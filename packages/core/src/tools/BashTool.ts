@@ -24,9 +24,9 @@ export class BashTool extends BaseTool {
     required: ['command'],
   };
 
-  async execute(args: BashArgs, context: ExecutionContext): Promise<ToolResult> {
+  async execute(args: BashArgs, context: ExecutionContext = { cwd: process.cwd() }): Promise<ToolResult> {
     const { command, timeoutMs = 120_000 } = args;
-    const cwd = context.cwd || process.cwd();
+    const cwd = context?.cwd || process.cwd();
     const isWindows = process.platform === 'win32';
 
     return new Promise((resolve) => {

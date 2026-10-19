@@ -51,7 +51,7 @@ export class StudioServer {
     });
 
     this.app.post('/api/workspaces/:wsId/threads', (req: Request, res: Response) => {
-      const { wsId } = req.params;
+      const wsId = String(req.params.wsId);
       try {
         const thread = this.workspaceRegistry.addThread(wsId, req.body);
         res.json(thread);
@@ -61,21 +61,23 @@ export class StudioServer {
     });
 
     this.app.patch('/api/workspaces/:wsId/threads/:thId', (req: Request, res: Response) => {
-      const { wsId, thId } = req.params;
+      const wsId = String(req.params.wsId);
+      const thId = String(req.params.thId);
       const updated = this.workspaceRegistry.updateThread(wsId, thId, req.body);
       if (!updated) return res.status(404).json({ error: 'Thread not found' });
       res.json(updated);
     });
 
     this.app.post('/api/workspaces/:wsId/select', (req: Request, res: Response) => {
-      const { wsId } = req.params;
+      const wsId = String(req.params.wsId);
       const { threadId } = req.body;
-      this.workspaceRegistry.setActiveThread(wsId, threadId);
+      this.workspaceRegistry.setActiveThread(wsId, String(threadId));
       res.json({ success: true, activeThreadId: threadId });
     });
 
     this.app.delete('/api/workspaces/:wsId/threads/:thId', (req: Request, res: Response) => {
-      const { wsId, thId } = req.params;
+      const wsId = String(req.params.wsId);
+      const thId = String(req.params.thId);
       const ok = this.workspaceRegistry.deleteThread(wsId, thId);
       res.json({ success: ok });
     });
@@ -96,7 +98,7 @@ export class StudioServer {
 
       // Link to thread if provided
       if (wsId && threadId) {
-        this.workspaceRegistry.updateThread(wsId, threadId, {
+        this.workspaceRegistry.updateThread(String(wsId), String(threadId), {
           sessionId: session.id,
           status: 'running'
         });
@@ -112,13 +114,13 @@ export class StudioServer {
     });
 
     this.app.post('/api/terminals/:id/kill', (req: Request, res: Response) => {
-      const { id } = req.params;
+      const id = String(req.params.id);
       const killed = this.terminalManager.killSession(id);
       res.json({ success: killed });
     });
 
     this.app.post('/api/terminals/:id/input', (req: Request, res: Response) => {
-      const { id } = req.params;
+      const id = String(req.params.id);
       const { input } = req.body;
       const ok = this.terminalManager.writeInput(id, input || '');
       res.json({ success: ok });
@@ -142,8 +144,20 @@ export class StudioServer {
 
       try {
         const loginManager = new BrowserLoginManager();
-        const token = await loginManager.login(service);
-        res.json({ success: true, service, token: token.slice(0, 10) + '...' });
+        const result = await loginManager.login(service as any);
+        if (result.success && result.token) {
+          res.json({
+            success: true,
+            service,
+            token: result.token.slice(0, 10) + '...',
+            details: result.details
+          });
+        } else {
+          res.status(400).json({
+            success: false,
+            error: result.error || 'Failed to authenticate via browser'
+          });
+        }
       } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
       }

@@ -4,17 +4,20 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "packages/studio/client"
   ],
   "scripts": {
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces",
-    "studio": "node packages/studio/dist/server/index.js",
+    "studio": "node packages/studio/dist/index.js",
     "dev": "npm --workspace=@bridgemind/client run dev"
   },
   "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@vitejs/plugin-react": "^4.7.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "@types/node": "^22.10.2"
+    "vite": "^6.4.4"
   }
 }
