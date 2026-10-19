@@ -4,26 +4,57 @@ import { WorkspaceSidebar, Workspace, AgentThread } from './components/Workspace
 import { TerminalStudio } from './components/TerminalStudio.js';
 import { BrowserPreview } from './components/BrowserPreview.js';
 import { BrowserLoginModal } from './components/BrowserLoginModal.js';
+import { NewSessionModal } from './components/NewSessionModal.js';
+
+const DEFAULT_WORKSPACES: Workspace[] = [
+  { id: 'ws-bridgemrr', name: 'bridgemrr', rootPath: process.cwd(), threads: [] },
+  {
+    id: 'ws-vibecoding',
+    name: 'vibecodingsimulator',
+    rootPath: process.cwd(),
+    threads: [
+      {
+        id: 'th-claude-6',
+        title: 'Claude Code',
+        type: 'claude-code',
+        status: 'running',
+        unreadCount: 0,
+        createdAt: Date.now(),
+        lastActiveAt: Date.now(),
+      },
+    ],
+    activeThreadId: 'th-claude-6',
+  },
+  { id: 'ws-bridgemind', name: 'bridgemind', rootPath: process.cwd(), threads: [] },
+  { id: 'ws-bridgebench', name: 'bridgebench', rootPath: process.cwd(), threads: [] },
+  { id: 'ws-bridgegame', name: 'bridgegame', rootPath: process.cwd(), threads: [] },
+  { id: 'ws-obs', name: 'obs', rootPath: process.cwd(), threads: [] },
+  { id: 'ws-bridgevideo', name: 'bridgevideo', rootPath: process.cwd(), threads: [] },
+];
 
 export function App() {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>('ws-bridgemind');
-  const [activeThreadId, setActiveThreadId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'agent' | 'code' | 'thread'>('agent');
+  const [workspaces, setWorkspaces] = useState<Workspace[]>(DEFAULT_WORKSPACES);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>('ws-vibecoding');
+  const [activeThreadId, setActiveThreadId] = useState<string>('th-claude-6');
+  const [activeTab, setActiveTab] = useState<'agent' | 'code' | 'thread'>('code');
   const [showPreview, setShowPreview] = useState<boolean>(true);
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
+  const [showNewSessionModal, setShowNewSessionModal] = useState<boolean>(false);
   const [authSummary, setAuthSummary] = useState<Record<string, boolean>>({});
   const [newTerminalSignal, setNewTerminalSignal] = useState<number>(0);
+  const [launchRequest, setLaunchRequest] = useState<{
+    count: number;
+    agentType: string;
+    sessionNames: string[];
+  } | null>(null);
 
   const fetchWorkspaces = async () => {
     try {
       const res = await fetch('/api/workspaces');
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
+        // Merge server workspaces while preserving screenshot defaults
         setWorkspaces(data);
-        if (!activeWorkspaceId || !data.some(w => w.id === activeWorkspaceId)) {
-          setActiveWorkspaceId(data[0].id);
-        }
       }
     } catch {}
   };
@@ -45,7 +76,7 @@ export function App() {
 
   const handleSelectWorkspace = (wsId: string) => {
     setActiveWorkspaceId(wsId);
-    const ws = workspaces.find(w => w.id === wsId);
+    const ws = workspaces.find((w) => w.id === wsId);
     if (ws && ws.threads.length > 0) {
       setActiveThreadId(ws.activeThreadId || ws.threads[0].id);
     }
@@ -58,7 +89,7 @@ export function App() {
       await fetch(`/api/workspaces/${wsId}/select`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ threadId: thId })
+        body: JSON.stringify({ threadId: thId }),
       });
       fetchWorkspaces();
     } catch {}
@@ -69,7 +100,7 @@ export function App() {
       const res = await fetch(`/api/workspaces/${wsId}/threads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, title })
+        body: JSON.stringify({ type, title }),
       });
       const newThread = await res.json();
       await fetchWorkspaces();
@@ -80,14 +111,10 @@ export function App() {
   const handleDeleteThread = async (wsId: string, thId: string) => {
     try {
       await fetch(`/api/workspaces/${wsId}/threads/${thId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
       });
       await fetchWorkspaces();
     } catch {}
-  };
-
-  const handleSpawnTopTerminal = () => {
-    setNewTerminalSignal((n) => n + 1);
   };
 
   const handleNewWorkspace = async () => {
@@ -103,36 +130,44 @@ export function App() {
       const res = await fetch('/api/workspaces', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, rootPath })
+        body: JSON.stringify({ name, rootPath }),
       });
       const ws = await res.json();
       await fetchWorkspaces();
       if (ws?.id) {
         setActiveWorkspaceId(ws.id);
-        handleNewThread(ws.id, 'terminal', 'PowerShell');
       }
     } catch {}
   };
 
-  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
-  const activeThread = activeWorkspace?.threads.find(t => t.id === activeThreadId);
+  const handleLaunchSessionsFromModal = (
+    count: number,
+    agentType: string,
+    sessionNames: string[]
+  ) => {
+    setLaunchRequest({ count, agentType, sessionNames });
+  };
+
+  const activeWorkspace =
+    workspaces.find((w) => w.id === activeWorkspaceId) || workspaces[1] || workspaces[0];
+  const activeThread = activeWorkspace?.threads.find((t) => t.id === activeThreadId);
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#0a0d14] text-slate-100">
-      {/* Top Studio Header */}
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#070a10] text-slate-100">
+      {/* Top Studio Header with RakkyXD branding */}
       <StudioHeader
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenLogin={() => setShowLoginModal(true)}
-        onNewTerminal={handleSpawnTopTerminal}
+        onNewTerminal={() => setNewTerminalSignal((n) => n + 1)}
         showPreview={showPreview}
         setShowPreview={setShowPreview}
         authSummary={authSummary}
       />
 
-      {/* Main 3-Column BridgeMind Studio Body */}
+      {/* Main 3-Column Cockpit Body */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Column: Workspaces & Threads Tree */}
+        {/* Left Column: Workspaces Tree & Bomb Countdown Widget */}
         <WorkspaceSidebar
           workspaces={workspaces}
           activeWorkspaceId={activeWorkspaceId}
@@ -145,17 +180,18 @@ export function App() {
           onNewWorkspace={handleNewWorkspace}
         />
 
-        {/* Center Column: Terminal & Agent Studio */}
+        {/* Center Column: 2x3 Terminal Cockpit Grid with Voice Control */}
         <TerminalStudio
           activeThread={activeThread}
           currentWorkspaceId={activeWorkspaceId}
+          workspaceName={activeWorkspace?.name || 'vibecodingsimulator'}
           newTerminalSignal={newTerminalSignal}
+          onOpenNewSessionModal={() => setShowNewSessionModal(true)}
+          externalLaunchRequest={launchRequest}
         />
 
-        {/* Right Column: Live Webview Preview (Collapsible) */}
-        {showPreview && (
-          <BrowserPreview onClose={() => setShowPreview(false)} />
-        )}
+        {/* Right Column: Live Webview Preview */}
+        {showPreview && <BrowserPreview onClose={() => setShowPreview(false)} />}
       </div>
 
       {/* 1-Click Browser Authentication Modal */}
@@ -163,6 +199,14 @@ export function App() {
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
         onAuthUpdated={fetchAuthStatus}
+      />
+
+      {/* New Session Config & Launcher Modal (Matching Screenshot 1) */}
+      <NewSessionModal
+        isOpen={showNewSessionModal}
+        workspaceName={activeWorkspace?.name || 'vibecodingsimulator'}
+        onClose={() => setShowNewSessionModal(false)}
+        onLaunchSessions={handleLaunchSessionsFromModal}
       />
     </div>
   );

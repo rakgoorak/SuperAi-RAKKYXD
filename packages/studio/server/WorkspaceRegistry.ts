@@ -31,90 +31,57 @@ export class WorkspaceRegistry {
     const cwd = process.cwd();
     const defaultWorkspaces: Workspace[] = [
       {
-        id: 'ws-bridgemind',
-        name: 'bridgemind',
+        id: 'ws-bridgemrr',
+        name: 'bridgemrr',
+        rootPath: cwd,
+        threads: []
+      },
+      {
+        id: 'ws-vibecoding',
+        name: 'vibecodingsimulator',
         rootPath: cwd,
         threads: [
           {
-            id: 'th-1',
+            id: 'th-vibecoding-1',
             title: 'Claude Code',
             type: 'claude-code',
             status: 'running',
-            unreadCount: 3,
-            createdAt: Date.now() - 3600000,
-            lastActiveAt: Date.now(),
-            thoughts: [
-              {
-                id: 't-1',
-                duration: '11s',
-                tokens: 495,
-                preview: 'Thinking Process: 1. Analyze the project layout 2. Configure multi-agent threads'
-              }
-            ]
-          },
-          {
-            id: 'th-2',
-            title: 'Codex Agent',
-            type: 'codex',
-            status: 'idle',
             unreadCount: 0,
-            createdAt: Date.now() - 7200000,
-            lastActiveAt: Date.now() - 1800000
-          },
-          {
-            id: 'th-3',
-            title: 'Antigravity Studio',
-            type: 'antigravity',
-            status: 'running',
-            unreadCount: 1,
-            createdAt: Date.now() - 10800000,
+            createdAt: Date.now(),
             lastActiveAt: Date.now()
-          },
-          {
-            id: 'th-4',
-            title: 'OpenCode Multi-Agent',
-            type: 'opencode-multi',
-            status: 'idle',
-            unreadCount: 0,
-            createdAt: Date.now() - 14400000,
-            lastActiveAt: Date.now() - 3600000
           }
         ],
-        activeThreadId: 'th-1'
+        activeThreadId: 'th-vibecoding-1'
+      },
+      {
+        id: 'ws-bridgemind',
+        name: 'bridgemind',
+        rootPath: cwd,
+        threads: []
       },
       {
         id: 'ws-bridgebench',
         name: 'bridgebench',
         rootPath: cwd,
-        threads: [
-          {
-            id: 'th-bb-1',
-            title: 'Benchmark Runner',
-            type: 'terminal',
-            status: 'idle',
-            unreadCount: 0,
-            createdAt: Date.now(),
-            lastActiveAt: Date.now()
-          }
-        ],
-        activeThreadId: 'th-bb-1'
+        threads: []
       },
       {
-        id: 'ws-gemini-4',
-        name: 'gemini-4',
+        id: 'ws-bridgegame',
+        name: 'bridgegame',
         rootPath: cwd,
-        threads: [
-          {
-            id: 'th-g4-1',
-            title: 'Gemini Research Agent',
-            type: 'opencode-multi',
-            status: 'idle',
-            unreadCount: 0,
-            createdAt: Date.now(),
-            lastActiveAt: Date.now()
-          }
-        ],
-        activeThreadId: 'th-g4-1'
+        threads: []
+      },
+      {
+        id: 'ws-obs',
+        name: 'obs',
+        rootPath: cwd,
+        threads: []
+      },
+      {
+        id: 'ws-bridgevideo',
+        name: 'bridgevideo',
+        rootPath: cwd,
+        threads: []
       }
     ];
 

@@ -1,37 +1,56 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Plus, Send, LayoutGrid, Rows3, Bot, Sparkles, Terminal as TerminalIcon, ChevronDown } from 'lucide-react';
+import { 
+  X, 
+  Plus, 
+  Send, 
+  LayoutGrid, 
+  Rows3, 
+  Bot, 
+  Sparkles, 
+  Terminal as TerminalIcon, 
+  ChevronDown,
+  Maximize2,
+  ExternalLink,
+  MoreHorizontal,
+  Circle,
+  Play
+} from 'lucide-react';
 import { AgentThread } from './WorkspaceSidebar.js';
 import { TerminalPane, TerminalTab, tabIcon } from './TerminalPane.js';
+import { PixelAvatar } from './PixelAvatar.js';
+import { VoiceControl } from './VoiceControl.js';
 
 interface TerminalStudioProps {
   activeThread?: AgentThread;
   currentWorkspaceId: string;
-  /** Incremented by the header "+ Terminal" button to open a new shell. */
+  workspaceName?: string;
   newTerminalSignal: number;
+  onOpenNewSessionModal?: () => void;
+  externalLaunchRequest?: { count: number; agentType: string; sessionNames: string[] } | null;
 }
 
-/** CLI typed into the shell for agent threads. Others just open a shell. */
-const AGENT_COMMANDS: Record<string, string | undefined> = {
-  'claude-code': 'claude',
-  codex: 'codex',
+const AGENT_SUGGESTIONS: Record<string, string> = {
+  Emma: 'refactor Blue light.mat',
+  James: 'how do I log an error?',
+  Olivia: 'refactor InventoryBar.cs',
+  Michael: 'how does Inventory.cs work?',
+  Grace: 'fix typecheck errors',
+  Daniel: 'create a util logging.py that rotates',
 };
 
-const NEW_TERMINAL_OPTIONS: Array<{ type: string; label: string; icon: React.ReactNode }> = [
-  { type: 'terminal', label: 'PowerShell', icon: <TerminalIcon className="w-3.5 h-3.5 text-slate-400" /> },
-  { type: 'claude-code', label: 'Claude Code', icon: <Bot className="w-3.5 h-3.5 text-cyan-400" /> },
-  { type: 'codex', label: 'Codex', icon: <Sparkles className="w-3.5 h-3.5 text-purple-400" /> },
-];
-
-let tabCounter = 0;
+const DEFAULT_AGENTS = ['Emma', 'James', 'Olivia', 'Michael', 'Grace', 'Daniel'];
 
 export const TerminalStudio: React.FC<TerminalStudioProps> = ({
   activeThread,
   currentWorkspaceId,
+  workspaceName = 'vibecodingsimulator',
   newTerminalSignal,
+  onOpenNewSessionModal,
+  externalLaunchRequest,
 }) => {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>('');
-  const [layout, setLayout] = useState<'tabs' | 'grid'>('grid');
+  const [layout, setLayout] = useState<'grid' | 'tabs'>('grid');
   const [inputVal, setInputVal] = useState('');
   const [showNewMenu, setShowNewMenu] = useState(false);
   const sendersRef = useRef<Map<string, (data: string) => void>>(new Map());
@@ -46,7 +65,7 @@ export const TerminalStudio: React.FC<TerminalStudioProps> = ({
 
   const spawnTerminal = useCallback(
     async (opts: { type: string; name: string; threadId?: string }) => {
-      const id = opts.threadId ? `thread-${opts.threadId}` : `tab-${Date.now()}-${++tabCounter}`;
+      const id = opts.threadId ? `thread-${opts.threadId}` : `tab-${opts.name.toLowerCase()}-${Date.now()}`;
       if (spawnedRef.current.has(id)) {
         setActiveTabId(id);
         return;
@@ -57,7 +76,6 @@ export const TerminalStudio: React.FC<TerminalStudioProps> = ({
         id,
         name: opts.name,
         type: opts.type,
-        autoCommand: AGENT_COMMANDS[opts.type],
         status: 'connecting',
       };
       setTabs((prev) => [...prev, tab]);
@@ -76,7 +94,15 @@ export const TerminalStudio: React.FC<TerminalStudioProps> = ({
         const data = await res.json();
         if (!res.ok || !data.id) throw new Error(data.error || 'spawn failed');
         setTabs((prev) =>
-          prev.map((t) => (t.id === id ? { ...t, sessionId: data.id, status: data.status === 'error' ? 'error' : 'running' } : t))
+          prev.map((t) =>
+            t.id === id
+              ? {
+                  ...t,
+                  sessionId: data.id,
+                  status: data.status === 'error' ? 'error' : 'running',
+                }
+              : t
+          )
         );
       } catch {
         setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'error' } : t)));
@@ -85,31 +111,38 @@ export const TerminalStudio: React.FC<TerminalStudioProps> = ({
     [currentWorkspaceId]
   );
 
-  // First terminal on launch.
+  // Initialize with the 6 agent sessions matching Screenshot 2!
+  const launchSixSessions = useCallback(() => {
+    DEFAULT_AGENTS.forEach((name) => {
+      spawnTerminal({ type: 'claude-code', name });
+    });
+  }, [spawnTerminal]);
+
   useEffect(() => {
     if (spawnedRef.current.size === 0) {
-      spawnTerminal({ type: 'terminal', name: 'PowerShell' });
+      launchSixSessions();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [launchSixSessions]);
 
-  // Selecting a thread in the sidebar opens (or focuses) its terminal.
+  // Handle launch request from NewSessionModal
   useEffect(() => {
-    if (activeThread) {
-      spawnTerminal({ type: activeThread.type, name: activeThread.title, threadId: activeThread.id });
+    if (externalLaunchRequest) {
+      const { sessionNames, agentType } = externalLaunchRequest;
+      sessionNames.forEach((name) => {
+        spawnTerminal({ type: agentType, name });
+      });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeThread?.id]);
+  }, [externalLaunchRequest, spawnTerminal]);
 
-  // Header "+ Terminal" button.
+  // Header "+ Terminal" button
   useEffect(() => {
     if (newTerminalSignal > 0) {
-      spawnTerminal({ type: 'terminal', name: `PowerShell ${tabCounter + 1}` });
+      const nextName = `Agent ${tabs.length + 1}`;
+      spawnTerminal({ type: 'claude-code', name: nextName });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newTerminalSignal]);
+  }, [newTerminalSignal, spawnTerminal, tabs.length]);
 
-  const closeTab = async (id: string) => {
+  const closeTab = (id: string) => {
     const tab = tabs.find((t) => t.id === id);
     if (tab?.sessionId) {
       fetch(`/api/terminals/${tab.sessionId}/kill`, { method: 'POST' }).catch(() => {});
@@ -121,164 +154,257 @@ export const TerminalStudio: React.FC<TerminalStudioProps> = ({
   };
 
   const markExited = (id: string) =>
-    setTabs((prev) => prev.map((t) => (t.id === id && t.status === 'running' ? { ...t, status: 'exited' } : t)));
+    setTabs((prev) =>
+      prev.map((t) => (t.id === id && t.status === 'running' ? { ...t, status: 'exited' } : t))
+    );
 
-  const sendPrompt = () => {
-    const text = inputVal;
+  const sendPromptToTarget = (text: string, targetId: string) => {
     if (!text.trim()) return;
-    const sender = sendersRef.current.get(activeTabId);
-    if (!sender) return;
-    sender(text + '\r');
+    const sender = sendersRef.current.get(targetId);
+    if (sender) {
+      sender(text + '\r');
+    }
     history.current.unshift(text);
     historyIdx.current = -1;
+  };
+
+  const sendPrompt = () => {
+    if (!inputVal.trim()) return;
+    sendPromptToTarget(inputVal, activeTabId);
     setInputVal('');
   };
 
   const sendToAll = () => {
-    const text = inputVal;
-    if (!text.trim()) return;
-    sendersRef.current.forEach((sender) => sender(text + '\r'));
-    history.current.unshift(text);
+    if (!inputVal.trim()) return;
+    sendersRef.current.forEach((sender) => sender(inputVal + '\r'));
+    history.current.unshift(inputVal);
     setInputVal('');
   };
 
-  const activeTab = tabs.find((t) => t.id === activeTabId);
+  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
   const gridCols = tabs.length <= 1 ? 1 : tabs.length <= 4 ? 2 : 3;
   const gridRows = Math.max(1, Math.ceil(tabs.length / gridCols));
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-[#0a0d14] overflow-hidden">
-      {/* Tab bar */}
-      <div className="h-10 bg-[#0e131f] border-b border-[#1f293d] flex items-center px-2 gap-1 select-none shrink-0">
-        <div className="flex items-center gap-1 overflow-x-auto flex-1 min-w-0">
-          {tabs.map((tab) => {
-            const isActive = tab.id === activeTabId;
-            return (
-              <div
-                key={tab.id}
-                onClick={() => setActiveTabId(tab.id)}
-                className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer shrink-0 transition-colors ${
-                  isActive ? 'bg-[#162033] text-cyan-300' : 'text-slate-400 hover:text-slate-200 hover:bg-[#141a29]'
-                }`}
-              >
-                {tabIcon(tab.type)}
-                <span className="truncate max-w-[130px]">{tab.name}</span>
-                {tab.status === 'exited' && <span className="text-[10px] text-slate-500">exited</span>}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeTab(tab.id);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 hover:text-rose-400 p-0.5 rounded transition-opacity"
-                  title="Close terminal"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            );
-          })}
+      {/* Top Controls Bar */}
+      <div className="h-10 bg-[#0e131f] border-b border-[#1f293d] flex items-center justify-between px-3 select-none shrink-0">
+        <div className="flex items-center space-x-2 overflow-x-auto flex-1 min-w-0">
+          <span className="text-xs font-semibold text-slate-300 truncate">
+            {workspaceName}
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-800/40 font-mono">
+            {tabs.length} sessions
+          </span>
 
-          <div className="relative shrink-0">
-            <button
-              onClick={() => setShowNewMenu((v) => !v)}
-              className="flex items-center p-1 text-slate-400 hover:text-cyan-400 hover:bg-[#141a29] rounded transition-colors"
-              title="Open another terminal"
-            >
-              <Plus className="w-4 h-4" />
-              <ChevronDown className="w-3 h-3" />
-            </button>
-            {showNewMenu && (
-              <div className="fixed z-40 mt-1 w-44 bg-[#141a29] border border-[#27354f] rounded-lg shadow-xl p-1 text-xs">
-                {NEW_TERMINAL_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.type}
-                    onClick={() => {
-                      setShowNewMenu(false);
-                      spawnTerminal({ type: opt.type, name: `${opt.label} ${tabCounter + 1}` });
-                    }}
-                    className="w-full text-left px-2 py-1.5 rounded hover:bg-[#1f293d] flex items-center gap-2 text-slate-200"
-                  >
-                    {opt.icon}
-                    <span>{opt.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+          {/* Quick tab pills */}
+          <div className="flex items-center space-x-1 pl-2">
+            {tabs.map((tab) => {
+              const isActive = tab.id === activeTabId;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTabId(tab.id)}
+                  className={`px-2 py-0.5 rounded text-[11px] font-medium flex items-center space-x-1 transition-all ${
+                    isActive
+                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-700/60'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-[#141a29]'
+                  }`}
+                >
+                  <Circle
+                    className={`w-1.5 h-1.5 ${
+                      tab.status === 'running'
+                        ? 'fill-emerald-400 text-emerald-400'
+                        : 'fill-slate-500 text-slate-500'
+                    }`}
+                  />
+                  <span>{tab.name}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Layout switch */}
-        <div className="flex items-center bg-[#141a29] p-0.5 rounded-md border border-[#1f293d] shrink-0">
-          <button
-            onClick={() => setLayout('grid')}
-            className={`p-1 rounded ${layout === 'grid' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}
-            title="Show all terminals side by side"
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => setLayout('tabs')}
-            className={`p-1 rounded ${layout === 'tabs' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}
-            title="One terminal at a time"
-          >
-            <Rows3 className="w-3.5 h-3.5" />
-          </button>
+        {/* Right Action Buttons */}
+        <div className="flex items-center space-x-2 shrink-0">
+          {onOpenNewSessionModal && (
+            <button
+              onClick={onOpenNewSessionModal}
+              className="flex items-center space-x-1 px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition-all"
+              title="Configure and launch parallel agent presets"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>New Session</span>
+            </button>
+          )}
+
+          {/* Grid vs Tabs layout */}
+          <div className="flex items-center bg-[#141a29] p-0.5 rounded-md border border-[#1f293d]">
+            <button
+              onClick={() => setLayout('grid')}
+              className={`p-1 rounded ${
+                layout === 'grid' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+              title="2x3 Grid View"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setLayout('tabs')}
+              className={`p-1 rounded ${
+                layout === 'tabs' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Single Tab View"
+            >
+              <Rows3 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Terminals */}
+      {/* 2x3 Grid of Agent Terminal Cards (Screenshot 2 Match) */}
       <div
-        className={`flex-1 min-h-0 ${layout === 'grid' && tabs.length > 0 ? 'grid gap-2 p-2' : ''}`}
+        className={`flex-1 min-h-0 p-2 overflow-y-auto ${
+          layout === 'grid' && tabs.length > 0 ? 'grid gap-2' : 'flex flex-col'
+        }`}
         style={
           layout === 'grid'
-            ? { gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))` }
+            ? {
+                gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+                gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))`,
+              }
             : undefined
         }
       >
-        {tabs.map((tab) => (
-          <TerminalPane
-            key={tab.id}
-            tab={tab}
-            visible={layout === 'grid' || tab.id === activeTabId}
-            focused={tab.id === activeTabId}
-            showHeader={layout === 'grid'}
-            onFocus={() => setActiveTabId(tab.id)}
-            onClose={() => closeTab(tab.id)}
-            onExit={() => markExited(tab.id)}
-            registerSender={registerSender}
-          />
-        ))}
-        {tabs.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-slate-500 text-sm gap-3">
-            <TerminalIcon className="w-8 h-8" />
-            <span>No terminals open</span>
-            <button
-              onClick={() => spawnTerminal({ type: 'terminal', name: 'PowerShell' })}
-              className="px-3 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-xs"
+        {tabs.map((tab, idx) => {
+          const isFocused = tab.id === activeTabId;
+          const suggestion = AGENT_SUGGESTIONS[tab.name] || 'refactor code';
+
+          return (
+            <div
+              key={tab.id}
+              onClick={() => setActiveTabId(tab.id)}
+              className={`flex flex-col min-h-0 min-w-0 bg-[#0c101a] rounded-xl border transition-all ${
+                isFocused
+                  ? 'border-cyan-500/80 shadow-[0_0_15px_rgba(0,210,255,0.12)]'
+                  : 'border-[#1b2336] hover:border-slate-700'
+              } overflow-hidden`}
             >
-              Open terminal
-            </button>
-          </div>
-        )}
+              {/* Tile Header */}
+              <div className="h-7 px-2.5 bg-[#0f1422] border-b border-[#1c2438] flex items-center justify-between text-xs select-none shrink-0">
+                <div className="flex items-center space-x-1.5 truncate">
+                  <span className="text-xs">💥</span>
+                  <span className={`font-semibold text-[12px] truncate ${isFocused ? 'text-cyan-300' : 'text-slate-300'}`}>
+                    {tab.name}
+                  </span>
+                  <Circle className="w-1.5 h-1.5 fill-emerald-400 text-emerald-400 animate-pulse ml-1" />
+                </div>
+
+                <div className="flex items-center space-x-1 text-slate-400">
+                  <button className="p-0.5 hover:text-white rounded" title="Options">
+                    <MoreHorizontal className="w-3 h-3" />
+                  </button>
+                  <button className="p-0.5 hover:text-white rounded" title="Popout">
+                    <ExternalLink className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeTab(tab.id);
+                    }}
+                    className="p-0.5 hover:text-rose-400 rounded"
+                    title="Close"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Character Avatar Banner (Screenshot 2 Match) */}
+              <div className="px-3 py-2 bg-[#0d121e] border-b border-[#182033] flex items-center space-x-3 select-none shrink-0">
+                <PixelAvatar size={34} color="#e07a5f" />
+                <div className="text-[10px] leading-tight font-mono truncate">
+                  <div className="font-bold text-slate-200 truncate">Claude Code v2.1.294</div>
+                  <div className="text-slate-400 truncate">Opus 5.5 with xhigh ...</div>
+                  <div className="text-slate-500 truncate">Claude Max</div>
+                  <div className="text-slate-500 truncate">.../{workspaceName}</div>
+                </div>
+              </div>
+
+              {/* Terminal Output Body */}
+              <div className="flex-1 min-h-[100px] p-1 bg-[#0a0d14] overflow-hidden">
+                <TerminalPane
+                  tab={tab}
+                  visible={true}
+                  focused={isFocused}
+                  showHeader={false}
+                  onFocus={() => setActiveTabId(tab.id)}
+                  onClose={() => closeTab(tab.id)}
+                  onExit={() => markExited(tab.id)}
+                  registerSender={registerSender}
+                />
+              </div>
+
+              {/* Tile Footer (Screenshot 2 Match) */}
+              <div className="p-2 bg-[#0c101a] border-t border-[#182033] space-y-1 select-none shrink-0">
+                <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                  <span className="flex items-center space-x-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-500 inline-block" />
+                    <span>xhigh</span>
+                    <span className="text-slate-600">/ effort</span>
+                  </span>
+                </div>
+
+                {/* Quick Suggestion Prompt Button */}
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    sendPromptToTarget(`"${suggestion}"`, tab.id);
+                  }}
+                  className="px-2 py-1 rounded bg-[#131929] hover:bg-[#1a233a] border border-[#1f283d] text-[11px] font-mono text-slate-300 truncate cursor-pointer transition-colors"
+                >
+                  <span className="text-cyan-400 font-bold">&gt;</span> Try{' '}
+                  <span className="text-cyan-300">"{suggestion}"</span>
+                </div>
+
+                {/* Auto Mode Indicator */}
+                <div className="text-[10px] text-amber-400/90 font-mono flex items-center space-x-1">
+                  <span className="font-bold">&gt;&gt;</span>
+                  <span>auto mode on</span>
+                  <span className="text-slate-500">(shift+tab to ...)</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Prompt bar — sends to the focused terminal (or all) */}
-      <div className="p-3 bg-[#0e131f] border-t border-[#1f293d] select-none shrink-0">
-        <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1.5">
-          <span>
-            Sending to:{' '}
-            <span className="text-cyan-300 font-medium">{activeTab ? activeTab.name : '—'}</span>
-            <span className="ml-2">· click a terminal to type directly into it</span>
-          </span>
-          <button
-            onClick={() => sendersRef.current.get(activeTabId)?.('\x03')}
-            className="px-2 py-0.5 rounded bg-[#1e2738] hover:bg-rose-950 hover:text-rose-400 text-slate-400 border border-[#2b3952] transition-colors"
-            title="Send Ctrl+C to the focused terminal"
-          >
-            Ctrl+C
-          </button>
+      {/* Global Bottom Prompt & Voice Control Bar */}
+      <div className="p-3 bg-[#0e131f] border-t border-[#1f293d] select-none shrink-0 space-y-1.5">
+        <div className="flex items-center justify-between text-[11px] text-slate-400">
+          <div className="flex items-center space-x-2">
+            <span>
+              Target: <span className="text-cyan-300 font-semibold">{activeTab?.name || 'All'}</span>
+            </span>
+            <span className="text-slate-600">|</span>
+            <span className="text-slate-400">
+              Enter = Active Terminal · Ctrl+Enter = Broadcast to All
+            </span>
+          </div>
+
+          {/* Thai & English Voice Control Integration */}
+          <VoiceControl
+            onTranscript={(text) => setInputVal(text)}
+            onExecute={sendPrompt}
+            onBroadcast={sendToAll}
+            onInterrupt={() => sendersRef.current.get(activeTabId)?.('\x03')}
+            onClear={() => sendersRef.current.get(activeTabId)?.('clear\r')}
+            onLaunchSix={launchSixSessions}
+          />
         </div>
-        <div className="flex items-center bg-[#141a29] border border-[#24314c] focus-within:border-cyan-500 rounded-lg px-3 py-1.5 transition-colors">
+
+        {/* Input Bar */}
+        <div className="flex items-center bg-[#141a29] border border-[#24314c] focus-within:border-cyan-500 rounded-lg px-3 py-1.5 shadow-inner transition-colors">
           <span className="text-cyan-400 font-mono text-sm mr-2">&gt;</span>
           <input
             type="text"
@@ -298,19 +424,20 @@ export const TerminalStudio: React.FC<TerminalStudioProps> = ({
                 e.preventDefault();
               }
             }}
-            placeholder="Type a prompt or command… (Enter = focused terminal, Ctrl+Enter = all terminals)"
+            placeholder="Type instructions or use voice command (e.g. 'Build login system', 'refactor code')..."
             className="flex-1 bg-transparent text-slate-100 text-xs placeholder:text-slate-500 focus:outline-none font-mono"
           />
+
           <button
             onClick={sendToAll}
             className="ml-2 px-2.5 py-1 rounded bg-[#1e2738] hover:bg-[#28354c] text-slate-300 text-xs border border-[#2b3952] transition-colors"
-            title="Send to every open terminal"
+            title="Broadcast prompt to all 6 sessions simultaneously"
           >
             All
           </button>
           <button
             onClick={sendPrompt}
-            className="ml-2 px-2.5 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium flex items-center gap-1 transition-colors"
+            className="ml-2 px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center space-x-1 transition-colors shadow-sm"
           >
             <span>Send</span>
             <Send className="w-3 h-3" />

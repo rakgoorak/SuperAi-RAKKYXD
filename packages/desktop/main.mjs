@@ -55,11 +55,11 @@ function createMainWindow() {
     height: 920,
     minWidth: 1100,
     minHeight: 680,
-    title: 'BridgeMind Studio',
+    title: 'RakkyXD Studio',
     backgroundColor: '#0a0d14',
     show: false,
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#0e131f', symbolColor: '#cbd5e1', height: 48 },
+    titleBarOverlay: { color: '#0a0d14', symbolColor: '#cbd5e1', height: 48 },
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -227,13 +227,24 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
+    // Grant microphone permission for Thai and English voice recognition
+    session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+      if (permission === 'media' || permission === 'microphone') {
+        return callback(true);
+      }
+      callback(false);
+    });
+    session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+      return permission === 'media' || permission === 'microphone';
+    });
+
     try {
       await startStudioServer();
       createMainWindow();
     } catch (err) {
       await log(`Fatal startup error: ${err.stack || err.message}`);
       dialog.showErrorBox(
-        'BridgeMind Studio failed to start',
+        'RakkyXD Studio failed to start',
         `${err.message}\n\nTry running "npm run build" in d:\\Agent, then start again.\nLog: ${LOG_FILE}`
       );
       app.quit();

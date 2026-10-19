@@ -1,12 +1,13 @@
 @echo off
 chcp 65001 >nul
-title BridgeMind Studio - Desktop App
+title RakkyXD Studio - Desktop App
 cls
 
 echo =====================================================================
-echo   🚀  BridgeMind Studio - Native Desktop AI Workspace
+echo   🚀  RakkyXD Studio - Native Desktop AI Workspace
+echo   🎙️  Voice-Controlled Cockpit (Thai / English)
 echo   🔑  1-Click Browser Authentication (OpenCode Engine)
-echo   💻  Concurrent Terminal Sessions (PTY) & Live Webview Preview
+echo   💻  6x Concurrent Agent Cockpit (PTY) & Live Webview Preview
 echo =====================================================================
 echo.
 
@@ -29,7 +30,7 @@ if not exist "packages\studio\client\dist\index.html" (
     call npm --workspace=@bridgemind/client run build
 )
 
-echo [*] Launching BridgeMind Studio Desktop Application...
+echo [*] Launching RakkyXD Studio Desktop Application...
 echo.
 
 :: Launch Electron native desktop window
