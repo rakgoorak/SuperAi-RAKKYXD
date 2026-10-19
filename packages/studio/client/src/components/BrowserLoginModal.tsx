@@ -99,24 +99,32 @@ export const BrowserLoginModal: React.FC<BrowserLoginModalProps> = ({
   const handleStartBrowserLogin = async (service: string) => {
     setLoadingService(service);
     setErrorMessage('');
-    setStatusMessage(`Opening browser for ${service}... Log in as normal. The token will be captured automatically.`);
+    setStatusMessage(`A login window for ${service} is open. Log in as normal — it closes by itself when done.`);
 
     try {
-      const res = await fetch('/api/auth/browser-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ service })
-      });
-      const data = await res.json();
+      let data: { success: boolean; error?: string };
+      if (window.bridgemind?.browserLogin) {
+        // Desktop app: native login window, session captured automatically.
+        data = await window.bridgemind.browserLogin(service);
+      } else {
+        const res = await fetch('/api/auth/browser-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ service })
+        });
+        data = await res.json();
+      }
 
       if (data.success) {
-        setStatusMessage(`✔ Successfully authenticated with ${service}! Saved to auth config.`);
+        setStatusMessage(`✔ Logged in to ${service}. Session saved locally.`);
         await fetchAuthStatus();
         if (onAuthUpdated) onAuthUpdated();
       } else {
+        setStatusMessage('');
         setErrorMessage(data.error || 'Failed to authenticate via browser');
       }
     } catch (err: any) {
+      setStatusMessage('');
       setErrorMessage(err.message || 'Error communicating with Studio Server');
     } finally {
       setLoadingService(null);

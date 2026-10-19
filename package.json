@@ -11,6 +11,8 @@
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces",
     "studio": "node packages/studio/dist/index.js",
+    "app": "electron packages/desktop",
+    "start": "electron packages/desktop",
     "dev": "npm --workspace=@bridgemind/client run dev"
   },
   "devDependencies": {

@@ -30,3 +30,18 @@
 .terminal-scroll {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
+
+/* Desktop app: header acts as the window title bar */
+.app-drag {
+  -webkit-app-region: drag;
+}
+.app-drag button,
+.app-drag input,
+.app-drag select,
+.app-drag a {
+  -webkit-app-region: no-drag;
+}
+
+.xterm .xterm-viewport {
+  background-color: #0a0d14 !important;
+}

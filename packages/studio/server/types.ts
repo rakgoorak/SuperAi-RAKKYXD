@@ -1,12 +1,25 @@
 import { ChildProcess } from 'node:child_process';
 
+/** Minimal surface of a node-pty process that we rely on. */
+export interface PtyProcess {
+  pid: number;
+  write(data: string): void;
+  resize(cols: number, rows: number): void;
+  kill(signal?: string): void;
+  onData(cb: (data: string) => void): void;
+  onExit(cb: (e: { exitCode: number; signal?: number }) => void): void;
+}
+
 export interface TerminalSession {
   id: string;
   name: string;
   command: string;
   args?: string[];
   cwd: string;
+  /** 'pty' = real pseudo-terminal (interactive CLIs work); 'pipe' = stdio fallback. */
+  mode: 'pty' | 'pipe';
   process?: ChildProcess;
+  ptyProcess?: PtyProcess;
   status: 'running' | 'exited' | 'error';
   exitCode: number | null;
   createdAt: number;
@@ -47,4 +60,8 @@ export interface SpawnSessionOptions {
   args?: string[];
   cwd?: string;
   env?: Record<string, string>;
+  cols?: number;
+  rows?: number;
+  /** Force the stdio-pipe implementation even if a PTY is available. */
+  forcePipe?: boolean;
 }

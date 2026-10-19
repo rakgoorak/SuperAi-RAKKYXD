@@ -1,0 +1,16 @@
+{
+  "name": "@bridgemind/desktop",
+  "productName": "BridgeMind Studio",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "start": "electron .",
+    "build": "echo desktop: nothing to compile",
+    "test": "echo desktop: ok"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11"
+  }
+}

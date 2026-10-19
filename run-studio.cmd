@@ -1,12 +1,12 @@
 @echo off
 chcp 65001 >nul
-title BridgeMind Studio - Multi-Terminal & Multi-Agent AI
+title BridgeMind Studio - Desktop App
 cls
 
 echo =====================================================================
-echo   🚀  BridgeMind Studio - Multi-Terminal & Multi-Agent AI Cockpit
+echo   🚀  BridgeMind Studio - Native Desktop AI Workspace
 echo   🔑  1-Click Browser Authentication (OpenCode Engine)
-echo   💻  Concurrent Terminal Sessions & Live Webview Preview
+echo   💻  Concurrent Terminal Sessions (PTY) & Live Webview Preview
 echo =====================================================================
 echo.
 
@@ -20,19 +20,22 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 :: Ensure dist files exist, build if needed
-if not exist "packages\studio\dist\index.js" (
-    echo [*] First time setup: Building packages...
+if not exist "packages\studio\dist\StudioServer.js" (
+    echo [*] Building studio backend...
     call npm run build
 )
+if not exist "packages\studio\client\dist\index.html" (
+    echo [*] Building studio frontend UI...
+    call npm --workspace=@bridgemind/client run build
+)
 
-echo [*] Starting BridgeMind Studio Server on port 3888...
-echo [*] Web UI & Multi-Terminal WebSocket: http://localhost:3888
+echo [*] Launching BridgeMind Studio Desktop Application...
 echo.
 
-:: Launch browser after 2 seconds in background
-start "" /b cmd /c "timeout /t 2 /nobreak >nul & start http://localhost:3888"
+:: Launch Electron native desktop window
+call npx electron packages\desktop
 
-:: Start the Studio Server
-node packages\studio\dist\index.js
-
-pause
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo [!] Desktop app exited.
+)

@@ -1,6 +1,7 @@
 import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -35,7 +36,7 @@ export class StudioServer {
   private setupRoutes(): void {
     // Health / info
     this.app.get('/api/health', (_req: Request, res: Response) => {
-      res.json({ status: 'ok', time: Date.now() });
+      res.json({ status: 'ok', time: Date.now(), pty: this.terminalManager.ptyAvailable });
     });
 
     // Workspaces
@@ -88,12 +89,18 @@ export class StudioServer {
     });
 
     this.app.post('/api/terminals/spawn', (req: Request, res: Response) => {
-      const { command, args, cwd, name, threadId, wsId } = req.body;
+      const { command, args, cwd, name, threadId, wsId, cols, rows } = req.body;
+      const workspace = wsId ? this.workspaceRegistry.getWorkspace(String(wsId)) : undefined;
+      const workingDir =
+        cwd || (workspace?.rootPath && fs.existsSync(workspace.rootPath) ? workspace.rootPath : undefined);
+
       const session = this.terminalManager.spawnSession({
         name,
         command,
         args,
-        cwd
+        cwd: workingDir,
+        cols: Number(cols) || undefined,
+        rows: Number(rows) || undefined
       });
 
       // Link to thread if provided
@@ -109,6 +116,7 @@ export class StudioServer {
         name: session.name,
         command: session.command,
         cwd: session.cwd,
+        mode: session.mode,
         status: session.status
       });
     });
@@ -163,9 +171,14 @@ export class StudioServer {
       }
     });
 
-    // Serve static client if dist folder exists
-    const clientDist = path.join(process.cwd(), 'packages', 'studio', 'client', 'dist');
-    if (fs.existsSync(clientDist)) {
+    // Serve the built UI (packages/studio/client/dist), resolved relative to this
+    // file so it works no matter which folder the app is launched from.
+    const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+    const clientDist = [
+      path.resolve(moduleDir, '../client/dist'),
+      path.join(process.cwd(), 'packages', 'studio', 'client', 'dist')
+    ].find((p) => fs.existsSync(path.join(p, 'index.html')));
+    if (clientDist) {
       this.app.use(express.static(clientDist));
       this.app.get('*', (_req: Request, res: Response) => {
         res.sendFile(path.join(clientDist, 'index.html'));
@@ -174,6 +187,9 @@ export class StudioServer {
   }
 
   private setupWebSockets(): void {
+    // Errors (e.g. port in use) are surfaced through start(); don't crash here.
+    this.wss.on('error', () => {});
+
     this.wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
       const url = new URL(req.url || '/', `http://localhost:${this.port}`);
       const pathname = url.pathname;
@@ -195,12 +211,14 @@ export class StudioServer {
           }
         });
 
-        // Handle user keyboard input
+        // Handle keyboard input and terminal resize
         ws.on('message', (message: string) => {
           try {
             const data = JSON.parse(message.toString());
             if (data.type === 'input' && typeof data.data === 'string') {
               this.terminalManager.writeInput(sessionId, data.data);
+            } else if (data.type === 'resize') {
+              this.terminalManager.resize(sessionId, Number(data.cols), Number(data.rows));
             }
           } catch {
             // raw string fallback
@@ -226,11 +244,23 @@ export class StudioServer {
     return this.workspaceRegistry;
   }
 
+  public getPort(): number {
+    return this.port;
+  }
+
   public start(): Promise<void> {
-    return new Promise((resolve) => {
-      this.server.listen(this.port, () => {
+    return new Promise((resolve, reject) => {
+      const onError = (err: Error) => {
+        this.server.off('listening', onListening);
+        reject(err);
+      };
+      const onListening = () => {
+        this.server.off('error', onError);
         resolve();
-      });
+      };
+      this.server.once('error', onError);
+      this.server.once('listening', onListening);
+      this.server.listen(this.port);
     });
   }
 

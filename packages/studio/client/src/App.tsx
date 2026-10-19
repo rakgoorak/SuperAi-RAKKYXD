@@ -8,11 +8,12 @@ import { BrowserLoginModal } from './components/BrowserLoginModal.js';
 export function App() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>('ws-bridgemind');
-  const [activeThreadId, setActiveThreadId] = useState<string>('th-1');
+  const [activeThreadId, setActiveThreadId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'agent' | 'code' | 'thread'>('agent');
   const [showPreview, setShowPreview] = useState<boolean>(true);
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
   const [authSummary, setAuthSummary] = useState<Record<string, boolean>>({});
+  const [newTerminalSignal, setNewTerminalSignal] = useState<number>(0);
 
   const fetchWorkspaces = async () => {
     try {
@@ -22,9 +23,6 @@ export function App() {
         setWorkspaces(data);
         if (!activeWorkspaceId || !data.some(w => w.id === activeWorkspaceId)) {
           setActiveWorkspaceId(data[0].id);
-          if (data[0].threads?.[0]) {
-            setActiveThreadId(data[0].threads[0].id);
-          }
         }
       }
     } catch {}
@@ -88,15 +86,31 @@ export function App() {
     } catch {}
   };
 
-  const handleSpawnTopTerminal = async () => {
+  const handleSpawnTopTerminal = () => {
+    setNewTerminalSignal((n) => n + 1);
+  };
+
+  const handleNewWorkspace = async () => {
+    let rootPath: string | null = null;
+    if (window.bridgemind?.pickFolder) {
+      rootPath = await window.bridgemind.pickFolder();
+    } else {
+      rootPath = window.prompt('Project folder path for the new workspace:');
+    }
+    if (!rootPath) return;
+    const name = rootPath.split(/[\\/]/).filter(Boolean).pop() || rootPath;
     try {
-      const res = await fetch('/api/terminals/spawn', {
+      const res = await fetch('/api/workspaces', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'PowerShell / Bash' })
+        body: JSON.stringify({ name, rootPath })
       });
-      await res.json();
-      // Added session
+      const ws = await res.json();
+      await fetchWorkspaces();
+      if (ws?.id) {
+        setActiveWorkspaceId(ws.id);
+        handleNewThread(ws.id, 'terminal', 'PowerShell');
+      }
     } catch {}
   };
 
@@ -128,12 +142,14 @@ export function App() {
           onNewThread={handleNewThread}
           onDeleteThread={handleDeleteThread}
           onOpenLogin={() => setShowLoginModal(true)}
+          onNewWorkspace={handleNewWorkspace}
         />
 
         {/* Center Column: Terminal & Agent Studio */}
         <TerminalStudio
           activeThread={activeThread}
           currentWorkspaceId={activeWorkspaceId}
+          newTerminalSignal={newTerminalSignal}
         />
 
         {/* Right Column: Live Webview Preview (Collapsible) */}

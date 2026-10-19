@@ -1,359 +1,316 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Terminal as TerminalIcon, 
-  X, 
-  Plus, 
-  ChevronDown, 
-  ChevronUp, 
-  Sparkles, 
-  Send, 
-  RotateCcw, 
-  Slash, 
-  Play, 
-  CheckCircle2, 
-  Clock, 
-  Bot,
-  Layers
-} from 'lucide-react';
-import { AnsiUp } from 'ansi_up';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { X, Plus, Send, LayoutGrid, Rows3, Bot, Sparkles, Terminal as TerminalIcon, ChevronDown } from 'lucide-react';
 import { AgentThread } from './WorkspaceSidebar.js';
-
-interface TerminalTab {
-  id: string;
-  name: string;
-  sessionId?: string;
-  type: string;
-}
+import { TerminalPane, TerminalTab, tabIcon } from './TerminalPane.js';
 
 interface TerminalStudioProps {
   activeThread?: AgentThread;
   currentWorkspaceId: string;
+  /** Incremented by the header "+ Terminal" button to open a new shell. */
+  newTerminalSignal: number;
 }
 
-const ansiUp = new AnsiUp();
+/** CLI typed into the shell for agent threads. Others just open a shell. */
+const AGENT_COMMANDS: Record<string, string | undefined> = {
+  'claude-code': 'claude',
+  codex: 'codex',
+};
+
+const NEW_TERMINAL_OPTIONS: Array<{ type: string; label: string; icon: React.ReactNode }> = [
+  { type: 'terminal', label: 'PowerShell', icon: <TerminalIcon className="w-3.5 h-3.5 text-slate-400" /> },
+  { type: 'claude-code', label: 'Claude Code', icon: <Bot className="w-3.5 h-3.5 text-cyan-400" /> },
+  { type: 'codex', label: 'Codex', icon: <Sparkles className="w-3.5 h-3.5 text-purple-400" /> },
+];
+
+let tabCounter = 0;
 
 export const TerminalStudio: React.FC<TerminalStudioProps> = ({
   activeThread,
-  currentWorkspaceId
+  currentWorkspaceId,
+  newTerminalSignal,
 }) => {
-  const [tabs, setTabs] = useState<TerminalTab[]>([
-    { id: 'tab-1', name: 'Claude Code', type: 'claude-code' },
-    { id: 'tab-2', name: 'PowerShell', type: 'terminal' }
-  ]);
-  const [activeTabId, setActiveTabId] = useState<string>('tab-1');
-  const [outputLines, setOutputLines] = useState<Record<string, string>>({
-    'tab-1': `\x1b[36mBridgeMind Studio v1.0 [Multi-Agent Terminal Multiplexer]\x1b[0m\r\n\x1b[32m✔ Connected to Agent Engine\x1b[0m\r\n\x1b[90mSession ID: session-claude-01 | Model: Claude 3.7 Sonnet\x1b[0m\r\n\r\nWelcome! Type instructions to command Claude Code or switch tabs to launch parallel agents.\r\n\r\n> `,
-    'tab-2': `Windows PowerShell\r\nCopyright (C) Microsoft Corporation. All rights reserved.\r\n\r\nPS D:\\Agent> `
-  });
-  const [thoughtExpanded, setThoughtExpanded] = useState<boolean>(true);
-  const [inputVal, setInputVal] = useState<string>('');
-  const [selectedModel, setSelectedModel] = useState<string>('Claude 3.7 Sonnet');
-  const [executionMode, setExecutionMode] = useState<'agent' | 'raw'>('agent');
-  const terminalEndRef = useRef<HTMLDivElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const [tabs, setTabs] = useState<TerminalTab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string>('');
+  const [layout, setLayout] = useState<'tabs' | 'grid'>('grid');
+  const [inputVal, setInputVal] = useState('');
+  const [showNewMenu, setShowNewMenu] = useState(false);
+  const sendersRef = useRef<Map<string, (data: string) => void>>(new Map());
+  const spawnedRef = useRef<Set<string>>(new Set());
+  const history = useRef<string[]>([]);
+  const historyIdx = useRef<number>(-1);
 
-  // Sync active thread with tabs
+  const registerSender = useCallback((id: string, sender: ((data: string) => void) | null) => {
+    if (sender) sendersRef.current.set(id, sender);
+    else sendersRef.current.delete(id);
+  }, []);
+
+  const spawnTerminal = useCallback(
+    async (opts: { type: string; name: string; threadId?: string }) => {
+      const id = opts.threadId ? `thread-${opts.threadId}` : `tab-${Date.now()}-${++tabCounter}`;
+      if (spawnedRef.current.has(id)) {
+        setActiveTabId(id);
+        return;
+      }
+      spawnedRef.current.add(id);
+
+      const tab: TerminalTab = {
+        id,
+        name: opts.name,
+        type: opts.type,
+        autoCommand: AGENT_COMMANDS[opts.type],
+        status: 'connecting',
+      };
+      setTabs((prev) => [...prev, tab]);
+      setActiveTabId(id);
+
+      try {
+        const res = await fetch('/api/terminals/spawn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: opts.name,
+            wsId: currentWorkspaceId,
+            threadId: opts.threadId,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.id) throw new Error(data.error || 'spawn failed');
+        setTabs((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, sessionId: data.id, status: data.status === 'error' ? 'error' : 'running' } : t))
+        );
+      } catch {
+        setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'error' } : t)));
+      }
+    },
+    [currentWorkspaceId]
+  );
+
+  // First terminal on launch.
+  useEffect(() => {
+    if (spawnedRef.current.size === 0) {
+      spawnTerminal({ type: 'terminal', name: 'PowerShell' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Selecting a thread in the sidebar opens (or focuses) its terminal.
   useEffect(() => {
     if (activeThread) {
-      setTabs(prev => {
-        const exists = prev.find(t => t.id === activeThread.id);
-        if (!exists) {
-          return [...prev, {
-            id: activeThread.id,
-            name: activeThread.title,
-            sessionId: activeThread.sessionId,
-            type: activeThread.type
-          }];
-        }
-        return prev;
-      });
-      setActiveTabId(activeThread.id);
+      spawnTerminal({ type: activeThread.type, name: activeThread.title, threadId: activeThread.id });
     }
-  }, [activeThread]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeThread?.id]);
 
-  // Connect WebSocket when tab changes if session exists
+  // Header "+ Terminal" button.
   useEffect(() => {
-    const curTab = tabs.find(t => t.id === activeTabId);
-    if (!curTab?.sessionId) return;
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const ws = new WebSocket(`${protocol}//${host}/ws/terminal/${curTab.sessionId}`);
-    wsRef.current = ws;
-
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'output') {
-          setOutputLines(prev => ({
-            ...prev,
-            [activeTabId]: (prev[activeTabId] || '') + msg.data
-          }));
-        }
-      } catch {
-        setOutputLines(prev => ({
-          ...prev,
-          [activeTabId]: (prev[activeTabId] || '') + event.data
-        }));
-      }
-    };
-
-    return () => {
-      ws.close();
-      wsRef.current = null;
-    };
-  }, [activeTabId, tabs]);
-
-  // Auto-scroll
-  useEffect(() => {
-    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [outputLines, activeTabId]);
-
-  const handleSpawnNewTab = async (type: string = 'terminal', name?: string) => {
-    const newId = `tab-${Date.now()}`;
-    const tabName = name || (type === 'claude-code' ? 'Claude Code' : `Terminal #${tabs.length + 1}`);
-
-    try {
-      // Spawn real backend session
-      const res = await fetch('/api/terminals/spawn', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: tabName,
-          cwd: process.cwd()
-        })
-      });
-      const data = await res.json();
-      
-      const newTab: TerminalTab = {
-        id: newId,
-        name: tabName,
-        sessionId: data.id,
-        type
-      };
-
-      setTabs(prev => [...prev, newTab]);
-      setActiveTabId(newId);
-      setOutputLines(prev => ({
-        ...prev,
-        [newId]: `\x1b[32m✔ Spawned new session: ${tabName} (PID / Session: ${data.id})\x1b[0m\r\n\r\n`
-      }));
-    } catch {
-      // Offline fallback
-      setTabs(prev => [...prev, { id: newId, name: tabName, type }]);
-      setActiveTabId(newId);
+    if (newTerminalSignal > 0) {
+      spawnTerminal({ type: 'terminal', name: `PowerShell ${tabCounter + 1}` });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newTerminalSignal]);
+
+  const closeTab = async (id: string) => {
+    const tab = tabs.find((t) => t.id === id);
+    if (tab?.sessionId) {
+      fetch(`/api/terminals/${tab.sessionId}/kill`, { method: 'POST' }).catch(() => {});
+    }
+    spawnedRef.current.delete(id);
+    const next = tabs.filter((t) => t.id !== id);
+    setTabs(next);
+    if (activeTabId === id) setActiveTabId(next[next.length - 1]?.id || '');
   };
 
-  const handleCloseTab = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (tabs.length <= 1) return;
-    const nextTabs = tabs.filter(t => t.id !== id);
-    setTabs(nextTabs);
-    if (activeTabId === id) {
-      setActiveTabId(nextTabs[0].id);
-    }
-  };
+  const markExited = (id: string) =>
+    setTabs((prev) => prev.map((t) => (t.id === id && t.status === 'running' ? { ...t, status: 'exited' } : t)));
 
-  const handleSendInput = () => {
-    if (!inputVal.trim()) return;
-    const line = inputVal;
+  const sendPrompt = () => {
+    const text = inputVal;
+    if (!text.trim()) return;
+    const sender = sendersRef.current.get(activeTabId);
+    if (!sender) return;
+    sender(text + '\r');
+    history.current.unshift(text);
+    historyIdx.current = -1;
     setInputVal('');
-
-    const curTab = tabs.find(t => t.id === activeTabId);
-    if (curTab?.sessionId && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'input', data: line + '\r\n' }));
-    } else {
-      // Local simulated response with BridgeMind reasoning
-      setOutputLines(prev => ({
-        ...prev,
-        [activeTabId]: (prev[activeTabId] || '') + line + '\r\n\x1b[36m[Agent]: Processing command with ' + selectedModel + '...\x1b[0m\r\n\x1b[32m✔ Task acknowledged.\x1b[0m\r\n> '
-      }));
-    }
   };
 
-  const handleInterrupt = () => {
-    const curTab = tabs.find(t => t.id === activeTabId);
-    if (curTab?.sessionId && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'input', data: '\x03' }));
-    }
-    setOutputLines(prev => ({
-      ...prev,
-      [activeTabId]: (prev[activeTabId] || '') + '^C\r\n> '
-    }));
+  const sendToAll = () => {
+    const text = inputVal;
+    if (!text.trim()) return;
+    sendersRef.current.forEach((sender) => sender(text + '\r'));
+    history.current.unshift(text);
+    setInputVal('');
   };
 
-  const currentOutput = outputLines[activeTabId] || '';
-  const htmlOutput = ansiUp.ansi_to_html(currentOutput);
+  const activeTab = tabs.find((t) => t.id === activeTabId);
+  const gridCols = tabs.length <= 1 ? 1 : tabs.length <= 4 ? 2 : 3;
+  const gridRows = Math.max(1, Math.ceil(tabs.length / gridCols));
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#0a0d14] overflow-hidden">
-      {/* Top Tab Bar for Concurrent Terminals */}
-      <div className="h-10 bg-[#0e131f] border-b border-[#1f293d] flex items-center px-2 space-x-1 overflow-x-auto select-none shrink-0">
-        {tabs.map(tab => {
-          const isActive = tab.id === activeTabId;
-          return (
-            <div
-              key={tab.id}
-              onClick={() => setActiveTabId(tab.id)}
-              className={`group flex items-center space-x-2 px-3 py-1.5 rounded-t-md text-xs font-medium cursor-pointer border-t-2 transition-all ${
-                isActive
-                  ? 'bg-[#0a0d14] text-cyan-300 border-cyan-500 shadow-sm'
-                  : 'bg-transparent text-slate-400 border-transparent hover:text-slate-200 hover:bg-[#141a29]'
-              }`}
-            >
-              <TerminalIcon className={`w-3.5 h-3.5 ${isActive ? 'text-cyan-400' : 'text-slate-500'}`} />
-              <span className="truncate max-w-[120px]">{tab.name}</span>
-              {tabs.length > 1 && (
+    <div className="flex-1 flex flex-col h-full min-w-0 bg-[#0a0d14] overflow-hidden">
+      {/* Tab bar */}
+      <div className="h-10 bg-[#0e131f] border-b border-[#1f293d] flex items-center px-2 gap-1 select-none shrink-0">
+        <div className="flex items-center gap-1 overflow-x-auto flex-1 min-w-0">
+          {tabs.map((tab) => {
+            const isActive = tab.id === activeTabId;
+            return (
+              <div
+                key={tab.id}
+                onClick={() => setActiveTabId(tab.id)}
+                className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer shrink-0 transition-colors ${
+                  isActive ? 'bg-[#162033] text-cyan-300' : 'text-slate-400 hover:text-slate-200 hover:bg-[#141a29]'
+                }`}
+              >
+                {tabIcon(tab.type)}
+                <span className="truncate max-w-[130px]">{tab.name}</span>
+                {tab.status === 'exited' && <span className="text-[10px] text-slate-500">exited</span>}
                 <button
-                  onClick={(e) => handleCloseTab(tab.id, e)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeTab(tab.id);
+                  }}
                   className="opacity-0 group-hover:opacity-100 hover:text-rose-400 p-0.5 rounded transition-opacity"
+                  title="Close terminal"
                 >
                   <X className="w-3 h-3" />
                 </button>
-              )}
-            </div>
-          );
-        })}
+              </div>
+            );
+          })}
 
-        <button
-          onClick={() => handleSpawnNewTab('terminal')}
-          className="p-1 text-slate-400 hover:text-cyan-400 hover:bg-[#141a29] rounded transition-colors"
-          title="Open another terminal"
-        >
-          <Plus className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* BridgeMind Deep Reasoning Thought Card */}
-      <div className="px-4 pt-3 pb-1 select-none">
-        <div className="bg-[#121826] border border-[#1f293d] rounded-lg p-2.5 text-xs transition-all shadow-sm">
-          <div
-            onClick={() => setThoughtExpanded(!thoughtExpanded)}
-            className="flex items-center justify-between cursor-pointer text-slate-300 hover:text-white"
-          >
-            <div className="flex items-center space-x-2">
-              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
-              <span className="font-semibold text-slate-200">
-                Thought for 11s, 495 tokens
-              </span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/40">
-                Active Reasoning
-              </span>
-            </div>
-            {thoughtExpanded ? (
-              <ChevronUp className="w-4 h-4 text-slate-400" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-slate-400" />
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setShowNewMenu((v) => !v)}
+              className="flex items-center p-1 text-slate-400 hover:text-cyan-400 hover:bg-[#141a29] rounded transition-colors"
+              title="Open another terminal"
+            >
+              <Plus className="w-4 h-4" />
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {showNewMenu && (
+              <div className="fixed z-40 mt-1 w-44 bg-[#141a29] border border-[#27354f] rounded-lg shadow-xl p-1 text-xs">
+                {NEW_TERMINAL_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.type}
+                    onClick={() => {
+                      setShowNewMenu(false);
+                      spawnTerminal({ type: opt.type, name: `${opt.label} ${tabCounter + 1}` });
+                    }}
+                    className="w-full text-left px-2 py-1.5 rounded hover:bg-[#1f293d] flex items-center gap-2 text-slate-200"
+                  >
+                    {opt.icon}
+                    <span>{opt.label}</span>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
+        </div>
 
-          {thoughtExpanded && (
-            <div className="mt-2.5 pt-2 border-t border-[#1f293d] text-slate-400 space-y-1.5 font-mono text-[11px] leading-relaxed">
-              <p className="text-slate-300">
-                1. Inspecting workspace configuration and active terminal processes...
-              </p>
-              <p className="text-slate-400">
-                2. Multi-terminal multiplexer ready: standard shell streaming via WebSockets.
-              </p>
-              <p className="text-slate-400">
-                3. Browser authentication cookies cached for 1-click execution.
-              </p>
-              <div className="flex items-center space-x-3 text-[10px] text-slate-500 pt-1">
-                <span className="flex items-center space-x-1">
-                  <Clock className="w-3 h-3 text-cyan-400" />
-                  <span>Latency: 42ms</span>
-                </span>
-                <span className="flex items-center space-x-1">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                  <span>Safety Guard: Strict</span>
-                </span>
-              </div>
-            </div>
-          )}
+        {/* Layout switch */}
+        <div className="flex items-center bg-[#141a29] p-0.5 rounded-md border border-[#1f293d] shrink-0">
+          <button
+            onClick={() => setLayout('grid')}
+            className={`p-1 rounded ${layout === 'grid' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            title="Show all terminals side by side"
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setLayout('tabs')}
+            className={`p-1 rounded ${layout === 'tabs' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            title="One terminal at a time"
+          >
+            <Rows3 className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 
-      {/* Main Terminal Output Pane */}
-      <div className="flex-1 p-4 overflow-y-auto terminal-scroll bg-[#0a0d14] text-slate-200 text-xs font-mono leading-relaxed select-text">
-        <div
-          dangerouslySetInnerHTML={{ __html: htmlOutput }}
-          className="whitespace-pre-wrap break-all"
-        />
-        <div ref={terminalEndRef} />
+      {/* Terminals */}
+      <div
+        className={`flex-1 min-h-0 ${layout === 'grid' && tabs.length > 0 ? 'grid gap-2 p-2' : ''}`}
+        style={
+          layout === 'grid'
+            ? { gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))` }
+            : undefined
+        }
+      >
+        {tabs.map((tab) => (
+          <TerminalPane
+            key={tab.id}
+            tab={tab}
+            visible={layout === 'grid' || tab.id === activeTabId}
+            focused={tab.id === activeTabId}
+            showHeader={layout === 'grid'}
+            onFocus={() => setActiveTabId(tab.id)}
+            onClose={() => closeTab(tab.id)}
+            onExit={() => markExited(tab.id)}
+            registerSender={registerSender}
+          />
+        ))}
+        {tabs.length === 0 && (
+          <div className="h-full flex flex-col items-center justify-center text-slate-500 text-sm gap-3">
+            <TerminalIcon className="w-8 h-8" />
+            <span>No terminals open</span>
+            <button
+              onClick={() => spawnTerminal({ type: 'terminal', name: 'PowerShell' })}
+              className="px-3 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-xs"
+            >
+              Open terminal
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Bottom Prompt Bar with Model Selector & Execution Controls */}
-      <div className="p-3 bg-[#0e131f] border-t border-[#1f293d] select-none shrink-0 space-y-2">
-        <div className="flex items-center justify-between text-xs text-slate-400">
-          {/* Model selector dropdown */}
-          <div className="flex items-center space-x-2">
-            <span className="text-[11px] text-slate-500 font-medium">Model:</span>
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="bg-[#141a29] border border-[#232f48] rounded px-2 py-0.5 text-xs text-cyan-300 focus:outline-none focus:border-cyan-500 cursor-pointer font-medium"
-            >
-              <option value="Claude 3.7 Sonnet">Claude 3.7 Sonnet (Hybrid Reasoning)</option>
-              <option value="Claude 3.5 Sonnet">Claude 3.5 Sonnet</option>
-              <option value="GPT-4o">OpenAI GPT-4o</option>
-              <option value="Gemini 2.5 Pro">Google Gemini 2.5 Pro</option>
-              <option value="DeepSeek V3">DeepSeek V3 / R1</option>
-              <option value="Ollama Local">Local Ollama (Offline)</option>
-            </select>
-          </div>
-
-          {/* Mode Switch & Fast Actions */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setExecutionMode(executionMode === 'agent' ? 'raw' : 'agent')}
-              className={`px-2 py-0.5 rounded text-[11px] border font-medium transition-all ${
-                executionMode === 'agent'
-                  ? 'bg-cyan-950/60 border-cyan-800 text-cyan-300'
-                  : 'bg-slate-800 border-slate-700 text-slate-300'
-              }`}
-            >
-              Mode: {executionMode === 'agent' ? 'AI Agent' : 'Raw Shell'}
-            </button>
-            <button
-              onClick={handleInterrupt}
-              className="px-2 py-0.5 rounded bg-[#1e2738] hover:bg-rose-950 hover:text-rose-400 text-slate-400 text-[11px] border border-[#2b3952] transition-colors"
-              title="Send Ctrl+C"
-            >
-              Ctrl+C
-            </button>
-            <button
-              onClick={() => setOutputLines(prev => ({ ...prev, [activeTabId]: '' }))}
-              className="px-2 py-0.5 rounded bg-[#1e2738] hover:bg-[#28354c] text-slate-400 text-[11px] border border-[#2b3952] transition-colors"
-              title="Clear Terminal Output"
-            >
-              Clear
-            </button>
-          </div>
+      {/* Prompt bar — sends to the focused terminal (or all) */}
+      <div className="p-3 bg-[#0e131f] border-t border-[#1f293d] select-none shrink-0">
+        <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1.5">
+          <span>
+            Sending to:{' '}
+            <span className="text-cyan-300 font-medium">{activeTab ? activeTab.name : '—'}</span>
+            <span className="ml-2">· click a terminal to type directly into it</span>
+          </span>
+          <button
+            onClick={() => sendersRef.current.get(activeTabId)?.('\x03')}
+            className="px-2 py-0.5 rounded bg-[#1e2738] hover:bg-rose-950 hover:text-rose-400 text-slate-400 border border-[#2b3952] transition-colors"
+            title="Send Ctrl+C to the focused terminal"
+          >
+            Ctrl+C
+          </button>
         </div>
-
-        {/* Prompt Input Box */}
-        <div className="flex items-center bg-[#141a29] border border-[#24314c] focus-within:border-cyan-500 rounded-lg px-3 py-1.5 shadow-inner transition-colors">
-          <span className="text-cyan-400 font-mono text-sm mr-2 select-none">&gt;</span>
+        <div className="flex items-center bg-[#141a29] border border-[#24314c] focus-within:border-cyan-500 rounded-lg px-3 py-1.5 transition-colors">
+          <span className="text-cyan-400 font-mono text-sm mr-2">&gt;</span>
           <input
             type="text"
             value={inputVal}
             onChange={(e) => setInputVal(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                handleSendInput();
+                if (e.ctrlKey) sendToAll();
+                else sendPrompt();
+              } else if (e.key === 'ArrowUp' && history.current.length) {
+                historyIdx.current = Math.min(historyIdx.current + 1, history.current.length - 1);
+                setInputVal(history.current[historyIdx.current]);
+                e.preventDefault();
+              } else if (e.key === 'ArrowDown') {
+                historyIdx.current = Math.max(historyIdx.current - 1, -1);
+                setInputVal(historyIdx.current >= 0 ? history.current[historyIdx.current] : '');
+                e.preventDefault();
               }
             }}
-            placeholder={
-              executionMode === 'agent'
-                ? "Send prompt to agent (e.g. 'Build a React dashboard', 'Refactor auth', 'Run test suite')..."
-                : "Type terminal command (e.g. 'npm test', 'git status', 'cargo build')..."
-            }
+            placeholder="Type a prompt or command… (Enter = focused terminal, Ctrl+Enter = all terminals)"
             className="flex-1 bg-transparent text-slate-100 text-xs placeholder:text-slate-500 focus:outline-none font-mono"
           />
           <button
-            onClick={handleSendInput}
-            className="ml-2 px-2.5 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium flex items-center space-x-1 transition-colors shadow-sm"
+            onClick={sendToAll}
+            className="ml-2 px-2.5 py-1 rounded bg-[#1e2738] hover:bg-[#28354c] text-slate-300 text-xs border border-[#2b3952] transition-colors"
+            title="Send to every open terminal"
+          >
+            All
+          </button>
+          <button
+            onClick={sendPrompt}
+            className="ml-2 px-2.5 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium flex items-center gap-1 transition-colors"
           >
             <span>Send</span>
             <Send className="w-3 h-3" />

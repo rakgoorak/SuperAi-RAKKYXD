@@ -49,6 +49,7 @@ interface WorkspaceSidebarProps {
   onNewThread: (wsId: string, type: AgentThread['type'], title: string) => void;
   onDeleteThread: (wsId: string, thId: string) => void;
   onOpenLogin: () => void;
+  onNewWorkspace: () => void;
 }
 
 export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
@@ -59,12 +60,13 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   onSelectThread,
   onNewThread,
   onDeleteThread,
-  onOpenLogin
+  onOpenLogin,
+  onNewWorkspace
 }) => {
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Record<string, boolean>>({
     [activeWorkspaceId]: true
   });
-  const [showThreadMenu, setShowThreadMenu] = useState(false);
+  const [threadMenuWsId, setThreadMenuWsId] = useState<string | null>(null);
 
   const toggleExpand = (wsId: string) => {
     setExpandedWorkspaces(prev => ({
@@ -96,14 +98,9 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           Workspaces
         </span>
         <button
-          onClick={() => {
-            const name = prompt('Enter new workspace name:');
-            if (name) {
-              // Add workspace logic handled by parent or default
-            }
-          }}
+          onClick={onNewWorkspace}
           className="text-slate-400 hover:text-cyan-400 p-1 hover:bg-[#1a2337] rounded"
-          title="Add Workspace"
+          title="Add workspace (choose a project folder)"
         >
           <Plus className="w-3.5 h-3.5" />
         </button>
@@ -191,19 +188,19 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                   {/* Add Thread Button */}
                   <div className="pt-1 relative">
                     <button
-                      onClick={() => setShowThreadMenu(!showThreadMenu)}
+                      onClick={() => setThreadMenuWsId(threadMenuWsId === ws.id ? null : ws.id)}
                       className="w-full flex items-center justify-center space-x-1 py-1 rounded text-[11px] text-cyan-400 hover:bg-[#141c2e] border border-dashed border-[#1f293d] transition-colors"
                     >
                       <Plus className="w-3 h-3" />
                       <span>New Thread</span>
                     </button>
 
-                    {showThreadMenu && (
-                      <div className="absolute left-0 bottom-8 z-30 w-48 bg-[#141a29] border border-[#27354f] rounded-lg shadow-xl p-1 text-xs space-y-0.5">
+                    {threadMenuWsId === ws.id && (
+                      <div className="relative z-30 mt-1 w-full bg-[#141a29] border border-[#27354f] rounded-lg shadow-xl p-1 text-xs space-y-0.5">
                         <button
                           onClick={() => {
                             onNewThread(ws.id, 'claude-code', 'Claude Code');
-                            setShowThreadMenu(false);
+                            setThreadMenuWsId(null);
                           }}
                           className="w-full text-left px-2 py-1.5 rounded hover:bg-[#1f293d] flex items-center space-x-2"
                         >
@@ -213,7 +210,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                         <button
                           onClick={() => {
                             onNewThread(ws.id, 'codex', 'Codex Agent');
-                            setShowThreadMenu(false);
+                            setThreadMenuWsId(null);
                           }}
                           className="w-full text-left px-2 py-1.5 rounded hover:bg-[#1f293d] flex items-center space-x-2"
                         >
@@ -223,7 +220,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                         <button
                           onClick={() => {
                             onNewThread(ws.id, 'opencode-multi', 'Multi-Agent Team');
-                            setShowThreadMenu(false);
+                            setThreadMenuWsId(null);
                           }}
                           className="w-full text-left px-2 py-1.5 rounded hover:bg-[#1f293d] flex items-center space-x-2"
                         >
@@ -233,7 +230,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                         <button
                           onClick={() => {
                             onNewThread(ws.id, 'terminal', 'Terminal Session');
-                            setShowThreadMenu(false);
+                            setThreadMenuWsId(null);
                           }}
                           className="w-full text-left px-2 py-1.5 rounded hover:bg-[#1f293d] flex items-center space-x-2"
                         >
@@ -250,14 +247,11 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         })}
       </div>
 
-      {/* Bottom Profile / Credits / 1-Click Browser Login Badge */}
+      {/* Bottom: local mode + 1-Click Browser Login */}
       <div className="p-3 border-t border-[#1f293d] bg-[#0c101a] space-y-2">
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center space-x-1.5">
-            <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-slate-400">Credits left:</span>
-          </div>
-          <span className="font-semibold text-emerald-400">$5.00</span>
+        <div className="flex items-center justify-between text-[11px] text-slate-500">
+          <span>Local workspace · runs on this PC</span>
+          <span className="text-slate-600">v1.0</span>
         </div>
 
         <button

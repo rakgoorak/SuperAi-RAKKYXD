@@ -21,9 +21,13 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   authSummary = {}
 }) => {
   const loggedInCount = Object.values(authSummary).filter(Boolean).length;
+  const isDesktop = Boolean(window.bridgemind?.isDesktop);
 
   return (
-    <header className="h-12 bg-[#0e131f] border-b border-[#1f293d] flex items-center justify-between px-4 select-none shrink-0">
+    <header
+      className="app-drag h-12 bg-[#0e131f] border-b border-[#1f293d] flex items-center justify-between px-4 select-none shrink-0"
+      style={isDesktop ? { paddingRight: 150 } : undefined}
+    >
       {/* Brand & Workspace Name */}
       <div className="flex items-center space-x-3">
         <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 text-white shadow-sm shadow-cyan-500/20">

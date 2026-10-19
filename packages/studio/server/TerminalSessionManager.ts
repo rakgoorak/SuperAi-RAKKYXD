@@ -1,53 +1,41 @@
 import { spawn, ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import os from 'node:os';
-import { TerminalSession, SpawnSessionOptions } from './types.js';
+import { createRequire } from 'node:module';
+import { TerminalSession, SpawnSessionOptions, PtyProcess } from './types.js';
+
+// Prebuilt node-pty (no Visual Studio / node-gyp needed). If it can't load,
+// we fall back to plain stdio pipes so the app still works.
+const require = createRequire(import.meta.url);
+let ptyModule: { spawn: (file: string, args: string[], opts: any) => PtyProcess } | null = null;
+try {
+  ptyModule = require('@lydell/node-pty');
+} catch {
+  ptyModule = null;
+}
 
 export class TerminalSessionManager {
   private sessions: Map<string, TerminalSession> = new Map();
-  private maxBufferSize: number = 100 * 1024; // 100KB backlog per session
+  private maxBufferSize: number = 200 * 1024; // backlog replayed to new viewers
+
+  public get ptyAvailable(): boolean {
+    return ptyModule !== null;
+  }
 
   public spawnSession(options: SpawnSessionOptions = {}): TerminalSession {
     const id = options.id || randomUUID();
     const isWindows = process.platform === 'win32';
-    
-    // Choose sensible default shell
-    const defaultShell = isWindows ? 'powershell.exe' : (process.env.SHELL || 'bash');
-    const command = options.command || defaultShell;
-    const args = options.args || (isWindows && command.toLowerCase().includes('powershell') ? ['-NoLogo'] : []);
-    const cwd = options.cwd || process.cwd();
 
-    const env = {
-      ...process.env,
+    const defaultShell = isWindows ? 'powershell.exe' : process.env.SHELL || 'bash';
+    const command = options.command || defaultShell;
+    const args =
+      options.args || (isWindows && command.toLowerCase().includes('powershell') ? ['-NoLogo'] : []);
+    const cwd = options.cwd || process.cwd();
+    const env: Record<string, string> = {
+      ...(process.env as Record<string, string>),
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
-      ...options.env
+      ...options.env,
     };
-
-    let proc: ChildProcess;
-    try {
-      proc = spawn(command, args, {
-        cwd,
-        env,
-        shell: false,
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-    } catch (err: any) {
-      const failedSession: TerminalSession = {
-        id,
-        name: options.name || command,
-        command,
-        args,
-        cwd,
-        status: 'error',
-        exitCode: 1,
-        createdAt: Date.now(),
-        bufferedOutput: `[Failed to spawn process: ${err.message}]\r\n`,
-        subscribers: new Set()
-      };
-      this.sessions.set(id, failedSession);
-      return failedSession;
-    }
 
     const session: TerminalSession = {
       id,
@@ -55,12 +43,12 @@ export class TerminalSessionManager {
       command,
       args,
       cwd,
-      process: proc,
+      mode: ptyModule && !options.forcePipe ? 'pty' : 'pipe',
       status: 'running',
       exitCode: null,
       createdAt: Date.now(),
       bufferedOutput: '',
-      subscribers: new Set()
+      subscribers: new Set(),
     };
 
     const handleData = (chunk: Buffer | string) => {
@@ -78,19 +66,47 @@ export class TerminalSessionManager {
       }
     };
 
-    proc.stdout?.on('data', handleData);
-    proc.stderr?.on('data', handleData);
-
-    proc.on('error', (err) => {
-      handleData(`\r\n[Process error: ${err.message}]\r\n`);
-      session.status = 'error';
-    });
-
-    proc.on('close', (code) => {
+    const handleExit = (code: number | null) => {
+      if (session.status === 'exited') return;
       session.status = 'exited';
       session.exitCode = code;
-      handleData(`\r\n[Process terminated with exit code ${code}]\r\n`);
-    });
+      handleData(`\r\n\x1b[90m[Process exited with code ${code}]\x1b[0m\r\n`);
+    };
+
+    try {
+      if (session.mode === 'pty' && ptyModule) {
+        const ptyProc = ptyModule.spawn(command, args, {
+          name: 'xterm-256color',
+          cols: options.cols || 120,
+          rows: options.rows || 30,
+          cwd,
+          env,
+        });
+        session.ptyProcess = ptyProc;
+        ptyProc.onData(handleData);
+        ptyProc.onExit(({ exitCode }) => handleExit(exitCode));
+      } else {
+        const proc: ChildProcess = spawn(command, args, {
+          cwd,
+          env,
+          shell: false,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          windowsHide: true,
+        });
+        session.process = proc;
+        proc.stdout?.on('data', handleData);
+        proc.stderr?.on('data', handleData);
+        proc.on('error', (err) => {
+          handleData(`\r\n[Process error: ${err.message}]\r\n`);
+          session.status = 'error';
+        });
+        proc.on('close', (code) => handleExit(code));
+      }
+    } catch (err: any) {
+      session.status = 'error';
+      session.exitCode = 1;
+      session.bufferedOutput = `\x1b[31m[Failed to spawn "${command}": ${err.message}]\x1b[0m\r\n`;
+    }
 
     this.sessions.set(id, session);
     return session;
@@ -100,27 +116,45 @@ export class TerminalSessionManager {
     return this.sessions.get(id);
   }
 
-  public listSessions(): Array<Omit<TerminalSession, 'process' | 'subscribers'>> {
-    return Array.from(this.sessions.values()).map(s => ({
+  public listSessions() {
+    return Array.from(this.sessions.values()).map((s) => ({
       id: s.id,
       name: s.name,
       command: s.command,
       args: s.args,
       cwd: s.cwd,
+      mode: s.mode,
       status: s.status,
       exitCode: s.exitCode,
       createdAt: s.createdAt,
-      bufferedOutput: s.bufferedOutput.slice(-1000) // snippet
+      bufferedOutput: s.bufferedOutput.slice(-1000),
     }));
   }
 
   public writeInput(id: string, data: string): boolean {
     const session = this.sessions.get(id);
-    if (!session || !session.process || session.status !== 'running') {
+    if (!session || session.status !== 'running') return false;
+    try {
+      if (session.ptyProcess) {
+        session.ptyProcess.write(data);
+      } else if (session.process?.stdin) {
+        // Pipes have no line discipline: translate a lone Enter (\r) to a newline.
+        session.process.stdin.write(data.replace(/\r(?!\n)/g, '\r\n'));
+      } else {
+        return false;
+      }
+      return true;
+    } catch {
       return false;
     }
+  }
+
+  public resize(id: string, cols: number, rows: number): boolean {
+    const session = this.sessions.get(id);
+    if (!session?.ptyProcess || session.status !== 'running') return false;
+    if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols < 2 || rows < 2) return false;
     try {
-      session.process.stdin?.write(data);
+      session.ptyProcess.resize(Math.floor(cols), Math.floor(rows));
       return true;
     } catch {
       return false;
@@ -133,7 +167,6 @@ export class TerminalSessionManager {
       throw new Error(`Session ${id} not found`);
     }
     session.subscribers.add(callback);
-    // Send existing backlog immediately
     if (session.bufferedOutput) {
       try {
         callback(session.bufferedOutput);
@@ -146,12 +179,12 @@ export class TerminalSessionManager {
 
   public killSession(id: string): boolean {
     const session = this.sessions.get(id);
-    if (!session || !session.process) {
-      return false;
-    }
+    if (!session) return false;
     try {
-      session.process.kill();
+      session.ptyProcess?.kill();
+      session.process?.kill();
       session.status = 'exited';
+      this.sessions.delete(id);
       return true;
     } catch {
       return false;
@@ -160,9 +193,10 @@ export class TerminalSessionManager {
 
   public killAll(): void {
     for (const session of this.sessions.values()) {
-      if (session.process && session.status === 'running') {
+      if (session.status === 'running') {
         try {
-          session.process.kill();
+          session.ptyProcess?.kill();
+          session.process?.kill();
         } catch {}
       }
     }
