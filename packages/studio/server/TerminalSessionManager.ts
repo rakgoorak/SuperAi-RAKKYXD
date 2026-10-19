@@ -1,6 +1,9 @@
 import { spawn, ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
+import path from 'node:path';
+import os from 'node:os';
+import { loadStoredAuth } from '@opencode-multi/core';
 import { TerminalSession, SpawnSessionOptions, PtyProcess } from './types.js';
 
 // Prebuilt node-pty (no Visual Studio / node-gyp needed). If it can't load,
@@ -30,10 +33,23 @@ export class TerminalSessionManager {
     const args =
       options.args || (isWindows && command.toLowerCase().includes('powershell') ? ['-NoLogo'] : []);
     const cwd = options.cwd || process.cwd();
+
+    const storedAuth = loadStoredAuth();
+    const localBin = path.join(os.homedir(), '.local', 'bin');
+    const existingPath = process.env.PATH || '';
+    const enhancedPath = isWindows && !existingPath.toLowerCase().includes(localBin.toLowerCase())
+      ? `${localBin};${existingPath}`
+      : existingPath;
+
     const env: Record<string, string> = {
       ...(process.env as Record<string, string>),
+      PATH: enhancedPath,
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
+      ...(storedAuth.anthropic ? { ANTHROPIC_API_KEY: storedAuth.anthropic } : {}),
+      ...(storedAuth.openai ? { OPENAI_API_KEY: storedAuth.openai } : {}),
+      ...(storedAuth.gemini ? { GEMINI_API_KEY: storedAuth.gemini } : {}),
+      ...(storedAuth.deepseek ? { DEEPSEEK_API_KEY: storedAuth.deepseek } : {}),
       ...options.env,
     };
 
