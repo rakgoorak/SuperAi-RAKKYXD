@@ -179,10 +179,13 @@ export class StudioServer {
       path.join(process.cwd(), 'packages', 'studio', 'client', 'dist')
     ].find((p) => fs.existsSync(path.join(p, 'index.html')));
     if (clientDist) {
+      console.log(`[StudioServer] Serving static client dist from: ${clientDist}`);
       this.app.use(express.static(clientDist));
       this.app.get('*', (_req: Request, res: Response) => {
         res.sendFile(path.join(clientDist, 'index.html'));
       });
+    } else {
+      console.warn(`[StudioServer] WARNING: client dist index.html not found!`);
     }
   }
 

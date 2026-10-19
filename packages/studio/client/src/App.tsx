@@ -7,11 +7,11 @@ import { BrowserLoginModal } from './components/BrowserLoginModal.js';
 import { NewSessionModal } from './components/NewSessionModal.js';
 
 const DEFAULT_WORKSPACES: Workspace[] = [
-  { id: 'ws-bridgemrr', name: 'bridgemrr', rootPath: process.cwd(), threads: [] },
+  { id: 'ws-bridgemrr', name: 'bridgemrr', rootPath: '', threads: [] },
   {
     id: 'ws-vibecoding',
     name: 'vibecodingsimulator',
-    rootPath: process.cwd(),
+    rootPath: '',
     threads: [
       {
         id: 'th-claude-6',
@@ -25,11 +25,11 @@ const DEFAULT_WORKSPACES: Workspace[] = [
     ],
     activeThreadId: 'th-claude-6',
   },
-  { id: 'ws-bridgemind', name: 'bridgemind', rootPath: process.cwd(), threads: [] },
-  { id: 'ws-bridgebench', name: 'bridgebench', rootPath: process.cwd(), threads: [] },
-  { id: 'ws-bridgegame', name: 'bridgegame', rootPath: process.cwd(), threads: [] },
-  { id: 'ws-obs', name: 'obs', rootPath: process.cwd(), threads: [] },
-  { id: 'ws-bridgevideo', name: 'bridgevideo', rootPath: process.cwd(), threads: [] },
+  { id: 'ws-bridgemind', name: 'bridgemind', rootPath: '', threads: [] },
+  { id: 'ws-bridgebench', name: 'bridgebench', rootPath: '', threads: [] },
+  { id: 'ws-bridgegame', name: 'bridgegame', rootPath: '', threads: [] },
+  { id: 'ws-obs', name: 'obs', rootPath: '', threads: [] },
+  { id: 'ws-bridgevideo', name: 'bridgevideo', rootPath: '', threads: [] },
 ];
 
 export function App() {

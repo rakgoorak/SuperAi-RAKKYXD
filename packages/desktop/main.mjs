@@ -69,7 +69,32 @@ function createMainWindow() {
     },
   });
 
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    log('Main window displayed.');
+  });
+
+  // Log renderer console messages to desktop.log
+  mainWindow.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    const levelStr = ['verbose', 'info', 'warning', 'error'][level] || String(level);
+    log(`[Renderer ${levelStr}] ${message} (${sourceId}:${line})`);
+  });
+
+  mainWindow.webContents.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL) => {
+    log(`[Renderer load failed] ${validatedURL}: [${errorCode}] ${errorDescription}`);
+  });
+
+  // F12 or Ctrl+Shift+I toggles DevTools
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) {
+      mainWindow.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
+
+  if (process.argv.includes('--debug') || process.argv.includes('--devtools') || process.env.DEBUG) {
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+  }
 
   // Links that try to open a new window go to the user's default browser.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

@@ -20,14 +20,21 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-:: Ensure dist files exist, build if needed
-if not exist "packages\studio\dist\StudioServer.js" (
-    echo [*] Building studio backend...
-    call npm run build
-)
-if not exist "packages\studio\client\dist\index.html" (
-    echo [*] Building studio frontend UI...
+:: Check if user requested a rebuild
+if "%1"=="--build" (
+    echo [*] Rebuilding studio server and client...
+    call npm --workspace=@bridgemind/studio run build
     call npm --workspace=@bridgemind/client run build
+) else (
+    :: Ensure dist files exist, build if needed
+    if not exist "packages\studio\dist\StudioServer.js" (
+        echo [*] Building studio backend...
+        call npm --workspace=@bridgemind/studio run build
+    )
+    if not exist "packages\studio\client\dist\index.html" (
+        echo [*] Building studio frontend UI...
+        call npm --workspace=@bridgemind/client run build
+    )
 )
 
 echo [*] Launching RakkyXD Studio Desktop Application...
@@ -38,5 +45,6 @@ call npx electron packages\desktop
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
-    echo [!] Desktop app exited.
+    echo [!] Desktop app exited with code %ERRORLEVEL%.
+    pause
 )
