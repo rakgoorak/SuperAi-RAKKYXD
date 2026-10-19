@@ -47,6 +47,7 @@ export function App() {
     agentType: string;
     sessionNames: string[];
   } | null>(null);
+  const [injectedPrompt, setInjectedPrompt] = useState<string>('');
 
   const fetchWorkspaces = async () => {
     try {
@@ -188,10 +189,17 @@ export function App() {
           newTerminalSignal={newTerminalSignal}
           onOpenNewSessionModal={() => setShowNewSessionModal(true)}
           externalLaunchRequest={launchRequest}
+          injectedPrompt={injectedPrompt}
+          onPromptConsumed={() => setInjectedPrompt('')}
         />
 
-        {/* Right Column: Live Webview Preview */}
-        {showPreview && <BrowserPreview onClose={() => setShowPreview(false)} />}
+        {/* Right Column: Live Webview & Companion Tabs Preview */}
+        {showPreview && (
+          <BrowserPreview
+            onClose={() => setShowPreview(false)}
+            onSelectPrompt={(text) => setInjectedPrompt(text)}
+          />
+        )}
       </div>
 
       {/* 1-Click Browser Authentication Modal */}
