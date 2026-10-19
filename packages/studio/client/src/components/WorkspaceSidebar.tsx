@@ -11,7 +11,6 @@ import {
   Folder,
   Circle
 } from 'lucide-react';
-import { BombWidget } from './BombWidget.js';
 
 export interface AgentThread {
   id: string;
@@ -155,8 +154,20 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         })}
       </div>
 
-      {/* Bomb Widget at the bottom (Matching Screenshot 1 & 2) */}
-      <BombWidget />
+      {/* Clean Bottom Workspace Footer (No Bomb) */}
+      <div className="p-3 bg-[#080b12] border-t border-[#1a2337] select-none flex items-center justify-between text-xs text-slate-400">
+        <div className="flex items-center space-x-2 truncate">
+          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-[11px] font-mono text-slate-300 truncate">6 Agents Online</span>
+        </div>
+        <button
+          onClick={onOpenLogin}
+          className="px-2 py-0.5 rounded bg-[#131929] hover:bg-[#1a243b] text-cyan-400 border border-[#212d47] text-[10px] font-mono transition-colors"
+          title="Manage AI Auth"
+        >
+          Auth
+        </button>
+      </div>
     </aside>
   );
 };

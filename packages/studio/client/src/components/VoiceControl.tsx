@@ -8,6 +8,7 @@ interface VoiceControlProps {
   onInterrupt: () => void;
   onClear: () => void;
   onLaunchSix?: () => void;
+  onStartClaudeAll?: () => void;
 }
 
 export const VoiceControl: React.FC<VoiceControlProps> = ({
@@ -75,11 +76,17 @@ export const VoiceControl: React.FC<VoiceControlProps> = ({
         } else if (lower.includes('เปิดหกตัว') || lower.includes('เปิด 6 ตัว') || lower.includes('เปิด 6 เซสชัน')) {
           setDetectedAction('🚀 เปิด 6 Agents');
           if (onLaunchSix) onLaunchSix();
+        } else if (lower.includes('เริ่มคลอด') || lower.includes('รันคลอด') || lower.includes('เปิดคลอด') || lower.includes('เริ่ม claude')) {
+          setDetectedAction('⚡ รัน Claude Code ทั้งหมด');
+          if (onStartClaudeAll) onStartClaudeAll();
         }
         // Detect English commands
         else if (lower.includes('broadcast all') || lower.includes('send to all')) {
           setDetectedAction('⚡ Broadcast to All');
           onBroadcast();
+        } else if (lower.includes('start claude') || lower.includes('run claude')) {
+          setDetectedAction('⚡ Start Claude on All Seats');
+          if (onStartClaudeAll) onStartClaudeAll();
         } else if (lower.includes('run') || lower.includes('execute') || lower.includes('send')) {
           setDetectedAction('▶ Execute Command');
           onExecute();

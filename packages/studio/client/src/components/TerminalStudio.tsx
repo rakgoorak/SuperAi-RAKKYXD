@@ -243,9 +243,18 @@ export const TerminalStudio: React.FC<TerminalStudioProps> = ({
   const launchClaudeInSession = (tabId: string) => {
     const sender = sendersRef.current.get(tabId);
     if (sender) {
-      sender('claude\r');
+      const isAuto = autoModes[tabId] ?? true;
+      const cmd = isAuto ? 'claude --dangerously-skip-permissions\r' : 'claude\r';
+      sender(cmd);
       sound.playExecute();
     }
+  };
+
+  const startAllClaude = () => {
+    sendersRef.current.forEach((sender) => {
+      sender('claude --dangerously-skip-permissions\r');
+    });
+    sound.playBroadcast();
   };
 
   const toggleAutoMode = (tabId: string) => {
@@ -304,6 +313,16 @@ export const TerminalStudio: React.FC<TerminalStudioProps> = ({
 
         {/* Right Action Buttons */}
         <div className="flex items-center space-x-2 shrink-0">
+          {/* 1-Click Start All Claude Code Agents */}
+          <button
+            onClick={startAllClaude}
+            className="flex items-center space-x-1 px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-sm transition-all"
+            title="Start Claude Code CLI on all 6 seats in parallel"
+          >
+            <Play className="w-3.5 h-3.5 fill-white" />
+            <span>Start 6 Claude</span>
+          </button>
+
           {onOpenNewSessionModal && (
             <button
               onClick={onOpenNewSessionModal}
@@ -585,6 +604,7 @@ export const TerminalStudio: React.FC<TerminalStudioProps> = ({
             onInterrupt={() => sendersRef.current.get(activeTabId)?.('\x03')}
             onClear={() => sendersRef.current.get(activeTabId)?.('clear\r')}
             onLaunchSix={launchSixSessions}
+            onStartClaudeAll={startAllClaude}
           />
         </div>
 
