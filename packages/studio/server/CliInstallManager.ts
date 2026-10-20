@@ -2,7 +2,7 @@ import { spawn, execFileSync, ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { cliEnv, findExecutable, getCliDefinition, INSTALL_PACKAGES, managedCliPrefix } from './CliCatalog.js';
+import { cliEnv, findExecutable, getCliDefinition, INSTALL_PACKAGES, INSTALL_SCRIPTS, managedCliPrefix } from './CliCatalog.js';
 import { installNode22 } from './NodeInstaller.js';
 import { installPortableGit } from './GitInstaller.js';
 
@@ -160,12 +160,23 @@ export class CliInstallManager {
 
     const cli = getCliDefinition(cliId);
     const pkg = INSTALL_PACKAGES[cliId];
-    if (!pkg) throw new Error('Terminal มาพร้อมระบบปฏิบัติการ ไม่ต้องติดตั้ง');
+    const script = INSTALL_SCRIPTS[cliId];
+    if (!pkg && !script) throw new Error('Terminal มาพร้อมระบบปฏิบัติการ ไม่ต้องติดตั้ง');
     if (this.child || this.currentAbort) {
       throw new Error('กำลังติดตั้งเครื่องมืออื่น กรุณารอหรือยกเลิกก่อน');
     }
     if (this.dependencies.find(cli.command)) {
       throw new Error('เครื่องมือนี้ติดตั้งแล้ว กดตรวจสอบอีกครั้งได้');
+    }
+    if (script) {
+      this.pruneOldJobs();
+      const job: InstallJob = { id: randomUUID(), cliId, status: 'running', log: `ติดตั้ง ${cli.name} ด้วยสคริปต์ทางการของ Google
+` };
+      this.jobs.set(job.id, job);
+      if (process.platform === 'win32')
+        this.runInstaller(job, cli, 'powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', `irm '${script.win32}' | iex`]);
+      else this.runInstaller(job, cli, '/bin/bash', ['-c', `curl -fsSL '${script.posix}' | bash`]);
+      return job;
     }
 
     const node = this.dependencies.find('node');
@@ -270,9 +281,7 @@ export class CliInstallManager {
       return;
     }
 
-    const child = this.dependencies.spawn(
-      node,
-      [
+    this.runInstaller(job, cli, node, [
         entry,
         'install',
         '--global',
@@ -282,7 +291,13 @@ export class CliInstallManager {
         '--registry=https://registry.npmjs.org',
         '--no-fund',
         '--no-audit',
-      ],
+      ]);
+  }
+
+  private runInstaller(job: InstallJob, cli: { command: string; name: string }, command: string, args: string[]) {
+    const child = this.dependencies.spawn(
+      command,
+      args,
       {
         windowsHide: true,
         detached: process.platform !== 'win32',

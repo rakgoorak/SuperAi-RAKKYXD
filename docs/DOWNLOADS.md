@@ -24,7 +24,7 @@
 
 1. **Node.js 22** กดติดตั้งอัตโนมัติ (ดาวน์โหลดจาก nodejs.org และตรวจ SHA-256)
 2. **Git for Windows** (เฉพาะ Windows, Claude Code ต้องใช้ Git Bash) กดติดตั้ง PortableGit จาก GitHub ของ Git for Windows และตรวจ SHA-256 บน macOS ใช้ `xcode-select --install`
-3. **CLI ของ AI** เลือกติดตั้ง Claude Code, Codex, OpenCode หรือ Gemini CLI จาก npm ทางการ
+3. **CLI ของ AI** เลือกติดตั้ง Claude Code, Codex หรือ OpenCode จาก npm ทางการ หรือ Antigravity CLI (`agy`) ด้วยสคริปต์ทางการของ Google ที่ antigravity.google
 4. **โปรเจกต์** เลือกโฟลเดอร์ทำงาน
 5. **เข้าสู่ระบบ** เปิด session แล้วทำตามขั้นตอนของ CLI นั้นด้วยบัญชีของคุณเอง ค่าใช้จ่ายและโควตาขึ้นกับผู้ให้บริการ
 6. **โหมดเสียง** (ไม่บังคับ) โมเดลแปลงเสียงดาวน์โหลดครั้งแรกที่เปิดใช้ หากต้องการให้อ่านคำตอบภาษาไทย ให้เพิ่มเสียงพูดภาษาไทยของระบบ (Windows: การตั้งค่า → เวลาและภาษา → เสียงพูด, macOS: เพิ่มเสียง Kanya)

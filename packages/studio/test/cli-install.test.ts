@@ -19,13 +19,13 @@ test('installer rejects unknown IDs and Terminal before executing any command',(
   const f=fixture();try{assert.throws(()=>f.manager.start('arbitrary;package'));assert.throws(()=>f.manager.start('terminal'),/ไม่ต้องติดตั้ง/);assert.equal(f.calls.length,0);}finally{f.dispose();}
 });
 test('installer uses fixed official package, private prefix and requires executable discovery',()=>{
-  const f=fixture();try{const job=f.manager.start('codex');assert.ok(f.calls[0].args.includes('@openai/codex@latest'));assert.ok(f.calls[0].args.includes('--prefix'));assert.throws(()=>f.manager.start('gemini'),/กำลังติดตั้ง/);f.children[0].stdout.write('download complete');f.installed();f.children[0].emit('close',0);assert.equal(job.status,'completed');assert.match(job.log,/download complete/);}finally{f.dispose();}
+  const f=fixture();try{const job=f.manager.start('codex');assert.ok(f.calls[0].args.includes('@openai/codex@latest'));assert.ok(f.calls[0].args.includes('--prefix'));assert.throws(()=>f.manager.start('opencode'),/กำลังติดตั้ง/);f.children[0].stdout.write('download complete');f.installed();f.children[0].emit('close',0);assert.equal(job.status,'completed');assert.match(job.log,/download complete/);}finally{f.dispose();}
 });
 test('installer does not report success when npm exits zero without an executable',()=>{
   const f=fixture();try{const job=f.manager.start('codex');f.children[0].emit('close',0);assert.equal(job.status,'failed');assert.match(job.error!,/executable/);}finally{f.dispose();}
 });
 test('installer cancellation keeps slot until child confirms close',()=>{
-  const f=fixture();try{const job=f.manager.start('codex');assert.equal(f.manager.cancel(job.id),true);assert.equal(job.status,'cancelled');assert.throws(()=>f.manager.start('gemini'),/กำลังติดตั้ง/);f.children[0].emit('close',1);assert.equal(f.manager.start('gemini').status,'running');}finally{f.dispose();}
+  const f=fixture();try{const job=f.manager.start('codex');assert.equal(f.manager.cancel(job.id),true);assert.equal(job.status,'cancelled');assert.throws(()=>f.manager.start('opencode'),/กำลังติดตั้ง/);f.children[0].emit('close',1);assert.equal(f.manager.start('opencode').status,'running');}finally{f.dispose();}
 });
 test('installer timeout fails after process close and records a recovery message',async()=>{
   const f=fixture(10);try{const job=f.manager.start('codex');await new Promise(r=>setTimeout(r,30));f.children[0].emit('close',1);assert.equal(job.status,'failed');assert.match(job.error!,/เกินเวลา/);}finally{f.dispose();}
@@ -131,4 +131,14 @@ test('installer supports start("node") for standalone Node 22 setup and responds
   assert.ok(receivedSignal?.aborted);
   await new Promise((r) => setTimeout(r, 30));
   assert.equal(installDone, false);
+});
+
+test('Antigravity CLI installs with the fixed official Google script, never an npm package',()=>{
+  const f=fixture();try{
+    const job=f.manager.start('antigravity');
+    const call=f.calls[0], line=[call.command,...call.args].join(' ');
+    assert.match(line,process.platform==='win32'?/https:\/\/antigravity\.google\/cli\/install\.ps1/:/https:\/\/antigravity\.google\/cli\/install\.sh/);
+    assert.doesNotMatch(line,/npm|registry/);
+    f.children[0].emit('close',0);assert.equal(job.status,'failed','exit 0 without agy on PATH is not success');
+  }finally{f.dispose();}
 });

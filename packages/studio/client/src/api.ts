@@ -42,6 +42,7 @@ export interface Cli {
   available: boolean;
   maxSessions: number;
   installPackage?: string;
+  needsNode?: boolean;
   installerReady?: boolean;
   nodeReady?: boolean;
   nodeStatus?: NodeStatus;

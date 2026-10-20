@@ -8,6 +8,8 @@ export function LaunchPresets({ clis, type, count, onChoose, onError }: {
 }) {
   const [presets, setPresets] = useState<Preset[]>(() => {
     try { const data = JSON.parse(localStorage.getItem('superai-launch-presets-v1') || '[]');
+      // Gemini CLI was retired; saved sets carry over to its replacement.
+      if (Array.isArray(data)) for (const p of data) for (const s of p?.seats || []) if (s?.type === 'gemini') s.type = 'antigravity';
       return Array.isArray(data) ? data.filter(p => p && typeof p.id === 'string' && typeof p.name === 'string' && Array.isArray(p.seats) && p.seats.length && p.seats.every((s: LaunchSeat) => typeof s.type === 'string' && Number.isInteger(s.count) && s.count >= 1 && s.count <= 12)) : [];
     } catch { return []; }
   });

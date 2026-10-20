@@ -8,7 +8,7 @@ import { isModelCached } from "../voice/stt";
 interface GitStatus { required: boolean; installed: boolean; version: string | null }
 interface Job { id: string; cliId: string; status: string; log: string; error?: string }
 
-const AI_CLIS = ["claude-code", "codex", "opencode", "gemini"];
+const AI_CLIS = ["claude-code", "codex", "opencode", "antigravity"];
 const LOGIN_KEY = "superai-setup-login";
 
 export function setupNeeded(clis: Cli[], workspaces: Workspace[]) {
@@ -95,8 +95,8 @@ export function SetupGuide({ clis, workspaces, voice, refreshClis, addProject, i
     }] : []),
     {
       key: "cli", title: "ผู้ช่วย AI อย่างน้อย 1 ตัว", done: hasCli, optional: false,
-      detail: hasCli ? `พร้อมใช้: ${clis.filter((c) => AI_CLIS.includes(c.id) && c.available).map((c) => c.name).join(", ")}` : "Claude Code, Codex, OpenCode หรือ Gemini CLI · OpenCode มีรุ่นฟรีให้ลอง",
-      action: <button className="secondary" disabled={!node?.ready} onClick={installCli}><Terminal size={14} /> {hasCli ? "เพิ่มตัวอื่น" : "เลือกและติดตั้ง"}</button>,
+      detail: hasCli ? `พร้อมใช้: ${clis.filter((c) => AI_CLIS.includes(c.id) && c.available).map((c) => c.name).join(", ")}` : "Claude Code, Codex, OpenCode หรือ Antigravity CLI · OpenCode มีรุ่นฟรีให้ลอง",
+      action: <button className="secondary" onClick={installCli}><Terminal size={14} /> {hasCli ? "เพิ่มตัวอื่น" : "เลือกและติดตั้ง"}</button>,
     },
     {
       key: "project", title: "โฟลเดอร์โปรเจกต์", done: workspaces.length > 0, optional: false,

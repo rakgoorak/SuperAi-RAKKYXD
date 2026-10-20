@@ -22,20 +22,28 @@ export const CLI_DEFINITIONS = [
     maxSessions: 12,
   },
   { id: "codex", name: "Codex", command: "codex", maxSessions: 12 },
-  { id: "gemini", name: "Gemini CLI", command: "gemini", maxSessions: 12 },
+  // Gemini CLI was retired in June 2026; Google replaced it with Antigravity CLI (agy).
+  { id: "antigravity", name: "Antigravity CLI", command: "agy", maxSessions: 12 },
   { id: "opencode", name: "OpenCode", command: "opencode", maxSessions: 12 },
   { id: "freebuff", name: "Freebuff", command: "freebuff", maxSessions: 1 },
 ];
 export const INSTALL_PACKAGES: Record<string, string> = {
-  'claude-code':'@anthropic-ai/claude-code', codex:'@openai/codex', gemini:'@google/gemini-cli', opencode:'opencode-ai', freebuff:'freebuff',
+  'claude-code':'@anthropic-ai/claude-code', codex:'@openai/codex', opencode:'opencode-ai', freebuff:'freebuff',
 };
+// Not on npm (the npm names "agy"/"antigravity" are unrelated placeholders): Google's
+// own installer downloads a SHA-512-verified binary. Fixed URLs only.
+export const INSTALL_SCRIPTS: Record<string, { win32: string; posix: string }> = {
+  antigravity: { win32: 'https://antigravity.google/cli/install.ps1', posix: 'https://antigravity.google/cli/install.sh' },
+};
+export const antigravityBin = () =>
+  process.platform === 'win32' ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'agy', 'bin') : path.join(os.homedir(), '.local', 'bin');
 export const managedCliPrefix = () => path.join(os.homedir(), '.opencode-multi', 'cli-tools');
 export const managedCliBin = () => process.platform === 'win32' ? managedCliPrefix() : path.join(managedCliPrefix(), 'bin');
 export const cliPath = () => [
   ...new Set([
     managedCliBin(),
     managedNodeBin(),
-    ...(process.platform === 'win32' ? [managedGitCmd()] : []),
+    ...(process.platform === 'win32' ? [managedGitCmd(), antigravityBin()] : []),
     path.join(os.homedir(), '.local', 'bin'),
     ...(process.env.PATH || '').split(path.delimiter),
   ]),
@@ -138,7 +146,8 @@ export function listClis() {
   return CLI_DEFINITIONS.map((c) => ({
     ...c,
     available: !!findExecutable(c.command),
-    installPackage: INSTALL_PACKAGES[c.id],
+    installPackage: INSTALL_PACKAGES[c.id] || (INSTALL_SCRIPTS[c.id] ? 'antigravity.google' : undefined),
+    needsNode: !!INSTALL_PACKAGES[c.id],
     installerReady: true,
     nodeReady: nodeStatus.ready,
     nodeStatus,
@@ -174,7 +183,6 @@ export function cliLaunch(
       codex: "@openai/codex",
       opencode: "opencode-ai",
       freebuff: "freebuff",
-      gemini: "@google/gemini-cli",
       "claude-code": "@anthropic-ai/claude-code",
     };
     const packageName = packages[id];
