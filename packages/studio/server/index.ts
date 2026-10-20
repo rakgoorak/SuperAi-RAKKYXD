@@ -7,7 +7,7 @@ export * from './StudioServer.js';
 
 const PORT = parseInt(process.env.PORT || '3888', 10);
 
-if (process.argv[1] && process.argv[1].endsWith('index.js')) {
+if (process.argv[1] && process.argv[1].match(/index\.(js|ts)$/)) {
   const server = new StudioServer({ port: PORT });
   server.start().then(() => {
     console.log(`\n======================================================`);

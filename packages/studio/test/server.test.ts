@@ -31,6 +31,7 @@ test('StudioServer: REST endpoints and WebSocket terminal streaming', async () =
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: 'test-api-terminal',
+        forcePipe: true,
         command: isWindows ? 'cmd.exe' : 'sh',
         args: isWindows ? ['/c', 'echo STREAM_TEST_OK'] : ['-c', 'echo STREAM_TEST_OK']
       })

@@ -6,6 +6,7 @@ export default defineConfig({
   define: {
     'process.env': '{}',
   },
+  build: { rollupOptions: { output: { manualChunks: { terminal: ['@xterm/xterm', '@xterm/addon-fit'], react: ['react', 'react-dom'] } } } },
   server: {
     port: 5173,
     proxy: {

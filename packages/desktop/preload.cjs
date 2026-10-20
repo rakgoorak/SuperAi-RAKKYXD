@@ -1,11 +1,11 @@
-// Exposes a minimal, safe desktop API to the Studio UI as `window.bridgemind`.
 const { contextBridge, ipcRenderer } = require('electron');
-
-contextBridge.exposeInMainWorld('bridgemind', {
-  isDesktop: true,
-  platform: process.platform,
-  browserLogin: (service) => ipcRenderer.invoke('auth:browser-login', service),
-  logout: (service) => ipcRenderer.invoke('auth:logout', service),
-  pickFolder: () => ipcRenderer.invoke('dialog:pick-folder'),
-  openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
+const listen = (channel, callback) => { const handler = (_event, data) => callback(data); ipcRenderer.on(channel, handler); return () => ipcRenderer.removeListener(channel, handler); };
+contextBridge.exposeInMainWorld('superai', {
+  isDesktop: true, platform: process.platform,
+  pickFolder: () => ipcRenderer.invoke('app:folder'),
+  openExternal: url => ipcRenderer.invoke('app:external', url),
+  openVoice: () => ipcRenderer.invoke('app:voice'),
+  browser: (action, payload) => ipcRenderer.invoke('browser:action', action, payload),
+  onBrowser: callback => listen('browser:state', callback),
+  onVoiceText: callback => listen('voice:text', callback),
 });

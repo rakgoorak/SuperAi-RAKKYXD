@@ -126,13 +126,14 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'output') term.write(msg.data);
+        else if (msg.type === 'exit') { term.write('\r\n[จบการทำงาน]\r\n'); onExitRef.current(); }
         else if (msg.type === 'error') term.write(`\r\n\x1b[31m${msg.message}\x1b[0m\r\n`);
       } catch {
         term.write(String(event.data));
       }
     };
     ws.onclose = () => {
-      term.write('\r\n\x1b[90m[Disconnected]\x1b[0m\r\n');
+      term.write('\r\n\x1b[90m[การเชื่อมต่อขาดหาย]\x1b[0m\r\n');
       onExitRef.current();
     };
 
@@ -213,7 +214,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
           <div ref={containerRef} className="w-full h-full" />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-xs text-slate-500">
-            {tab.status === 'error' ? 'Failed to start terminal' : 'Starting terminal…'}
+            {tab.status === 'error' ? 'เปิด terminal ไม่สำเร็จ' : 'กำลังเปิด terminal…'}
           </div>
         )}
       </div>

@@ -44,7 +44,7 @@ export class AgentLoop {
 
     this.emitEvent(options.onEvent, 'start', { task: taskPrompt });
 
-    while (this.isRunning && stepCount < maxSteps) {
+    while (this.isRunning && !options.abortSignal?.aborted && stepCount < maxSteps) {
       stepCount++;
       this.emitEvent(options.onEvent, 'step', { step: stepCount, maxSteps });
 
@@ -79,7 +79,7 @@ export class AgentLoop {
       }
 
       for (const tc of response.toolCalls) {
-        if (!this.isRunning) break;
+        if (!this.isRunning || options.abortSignal?.aborted) break;
 
         this.emitEvent(options.onEvent, 'tool_call', {
           toolCallId: tc.id,

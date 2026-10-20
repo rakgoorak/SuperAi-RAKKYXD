@@ -7,3 +7,13 @@ dist/
 .DS_Store
 Thumbs.db
 coverage/
+
+output/
+__pycache__/
+*.pyc
+release/
+
+release-assets/
+.env.*
+*.p12
+*.pfx

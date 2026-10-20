@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import { BaseTool, ExecutionContext, ToolResult } from './BaseTool.js';
 
 export interface BashArgs {
@@ -25,6 +25,7 @@ export class BashTool extends BaseTool {
   };
 
   async execute(args: BashArgs, context: ExecutionContext = { cwd: process.cwd() }): Promise<ToolResult> {
+    if (context.signal?.aborted) return { success: false, output: '', error: 'ยกเลิกคำสั่งแล้ว' };
     const { command, timeoutMs = 120_000 } = args;
     const cwd = context?.cwd || process.cwd();
     const isWindows = process.platform === 'win32';
@@ -42,10 +43,16 @@ export class BashTool extends BaseTool {
         env: { ...process.env, ...context.env },
         windowsHide: true,
       });
+      const stop = () => {
+        if(isWindows && child.pid)execFile('taskkill',['/PID',String(child.pid),'/T','/F'],{windowsHide:true},()=>{});
+        else child.kill();
+      };
+      const onAbort = () => stop();
+      context.signal?.addEventListener('abort', onAbort, { once: true });
 
       const timer = setTimeout(() => {
         timedOut = true;
-        child.kill();
+        stop();
       }, timeoutMs);
 
       child.stdout?.on('data', (data: Buffer) => {
@@ -65,6 +72,7 @@ export class BashTool extends BaseTool {
       });
 
       child.on('error', (err) => {
+        context.signal?.removeEventListener('abort', onAbort);
         clearTimeout(timer);
         resolve({
           success: false,
@@ -74,6 +82,7 @@ export class BashTool extends BaseTool {
       });
 
       child.on('close', (code) => {
+        context.signal?.removeEventListener('abort', onAbort);
         clearTimeout(timer);
         if (timedOut) {
           resolve({

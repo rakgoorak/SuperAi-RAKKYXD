@@ -1,0 +1,10 @@
+# Reference workspace implementation plan
+
+User-approved direction: continue the existing SuperAi & RAKKYXD rebuild using the seven supplied BridgeMind screenshots as visual/interaction authority. Preserve Thai, own brand, real CLI sessions, embedded Chromium and Freebuff single-session enforcement. This refinement replaces the oversized composer/rigid two-column topology with a terminal-first tiled canvas.
+
+1. Extract a tiled SessionCanvas component: auto/1/2/3/4-column layouts, full-width final remainder, pointer and keyboard splitters, reorder controls and drag/drop, focus/restore, stable mounted TerminalPane identity. Persist preferences and ordering locally. Default code composer collapsed, but reveal it for dictation and saved prompts.
+2. Add RightDock around the existing mounted PreviewPanel: Dashboard from actual process/run state, Tasks with explicit user completion and command delivery, reusable Prompts, Browser with native-view suspension while another tab/modal is shown. Persist tasks/prompts locally; show storage failures. Resize dock with pointer or keyboard.
+3. Add saved launch presets to existing session flow, validate unavailable CLIs and Freebuff limit before launching; retain authoritative backend limit. Compact shell with top mode switch, thin pane headers, close/split/rename/reorder controls. Do not invent context percentages or AI activity detection unsupported by CLI protocols.
+4. Validate pure grid calculation/persistence shape; Electron integration checks for fitted 6/9 sessions, resize/reorder/focus process identity, dock native visibility, task CRUD/delivery, prompt reuse, presets and Freebuff limits. Update earlier layout tests for new composer default; retain explicit old split/stack layouts. Build and package a new portable release without stopping the user's running app.
+
+Deferred rather than impersonated: proprietary internal scheduling, provider billing/account switching, context telemetry unavailable from terminal protocols. CLI authentication remains through each installed CLI.

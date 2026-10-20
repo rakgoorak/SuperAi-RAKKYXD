@@ -1,14 +1,14 @@
 {
   "name": "@bridgemind/desktop",
-  "productName": "RakkyXD Studio",
+  "productName": "SuperAi & RAKKYXD",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "main.mjs",
   "scripts": {
     "start": "electron .",
-    "build": "echo desktop: nothing to compile",
-    "test": "echo desktop: ok"
+    "build": "node --check main.mjs && node --check browser.mjs",
+    "test": "node --test browser.test.mjs"
   },
   "devDependencies": {
     "electron": "^33.4.11"

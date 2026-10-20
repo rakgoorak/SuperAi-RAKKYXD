@@ -1,17 +1,19 @@
-import { spawn, ChildProcess } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
-import path from 'node:path';
-import os from 'node:os';
-import { loadStoredAuth } from '@opencode-multi/core';
-import { TerminalSession, SpawnSessionOptions, PtyProcess } from './types.js';
+import { spawn, ChildProcess, execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
+import path from "node:path";
+import os from "node:os";
+import { TerminalSession, SpawnSessionOptions, PtyProcess } from "./types.js";
+import { getCliDefinition, cliLaunch } from "./CliCatalog.js";
 
 // Prebuilt node-pty (no Visual Studio / node-gyp needed). If it can't load,
 // we fall back to plain stdio pipes so the app still works.
 const require = createRequire(import.meta.url);
-let ptyModule: { spawn: (file: string, args: string[], opts: any) => PtyProcess } | null = null;
+let ptyModule: {
+  spawn: (file: string, args: string[], opts: any) => PtyProcess;
+} | null = null;
 try {
-  ptyModule = require('@lydell/node-pty');
+  ptyModule = require("@lydell/node-pty");
 } catch {
   ptyModule = null;
 }
@@ -25,45 +27,76 @@ export class TerminalSessionManager {
   }
 
   public spawnSession(options: SpawnSessionOptions = {}): TerminalSession {
+    if (options.agentType) {
+      const definition = getCliDefinition(options.agentType);
+      const count = [...this.sessions.values()].filter(
+        (s) =>
+          s.agentType === options.agentType &&
+          (["running", "stopping"].includes(s.status) ||
+            (s.closeRequested && !s.terminationConfirmed)),
+      ).length;
+      if (count >= definition.maxSessions)
+        throw new Error(
+          `${definition.name} เปิดได้สูงสุด ${definition.maxSessions} session กรุณาปิด session เดิมก่อน`,
+        );
+      if (!options.command)
+        options = {
+          ...options,
+          ...cliLaunch(
+            options.agentType,
+            options.agentType === "opencode" && options.openCodeModel
+              ? ["--model", options.openCodeModel]
+              : [],
+          ),
+        };
+    }
+    if (this.sessions.size > 100)
+      for (const [key, s] of this.sessions)
+        if (!["running", "stopping"].includes(s.status) && !s.closeRequested)
+          this.sessions.delete(key);
     const id = options.id || randomUUID();
-    const isWindows = process.platform === 'win32';
+    const isWindows = process.platform === "win32";
 
-    const defaultShell = isWindows ? 'powershell.exe' : process.env.SHELL || 'bash';
+    const defaultShell = isWindows
+      ? "powershell.exe"
+      : process.env.SHELL || "bash";
     const command = options.command || defaultShell;
     const args =
-      options.args || (isWindows && command.toLowerCase().includes('powershell') ? ['-NoLogo'] : []);
+      options.args ||
+      (isWindows && command.toLowerCase().includes("powershell")
+        ? ["-NoLogo"]
+        : []);
     const cwd = options.cwd || process.cwd();
 
-    const storedAuth = loadStoredAuth();
-    const localBin = path.join(os.homedir(), '.local', 'bin');
-    const existingPath = process.env.PATH || '';
-    const enhancedPath = isWindows && !existingPath.toLowerCase().includes(localBin.toLowerCase())
-      ? `${localBin};${existingPath}`
-      : existingPath;
+    const localBin = path.join(os.homedir(), ".local", "bin");
+    const existingPath = process.env.PATH || "";
+    const enhancedPath =
+      isWindows && !existingPath.toLowerCase().includes(localBin.toLowerCase())
+        ? `${localBin};${existingPath}`
+        : existingPath;
 
     const env: Record<string, string> = {
       ...(process.env as Record<string, string>),
       PATH: enhancedPath,
-      TERM: 'xterm-256color',
-      COLORTERM: 'truecolor',
-      ...(storedAuth.anthropic ? { ANTHROPIC_API_KEY: storedAuth.anthropic } : {}),
-      ...(storedAuth.openai ? { OPENAI_API_KEY: storedAuth.openai } : {}),
-      ...(storedAuth.gemini ? { GEMINI_API_KEY: storedAuth.gemini } : {}),
-      ...(storedAuth.deepseek ? { DEEPSEEK_API_KEY: storedAuth.deepseek } : {}),
+      TERM: "xterm-256color",
+      COLORTERM: "truecolor",
       ...options.env,
     };
 
     const session: TerminalSession = {
+      agentType: options.agentType || "terminal",
+      wsId: options.wsId,
+      threadId: options.threadId,
       id,
       name: options.name || command,
       command,
       args,
       cwd,
-      mode: ptyModule && !options.forcePipe ? 'pty' : 'pipe',
-      status: 'running',
+      mode: ptyModule && !options.forcePipe ? "pty" : "pipe",
+      status: "running",
       exitCode: null,
       createdAt: Date.now(),
-      bufferedOutput: '',
+      bufferedOutput: "",
       subscribers: new Set(),
     };
 
@@ -71,7 +104,9 @@ export class TerminalSessionManager {
       const text = chunk.toString();
       session.bufferedOutput += text;
       if (session.bufferedOutput.length > this.maxBufferSize) {
-        session.bufferedOutput = session.bufferedOutput.slice(-this.maxBufferSize);
+        session.bufferedOutput = session.bufferedOutput.slice(
+          -this.maxBufferSize,
+        );
       }
       for (const subscriber of session.subscribers) {
         try {
@@ -83,16 +118,23 @@ export class TerminalSessionManager {
     };
 
     const handleExit = (code: number | null) => {
-      if (session.status === 'exited') return;
-      session.status = 'exited';
+      session.exitObserved = true;
+      if (session.status === "exited") return;
+      if (session.status !== "error")
+        session.status =
+          session.closeRequested && !session.terminationConfirmed
+            ? "stopping"
+            : "exited";
       session.exitCode = code;
       handleData(`\r\n\x1b[90m[Process exited with code ${code}]\x1b[0m\r\n`);
+      if (session.closeRequested && session.terminationConfirmed)
+        this.sessions.delete(session.id);
     };
 
     try {
-      if (session.mode === 'pty' && ptyModule) {
+      if (session.mode === "pty" && ptyModule) {
         const ptyProc = ptyModule.spawn(command, args, {
-          name: 'xterm-256color',
+          name: "xterm-256color",
           cols: options.cols || 120,
           rows: options.rows || 30,
           cwd,
@@ -106,20 +148,23 @@ export class TerminalSessionManager {
           cwd,
           env,
           shell: false,
-          stdio: ['pipe', 'pipe', 'pipe'],
+          detached: !isWindows,
+          stdio: ["pipe", "pipe", "pipe"],
           windowsHide: true,
         });
         session.process = proc;
-        proc.stdout?.on('data', handleData);
-        proc.stderr?.on('data', handleData);
-        proc.on('error', (err) => {
+        proc.stdout?.setEncoding("utf8");
+        proc.stderr?.setEncoding("utf8");
+        proc.stdout?.on("data", handleData);
+        proc.stderr?.on("data", handleData);
+        proc.on("error", (err) => {
           handleData(`\r\n[Process error: ${err.message}]\r\n`);
-          session.status = 'error';
+          session.status = "error";
         });
-        proc.on('close', (code) => handleExit(code));
+        proc.on("close", (code) => handleExit(code));
       }
     } catch (err: any) {
-      session.status = 'error';
+      session.status = "error";
       session.exitCode = 1;
       session.bufferedOutput = `\x1b[31m[Failed to spawn "${command}": ${err.message}]\x1b[0m\r\n`;
     }
@@ -135,6 +180,9 @@ export class TerminalSessionManager {
   public listSessions() {
     return Array.from(this.sessions.values()).map((s) => ({
       id: s.id,
+      agentType: s.agentType,
+      wsId: s.wsId,
+      threadId: s.threadId,
       name: s.name,
       command: s.command,
       args: s.args,
@@ -149,13 +197,13 @@ export class TerminalSessionManager {
 
   public writeInput(id: string, data: string): boolean {
     const session = this.sessions.get(id);
-    if (!session || session.status !== 'running') return false;
+    if (!session || session.status !== "running") return false;
     try {
       if (session.ptyProcess) {
         session.ptyProcess.write(data);
       } else if (session.process?.stdin) {
         // Pipes have no line discipline: translate a lone Enter (\r) to a newline.
-        session.process.stdin.write(data.replace(/\r(?!\n)/g, '\r\n'));
+        session.process.stdin.write(data.replace(/\r(?!\n)/g, "\r\n"));
       } else {
         return false;
       }
@@ -167,8 +215,14 @@ export class TerminalSessionManager {
 
   public resize(id: string, cols: number, rows: number): boolean {
     const session = this.sessions.get(id);
-    if (!session?.ptyProcess || session.status !== 'running') return false;
-    if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols < 2 || rows < 2) return false;
+    if (!session?.ptyProcess || session.status !== "running") return false;
+    if (
+      !Number.isFinite(cols) ||
+      !Number.isFinite(rows) ||
+      cols < 2 ||
+      rows < 2
+    )
+      return false;
     try {
       session.ptyProcess.resize(Math.floor(cols), Math.floor(rows));
       return true;
@@ -193,14 +247,63 @@ export class TerminalSessionManager {
     };
   }
 
+  private terminate(session: TerminalSession): void {
+    const pid = session.ptyProcess?.pid || session.process?.pid;
+    if (process.platform === "win32" && pid) {
+      execFile(
+        "taskkill",
+        ["/PID", String(pid), "/T", "/F"],
+        { windowsHide: true },
+        (error) => {
+          if (error) {
+            session.status = "error";
+            const message =
+              "\r\n[ปิด process ลูกไม่สำเร็จ ยังไม่คืนสิทธิ์เปิด session กรุณาลองปิดอีกครั้ง]\r\n";
+            session.bufferedOutput += message;
+            for (const subscriber of session.subscribers)
+              try {
+                subscriber(message);
+              } catch {}
+            return;
+          }
+          try {
+            session.ptyProcess?.kill();
+          } catch {}
+          session.terminationConfirmed = true;
+          if (session.closeRequested && session.exitObserved)
+            this.sessions.delete(session.id);
+        },
+      );
+    } else {
+      if (pid) {
+        try { process.kill(-pid, "SIGKILL"); }
+        catch (error: any) { if (error.code !== "ESRCH") throw error; }
+      }
+      session.terminationConfirmed = true;
+      try { session.ptyProcess?.kill(); } catch {}
+      try { session.process?.kill(); } catch {}
+      if (session.closeRequested && session.exitObserved) this.sessions.delete(session.id);
+    }
+  }
+
   public killSession(id: string): boolean {
     const session = this.sessions.get(id);
     if (!session) return false;
     try {
-      session.ptyProcess?.kill();
-      session.process?.kill();
-      session.status = 'exited';
-      this.sessions.delete(id);
+      if (session.status === "stopping") return true;
+      if (session.closeRequested && !session.terminationConfirmed) {
+        session.status = "stopping";
+        this.terminate(session);
+        return true;
+      }
+      if (session.status !== "running") {
+        try {session.ptyProcess?.kill();}catch{}
+        this.sessions.delete(id);
+        return true;
+      }
+      session.closeRequested = true;
+      session.status = "stopping";
+      this.terminate(session);
       return true;
     } catch {
       return false;
@@ -209,12 +312,11 @@ export class TerminalSessionManager {
 
   public killAll(): void {
     for (const session of this.sessions.values()) {
-      if (session.status === 'running') {
+      if (session.status === "running" || session.status === "stopping") {
         try {
-          session.ptyProcess?.kill();
-          session.process?.kill();
+          this.terminate(session);
         } catch {}
-      }
+      } else {try{session.ptyProcess?.kill();}catch{}}
     }
     this.sessions.clear();
   }

@@ -1,4 +1,4 @@
-import { ChildProcess } from 'node:child_process';
+import { ChildProcess } from "node:child_process";
 
 /** Minimal surface of a node-pty process that we rely on. */
 export interface PtyProcess {
@@ -11,16 +11,22 @@ export interface PtyProcess {
 }
 
 export interface TerminalSession {
+  agentType?: string;
+  wsId?: string;
+  threadId?: string;
   id: string;
   name: string;
   command: string;
   args?: string[];
   cwd: string;
   /** 'pty' = real pseudo-terminal (interactive CLIs work); 'pipe' = stdio fallback. */
-  mode: 'pty' | 'pipe';
+  mode: "pty" | "pipe";
   process?: ChildProcess;
   ptyProcess?: PtyProcess;
-  status: 'running' | 'exited' | 'error';
+  status: "running" | "stopping" | "exited" | "error";
+  closeRequested?: boolean;
+  terminationConfirmed?: boolean;
+  exitObserved?: boolean;
   exitCode: number | null;
   createdAt: number;
   bufferedOutput: string;
@@ -30,8 +36,16 @@ export interface TerminalSession {
 export interface AgentThread {
   id: string;
   title: string;
-  type: 'claude-code' | 'codex' | 'antigravity' | 'opencode-multi' | 'terminal';
-  status: 'idle' | 'running' | 'completed' | 'failed';
+  type:
+    | "claude-code"
+    | "codex"
+    | "gemini"
+    | "opencode"
+    | "freebuff"
+    | "antigravity"
+    | "opencode-multi"
+    | "terminal";
+  status: "idle" | "running" | "completed" | "failed";
   unreadCount: number;
   sessionId?: string;
   createdAt: number;
@@ -54,6 +68,10 @@ export interface Workspace {
 }
 
 export interface SpawnSessionOptions {
+  openCodeModel?: string;
+  agentType?: string;
+  wsId?: string;
+  threadId?: string;
   id?: string;
   name?: string;
   command?: string;

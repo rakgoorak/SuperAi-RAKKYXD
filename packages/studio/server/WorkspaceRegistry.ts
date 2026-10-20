@@ -1,24 +1,23 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
-import { randomUUID } from 'node:crypto';
-import { Workspace, AgentThread } from './types.js';
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import { randomUUID } from "node:crypto";
+import { Workspace, AgentThread } from "./types.js";
 
 export class WorkspaceRegistry {
   private storagePath: string;
   private workspaces: Map<string, Workspace> = new Map();
+  private lastSaved = "";
 
   constructor(customPath?: string) {
     if (customPath) {
       this.storagePath = customPath;
     } else {
-      const configDir = path.join(os.homedir(), '.opencode-multi');
+      const configDir = path.join(os.homedir(), ".opencode-multi");
       if (!fs.existsSync(configDir)) {
-        try {
-          fs.mkdirSync(configDir, { recursive: true });
-        } catch {}
+        fs.mkdirSync(configDir, { recursive: true });
       }
-      this.storagePath = path.join(configDir, 'studio-workspaces.json');
+      this.storagePath = path.join(configDir, "studio-workspaces.json");
     }
 
     this.load();
@@ -31,58 +30,11 @@ export class WorkspaceRegistry {
     const cwd = process.cwd();
     const defaultWorkspaces: Workspace[] = [
       {
-        id: 'ws-bridgemrr',
-        name: 'bridgemrr',
+        id: "ws-default",
+        name: path.basename(cwd) || "โปรเจกต์ของฉัน",
         rootPath: cwd,
-        threads: []
+        threads: [],
       },
-      {
-        id: 'ws-vibecoding',
-        name: 'vibecodingsimulator',
-        rootPath: cwd,
-        threads: [
-          {
-            id: 'th-vibecoding-1',
-            title: 'Claude Code',
-            type: 'claude-code',
-            status: 'running',
-            unreadCount: 0,
-            createdAt: Date.now(),
-            lastActiveAt: Date.now()
-          }
-        ],
-        activeThreadId: 'th-vibecoding-1'
-      },
-      {
-        id: 'ws-bridgemind',
-        name: 'bridgemind',
-        rootPath: cwd,
-        threads: []
-      },
-      {
-        id: 'ws-bridgebench',
-        name: 'bridgebench',
-        rootPath: cwd,
-        threads: []
-      },
-      {
-        id: 'ws-bridgegame',
-        name: 'bridgegame',
-        rootPath: cwd,
-        threads: []
-      },
-      {
-        id: 'ws-obs',
-        name: 'obs',
-        rootPath: cwd,
-        threads: []
-      },
-      {
-        id: 'ws-bridgevideo',
-        name: 'bridgevideo',
-        rootPath: cwd,
-        threads: []
-      }
     ];
 
     for (const ws of defaultWorkspaces) {
@@ -94,14 +46,16 @@ export class WorkspaceRegistry {
   private load(): void {
     try {
       if (fs.existsSync(this.storagePath)) {
-        const data = fs.readFileSync(this.storagePath, 'utf8');
+        const data = fs.readFileSync(this.storagePath, "utf8");
         const list: Workspace[] = JSON.parse(data);
+        if(!Array.isArray(list)||list.some(ws=>typeof ws.id!=="string"||typeof ws.name!=="string"||typeof ws.rootPath!=="string"||!Array.isArray(ws.threads)))throw new Error("รูปแบบข้อมูลไม่ถูกต้อง");
         for (const ws of list) {
           this.workspaces.set(ws.id, ws);
         }
+        this.lastSaved=JSON.stringify(list);
       }
     } catch {
-      // fallback to in-memory if invalid
+      throw new Error(`อ่านข้อมูลโปรเจกต์ไม่ได้: ${this.storagePath} ไฟล์เดิมยังไม่ถูกแก้ไข กรุณาตรวจรูปแบบ JSON และสิทธิ์อ่าน`);
     }
   }
 
@@ -109,9 +63,14 @@ export class WorkspaceRegistry {
     try {
       const list = Array.from(this.workspaces.values());
       const tempPath = `${this.storagePath}.tmp`;
-      fs.writeFileSync(tempPath, JSON.stringify(list, null, 2), 'utf8');
+      const content=JSON.stringify(list, null, 2);
+      fs.writeFileSync(tempPath, content, "utf8");
       fs.renameSync(tempPath, this.storagePath);
-    } catch {}
+      this.lastSaved=content;
+    } catch {
+      if(this.lastSaved)this.workspaces=new Map((JSON.parse(this.lastSaved) as Workspace[]).map(ws=>[ws.id,ws]));
+      throw new Error(`บันทึกข้อมูลโปรเจกต์ไม่ได้: ${this.storagePath} กรุณาตรวจสิทธิ์เขียนและพื้นที่ว่าง`);
+    }
   }
 
   public getWorkspaces(): Workspace[] {
@@ -127,14 +86,45 @@ export class WorkspaceRegistry {
       id: `ws-${Date.now()}-${randomUUID().slice(0, 4)}`,
       name,
       rootPath,
-      threads: []
+      threads: [],
     };
     this.workspaces.set(ws.id, ws);
     this.save();
     return ws;
   }
 
-  public addThread(workspaceId: string, threadData: Partial<AgentThread>): AgentThread {
+  public updateWorkspace(
+    id: string,
+    updates: { name?: string; rootPath?: string },
+  ): Workspace | undefined {
+    const ws = this.workspaces.get(id);
+    if (!ws) return undefined;
+    if (updates.name !== undefined) {
+      if (!updates.name.trim()) throw new Error("กรุณาระบุชื่อโปรเจกต์");
+      ws.name = updates.name.trim();
+    }
+    if (updates.rootPath !== undefined) {
+      if (
+        !fs.existsSync(updates.rootPath) ||
+        !fs.statSync(updates.rootPath).isDirectory()
+      )
+        throw new Error("ไม่พบโฟลเดอร์โปรเจกต์");
+      ws.rootPath = path.resolve(updates.rootPath);
+    }
+    this.save();
+    return ws;
+  }
+
+  public deleteWorkspace(id: string): boolean {
+    const removed = this.workspaces.delete(id);
+    if (removed) this.save();
+    return removed;
+  }
+
+  public addThread(
+    workspaceId: string,
+    threadData: Partial<AgentThread>,
+  ): AgentThread {
     const ws = this.workspaces.get(workspaceId);
     if (!ws) {
       throw new Error(`Workspace ${workspaceId} not found`);
@@ -142,14 +132,14 @@ export class WorkspaceRegistry {
 
     const thread: AgentThread = {
       id: `th-${Date.now()}-${randomUUID().slice(0, 4)}`,
-      title: threadData.title || 'New Thread',
-      type: threadData.type || 'terminal',
-      status: threadData.status || 'idle',
+      title: threadData.title || "New Thread",
+      type: threadData.type || "terminal",
+      status: threadData.status || "idle",
       unreadCount: 0,
       sessionId: threadData.sessionId,
       createdAt: Date.now(),
       lastActiveAt: Date.now(),
-      thoughts: threadData.thoughts || []
+      thoughts: threadData.thoughts || [],
     };
 
     ws.threads.push(thread);
@@ -160,24 +150,41 @@ export class WorkspaceRegistry {
     return thread;
   }
 
-  public updateThread(workspaceId: string, threadId: string, updates: Partial<AgentThread>): AgentThread | undefined {
+  public updateThread(
+    workspaceId: string,
+    threadId: string,
+    updates: Partial<AgentThread>,
+  ): AgentThread | undefined {
     const ws = this.workspaces.get(workspaceId);
     if (!ws) return undefined;
 
-    const thread = ws.threads.find(t => t.id === threadId);
+    const thread = ws.threads.find((t) => t.id === threadId);
     if (!thread) return undefined;
 
-    Object.assign(thread, updates, { lastActiveAt: Date.now() });
+    const { title, status, unreadCount, sessionId, thoughts } = updates;
+    Object.assign(
+      thread,
+      Object.fromEntries(
+        Object.entries({
+          title,
+          status,
+          unreadCount,
+          sessionId,
+          thoughts,
+        }).filter(([, value]) => value !== undefined),
+      ),
+      { lastActiveAt: Date.now() },
+    );
     this.save();
     return thread;
   }
 
   public setActiveThread(workspaceId: string, threadId: string): void {
     const ws = this.workspaces.get(workspaceId);
-    if (ws && ws.threads.some(t => t.id === threadId)) {
+    if (ws && ws.threads.some((t) => t.id === threadId)) {
       ws.activeThreadId = threadId;
       // Clear unread count when activated
-      const th = ws.threads.find(t => t.id === threadId);
+      const th = ws.threads.find((t) => t.id === threadId);
       if (th) th.unreadCount = 0;
       this.save();
     }
@@ -187,7 +194,7 @@ export class WorkspaceRegistry {
     const ws = this.workspaces.get(workspaceId);
     if (!ws) return false;
 
-    const index = ws.threads.findIndex(t => t.id === threadId);
+    const index = ws.threads.findIndex((t) => t.id === threadId);
     if (index === -1) return false;
 
     ws.threads.splice(index, 1);

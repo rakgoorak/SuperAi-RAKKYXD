@@ -15,16 +15,20 @@ test('TerminalSessionManager: spawns a process and buffers output', async () => 
   const session = manager.spawnSession({
     name: 'test-session',
     command,
-    args
+    args,
+    forcePipe: true
   });
 
   assert.ok(session.id);
   assert.strictEqual(session.name, 'test-session');
 
   // Wait for process output
-  await new Promise<void>((resolve) => {
-    const unsub = manager.subscribe(session.id, (chunk) => {
+  await new Promise<void>((resolve, reject) => {
+    const timer=setTimeout(()=>reject(new Error('Terminal output timed out')),5000);
+    let unsub=()=>{};
+    unsub = manager.subscribe(session.id, (chunk) => {
       if (chunk.includes('Hello BridgeMind Multi-Terminal')) {
+        clearTimeout(timer);
         unsub();
         resolve();
       }

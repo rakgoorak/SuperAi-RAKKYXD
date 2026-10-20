@@ -1,287 +1,188 @@
-// BridgeMind Studio — native desktop shell (Electron main process).
-// Hosts the Studio server (terminals + workspaces) in-process and shows the UI
-// in a native window. Browser login runs in real Electron windows (no API keys).
-import { app, BrowserWindow, ipcMain, shell, dialog, session } from 'electron';
-import path from 'node:path';
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const STUDIO_SERVER_ENTRY = path.resolve(__dirname, '../studio/dist/StudioServer.js');
-const AUTH_DIR = path.join(os.homedir(), '.opencode-multi');
-const AUTH_FILE = path.join(AUTH_DIR, 'auth.json');
-const LOG_FILE = path.join(AUTH_DIR, 'desktop.log');
-
-let mainWindow = null;
-let studioServer = null;
-let studioPort = 3888;
-
-async function log(...parts) {
-  const line = `[${new Date().toISOString()}] ${parts.join(' ')}\n`;
-  process.stdout.write(line);
+import { app, BrowserWindow, ipcMain, shell, dialog } from "electron";
+import path from "node:path";
+import fs from "node:fs/promises";
+import os from "node:os";
+import { spawn } from "node:child_process";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { BrowserController } from "./browser.mjs";
+import { normalizeBrowserUrl } from "./browser-url.mjs";
+import { prepareDesktopPath } from "./platform-env.mjs";
+prepareDesktopPath();
+const directory = path.dirname(fileURLToPath(import.meta.url));
+if (process.env.SUPERAI_DATA_DIR)
+  app.setPath("userData", process.env.SUPERAI_DATA_DIR);
+let window, server, browser;
+const log = async (text) => {
   try {
-    await fs.mkdir(AUTH_DIR, { recursive: true });
-    await fs.appendFile(LOG_FILE, line, 'utf-8');
-  } catch {}
-}
-
-// ---------------------------------------------------------------------------
-// Studio server (in-process)
-// ---------------------------------------------------------------------------
-async function startStudioServer() {
-  const { StudioServer } = await import(pathToFileURL(STUDIO_SERVER_ENTRY).href);
-  for (let port = 3888; port < 3900; port++) {
-    const server = new StudioServer({ port });
-    try {
-      await server.start();
-      studioServer = server;
-      studioPort = port;
-      await log(`Studio server listening on http://localhost:${port}`);
-      return;
-    } catch (err) {
-      await log(`Port ${port} unavailable: ${err.message}`);
-    }
-  }
-  throw new Error('No free port between 3888 and 3899 for the Studio server.');
-}
-
-// ---------------------------------------------------------------------------
-// Main window
-// ---------------------------------------------------------------------------
-function createMainWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1480,
-    height: 920,
-    minWidth: 1100,
-    minHeight: 680,
-    title: 'RakkyXD Studio',
-    backgroundColor: '#0a0d14',
-    show: false,
-    titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#0a0d14', symbolColor: '#cbd5e1', height: 48 },
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webviewTag: false,
-    },
-  });
-
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-    log('Main window displayed.');
-  });
-
-  // Log renderer console messages to desktop.log
-  mainWindow.webContents.on('console-message', (_e, level, message, line, sourceId) => {
-    const levelStr = ['verbose', 'info', 'warning', 'error'][level] || String(level);
-    log(`[Renderer ${levelStr}] ${message} (${sourceId}:${line})`);
-  });
-
-  mainWindow.webContents.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL) => {
-    log(`[Renderer load failed] ${validatedURL}: [${errorCode}] ${errorDescription}`);
-  });
-
-  // F12 or Ctrl+Shift+I toggles DevTools
-  mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) {
-      mainWindow.webContents.toggleDevTools();
-      event.preventDefault();
-    }
-  });
-
-  if (process.argv.includes('--debug') || process.argv.includes('--devtools') || process.env.DEBUG) {
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
-  }
-
-  // Links that try to open a new window go to the user's default browser.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
-  });
-
-  mainWindow.loadURL(`http://localhost:${studioPort}`);
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Native browser login (OpenCode-style): open the provider's real login page
-// in an app window, wait for the session cookie, save it, close the window.
-// ---------------------------------------------------------------------------
-const LOGIN_TARGETS = {
-  chatgpt: { name: 'ChatGPT', url: 'https://chatgpt.com/auth/login', cookies: ['__Secure-next-auth.session-token'], localStorage: [] },
-  claude: { name: 'Claude', url: 'https://claude.ai/login', cookies: ['sessionKey'], localStorage: [] },
-  gemini: { name: 'Gemini', url: 'https://gemini.google.com/app', cookies: ['__Secure-1PSID'], localStorage: [] },
-  deepseek: { name: 'DeepSeek', url: 'https://chat.deepseek.com/sign_in', cookies: [], localStorage: ['userToken'] },
-};
-
-async function saveAuthToken(service, token) {
-  await fs.mkdir(AUTH_DIR, { recursive: true });
-  let existing = {};
-  try {
-    existing = JSON.parse(await fs.readFile(AUTH_FILE, 'utf-8'));
-  } catch {}
-  existing[service] = token;
-  await fs.writeFile(AUTH_FILE, JSON.stringify(existing, null, 2), 'utf-8');
-}
-
-async function removeAuthToken(service) {
-  try {
-    const existing = JSON.parse(await fs.readFile(AUTH_FILE, 'utf-8'));
-    delete existing[service];
-    await fs.writeFile(AUTH_FILE, JSON.stringify(existing, null, 2), 'utf-8');
-  } catch {}
-  await session.fromPartition(`persist:login-${service}`).clearStorageData().catch(() => {});
-}
-
-async function readSessionToken(loginSession, webContents, target) {
-  if (target.cookies.length) {
-    const all = await loginSession.cookies.get({});
-    for (const name of target.cookies) {
-      // Some providers split large cookies into name.0, name.1, ...
-      const parts = all
-        .filter((c) => c.name === name || c.name.startsWith(`${name}.`))
-        .sort((a, b) => a.name.localeCompare(b.name));
-      const value = parts.map((c) => c.value).join('');
-      if (value.length > 15) return value;
-    }
-  }
-  for (const key of target.localStorage) {
-    try {
-      const raw = await webContents.executeJavaScript(`localStorage.getItem(${JSON.stringify(key)})`, true);
-      if (raw && raw.length > 15) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === 'object' && parsed.value) return String(parsed.value);
-        } catch {}
-        return raw;
-      }
-    } catch {}
-  }
-  return null;
-}
-
-function browserLogin(service) {
-  const target = LOGIN_TARGETS[service];
-  if (!target) return Promise.resolve({ success: false, error: `Unknown service: ${service}` });
-
-  return new Promise((resolve) => {
-    const partition = `persist:login-${service}`;
-    const loginSession = session.fromPartition(partition);
-    const loginWindow = new BrowserWindow({
-      width: 1100,
-      height: 820,
-      parent: mainWindow ?? undefined,
-      title: `Log in to ${target.name} — BridgeMind Studio`,
-      backgroundColor: '#ffffff',
-      autoHideMenuBar: true,
-      webPreferences: { partition, contextIsolation: true, nodeIntegration: false, sandbox: true },
-    });
-
-    // Look like a regular Chrome so login pages don't block the embedded window.
-    const chromeUA = loginWindow.webContents
-      .getUserAgent()
-      .replace(/\s?Electron\/\S+/i, '')
-      .replace(/\s?@?bridgemind\S*/gi, '');
-    loginWindow.webContents.setUserAgent(chromeUA);
-
-    let finished = false;
-    const finish = async (result) => {
-      if (finished) return;
-      finished = true;
-      clearInterval(poller);
-      clearTimeout(timeout);
-      if (!loginWindow.isDestroyed()) loginWindow.close();
-      await log(`Browser login ${service}: ${result.success ? 'success' : result.error}`);
-      resolve(result);
-    };
-
-    const poller = setInterval(async () => {
-      if (loginWindow.isDestroyed()) return;
-      const token = await readSessionToken(loginSession, loginWindow.webContents, target);
-      if (token) {
-        await saveAuthToken(service, token);
-        finish({ success: true, service, details: `Session captured from ${target.name}` });
-      }
-    }, 1500);
-
-    const timeout = setTimeout(
-      () => finish({ success: false, error: 'Login timed out after 5 minutes.' }),
-      5 * 60 * 1000
+    const dir = path.join(os.homedir(), ".opencode-multi");
+    await fs.mkdir(dir, { recursive: true });
+    await fs.appendFile(
+      path.join(dir, "desktop.log"),
+      `[${new Date().toISOString()}] ${text}\n`,
     );
-
-    loginWindow.on('closed', () => finish({ success: false, error: 'Login window was closed before login completed.' }));
-    loginWindow.loadURL(target.url).catch((err) => finish({ success: false, error: err.message }));
-  });
+  } catch {}
+};
+function trusted(event) {
+  if (
+    !window ||
+    event.sender.id !== window.webContents.id ||
+    event.senderFrame !== window.webContents.mainFrame
+  )
+    throw new Error("ไม่อนุญาตการเรียกจากหน้าเว็บภายนอก");
 }
-
-// ---------------------------------------------------------------------------
-// IPC
-// ---------------------------------------------------------------------------
-ipcMain.handle('auth:browser-login', (_e, service) => browserLogin(String(service)));
-ipcMain.handle('auth:logout', async (_e, service) => {
-  await removeAuthToken(String(service));
-  return { success: true };
-});
-ipcMain.handle('dialog:pick-folder', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Choose a project folder for the new workspace',
-    properties: ['openDirectory', 'createDirectory'],
+ipcMain.handle("app:folder", async (e) => {
+  trusted(e);
+  const r = await dialog.showOpenDialog(window, {
+    title: "เลือกโฟลเดอร์โปรเจกต์",
+    properties: ["openDirectory", "createDirectory"],
   });
-  return result.canceled ? null : result.filePaths[0];
+  return r.canceled ? null : r.filePaths[0];
 });
-ipcMain.handle('shell:open-external', (_e, url) => {
-  if (/^https?:\/\//.test(String(url))) shell.openExternal(String(url));
+ipcMain.handle("app:external", async (e, url) => {
+  trusted(e);
+  await shell.openExternal(normalizeBrowserUrl(url));
 });
-
-// ---------------------------------------------------------------------------
-// App lifecycle
-// ---------------------------------------------------------------------------
-if (!app.requestSingleInstanceLock()) {
-  app.quit();
-} else {
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
+ipcMain.handle("browser:action", async (e, action, payload) => {
+  trusted(e);
+  if (
+    ![
+      "create",
+      "close",
+      "select",
+      "navigate",
+      "back",
+      "forward",
+      "reload",
+      "stop",
+      "state",
+      "bounds",
+    ].includes(action)
+  )
+    throw new Error("คำสั่ง browser ไม่ถูกต้อง");
+  return browser.action(action, payload);
+});
+ipcMain.handle("app:voice", async (e) => {
+  trusted(e);
+  await new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+        app.isPackaged ? ["--superai-voice"] : [path.resolve(directory, "../voice")],
+      {
+        windowsHide: true,
+        stdio: "ignore",
+        env: {
+          ...process.env,
+          SUPERAI_STUDIO_URL: new URL(window.webContents.getURL()).origin,
+          ...(process.env.SUPERAI_DATA_DIR
+            ? {
+                SUPERAI_VOICE_DATA_DIR: path.join(
+                  process.env.SUPERAI_DATA_DIR,
+                  "voice",
+                ),
+              }
+            : {}),
+        },
+      },
+    );
+    child.once("spawn", resolve);
+    child.once("error", reject);
+    child.unref();
+  });
+});
+if (!app.requestSingleInstanceLock()) app.quit();
+else {
+  app.on("second-instance", () => {
+    if (window) {
+      if (window.isMinimized()) window.restore();
+      window.show();
+      window.focus();
     }
   });
-
   app.whenReady().then(async () => {
-    // Grant microphone permission for Thai and English voice recognition
-    session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-      if (permission === 'media' || permission === 'microphone') {
-        return callback(true);
-      }
-      callback(false);
-    });
-    session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
-      return permission === 'media' || permission === 'microphone';
-    });
-
     try {
-      await startStudioServer();
-      createMainWindow();
-    } catch (err) {
-      await log(`Fatal startup error: ${err.stack || err.message}`);
+      const { StudioServer } = await import(
+        pathToFileURL(path.resolve(directory, "../studio/dist/StudioServer.js"))
+          .href
+      );
+      for (let port = 3888; port < 3900; port++) {
+        const candidate = new StudioServer({
+          port,
+          customWorkspacePath: process.env.SUPERAI_DATA_DIR
+            ? path.join(process.env.SUPERAI_DATA_DIR, "workspaces.json")
+            : undefined,
+        });
+        try {
+          await candidate.start();
+          server = candidate;
+          break;
+        } catch {
+          await candidate.stop().catch(() => {});
+        }
+      }
+      if (!server) throw new Error("พอร์ต 3888–3899 ถูกใช้งานทั้งหมด");
+      window = new BrowserWindow({
+        width: 1540,
+        height: 980,
+        minWidth: 1040,
+        minHeight: 680,
+        title: "SuperAi & RAKKYXD",
+        backgroundColor: "#111519",
+        show: false,
+        autoHideMenuBar: true,
+        titleBarStyle: "hidden",
+        titleBarOverlay: {
+          color: "#111519",
+          symbolColor: "#dce7ef",
+          height: 39,
+        },
+        webPreferences: {
+          preload: path.join(directory, "preload.cjs"),
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+        },
+      });
+      browser = new BrowserController(window);
+      window.once("ready-to-show", () => window.show());
+      window.webContents.setWindowOpenHandler(({ url }) => {
+        try {
+          shell.openExternal(normalizeBrowserUrl(url));
+        } catch {}
+        return { action: "deny" };
+      });
+      const appUrl = `http://127.0.0.1:${server.getPort()}`;
+      window.webContents.on("will-navigate", (event, url) => {
+        if (new URL(url).origin !== appUrl) event.preventDefault();
+      });
+      window.webContents.on("console-message", (_event, _level, message) =>
+        log(message),
+      );
+      window.webContents.on("before-input-event", (event, input) => {
+        if (input.key === "F12") {
+          window.webContents.toggleDevTools();
+          event.preventDefault();
+        }
+      });
+      window.on("resize", () => browser.layout());
+      window.on("closed", () => {
+        window = null;
+        app.quit();
+      });
+      await window.loadURL(appUrl);
+      await log(`SuperAi & RAKKYXD started at ${appUrl}`);
+    } catch (error) {
+      await log(error.stack || error.message);
       dialog.showErrorBox(
-        'RakkyXD Studio failed to start',
-        `${err.message}\n\nTry running "npm run build" in d:\\Agent, then start again.\nLog: ${LOG_FILE}`
+        "เปิด SuperAi & RAKKYXD ไม่สำเร็จ",
+        `${error.message}\nลอง npm run build แล้วเปิดใหม่`,
       );
       app.quit();
     }
   });
-
-  app.on('window-all-closed', async () => {
-    if (studioServer) await studioServer.stop().catch(() => {});
-    app.quit();
+  app.on("before-quit", () => {
+    app.isQuitting = true;
+    browser?.destroy();
+    server?.stop().catch(() => {});
   });
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0 && studioServer) createMainWindow();
-  });
+  app.on("window-all-closed", () => app.quit());
 }

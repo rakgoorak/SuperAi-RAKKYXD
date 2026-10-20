@@ -97,6 +97,7 @@ Format as a valid JSON array only:
     let accumulatedContext = `User Goal: "${goal}"\n`;
 
     for (const task of tasks) {
+      if (options.abortSignal?.aborted) break;
       task.status = 'running';
       this.emitEvent(options.onEvent, 'subagent_start', { task });
 
@@ -136,6 +137,7 @@ Format as a valid JSON array only:
     }
 
     this.emitEvent(options.onEvent, 'supervisor_synthesis', { tasks });
+    if (options.abortSignal?.aborted) return { success: false, goal, tasks, finalSummary: 'ยกเลิกงานแล้ว' };
     const synthPrompt = `You are the Lead Supervisor. All subagents have finished their assignments for goal: "${goal}".
 Task outputs:
 ${tasks.map((t) => `- [${t.assignedAgent.toUpperCase()}] ${t.title}: ${t.status} (${t.result?.slice(0, 200)}...)`).join('\n')}

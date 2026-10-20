@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; img-src 'self' data:"
+    />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>SuperAi Voice HUD</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="hud-body">
+    <!-- Floating Waveform HUD Pill -->
+    <div class="hud-pill" id="hudPill">
+      <!-- Top Row: Mic Orb, Live Transcript Input, Actions -->
+      <div class="hud-top-row">
+        <!-- Glowing Mic Orb -->
+        <div class="mic-orb" id="micOrb" title="คลิกเพื่อเริ่ม/หยุดอัดเสียง">
+          <div class="pulse-ring"></div>
+          <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="22"></line>
+          </svg>
+        </div>
+
+        <!-- Live Editable Transcript Area -->
+        <div class="transcript-wrapper">
+          <textarea
+            id="transcript"
+            class="transcript-input"
+            rows="1"
+            placeholder="กำลังฟังเสียง... (พูดคำสั่งได้เลย)"
+          ></textarea>
+        </div>
+
+        <!-- Right Controls -->
+        <div class="hud-controls">
+          <button class="action-btn" id="settingsToggle" type="button" title="ตั้งค่าระบบเสียง" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 17h16M8 4v6M16 14v6"/></svg></button>
+          <!-- Language Toggle Button -->
+          <button class="lang-btn" id="langBtn" type="button" title="สลับภาษา (ไทย 🇹🇭 / English 🇺🇸)">
+            <span class="lang-flag" id="langFlag">🇹🇭</span>
+            <span class="lang-label" id="langLabel">TH</span>
+          </button>
+
+          <!-- Deliver / Paste Button -->
+          <button class="action-btn done-btn" id="deliver" type="button" title="ส่งคำสั่งทันที (Enter หรือคลิก)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </button>
+
+          <!-- Cancel / Close Button -->
+          <button class="action-btn close-btn" id="cancel" type="button" title="ยกเลิกและปิด (Esc)">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Bottom Row: Dynamic Waveform Canvas & Status Bar -->
+      <div class="hud-bottom-row">
+        <canvas id="waveformCanvas" width="280" height="22"></canvas>
+        <div class="meta-row">
+          <span class="engine-badge" id="engineBadge" title="คลิกเพื่อตั้งค่า Groq API Key / Engine">💻 Local</span>
+          <span class="tech-badge" id="techBadge" title="คลิกเพื่อเปิด/ปิด โหมดแปลงศัพท์โค้ดภาษาไทย">🇹🇭 Code</span>
+          <span class="timer-badge" id="timerBadge">00:00</span>
+          <span class="status-badge" id="status">พร้อมฟังเสียง</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hidden compatibility elements (accessible without display:none) -->
+    <div class="compat-hidden" aria-hidden="true">
+      <select id="microphone"><option value="">default</option></select>
+      <select id="language"><option value="th">th</option></select>
+      <select id="model"><option value="base">base</option></select>
+      <select id="destination">
+        <option value="superai" selected>superai</option>
+        <option value="active">active</option>
+        <option value="clipboard">clipboard</option>
+      </select>
+      <button id="record" type="button"></button>
+      <button id="setup" type="button"></button>
+      <button id="prepare" type="button"></button>
+      <button id="refresh" type="button"></button>
+      <button id="copy" type="button"></button>
+      <pre id="progress"></pre>
+    </div>
+
+    <section id="voiceSettings" class="voice-settings" hidden aria-label="ตั้งค่าระบบเสียง">
+      <h2>เตรียมระบบเสียงบนเครื่อง</h2>
+      <p>ต้องมี Python 3.10+ · ครั้งแรกติดตั้งตัวถอดเสียง แล้วดาวน์โหลดโมเดลก่อนพูด</p>
+      <div class="setup-actions"><button id="installLocal" type="button">1. ติดตั้งระบบเสียง</button><button id="downloadLocal" type="button">2. ดาวน์โหลดโมเดล Base</button></div>
+      <p id="setupStatus" role="status">เสียงแบบ Local ประมวลผลบนเครื่องของคุณ</p>
+      <button id="checkLocal" type="button">ตรวจสอบอีกครั้ง</button><button id="closeSettings" type="button">กลับหน้าพูด</button>
+    </section>
+    <script src="renderer.js"></script>
+  </body>
+</html>

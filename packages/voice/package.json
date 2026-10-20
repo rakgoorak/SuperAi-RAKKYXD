@@ -1,0 +1,13 @@
+{
+  "name": "@superai/voice",
+  "productName": "SuperAi Voice & RAKKYXD",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "start": "electron .",
+    "build": "node --check main.mjs && node --check window.mjs && node --check service.mjs && node --check renderer.js",
+    "test": "node --test test/*.test.mjs"
+  }
+}

@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface Props {
@@ -39,8 +39,8 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="flex items-center space-x-3 text-rose-400 mb-4">
               <AlertTriangle className="w-8 h-8" />
               <div>
-                <h1 className="text-lg font-bold text-white">RakkyXD Studio Runtime Warning</h1>
-                <p className="text-xs text-rose-300">An unexpected UI exception was caught safely.</p>
+                <h1 className="text-lg font-bold text-white">SuperAi & RAKKYXD</h1>
+                <p className="text-xs text-rose-300">หน้าจอเกิดข้อผิดพลาด กรุณากดโหลดใหม่</p>
               </div>
             </div>
 
@@ -59,7 +59,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>Reload Studio</span>
+                <span>โหลดหน้าจอใหม่</span>
               </button>
             </div>
           </div>
