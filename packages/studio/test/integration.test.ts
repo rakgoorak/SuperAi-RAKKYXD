@@ -18,7 +18,7 @@ test('API: project CRUD, real CLI catalog, Freebuff conflict, dictation and orig
   const ws=await request('/api/workspaces','POST',{name:'โปรเจกต์ทดสอบ',rootPath:dir}).then(r=>r.json());assert.ok(ws.id);
   await request(`/api/workspaces/${ws.id}`,'PATCH',{name:'เปลี่ยนชื่อ'});
   const projects=await request('/api/workspaces').then(r=>r.json());assert.equal(projects.find((w:any)=>w.id===ws.id).name,'เปลี่ยนชื่อ');
-  const first=await request('/api/terminals/spawn','POST',{wsId:ws.id,agentType:'freebuff',command:process.execPath,args:['-e','setInterval(()=>{},1000)']}).then(r=>r.json());assert.equal(first.status,'running');
+  const first=await request('/api/terminals/spawn','POST',{wsId:ws.id,agentType:'freebuff',forcePipe:true,command:process.execPath,args:['-e','setInterval(()=>{},1000)']}).then(r=>r.json());assert.equal(first.status,'running');
   const conflict=await request('/api/terminals/spawn','POST',{wsId:ws.id,agentType:'freebuff'});assert.equal(conflict.status,409);assert.match((await conflict.json()).error,/1 session/);
   assert.equal((await request('/api/terminals/spawn','POST',{wsId:ws.id,agentType:'unknown'})).status,400);
   await request('/api/dictation','POST',{text:'สร้างเว็บไซต์ภาษาไทย'});
@@ -28,5 +28,5 @@ test('API: project CRUD, real CLI catalog, Freebuff conflict, dictation and orig
   let sessions:any[]=[];
   for(let i=0;i<100;i++){sessions=await request('/api/terminals').then(r=>r.json());if(!sessions.some((s:any)=>s.wsId===ws.id))break;await new Promise(r=>setTimeout(r,30));}
   assert.equal(sessions.some((s:any)=>s.wsId===ws.id),false);
- } finally {await server.stop();fs.rmSync(dir,{recursive:true,force:true});}
+ } finally {await server.stop();fs.rmSync(dir,{recursive:true,force:true,maxRetries:20,retryDelay:100});}
 });

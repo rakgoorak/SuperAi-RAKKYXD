@@ -1822,3 +1822,5 @@ input[type="checkbox"] {
   .titlebar .mode-switch svg { display: none; }
   .code-mode .running-label { display: none; }
 }
+
+.platform-mac .titlebar { padding-left: 80px; padding-right: 16px; }

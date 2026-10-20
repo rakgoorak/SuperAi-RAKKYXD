@@ -452,7 +452,7 @@ export function App() {
     });
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${window.superai?.platform === "darwin" ? "platform-mac" : ""}`}>
       <header className="titlebar app-drag">
         <div className="brand">
           <div className="brand-mark">

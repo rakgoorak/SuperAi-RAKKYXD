@@ -7,7 +7,7 @@ on:
       tag:
         description: Existing version tag to build
         required: true
-        default: v1.0.0
+        default: v1.0.1
 permissions:
   contents: read
 concurrency:
@@ -38,6 +38,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+        timeout-minutes: 3
       - run: npm run package:release
       - run: npm run test:release
       - run: npm run archive:release
@@ -75,7 +76,7 @@ jobs:
         shell: bash
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --draft --verify-tag --title "SuperAi & RAKKYXD $RELEASE_TAG" --notes-file docs/RELEASE-v1.0.0.md
+            gh release create "$RELEASE_TAG" --draft --verify-tag --title "SuperAi & RAKKYXD $RELEASE_TAG" --notes-file docs/RELEASE.md
           fi
           gh release upload "$RELEASE_TAG" release-assets/* --clobber
           gh release edit "$RELEASE_TAG" --draft=false --latest
