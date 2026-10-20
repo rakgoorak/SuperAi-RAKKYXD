@@ -64,6 +64,21 @@ try {
   await page.reload();
   await page.waitForSelector(".app-shell");
   await page.getByRole("button", { name: "สนทนา", exact: true }).click();
+  // Speak-to-type: click, speak, click again; text lands in the composer unsent.
+  const composer = page.getByRole("textbox", { name: "คำสั่ง", exact: true });
+  await composer.fill("Note:");
+  await page.getByRole("button", { name: "พูดเพื่อพิมพ์" }).click();
+  const confirm = page.getByRole("dialog", { name: "ดาวน์โหลดโมเดลแปลงเสียง" });
+  if (await confirm.isVisible().catch(() => false)) await confirm.getByRole("button", { name: "ดาวน์โหลด" }).click();
+  const stop = page.getByRole("button", { name: /กำลังฟัง/ });
+  await stop.waitFor({ timeout: 300000 });
+  await page.waitForTimeout(5500);
+  await stop.click();
+  await page.waitForFunction(() => /coffee shop/i.test(document.querySelector('textarea[aria-label="คำสั่ง"]').value), null, { timeout: 120000 });
+  assert.match(await composer.inputValue(), /^Note: .*coffee shop/i);
+  assert.equal(requests.length, 0, "dictation must not send anything");
+  passed.push(`dictation typed into composer: ${await composer.inputValue()}`);
+  await composer.fill("");
   await page.getByRole("button", { name: "โหมดเสียง", exact: true }).first().click();
   const voice = page.getByRole("dialog", { name: "โหมดเสียง" });
   await voice.waitFor();

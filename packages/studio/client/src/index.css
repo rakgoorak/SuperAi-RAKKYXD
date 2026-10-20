@@ -1919,3 +1919,15 @@ input[type="checkbox"] {
 .setup-job span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .setup-job.failed { color: #ffb4a8; }
 @media (max-width: 720px) { .setup-steps li { grid-template-columns: 28px 1fr; } .setup-action { grid-column: 2; justify-content: flex-start; } }
+
+/* Composer speak-to-type */
+.dictation { position: relative; display: inline-flex; align-items: center; gap: 6px; }
+.dictation-button.recording { background: #4a2c2e; color: #f4a6a6; border-radius: 50%; transition: box-shadow 0.08s linear; }
+.dictation-progress { font-size: 11px; color: var(--dim); }
+.dictation-confirm {
+  position: absolute; right: 0; bottom: calc(100% + 10px); z-index: 30; width: 300px;
+  display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center;
+  padding: 10px 12px; border-radius: 10px; background: var(--raised); border: 1px solid var(--border);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35); font-size: 12px; line-height: 1.5;
+}
+@media (prefers-reduced-motion: reduce) { .dictation-button.recording { transition: none; } }

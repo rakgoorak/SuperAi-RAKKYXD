@@ -47,6 +47,7 @@ import { CliInstaller } from "./components/CliInstaller";
 import { LaunchPresets, type LaunchSeat } from "./components/LaunchPresets";
 import { VoiceMode } from "./components/VoiceMode";
 import { VoiceSettingsPanel } from "./components/VoiceSettingsPanel";
+import { DictationButton } from "./components/DictationButton";
 import { SetupGuide, setupNeeded } from "./components/SetupGuide";
 import { loadVoiceSettings, saveVoiceSettings, type VoiceSettings } from "./voice/speech";
 
@@ -1022,6 +1023,14 @@ export function App() {
                       )}
                     </span>
                     <div className="inline">
+                      <DictationButton
+                        settings={voiceSettings}
+                        onError={showError}
+                        onText={(text) => {
+                          setDraft((current) => (current.trim() ? `${current.replace(/\s+$/, "")} ${text}` : text));
+                          requestAnimationFrame(() => composer.current?.focus());
+                        }}
+                      />
                       <button
                         className="icon-button"
                         title={
