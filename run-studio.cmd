@@ -3,6 +3,9 @@ chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 title SuperAi ^& RAKKYXD
+if exist "%USERPROFILE%\.opencode-multi\node-v22\node.exe" (
+  set "PATH=%USERPROFILE%\.opencode-multi\node-v22;%PATH%"
+)
 where node >nul 2>nul
 if errorlevel 1 (
   echo กรุณาติดตั้ง Node.js 22 ขึ้นไปก่อนเปิดโปรแกรม

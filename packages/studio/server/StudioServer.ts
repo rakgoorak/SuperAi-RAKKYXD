@@ -4,7 +4,7 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import express, { Express, Request, Response } from "express";
 import type { ErrorRequestHandler } from "express";
-import { listClis, listOpenCodeModels } from "./CliCatalog.js";
+import { listClis, listOpenCodeModels, getNodeStatus } from "./CliCatalog.js";
 import { AgentRunManager, ollamaBase } from "./AgentRunManager.js";
 import { CliInstallManager } from "./CliInstallManager.js";
 import { WebSocketServer, WebSocket } from "ws";
@@ -84,10 +84,18 @@ export class StudioServer {
   private setupRoutes(): void {
     this.app.get("/api/clis", (_req, res) => res.json(listClis()));
     this.app.get('/api/cli-installs', (_req,res)=>res.json(this.cliInstalls.list()));
+    this.app.get('/api/node/status', (_req, res) => res.json(getNodeStatus()));
+    this.app.post('/api/node/install', (_req, res) => {
+      try {
+        res.json(this.cliInstalls.start('node'));
+      } catch (error: any) {
+        res.status(400).json({ error: error.message });
+      }
+    });
     this.app.post('/api/clis/:id/install', (req,res)=> {
       try {
         const id=String(req.params.id);
-        if(this.terminalManager.listSessions().some(s=>s.agentType===id && ['running','stopping'].includes(s.status)) || this.agentRuns.usesCli(id)) return res.status(409).json({error:'CLI นี้กำลังใช้งานอยู่ กรุณาปิด session/หยุดทีมก่อนติดตั้ง'});
+        if(id !== 'node' && (this.terminalManager.listSessions().some(s=>s.agentType===id && ['running','stopping'].includes(s.status)) || this.agentRuns.usesCli(id))) return res.status(409).json({error:'CLI นี้กำลังใช้งานอยู่ กรุณาปิด session/หยุดทีมก่อนติดตั้ง'});
         res.json(this.cliInstalls.start(id));
       } catch(error:any) {res.status(400).json({error:error.message});}
     });

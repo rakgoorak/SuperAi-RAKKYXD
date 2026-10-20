@@ -26,6 +26,15 @@ export interface Workspace {
   rootPath: string;
   threads: any[];
 }
+export interface NodeStatus {
+  installed: boolean;
+  ready: boolean;
+  version: string | null;
+  major: number;
+  isManaged: boolean;
+  nodePath: string | null;
+  npmPath: string | null;
+}
 export interface Cli {
   id: string;
   name: string;
@@ -34,6 +43,8 @@ export interface Cli {
   maxSessions: number;
   installPackage?: string;
   installerReady?: boolean;
+  nodeReady?: boolean;
+  nodeStatus?: NodeStatus;
   teamSupported?: boolean;
 }
 export interface TeamSeat { name:string; provider:string; model:string; }
