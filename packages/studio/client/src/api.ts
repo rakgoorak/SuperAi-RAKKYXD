@@ -32,7 +32,13 @@ export interface Cli {
   command: string;
   available: boolean;
   maxSessions: number;
+  installPackage?: string;
+  installerReady?: boolean;
+  teamSupported?: boolean;
 }
+export interface TeamSeat { name:string; provider:string; model:string; }
+export type TeamRole = 'coder'|'tester'|'reviewer';
+export interface AgentTeam { leader:TeamSeat; members:(TeamSeat & {role:TeamRole})[]; }
 export interface Session {
   id: string;
   name: string;
@@ -54,4 +60,7 @@ export interface Run {
   error?: string;
   events: string[];
   createdAt: number;
+  team?:AgentTeam;
+  stage?:string;
+  tasks?:{id:string;title:string;assignedAgent:TeamRole;status:string;result?:string}[];
 }

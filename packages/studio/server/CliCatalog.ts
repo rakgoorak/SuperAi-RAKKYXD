@@ -22,6 +22,12 @@ export const CLI_DEFINITIONS = [
   { id: "opencode", name: "OpenCode", command: "opencode", maxSessions: 12 },
   { id: "freebuff", name: "Freebuff", command: "freebuff", maxSessions: 1 },
 ];
+export const INSTALL_PACKAGES: Record<string, string> = {
+  'claude-code':'@anthropic-ai/claude-code', codex:'@openai/codex', gemini:'@google/gemini-cli', opencode:'opencode-ai', freebuff:'freebuff',
+};
+export const managedCliPrefix = () => path.join(os.homedir(), '.opencode-multi', 'cli-tools');
+export const managedCliBin = () => process.platform === 'win32' ? managedCliPrefix() : path.join(managedCliPrefix(), 'bin');
+export const cliPath = () => [...new Set([managedCliBin(), path.join(os.homedir(), '.local','bin'), ...(process.env.PATH || '').split(path.delimiter)])].join(path.delimiter);
 
 export function getCliDefinition(id: string) {
   const definition = CLI_DEFINITIONS.find((c) => c.id === id);
@@ -31,7 +37,7 @@ export function getCliDefinition(id: string) {
 
 export function findExecutable(command: string): string | null {
   const extra = path.join(os.homedir(), ".local", "bin");
-  const envPath = [process.env.PATH || "", extra].join(path.delimiter);
+  const envPath = [cliPath(), extra].join(path.delimiter);
   const extensions =
     process.platform === "win32" ? [".exe", ".cmd", ".bat", ""] : [""];
   for (const dir of envPath.split(path.delimiter)) {
@@ -52,6 +58,9 @@ export function listClis() {
   return CLI_DEFINITIONS.map((c) => ({
     ...c,
     available: !!findExecutable(c.command),
+    installPackage: INSTALL_PACKAGES[c.id],
+    installerReady: !!findExecutable('node') && !!findExecutable('npm'),
+    teamSupported: ['claude-code','codex','opencode'].includes(c.id),
   }));
 }
 

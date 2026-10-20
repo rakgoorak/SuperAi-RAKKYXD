@@ -12,6 +12,13 @@ import {
   LLMProvider,
 } from "@opencode-multi/core";
 import { CliProvider } from "./CliProvider.js";
+import { AgentTeam, validateTeam } from "./AgentTeam.js";
+import { cliLaunch } from "./CliCatalog.js";
+export function ollamaBase() {
+  const value=process.env.SUPERAI_OLLAMA_URL || 'http://127.0.0.1:11434';
+  if(!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(value)) throw new Error('Ollama URL ต้องเป็นบริการในเครื่อง');
+  return value;
+}
 
 export class LocalProvider implements LLMProvider {
   name = "ollama";
@@ -23,7 +30,7 @@ export class LocalProvider implements LLMProvider {
     messages: LLMMessage[],
     tools?: ToolDefinition[],
   ): Promise<LLMResponse> {
-    const res = await fetch("http://127.0.0.1:11434/v1/chat/completions", {
+    const res = await fetch(`${ollamaBase()}/v1/chat/completions`, {
       method: "POST",
       signal: this.signal,
       headers: { "Content-Type": "application/json" },
@@ -95,6 +102,9 @@ export interface ConversationRun {
   error?: string;
   createdAt: number;
   events: string[];
+  team?: AgentTeam;
+  stage?: string;
+  tasks?: any[];
 }
 export class AgentRunManager {
   private runs = new Map<string, ConversationRun>();
@@ -133,6 +143,7 @@ export class AgentRunManager {
     mode: "chat" | "assistant",
     allowTools = false,
     openCodeModel = "",
+    requestedTeam?: unknown,
   ) {
     if (!prompt.trim() || prompt.length > 50000)
       throw new Error("กรุณาระบุคำสั่งไม่เกิน 50,000 ตัวอักษร");
@@ -146,6 +157,11 @@ export class AgentRunManager {
       );
     if (!model || model.length > 150)
       throw new Error("กรุณาเลือก CLI หรือรุ่น Ollama ในการตั้งค่า");
+    const team = mode === "assistant" ? validateTeam(requestedTeam || {
+      leader:{name:"หัวหน้าทีม",provider:model,model:openCodeModel && model === "cli:opencode" ? openCodeModel : ""},
+      members:["coder","tester","reviewer"].map(role=>({role,name:role,provider:model,model:openCodeModel && model === "cli:opencode" ? openCodeModel : ""})),
+    }) : undefined;
+    if (team) for (const seat of [team.leader,...team.members]) if(seat.provider.startsWith("cli:")) cliLaunch(seat.provider.slice(4));
     const run: ConversationRun = {
       id: randomUUID(),
       wsId,
@@ -156,20 +172,16 @@ export class AgentRunManager {
       output: "",
       createdAt: Date.now(),
       events: [],
+      ...(team ? {team, stage:"planning", tasks:[]} : {}),
     };
     const controller = new AbortController();
     this.runs.set(run.id, run);
     this.controllers.set(run.id, controller);
     try {this.save();}catch(error){this.runs.delete(run.id);this.controllers.delete(run.id);throw error;}
-    const provider = model.startsWith("cli:")
-      ? new CliProvider(
-          model,
-          cwd,
-          controller.signal,
-          allowTools,
-          openCodeModel,
-        )
-      : new LocalProvider(model, controller.signal);
+    const makeProvider = (providerId:string, override:string, tools:boolean, readTools=false) => providerId.startsWith("cli:")
+      ? new CliProvider(providerId,cwd,controller.signal,tools,override,readTools)
+      : new LocalProvider(providerId,controller.signal);
+    const provider = makeProvider(team?.leader.provider || model, team ? team.leader.model : openCodeModel, team ? false : allowTools, !!team && allowTools);
     const note = (text: string) => {
       if (!controller.signal.aborted) {
         run.events.push(text.slice(0, 1000));
@@ -189,6 +201,10 @@ export class AgentRunManager {
           const supervisor = new SupervisorAgent(
             provider,
             allowTools ? createDefaultTools() : [],
+            team ? {
+              enabledRoles:team.members.map(m=>m.role),
+              providers:Object.fromEntries(team.members.map(member=>[member.role,makeProvider(member.provider,member.model,allowTools && member.role !== "reviewer", allowTools && member.role === "reviewer")])),
+            } : {},
           );
           const result = await supervisor.planAndExecute(prompt, {
             cwd,
@@ -196,12 +212,20 @@ export class AgentRunManager {
             onStream: (t) => {
               if (!controller.signal.aborted) run.output += t;
             },
-            onEvent: (e) =>
-              note(`${e.type}: ${JSON.stringify(e.payload).slice(0, 700)}`),
+            onEvent: (e) => {
+              if(controller.signal.aborted) return;
+              if(e.type === "plan_created") run.tasks=e.payload.tasks.map((t:any)=>({...t}));
+              if(e.payload.task && run.tasks) run.tasks=run.tasks.map(t=>t.id===e.payload.task.id?{...e.payload.task}:t);
+              if(e.type === "supervisor_start") run.stage="planning";
+              if(e.type === "subagent_start") run.stage="working";
+              if(e.type === "supervisor_synthesis") run.stage="summarizing";
+              if(e.type === "complete") run.stage=e.payload.success?"completed":"failed";
+              if(e.type !== "subagent_chunk") note(`${e.type}: ${JSON.stringify(e.payload).slice(0,700)}`);
+            },
           });
+          run.output = result.finalSummary;
           if (!result.success)
             throw new Error("มีงานย่อยไม่สำเร็จ กรุณาตรวจบันทึกการทำงาน");
-          run.output = result.finalSummary;
         } else {
           const loop = new AgentLoop(
             {
@@ -239,6 +263,8 @@ export class AgentRunManager {
           ? "ยกเลิกงานแล้ว"
           : `${err.message} — ${model.startsWith("cli:") ? "ตรวจสอบการเข้าสู่ระบบและโควตาของ CLI ในโหมดโค้ด" : "ตรวจสอบว่าเปิด Ollama และดาวน์โหลด model แล้ว"}`;
       } finally {
+        if(run.team) run.stage=run.status;
+        if(run.status==='cancelled' && run.tasks) run.tasks=run.tasks.map(task=>['pending','running'].includes(task.status)?{...task,status:'cancelled'}:task);
         this.controllers.delete(run.id);
         try{this.save();}catch{run.status='failed';run.error='บันทึกประวัติไม่ได้ กรุณาตรวจสิทธิ์เขียนและพื้นที่ว่าง';}
       }
@@ -251,6 +277,9 @@ export class AgentRunManager {
     if (!controller) return false;
     controller.abort();
     return true;
+  }
+  usesCli(id:string) {
+    return [...this.runs.values()].some(run=>run.status==='running' && (run.model===`cli:${id}` || (run.team && [run.team.leader,...run.team.members].some(seat=>seat.provider===`cli:${id}`))));
   }
   clear(wsId: string) {
     if (this.list(wsId).some((r) => r.status === "running"))

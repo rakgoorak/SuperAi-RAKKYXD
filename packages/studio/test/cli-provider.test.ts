@@ -20,3 +20,11 @@ test('cancelling while preparing an OpenCode attachment prevents execution',asyn
  const provider=new CliProvider('cli:opencode',process.cwd(),controller.signal);
  await assert.rejects(provider.generate([{role:'user',content:'ไม่ควรรันหลังยกเลิก'}]),/ยกเลิก/);
 });
+
+test('Claude team reviewer can read files without write or shell tools',()=>{
+ const args=promptArguments('claude-code',false,undefined,'sonnet',true);
+ assert.equal(args[args.indexOf('--tools')+1],'Read,Grep,Glob');
+ assert.ok(args.includes('plan'));
+ assert.equal(args[args.indexOf('--model')+1],'sonnet');
+ assert.ok(!args.includes('Bash'));
+});

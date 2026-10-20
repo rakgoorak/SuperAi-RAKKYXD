@@ -1824,3 +1824,37 @@ input[type="checkbox"] {
 }
 
 .platform-mac .titlebar { padding-left: 80px; padding-right: 16px; }
+
+.team-editor { padding: 16px; border: 1px solid #3b4b58; border-radius: 12px; background: #151e26; margin-bottom: 20px; flex-shrink: 0; }
+.team-editor > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.team-editor h2 { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 500; }
+.team-editor header p { margin-top: 6px; color: #bdcbd7; font-size: 12px; line-height: 1.8; }
+.team-editor fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.team-seat { padding: 12px 0; border-top: 1px solid #34434f; }
+.team-seat h3, .team-role { font-size: 12px; font-weight: 500; margin-bottom: 10px; }
+.team-role { display: flex; align-items: center; gap: 8px; }
+.team-role small { color: #b9c9d5; font-size: 10px; margin-left: auto; }
+.team-seat-fields { display: grid; grid-template-columns: minmax(100px,.8fr) minmax(120px,1fr) minmax(130px,1.2fr); gap: 12px; }
+.team-seat-fields label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; color: #bbccd9; }
+.team-seat-fields input, .team-seat-fields select { width: 100%; padding: 7px 8px; border: 1px solid #495f70; background: #10171d; color: #e1edf6; border-radius: 6px; font-size: 12px; }
+.team-footnote, .team-instructions { font-size: 11px; line-height: 1.8; color: #b5c8d7; }
+.team-instructions { margin: 8px 0 20px; }
+.team-progress { margin: 14px 0; padding: 14px; background: #18232c; border: 1px solid #3c5364; border-radius: 10px; }
+.team-progress h3 { font-size: 13px; margin-bottom: 8px; }
+.team-progress > p { color: #b3c8d7; font-size: 11px; overflow-wrap: anywhere; }
+.team-members-status { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 8px; margin: 12px 0; }
+.team-members-status > div { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; border: 1px solid #405362; border-radius: 6px; }
+.team-members-status strong { font-size: 12px; flex: 1; }
+.team-members-status span, .team-members-status small { font-size: 10px; color: #bdcfdd; }
+.team-members-status small { width: 100%; overflow-wrap: anywhere; }
+.team-progress details { font-size: 11px; padding: 6px 0; }
+.team-progress summary { cursor: pointer; line-height: 1.8; }
+.team-progress pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow-y: auto; line-height: 1.8; margin: 8px 0; color: #cfdfeb; }
+.cli-installer { margin: 0 24px 16px; border-bottom: 1px solid #3a4b58; padding-bottom: 12px; }
+.cli-installer h3 { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 8px; }
+.install-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.install-buttons > p { font-size: 12px; color: #adcdbf; }
+.install-log { margin-top: 8px; font-size: 11px; }
+.install-log pre { max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: #0b1117; color: #c8dce9; padding: 10px; margin: 8px 0; border-radius: 6px; }
+.install-log [role="alert"] { color: #ffbcc5; line-height: 1.8; }
+@media(max-width:1100px) { .team-seat-fields { grid-template-columns: 1fr 1fr; } .team-seat-fields label:last-child { grid-column: 1 / -1; } .team-editor > header { flex-wrap: wrap; } }

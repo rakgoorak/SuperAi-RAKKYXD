@@ -7,6 +7,9 @@ import { CoderAgent } from './CoderAgent.js';
 import { TesterAgent } from './TesterAgent.js';
 import { ReviewerAgent } from './ReviewerAgent.js';
 
+export type TeamRole = 'coder' | 'tester' | 'reviewer';
+export interface SupervisorTeamOptions { providers?: Partial<Record<TeamRole, LLMProvider>>; enabledRoles?: TeamRole[]; }
+
 export interface SubTaskItem {
   id: string;
   title: string;
@@ -42,13 +45,17 @@ export class SupervisorAgent {
   private tools: ToolDefinition[];
   private subagents: Map<string, BaseSubagent> = new Map();
 
-  constructor(provider: LLMProvider, tools: ToolDefinition[]) {
+  private enabledRoles: TeamRole[];
+
+  constructor(provider: LLMProvider, tools: ToolDefinition[], team: SupervisorTeamOptions = {}) {
     this.provider = provider;
     this.tools = tools;
+    this.enabledRoles = team.enabledRoles || ["coder", "tester", "reviewer"];
+    if (!this.enabledRoles.length || this.enabledRoles.some(role => !["coder", "tester", "reviewer"].includes(role))) throw new Error("เลือกบทบาทลูกทีมอย่างน้อยหนึ่งคน");
 
-    this.registerSubagent(new CoderAgent(provider, tools));
-    this.registerSubagent(new TesterAgent(provider, tools));
-    this.registerSubagent(new ReviewerAgent(provider, tools));
+    this.registerSubagent(new CoderAgent(team.providers?.coder || provider, tools));
+    this.registerSubagent(new TesterAgent(team.providers?.tester || provider, tools));
+    this.registerSubagent(new ReviewerAgent(team.providers?.reviewer || provider, tools.filter(tool => ['view_file','grep_search','glob_search'].includes(tool.name))));
   }
 
   registerSubagent(subagent: BaseSubagent): void {
@@ -76,6 +83,7 @@ Decompose this goal into a strict JSON list of 2 to 4 actionable tasks for your 
 - "coder": implementation, file edits, scaffolding
 - "tester": writing unit tests, running bash test commands, verifying fixes
 - "reviewer": auditing code diffs, verifying constraints
+Only assign tasks to these enabled roles: ${this.enabledRoles.join(", ")}. Use only those roles. Execute tasks sequentially, preserving dependencies.
 
 Format as a valid JSON array only:
 [
@@ -88,7 +96,7 @@ Format as a valid JSON array only:
       const planRes = await this.provider.generate([{ role: 'user', content: planPrompt }]);
       planRaw = planRes.text;
     } catch (err: any) {
-      planRaw = '';
+      throw new Error(`หัวหน้าทีมวางแผนไม่สำเร็จ: ${err.message}`);
     }
 
     const tasks = this.parsePlan(planRaw, goal);
@@ -101,7 +109,7 @@ Format as a valid JSON array only:
       task.status = 'running';
       this.emitEvent(options.onEvent, 'subagent_start', { task });
 
-      const agent = this.subagents.get(task.assignedAgent) || this.subagents.get('coder')!;
+      const agent = this.subagents.get(task.assignedAgent)!;
       const subtaskPrompt = `Context:\n${accumulatedContext}\nYour Assignment (${task.title}):\n${task.instructions}`;
 
       try {
@@ -119,8 +127,8 @@ Format as a valid JSON array only:
         });
 
         task.status = subResult.success ? 'completed' : 'failed';
-        task.result = subResult.output;
-        accumulatedContext += `\n[Output from ${agent.name} on ${task.title}]:\n${subResult.output.slice(0, 1000)}\n`;
+        task.result = [subResult.output, !subResult.success && subResult.error ? `ข้อผิดพลาด: ${subResult.error}` : ''].filter(Boolean).join('\n');
+        accumulatedContext += `\n[Output from ${agent.name} on ${task.title} (${task.status})]:\n${task.result}\n`;
 
         this.emitEvent(options.onEvent, 'subagent_finish', {
           task,
@@ -136,20 +144,20 @@ Format as a valid JSON array only:
       }
     }
 
-    this.emitEvent(options.onEvent, 'supervisor_synthesis', { tasks });
     if (options.abortSignal?.aborted) return { success: false, goal, tasks, finalSummary: 'ยกเลิกงานแล้ว' };
+    this.emitEvent(options.onEvent, 'supervisor_synthesis', { tasks });
     const synthPrompt = `You are the Lead Supervisor. All subagents have finished their assignments for goal: "${goal}".
 Task outputs:
-${tasks.map((t) => `- [${t.assignedAgent.toUpperCase()}] ${t.title}: ${t.status} (${t.result?.slice(0, 200)}...)`).join('\n')}
+${tasks.map((t) => `- [${t.assignedAgent.toUpperCase()}] ${t.title}: ${t.status} (${t.result || 'ไม่มีผลลัพธ์'})`).join('\n')}
 
-Provide a concise, professional summary of the changes made, tests verified, and final status.`;
+ตอบเป็นภาษาไทย สรุปเฉพาะงานและผลทดสอบที่เกิดขึ้นจริง ระบุงานที่ล้มเหลวหรือยังไม่ได้ทำ ห้ามอ้างว่าทุกอย่างสำเร็จหากมี task ไม่สำเร็จ.`;
 
     let finalSummary = '';
     try {
       const synthRes = await this.provider.generate([{ role: 'user', content: synthPrompt }]);
       finalSummary = synthRes.text;
-    } catch {
-      finalSummary = `Multi-agent tasks completed. ${tasks.filter((t) => t.status === 'completed').length}/${tasks.length} tasks succeeded.`;
+    } catch (error: any) {
+      throw new Error(`หัวหน้าทีมสรุปผลไม่สำเร็จ: ${error.message}`);
     }
 
     const allSuccessful = tasks.every((t) => t.status === 'completed');
@@ -170,33 +178,12 @@ Provide a concise, professional summary of the changes made, tests verified, and
     const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*$/gi, '').trim();
     try {
       const parsed = JSON.parse(cleaned);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((item: any, idx: number) => ({
-          id: item.id || `task_${idx + 1}`,
-          title: item.title || `Task ${idx + 1}`,
-          assignedAgent: item.assignedAgent || (idx === 0 ? 'coder' : 'tester'),
-          instructions: item.instructions || item.title || '',
-          status: 'pending' as const,
-        }));
-      }
-    } catch {}
-
-    return [
-      {
-        id: 'task_1',
-        title: 'Implement Core Solution',
-        assignedAgent: 'coder',
-        instructions: `Implement solution for "${goal}".`,
-        status: 'pending',
-      },
-      {
-        id: 'task_2',
-        title: 'Run Tests and Verification',
-        assignedAgent: 'tester',
-        instructions: `Verify that the code builds and tests pass cleanly.`,
-        status: 'pending',
-      },
-    ];
+      if (!Array.isArray(parsed) || !parsed.length || parsed.length > 8) throw new Error('plan length');
+      return parsed.map((item: any, idx: number) => {
+        if (!item || !this.enabledRoles.includes(item.assignedAgent) || typeof item.instructions !== 'string' || !item.instructions.trim()) throw new Error('unknown role/instructions');
+        return { id: `task_${idx + 1}`, title: String(item.title || `งาน ${idx + 1}`).slice(0,200), assignedAgent: item.assignedAgent, instructions: item.instructions.slice(0,10000), status: 'pending' as const };
+      });
+    } catch { throw new Error(`แผนของหัวหน้าทีมไม่ถูกต้อง ต้องเป็น JSON และมอบหมายให้ลูกทีมที่เลือกเท่านั้น (${this.enabledRoles.join(', ')}) สำหรับงาน: ${goal.slice(0,100)}`); }
   }
 
   private emitEvent(

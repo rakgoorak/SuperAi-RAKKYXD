@@ -5,13 +5,15 @@ import { fileURLToPath } from "node:url";
 import express, { Express, Request, Response } from "express";
 import type { ErrorRequestHandler } from "express";
 import { listClis, listOpenCodeModels } from "./CliCatalog.js";
-import { AgentRunManager } from "./AgentRunManager.js";
+import { AgentRunManager, ollamaBase } from "./AgentRunManager.js";
+import { CliInstallManager } from "./CliInstallManager.js";
 import { WebSocketServer, WebSocket } from "ws";
 import { TerminalSessionManager } from "./TerminalSessionManager.js";
 import { WorkspaceRegistry } from "./WorkspaceRegistry.js";
 
 export class StudioServer {
   private agentRuns: AgentRunManager;
+  private cliInstalls = new CliInstallManager();
   private dictations: { id: number; text: string }[] = [];
   private app: Express;
   private server: http.Server;
@@ -81,6 +83,15 @@ export class StudioServer {
 
   private setupRoutes(): void {
     this.app.get("/api/clis", (_req, res) => res.json(listClis()));
+    this.app.get('/api/cli-installs', (_req,res)=>res.json(this.cliInstalls.list()));
+    this.app.post('/api/clis/:id/install', (req,res)=> {
+      try {
+        const id=String(req.params.id);
+        if(this.terminalManager.listSessions().some(s=>s.agentType===id && ['running','stopping'].includes(s.status)) || this.agentRuns.usesCli(id)) return res.status(409).json({error:'CLI นี้กำลังใช้งานอยู่ กรุณาปิด session/หยุดทีมก่อนติดตั้ง'});
+        res.json(this.cliInstalls.start(id));
+      } catch(error:any) {res.status(400).json({error:error.message});}
+    });
+    this.app.post('/api/cli-installs/:id/cancel',(req,res)=>res.json({success:this.cliInstalls.cancel(String(req.params.id))}));
     this.app.get("/api/opencode/models", async (_req, res) => {
       try {
         res.json({ models: await listOpenCodeModels() });
@@ -95,7 +106,7 @@ export class StudioServer {
     });
     this.app.get("/api/ollama/models", async (_req, res) => {
       try {
-        const response = await fetch("http://127.0.0.1:11434/api/tags", {
+        const response = await fetch(`${ollamaBase()}/api/tags`, {
           signal: AbortSignal.timeout(4000),
         });
         if (!response.ok) throw new Error(`Ollama ${response.status}`);
@@ -127,6 +138,7 @@ export class StudioServer {
           req.body.mode === "assistant" ? "assistant" : "chat",
           req.body.allowTools === true,
           req.body.openCodeModel || "",
+          req.body.team,
         );
         res.json(run);
       } catch (err: any) {
@@ -482,6 +494,7 @@ export class StudioServer {
   public stop(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.agentRuns.stop();
+      this.cliInstalls.stop();
       this.terminalManager.killAll();
       for (const client of this.wss.clients) client.terminate();
       this.wss.close(() => {

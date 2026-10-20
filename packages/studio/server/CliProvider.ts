@@ -4,24 +4,27 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { LLMProvider, LLMMessage, LLMResponse } from "@opencode-multi/core";
-import { cliLaunch } from "./CliCatalog.js";
+import { cliLaunch, cliPath } from "./CliCatalog.js";
 
 export function promptArguments(
   id: string,
   allowTools: boolean,
   inputFile?: string,
   modelOverride = "",
+  allowReadTools = false,
 ): string[] {
   if (id === "claude-code")
     return [
       "-p",
       "--output-format",
       "text",
-      ...(allowTools ? [] : ["--permission-mode", "plan", "--tools", ""]),
+      ...(modelOverride ? ["--model", modelOverride] : []),
+      ...(allowTools ? [] : ["--permission-mode", "plan", "--tools", allowReadTools ? "Read,Grep,Glob" : ""]),
     ];
   if (id === "codex")
     return [
       "exec",
+      ...(modelOverride ? ["--model", modelOverride] : []),
       "--skip-git-repo-check",
       "--sandbox",
       allowTools ? "workspace-write" : "read-only",
@@ -52,6 +55,7 @@ export class CliProvider implements LLMProvider {
     private signal: AbortSignal,
     private allowTools = false,
     private modelOverride = "",
+    private allowReadTools = false,
   ) {}
   async generate(messages: LLMMessage[]): Promise<LLMResponse> {
     return this.stream(messages, () => {});
@@ -75,14 +79,15 @@ export class CliProvider implements LLMProvider {
       if (this.signal.aborted) throw new Error("ยกเลิกงานแล้ว");
       const launch = cliLaunch(
         id,
-        promptArguments(id, this.allowTools, inputFile, this.modelOverride),
+        promptArguments(id, this.allowTools, inputFile, this.modelOverride, this.allowReadTools),
       );
       return await new Promise<LLMResponse>((resolve, reject) => {
         const proc = spawn(launch.command, launch.args, {
           cwd: this.cwd,
+          detached: process.platform !== 'win32',
           windowsHide: true,
           stdio: ["pipe", "pipe", "pipe"],
-          env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" },
+          env: { ...process.env, PATH: cliPath(), NO_COLOR: "1", FORCE_COLOR: "0" },
         });
         proc.stdin.on("error", () => {});
         proc.stdin.end(id === "opencode" ? undefined : prompt, "utf8");
@@ -98,7 +103,7 @@ export class CliProvider implements LLMProvider {
               { windowsHide: true },
               () => {},
             );
-          else proc.kill();
+          else if(proc.pid) {try{process.kill(-proc.pid,'SIGKILL');}catch{proc.kill();}}
         };
         const timeout = setTimeout(kill, 600000);
         this.signal.addEventListener("abort", kill, { once: true });

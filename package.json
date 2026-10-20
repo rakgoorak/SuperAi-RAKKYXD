@@ -1,6 +1,6 @@
 {
   "name": "superai-rakkyxd",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -22,7 +22,8 @@
     "package:portable": "node scripts/package-portable.mjs",
     "package:release": "node scripts/package-release.mjs",
     "archive:release": "node scripts/archive-release.mjs",
-    "test:release": "node packages/desktop/test/release-smoke.mjs"
+    "test:release": "node packages/desktop/test/release-smoke.mjs",
+    "test:team": "node packages/desktop/test/team-smoke.mjs"
   },
   "devDependencies": {
     "@electron/packager": "^18.3.6",

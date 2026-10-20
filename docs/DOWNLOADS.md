@@ -4,9 +4,9 @@
 
 | เครื่อง | ไฟล์ |
 | --- | --- |
-| Windows 10/11 64-bit | `SuperAi-RAKKYXD-v1.0.1-windows-x64.zip` |
-| Mac ชิป Apple Silicon (M1/M2/M3/M4 และรุ่นใหม่กว่า) | `SuperAi-RAKKYXD-v1.0.1-macos-arm64.zip` |
-| Mac ชิป Intel | `SuperAi-RAKKYXD-v1.0.1-macos-x64.zip` |
+| Windows 10/11 64-bit | `SuperAi-RAKKYXD-v1.1.0-windows-x64.zip` |
+| Mac ชิป Apple Silicon (M1/M2/M3/M4 และรุ่นใหม่กว่า) | `SuperAi-RAKKYXD-v1.1.0-macos-arm64.zip` |
+| Mac ชิป Intel | `SuperAi-RAKKYXD-v1.1.0-macos-x64.zip` |
 
 ## Windows
 
@@ -20,7 +20,7 @@ Voice ต้องได้รับสิทธิ์ Microphone ส่วน�
 
 ## CLI และเสียง
 
-ตัวโปรแกรมมี Electron runtime พร้อมแล้ว แต่ Claude Code, Codex, Gemini CLI, OpenCode และ Freebuff ต้องติดตั้งและล็อกอินด้วยบัญชีของคุณเอง Freebuff เปิดได้หนึ่ง session ที่แอปจัดการพร้อมกัน
+ตัวโปรแกรมมี Electron runtime พร้อมแล้ว แต่ Claude Code, Codex, Gemini CLI, OpenCode และ Freebuff กดติดตั้งจากหน้า สร้าง session ได้เมื่อมี Node.js 22+ และ npm จากนั้นล็อกอินด้วยบัญชีของคุณเอง Freebuff เปิดได้หนึ่ง session ที่แอปจัดการพร้อมกัน
 
 Voice ต้องมี Python 3.10+ (แนะนำ 3.11/3.12) และ faster-whisper พร้อมโมเดลเสียง Python ไม่ได้รวมอยู่ใน ZIP บน Mac ใช้ `python3`; ระบบติดตั้งเสียงสร้าง virtual environment ใน `~/.opencode-multi/whisper-models/runtime` เพื่อไม่แก้ Python ของระบบ กำหนด `SUPERAI_PYTHON` ได้เมื่อใช้ Python ที่ติดตั้งเอง การดาวน์โหลดโมเดลครั้งแรกต้องเชื่อมต่ออินเทอร์เน็ต
 

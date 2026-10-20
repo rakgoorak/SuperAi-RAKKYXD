@@ -39,9 +39,11 @@ import {
   Layers,
   Radio,
 } from "lucide-react";
-import { api, post, Workspace, Cli, Session, Run } from "./api";
+import { api, post, Workspace, Cli, Session, Run, AgentTeam } from "./api";
 import { SessionCanvas, type CanvasLayout } from "./components/SessionCanvas";
 import { RightDock, type DockView } from "./components/RightDock";
+import { TeamEditor, TeamProgress } from "./components/TeamEditor";
+import { CliInstaller } from "./components/CliInstaller";
 import { LaunchPresets, type LaunchSeat } from "./components/LaunchPresets";
 
 type Mode = "code" | "chat" | "assistant";
@@ -107,6 +109,7 @@ export function App() {
   const [models, setModels] = useState<string[]>([]);
   const [modelError, setModelError] = useState("");
   const [allowTools, setAllowTools] = useState(false);
+  const [agentTeam,setAgentTeam] = useState<AgentTeam | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
   const [menu, setMenu] = useState("");
   const composer = useRef<HTMLTextAreaElement>(null);
@@ -336,7 +339,7 @@ export function App() {
     });
   const send = () =>
     task(async () => {
-      if(mode!=='code'&&model==='cli:opencode'&&openCodeModel==='auto')throw new Error('กำลังตรวจรุ่น OpenCode กรุณารอ หรือเลือกรุ่นในการตั้งค่า');
+      if(mode==='chat'&&model==='cli:opencode'&&openCodeModel==='auto')throw new Error('กำลังตรวจรุ่น OpenCode กรุณารอ หรือเลือกรุ่นในการตั้งค่า');
       if (!draft.trim()) return;
       if (!workspace) throw new Error("กรุณาสร้างโปรเจกต์ก่อน");
       if (mode === "code") {
@@ -365,14 +368,16 @@ export function App() {
             : "ส่งคำสั่งแล้ว",
         );
       } else {
-        if (!model)
+        const conversationModel = mode === 'assistant' ? agentTeam?.leader.provider : model;
+        if (!conversationModel)
           throw new Error("เปิดการตั้งค่า แล้วเลือก CLI หรือ model ก่อน");
         await post(`/api/conversations/${workspace.id}`, {
           prompt: draft,
           mode,
-          model,
+          model:conversationModel,
           allowTools,
           openCodeModel,
+          ...(mode === "assistant" ? {team:agentTeam} : {}),
         });
         setRuns(await api<Run[]>(`/api/conversations/${workspace.id}`));
       }
@@ -752,7 +757,7 @@ export function App() {
                   ) : (
                     <>
                       <button className="text-button" onClick={openSettings}>
-                        {modelLabel || "เลือก model"}
+                        {mode === "assistant" ? "ตั้งค่าเริ่มต้น" : modelLabel || "เลือก model"}
                         <ChevronDown size={13} />
                       </button>
                       <button
@@ -826,7 +831,8 @@ export function App() {
               </div>
               {mode !== "code" && (
                 <div className="conversation-scroll">
-                  {!conversation.length ? (
+                  {mode === "assistant" && <TeamEditor key={activeWs} workspaceId={activeWs} clis={clis} models={models} openCodeModels={openCodeModels} provider={model} override={openCodeModel} disabled={!!activeRun} onChange={setAgentTeam} onError={showError} discover={()=>void loadModels()}/>}
+                  {!conversation.length && mode === "assistant" ? <p className="team-instructions">พิมพ์เป้าหมายและเกณฑ์ตรวจรับด้านล่าง แล้วกดส่ง หัวหน้าจะมอบหมายงานตามลูกทีมที่เลือก</p> : !conversation.length ? (
                     <div className="conversation-empty">
                       <div className="empty-command">
                         {mode === "assistant" ? (
@@ -868,6 +874,7 @@ export function App() {
                           </span>
                           <p>{run.prompt}</p>
                         </div>
+                        {run.team && <TeamProgress run={run}/>}
                         <div className="assistant-message">
                           <div className="message-author">
                             <span className="small-brand">
@@ -937,7 +944,7 @@ export function App() {
                     ) : (
                       <>
                         <Bot size={13} />
-                        <span>{modelLabel || "ยังไม่ได้เลือก model"}</span>
+                        <span>{mode === "assistant" ? `หัวหน้า: ${agentTeam?.leader.name || "ยังไม่เลือกทีม"}` : modelLabel || "ยังไม่ได้เลือก model"}</span>
                         <label className="tool-permission">
                           <input
                             type="checkbox"
@@ -995,7 +1002,7 @@ export function App() {
                       ) : (
                         <>
                           <ShieldCheck size={12} />{" "}
-                          {model.startsWith("cli:")
+                          {(mode === "assistant" ? agentTeam?.leader.provider || "" : model).startsWith("cli:")
                             ? "ใช้บัญชี CLI ของคุณ"
                             : "ใช้ Ollama บนเครื่อง"}
                         </>
@@ -1121,6 +1128,7 @@ export function App() {
             )}
             {dialog === "session" && (
               <>
+                <CliInstaller clis={clis} onRefresh={checkClis} onError={showError}/>
                 <LaunchPresets clis={clis} type={launchType} count={count} onChoose={setLaunchPlan} onError={showError} />
                 {launchPlan && <div className="launch-plan"><strong>ชุดที่จะเปิด: {launchPlan.map(seat => `${clis.find(c => c.id === seat.type)?.name || seat.type} ×${seat.count}`).join(" + ")}</strong><button className="text-button" onClick={() => setLaunchPlan(null)}>เลือกเอง</button></div>}
                 <div className="cli-options">
