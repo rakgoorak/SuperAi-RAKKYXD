@@ -4,8 +4,7 @@ contextBridge.exposeInMainWorld('superai', {
   isDesktop: true, platform: process.platform,
   pickFolder: () => ipcRenderer.invoke('app:folder'),
   openExternal: url => ipcRenderer.invoke('app:external', url),
-  openVoice: () => ipcRenderer.invoke('app:voice'),
+  openSpeechSettings: () => ipcRenderer.invoke('app:speech-settings'),
   browser: (action, payload) => ipcRenderer.invoke('browser:action', action, payload),
   onBrowser: callback => listen('browser:state', callback),
-  onVoiceText: callback => listen('voice:text', callback),
 });

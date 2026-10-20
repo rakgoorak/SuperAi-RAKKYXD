@@ -29,8 +29,7 @@ const app = await electron.launch({
   env: { ...process.env, SUPERAI_DATA_DIR: data },
   timeout: 60000,
 });
-let checks = 0,
-  voiceApp;
+let checks = 0;
 try {
   const page = await app.firstWindow();
   const errors = [];
@@ -39,6 +38,14 @@ try {
   await page.waitForFunction(() =>
     document.querySelector(".statusbar")?.textContent.includes("เชื่อมต่อแล้ว"),
   );
+  // A fresh profile opens the first-run setup guide with real machine checks.
+  const setup = page.getByRole("dialog", { name: "เริ่มต้นใช้งาน SuperAi" });
+  await setup.waitFor();
+  await setup.getByText("Node.js 22", { exact: true }).waitFor();
+  await setup.getByText("เข้าสู่ระบบบัญชี AI", { exact: true }).waitFor();
+  await setup.getByRole("button", { name: "เสร็จแล้ว" }).click();
+  await setup.waitFor({ state: "hidden" });
+  checks++;
   const request = async (route, options) =>
     page.evaluate(
       async ({ route, options }) => {
@@ -171,27 +178,6 @@ try {
   assert.deepEqual(options, ["1 session"]);
   await page.getByRole("button", { name: "ยกเลิก", exact: true }).click();
   checks++;
-  voiceApp = await electron.launch({
-    executablePath: process.env.SUPERAI_PORTABLE_DIR ? path.join(process.env.SUPERAI_PORTABLE_DIR,"SuperAiVoice-RAKKYXD.exe") : require("electron"),
-    args: process.env.SUPERAI_PORTABLE_DIR ? [] : ["packages/voice"],
-    env: { ...process.env, SUPERAI_VOICE_DATA_DIR: path.join(data, "voice") },
-    timeout: 60000,
-  });
-  const voice = await voiceApp.firstWindow();
-  await voice.waitForSelector("#transcript");
-  await voice.locator("#transcript").fill("สร้างเว็บไซต์ภาษาไทยจากเสียง");
-  await voice.locator("#deliver").click();
-  await page.waitForFunction(() =>
-    document
-      .querySelector('textarea[aria-label="คำสั่ง"]')
-      .value.includes("สร้างเว็บไซต์ภาษาไทยจากเสียง"),
-  );
-  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'คำสั่ง');
-  checks++;
-  await voice.screenshot({ path: path.join(output, "superai-voice.png") });
-  const capture = await voice.evaluate(() => window.voice.capture());
-  assert.equal(capture.ok, true);
-  checks++;
   await page.getByRole("button", { name: "สนทนา", exact: true }).click();
   await page
     .getByRole("heading", { name: "เริ่มจากคำถามของคุณ", exact: true })
@@ -237,7 +223,6 @@ try {
     }),
   );
 } finally {
-  await voiceApp?.close();
   await app.close();
   await new Promise((r) => website.close(r));
 }

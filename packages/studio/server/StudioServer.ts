@@ -4,7 +4,9 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import express, { Express, Request, Response } from "express";
 import type { ErrorRequestHandler } from "express";
-import { listClis, listOpenCodeModels, getNodeStatus } from "./CliCatalog.js";
+import { listClis, listOpenCodeModels, getNodeStatus, findExecutable } from "./CliCatalog.js";
+import { getGitStatus } from "./GitInstaller.js";
+import { SpeechService } from "./SpeechService.js";
 import { AgentRunManager, ollamaBase } from "./AgentRunManager.js";
 import { CliInstallManager } from "./CliInstallManager.js";
 import { WebSocketServer, WebSocket } from "ws";
@@ -14,7 +16,7 @@ import { WorkspaceRegistry } from "./WorkspaceRegistry.js";
 export class StudioServer {
   private agentRuns: AgentRunManager;
   private cliInstalls = new CliInstallManager();
-  private dictations: { id: number; text: string }[] = [];
+  private speech = new SpeechService();
   private app: Express;
   private server: http.Server;
   private wss: WebSocketServer;
@@ -92,6 +94,31 @@ export class StudioServer {
         res.status(400).json({ error: error.message });
       }
     });
+    this.app.get('/api/git/status', (_req, res) => res.json(getGitStatus(findExecutable)));
+    this.app.post('/api/git/install', (_req, res) => {
+      try {
+        if (process.platform !== 'win32') return res.status(400).json({ error: 'บน macOS ให้ติดตั้ง Git ด้วย xcode-select --install' });
+        if (getGitStatus(findExecutable).installed) return res.status(409).json({ error: 'มี Git พร้อมใช้งานแล้ว' });
+        res.json(this.cliInstalls.start('git'));
+      } catch (error: any) {
+        res.status(400).json({ error: error.message });
+      }
+    });
+    this.app.get('/api/speech/voices', async (req, res) => {
+      try {
+        res.json({ supported: this.speech.supported, voices: await this.speech.voices(req.query.refresh === '1') });
+      } catch (error: any) {
+        res.status(500).json({ error: `อ่านรายการเสียงพูดไม่ได้: ${error.message}` });
+      }
+    });
+    this.app.post('/api/speech/synthesize', async (req, res) => {
+      try {
+        const audio = await this.speech.synthesize(String(req.body.text || ''), String(req.body.lang || 'th-TH'), String(req.body.voice || ''), Number(req.body.rate) || 1);
+        res.type('audio/wav').send(audio);
+      } catch (error: any) {
+        res.status(error.code === 'NO_VOICE' ? 404 : 400).json({ error: error.message, code: error.code });
+      }
+    });
     this.app.post('/api/clis/:id/install', (req,res)=> {
       try {
         const id=String(req.params.id);
@@ -147,6 +174,7 @@ export class StudioServer {
           req.body.allowTools === true,
           req.body.openCodeModel || "",
           req.body.team,
+          req.body.voice === true,
         );
         res.json(run);
       } catch (err: any) {
@@ -163,22 +191,6 @@ export class StudioServer {
     });
     this.app.post("/api/runs/:id/cancel", (req, res) =>
       res.json({ success: this.agentRuns.cancel(String(req.params.id)) }),
-    );
-    this.app.post("/api/dictation", (req, res) => {
-      const text = req.body.text;
-      if (typeof text !== "string" || !text.trim() || text.length > 50000)
-        return res.status(400).json({ error: "ข้อความเสียงไม่ถูกต้อง" });
-      this.dictations.push({
-        id: Math.max(Date.now(), (this.dictations.at(-1)?.id || 0) + 1),
-        text,
-      });
-      this.dictations = this.dictations.slice(-20);
-      res.json({ success: true });
-    });
-    this.app.get("/api/dictation", (req, res) =>
-      res.json(
-        this.dictations.filter((d) => d.id > Number(req.query.after || 0)),
-      ),
     );
     this.app.patch("/api/workspaces/:wsId", (req, res) => {
       try {

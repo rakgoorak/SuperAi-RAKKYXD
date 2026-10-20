@@ -4,6 +4,7 @@ import os from "node:os";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { managedNodeDir, managedNodeBin, installNode22 } from "./NodeInstaller.js";
+import { managedGitCmd, bashForGit } from "./GitInstaller.js";
 
 export { managedNodeDir, managedNodeBin, installNode22 };
 
@@ -34,10 +35,22 @@ export const cliPath = () => [
   ...new Set([
     managedCliBin(),
     managedNodeBin(),
+    ...(process.platform === 'win32' ? [managedGitCmd()] : []),
     path.join(os.homedir(), '.local', 'bin'),
     ...(process.env.PATH || '').split(path.delimiter),
   ]),
 ].filter(Boolean).join(path.delimiter);
+
+// Environment for spawned CLIs: managed PATH plus Git Bash for Claude Code on Windows.
+export function cliEnv(): Record<string, string> {
+  const env: Record<string, string> = { PATH: cliPath() };
+  if (process.platform === 'win32' && !process.env.CLAUDE_CODE_GIT_BASH_PATH) {
+    const git = findExecutable('git');
+    const bash = git && bashForGit(git);
+    if (bash) env.CLAUDE_CODE_GIT_BASH_PATH = bash;
+  }
+  return env;
+}
 
 export interface NodeStatus {
   installed: boolean;

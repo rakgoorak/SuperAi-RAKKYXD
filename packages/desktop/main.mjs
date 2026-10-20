@@ -2,7 +2,6 @@ import { app, BrowserWindow, ipcMain, shell, dialog } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
-import { spawn } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserController } from "./browser.mjs";
 import { normalizeBrowserUrl } from "./browser-url.mjs";
@@ -11,6 +10,8 @@ prepareDesktopPath();
 const directory = path.dirname(fileURLToPath(import.meta.url));
 if (process.env.SUPERAI_DATA_DIR)
   app.setPath("userData", process.env.SUPERAI_DATA_DIR);
+// Multithreaded on-device speech recognition (voice mode) needs SharedArrayBuffer.
+app.commandLine.appendSwitch("enable-features", "SharedArrayBuffer");
 let window, server, browser;
 const log = async (text) => {
   try {
@@ -42,6 +43,14 @@ ipcMain.handle("app:external", async (e, url) => {
   trusted(e);
   await shell.openExternal(normalizeBrowserUrl(url));
 });
+// Fixed targets only: where users add a Thai text-to-speech voice.
+ipcMain.handle("app:speech-settings", async (e) => {
+  trusted(e);
+  if (process.platform === "win32") await shell.openExternal("ms-settings:speech");
+  else if (process.platform === "darwin")
+    await shell.openExternal("x-apple.systempreferences:com.apple.preference.universalaccess?SpeakableItems");
+  else throw new Error("เปิดการตั้งค่าเสียงพูดได้บน Windows และ macOS");
+});
 ipcMain.handle("browser:action", async (e, action, payload) => {
   trusted(e);
   if (
@@ -60,34 +69,6 @@ ipcMain.handle("browser:action", async (e, action, payload) => {
   )
     throw new Error("คำสั่ง browser ไม่ถูกต้อง");
   return browser.action(action, payload);
-});
-ipcMain.handle("app:voice", async (e) => {
-  trusted(e);
-  await new Promise((resolve, reject) => {
-    const child = spawn(
-      process.execPath,
-        app.isPackaged ? ["--superai-voice"] : [path.resolve(directory, "../voice")],
-      {
-        windowsHide: true,
-        stdio: "ignore",
-        env: {
-          ...process.env,
-          SUPERAI_STUDIO_URL: new URL(window.webContents.getURL()).origin,
-          ...(process.env.SUPERAI_DATA_DIR
-            ? {
-                SUPERAI_VOICE_DATA_DIR: path.join(
-                  process.env.SUPERAI_DATA_DIR,
-                  "voice",
-                ),
-              }
-            : {}),
-        },
-      },
-    );
-    child.once("spawn", resolve);
-    child.once("error", reject);
-    child.unref();
-  });
 });
 if (!app.requestSingleInstanceLock()) app.quit();
 else {

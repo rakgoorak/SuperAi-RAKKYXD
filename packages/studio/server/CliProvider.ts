@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { LLMProvider, LLMMessage, LLMResponse } from "@opencode-multi/core";
-import { cliLaunch, cliPath } from "./CliCatalog.js";
+import { cliLaunch, cliEnv } from "./CliCatalog.js";
 
 export function promptArguments(
   id: string,
@@ -87,7 +87,7 @@ export class CliProvider implements LLMProvider {
           detached: process.platform !== 'win32',
           windowsHide: true,
           stdio: ["pipe", "pipe", "pipe"],
-          env: { ...process.env, PATH: cliPath(), NO_COLOR: "1", FORCE_COLOR: "0" },
+          env: { ...process.env, ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0" },
         });
         proc.stdin.on("error", () => {});
         proc.stdin.end(id === "opencode" ? undefined : prompt, "utf8");

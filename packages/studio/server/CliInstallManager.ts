@@ -2,8 +2,9 @@ import { spawn, execFileSync, ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { cliPath, findExecutable, getCliDefinition, INSTALL_PACKAGES, managedCliPrefix } from './CliCatalog.js';
+import { cliEnv, findExecutable, getCliDefinition, INSTALL_PACKAGES, managedCliPrefix } from './CliCatalog.js';
 import { installNode22 } from './NodeInstaller.js';
+import { installPortableGit } from './GitInstaller.js';
 
 export interface InstallJob {
   id: string;
@@ -26,6 +27,7 @@ export interface CliInstallDependencies {
   timeout: number;
   version: (node: string) => string;
   installNode?: (options?: { onLog?: (msg: string) => void; signal?: AbortSignal }) => Promise<InstallNodeResult>;
+  installGit?: (options?: { onLog?: (msg: string) => void; signal?: AbortSignal }) => Promise<{ version: string }>;
   autoInstallNode?: boolean;
 }
 
@@ -68,6 +70,7 @@ export class CliInstallManager {
             windowsHide: true,
           }).trim(),
         installNode: installNode22,
+        installGit: installPortableGit,
         autoInstallNode: true,
       };
     }
@@ -102,20 +105,22 @@ export class CliInstallManager {
   }
 
   start(cliId: string): InstallJob {
-    if (cliId === 'node') {
+    if (cliId === 'node' || cliId === 'git') {
+      const label = cliId === 'node' ? 'Node.js 22 LTS' : 'Git for Windows';
+      const installer = cliId === 'node' ? this.dependencies.installNode : this.dependencies.installGit;
       if (this.child || this.currentAbort) {
         throw new Error('กำลังติดตั้งเครื่องมืออื่น กรุณารอหรือยกเลิกก่อน');
       }
-      if (!this.dependencies.installNode) {
-        throw new Error('ระบบติดตั้ง Node.js อัตโนมัติไม่พร้อมใช้งาน');
+      if (!installer) {
+        throw new Error(`ระบบติดตั้ง ${label} อัตโนมัติไม่พร้อมใช้งาน`);
       }
 
       this.pruneOldJobs();
       const job: InstallJob = {
         id: randomUUID(),
-        cliId: 'node',
+        cliId,
         status: 'running',
-        log: 'กำลังเตรียมดาวน์โหลดและติดตั้ง Node.js 22 LTS...\n',
+        log: `กำลังเตรียมดาวน์โหลดและติดตั้ง ${label}...\n`,
       };
       this.jobs.set(job.id, job);
 
@@ -127,7 +132,7 @@ export class CliInstallManager {
 
       (async () => {
         try {
-          const res = await this.dependencies.installNode!({
+          const res = await installer({
             onLog: (msg) => {
               job.log = (job.log + msg + '\n').slice(-20000);
             },
@@ -135,13 +140,13 @@ export class CliInstallManager {
           });
           if (job.status === 'cancelled') return;
           job.status = 'completed';
-          job.log += `\nNode.js 22 LTS (${res.version}) ติดตั้งสำเร็จและพร้อมใช้งาน`;
+          job.log += `\n${label} (${res.version}) ติดตั้งสำเร็จและพร้อมใช้งาน`;
         } catch (e: any) {
           if (job.status === 'cancelled') return;
           job.status = 'failed';
           job.error = ac.signal.aborted
-            ? 'ยกเลิกการติดตั้ง Node.js แล้ว'
-            : e.message || 'ติดตั้ง Node.js ไม่สำเร็จ';
+            ? `ยกเลิกการติดตั้ง ${label} แล้ว`
+            : e.message || `ติดตั้ง ${label} ไม่สำเร็จ`;
         } finally {
           if (this.currentAbort === ac) {
             this.currentAbort = null;
@@ -282,7 +287,7 @@ export class CliInstallManager {
         windowsHide: true,
         detached: process.platform !== 'win32',
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, PATH: cliPath() },
+        env: { ...process.env, ...cliEnv() },
       },
     );
     this.child = child;

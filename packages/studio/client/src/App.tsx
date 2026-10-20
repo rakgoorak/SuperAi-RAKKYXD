@@ -11,7 +11,6 @@ import {
   Bot,
   Settings,
   Globe,
-  Mic,
   LayoutGrid,
   Rows2,
   Activity,
@@ -26,7 +25,6 @@ import {
   X,
   Check,
   Search,
-  ArrowUpRight,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -38,6 +36,8 @@ import {
   ShieldCheck,
   Layers,
   Radio,
+  AudioLines,
+  Rocket,
 } from "lucide-react";
 import { api, post, Workspace, Cli, Session, Run, AgentTeam } from "./api";
 import { SessionCanvas, type CanvasLayout } from "./components/SessionCanvas";
@@ -45,9 +45,13 @@ import { RightDock, type DockView } from "./components/RightDock";
 import { TeamEditor, TeamProgress } from "./components/TeamEditor";
 import { CliInstaller } from "./components/CliInstaller";
 import { LaunchPresets, type LaunchSeat } from "./components/LaunchPresets";
+import { VoiceMode } from "./components/VoiceMode";
+import { VoiceSettingsPanel } from "./components/VoiceSettingsPanel";
+import { SetupGuide, setupNeeded } from "./components/SetupGuide";
+import { loadVoiceSettings, saveVoiceSettings, type VoiceSettings } from "./voice/speech";
 
 type Mode = "code" | "chat" | "assistant";
-type Dialog = "session" | "settings" | "project" | "delete" | "clear" | null;
+type Dialog = "session" | "settings" | "project" | "delete" | "clear" | "setup" | null;
 const modeLabels: Record<Mode, string> = {
   code: "โค้ด",
   chat: "สนทนา",
@@ -113,7 +117,9 @@ export function App() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [menu, setMenu] = useState("");
   const composer = useRef<HTMLTextAreaElement>(null);
-  const dictationAfter = useRef(Date.now());
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(loadVoiceSettings);
+  const setupShown = useRef(false);
   const [checkingModels, setCheckingModels] = useState(false);
   const [openCodeModel, setOpenCodeModel] = useState(
     initial("superai-opencode-model", "auto"),
@@ -239,30 +245,15 @@ export function App() {
       clearInterval(timer);
     };
   }, [activeWs]);
+  useEffect(() => saveVoiceSettings(voiceSettings), [voiceSettings]);
+  // First launch: walk new users through Node, Git, CLI, project and login.
   useEffect(() => {
-    const receive = (text: string) => {
-      setComposerShown(true);
-      setDraft((current) => (current ? `${current}\n${text}` : text));
-      setNotice("รับข้อความจาก SuperAi Voice แล้ว ตรวจข้อความก่อนกดส่ง");
-      requestAnimationFrame(() => composer.current?.focus());
-    };
-    const unsub = window.superai?.onVoiceText(receive);
-    const timer = setInterval(async () => {
-      try {
-        const messages = await api<{ id: number; text: string }[]>(
-          `/api/dictation?after=${dictationAfter.current}`,
-        );
-        for (const message of messages) {
-          dictationAfter.current = Math.max(dictationAfter.current, message.id);
-          receive(message.text);
-        }
-      } catch {}
-    }, 1200);
-    return () => {
-      unsub?.();
-      clearInterval(timer);
-    };
-  }, []);
+    if (setupShown.current || !connected || !clis.length) return;
+    setupShown.current = true;
+    let dismissed = false;
+    try { dismissed = localStorage.getItem("superai-setup-dismissed") === "1"; } catch {}
+    if (!dismissed && setupNeeded(clis, workspaces)) setDialog("setup");
+  }, [connected, clis, workspaces]);
   const loadOpenCodeModels = useCallback(async () => {
     setCheckingOpenCode(true);
     try {
@@ -447,14 +438,35 @@ export function App() {
     void loadModels();
     void checkClis().catch((e) => setError(e.message));
   };
-  const openVoice = () =>
-    task(async () => {
-      if (!window.superai)
-        throw new Error(
-          "เปิด SuperAi Voice ได้จากโปรแกรม Desktop หรือ npm run voice",
-        );
-      await window.superai.openVoice();
+  const openVoiceMode = () => {
+    setError("");
+    if (!workspace) return setError("เพิ่มโปรเจกต์ก่อนเริ่มโหมดเสียง");
+    if (mode === "code") setMode("chat");
+    if (!(mode === "assistant" ? agentTeam?.leader.provider : model)) {
+      setError("เลือกผู้ช่วยหรือ model ในการตั้งค่าก่อนเริ่มโหมดเสียง");
+      return openSettings();
+    }
+    setDialog(null);
+    setVoiceOpen(true);
+  };
+  const submitVoice = async (text: string) => {
+    if (!workspace) throw new Error("กรุณาสร้างโปรเจกต์ก่อน");
+    const voiceMode = mode === "assistant" ? "assistant" : "chat";
+    const provider = voiceMode === "assistant" ? agentTeam?.leader.provider : model;
+    if (!provider) throw new Error("เลือกผู้ช่วยหรือ model ในการตั้งค่าก่อน");
+    if (voiceMode === "chat" && model === "cli:opencode" && openCodeModel === "auto") throw new Error("กำลังตรวจรุ่น OpenCode กรุณารอสักครู่");
+    const run = await post<Run>(`/api/conversations/${workspace.id}`, {
+      prompt: text, mode: voiceMode, model: provider, allowTools, openCodeModel, voice: true,
+      ...(voiceMode === "assistant" ? { team: agentTeam } : {}),
     });
+    setRuns(await api<Run[]>(`/api/conversations/${workspace.id}`));
+    return run;
+  };
+  const closeSetup = () => {
+    try { localStorage.setItem("superai-setup-dismissed", "1"); } catch {}
+    setDialog(null);
+  };
+  const closeDialog = () => (dialog === "setup" ? closeSetup() : setDialog(null));
 
   return (
     <div className={`app-shell ${window.superai?.platform === "darwin" ? "platform-mac" : ""}`}>
@@ -613,19 +625,17 @@ export function App() {
               )}
             </div>
             <div className="sidebar-bottom">
-              <button
-                onClick={openVoice}
-                title={
-                  window.superai
-                    ? "เปิดโปรแกรมพูดเพื่อพิมพ์"
-                    : "ใช้จาก Desktop หรือ npm run voice"
-                }
-              >
-                <Mic size={17} />
+              <button onClick={() => setDialog("setup")} title="ตรวจความพร้อมและตั้งค่าเริ่มต้น">
+                <Rocket size={17} />
                 <span>
-                  SuperAi Voice<small>พูดเพื่อพิมพ์ · ไทย / อังกฤษ</small>
+                  เริ่มต้นใช้งาน<small>ตรวจ Node, Git, CLI และบัญชี</small>
                 </span>
-                <ArrowUpRight size={14} />
+              </button>
+              <button onClick={openVoiceMode} title="คุยกับผู้ช่วยด้วยเสียง">
+                <AudioLines size={17} />
+                <span>
+                  โหมดเสียง<small>คุยต่อเนื่อง · ไทย / อังกฤษ</small>
+                </span>
               </button>
               <button onClick={openSettings}>
                 <Settings size={17} />
@@ -825,8 +835,7 @@ export function App() {
                         ))}
                     </div>
                     <div className="empty-hint">
-                      <Keyboard size={14} /> พิมพ์คำสั่ง หรือใช้ SuperAi Voice
-                      เพื่อพูดแทนพิมพ์
+                      <AudioLines size={14} /> พิมพ์คำสั่ง หรือเปิดโหมดเสียงเพื่อคุยกับผู้ช่วย
                     </div>
                   </div>
                 )}
@@ -966,9 +975,11 @@ export function App() {
                         {composerExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                       </button>
                     )}
-                  <button className="text-button" onClick={openVoice}>
-                    <Mic size={14} /> พูดเพื่อพิมพ์
-                  </button>
+                  {mode !== "code" && (
+                    <button className="text-button" onClick={openVoiceMode} title="คุยด้วยเสียงแบบต่อเนื่อง">
+                      <AudioLines size={14} /> โหมดเสียง
+                    </button>
+                  )}
                   </div>
                 </div>
                 <div className="composer-box">
@@ -1052,7 +1063,7 @@ export function App() {
                 </div>
               </div>
             </main>
-            <RightDock open={preview} view={dockView} setView={setDockView} close={() => setPreview(false)} suspended={!!dialog}
+            <RightDock open={preview} view={dockView} setView={setDockView} close={() => setPreview(false)} suspended={!!dialog || voiceOpen}
               workspace={workspace} workspaces={workspaces} sessions={sessions} runs={runs} selected={selected}
               onSelect={session => { setActiveWs(session.wsId || activeWs); setSelected(session.id); setMode("code"); }}
               onPrompt={text => { setDraft(current => current ? `${current}\n${text}` : text); setComposerShown(true); requestAnimationFrame(() => composer.current?.focus()); }} onError={showError} />
@@ -1072,11 +1083,22 @@ export function App() {
           </footer>
         </div>
       </div>
+      {voiceOpen && (
+        <VoiceMode
+          runs={runs}
+          target={mode === "assistant" ? `ทีม · ${agentTeam?.leader.name || "หัวหน้าทีม"}` : modelLabel}
+          settings={voiceSettings}
+          submit={submitVoice}
+          cancel={async (id) => { await post(`/api/runs/${id}/cancel`); }}
+          openSettings={openSettings}
+          close={() => setVoiceOpen(false)}
+        />
+      )}
       {dialog && (
         <div
           className="modal-backdrop"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget && !busy) setDialog(null);
+            if (e.target === e.currentTarget && !busy) closeDialog();
           }}
         >
           <section
@@ -1085,7 +1107,7 @@ export function App() {
             aria-modal="true"
             aria-labelledby="dialog-title"
             onKeyDown={(e) => {
-              if (e.key === "Escape" && !busy) setDialog(null);
+              if (e.key === "Escape" && !busy) { e.stopPropagation(); closeDialog(); }
             }}
           >
             <div className="dialog-heading">
@@ -1101,7 +1123,9 @@ export function App() {
                           : "เพิ่มโปรเจกต์"
                         : dialog === "delete"
                           ? "ลบโปรเจกต์จากรายการ?"
-                          : "ล้างประวัติผู้ช่วย?"}
+                          : dialog === "setup"
+                            ? "เริ่มต้นใช้งาน SuperAi"
+                            : "ล้างประวัติผู้ช่วย?"}
                 </h2>
                 <p>
                   {dialog === "session"
@@ -1110,14 +1134,16 @@ export function App() {
                       ? "เชื่อมเครื่องมือที่คุณใช้ และเลือก model สำหรับผู้ช่วย"
                       : dialog === "project"
                         ? "เลือกโฟลเดอร์ที่ใช้ทำงานจริงบนเครื่อง"
-                        : "กรุณาตรวจสอบก่อนดำเนินการ"}
+                        : dialog === "setup"
+                          ? "ทำตามทีละขั้น ระบบตรวจเครื่องของคุณจริง และติดตั้งสิ่งที่ขาดให้ได้"
+                          : "กรุณาตรวจสอบก่อนดำเนินการ"}
                 </p>
               </div>
               <button
                 className="icon-button"
                 title="ปิดหน้าต่าง"
                 disabled={busy}
-                onClick={() => setDialog(null)}
+                onClick={closeDialog}
               >
                 <X size={18} />
               </button>
@@ -1221,6 +1247,18 @@ export function App() {
                     )}{" "}
                     เปิด {launchTotal} session
                   </button>
+                </div>
+              </>
+            )}
+            {dialog === "setup" && (
+              <>
+                <SetupGuide clis={clis} workspaces={workspaces} voice={voiceSettings} refreshClis={checkClis} onError={showError}
+                  addProject={() => openProject()} installCli={() => openSession()}
+                  login={(id) => { setLaunchType(id); setCount(1); setLaunchPlan(null); setDialog("session"); }}
+                  tryVoice={openVoiceMode} />
+                <div className="dialog-footer">
+                  <span className="muted">เปิดหน้านี้อีกครั้งได้จากแถบซ้าย “เริ่มต้นใช้งาน”</span>
+                  <button className="primary" onClick={closeSetup}>เสร็จแล้ว <Check size={15} /></button>
                 </div>
               </>
             )}
@@ -1414,16 +1452,7 @@ export function App() {
                       ใส่ในช่องคำสั่ง
                     </button>
                   </div>
-                  <div className="settings-section-title">
-                    <h3>SuperAi Voice & RAKKYXD</h3>
-                  </div>
-                  <p className="muted">
-                    โปรแกรมพูดเพื่อพิมพ์แยก รองรับไทย/อังกฤษ ใช้ Whisper
-                    บนเครื่อง กด Ctrl + Shift + Space เพื่ออัดหรือหยุด
-                  </p>
-                  <button className="secondary" onClick={openVoice}>
-                    <Mic size={15} /> เปิดโปรแกรมเสียง
-                  </button>
+                  <VoiceSettingsPanel settings={voiceSettings} onChange={setVoiceSettings} onError={showError} />
                 </div>
                 <div className="dialog-footer">
                   <span className="muted">บันทึกการตั้งค่าอัตโนมัติ</span>

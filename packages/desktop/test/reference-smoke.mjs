@@ -10,7 +10,8 @@ const app = await electron.launch({ executablePath: process.env.SUPERAI_PORTABLE
   args: process.env.SUPERAI_PORTABLE_DIR ? [] : ['packages/desktop'], env: { ...process.env, SUPERAI_DATA_DIR: data }, timeout: 60000 });
 let checks = 0;
 try {
-  const page = await app.firstWindow();
+  const page = await app.firstWindow(); // Setup guide is covered by smoke.mjs.
+  await page.waitForSelector('.app-shell'); await page.evaluate(() => localStorage.setItem('superai-setup-dismissed', '1')); await page.reload(); await page.waitForSelector('.app-shell');
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.waitForSelector('.app-shell');
   await app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows()[0]; w.unmaximize(); w.setContentSize(1440, 900); });

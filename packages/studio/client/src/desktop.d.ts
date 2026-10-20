@@ -17,13 +17,12 @@ declare global {
       platform: string;
       pickFolder: () => Promise<string | null>;
       openExternal: (url: string) => Promise<void>;
-      openVoice: () => Promise<void>;
+      openSpeechSettings: () => Promise<void>;
       browser: (
         action: string,
         payload?: Record<string, unknown>,
       ) => Promise<BrowserState>;
       onBrowser: (callback: (state: BrowserState) => void) => () => void;
-      onVoiceText: (callback: (text: string) => void) => () => void;
     };
     bridgemind?: {
       isDesktop: true;
