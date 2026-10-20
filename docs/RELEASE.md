@@ -1,4 +1,4 @@
-# SuperAi & RAKKYXD v1.1.0
+# SuperAi & RAKKYXD v1.1.1
 
 พื้นที่ทำงาน AI ภาษาไทย พร้อมโปรแกรม SuperAi Voice แยกต่างหาก
 

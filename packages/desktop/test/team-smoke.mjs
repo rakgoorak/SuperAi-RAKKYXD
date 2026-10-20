@@ -20,6 +20,7 @@ const app=await electron.launch({executablePath:require('electron'),args:['packa
 const passed=[],errors=[];
 try{
  const page=await app.firstWindow();page.on('pageerror',e=>errors.push(e.message));await page.waitForSelector('.app-shell');
+ await app.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows()[0];w.unmaximize();w.setContentSize(1100,760);});
  const request=(route,body)=>page.evaluate(async({route,body})=>{const res=await fetch(route,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:undefined);if(!res.ok)throw new Error(await res.text());return res.json();},{route,body});
  await request('/api/workspaces',{name:'Team fixture',rootPath:data});
  await page.getByRole('button',{name:'Team fixture',exact:true}).click();

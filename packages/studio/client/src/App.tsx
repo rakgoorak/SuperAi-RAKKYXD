@@ -671,6 +671,8 @@ export function App() {
               </button>
               <button
                 className="primary compact"
+                aria-label="สร้าง session"
+                title="สร้าง session"
                 disabled={!workspace}
                 onClick={() => openSession()}
               >

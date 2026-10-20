@@ -7,3 +7,5 @@
 - Read-only review found four P2 issues; fixed Claude readonly reads, removed silent output truncation, retained leader diagnosis on failed run and retained underlying worker error in task result/context. Tests verify all four.
 - Tests do not perform real npm installs, authenticate CLI accounts, use paid LLM quota, or record microphones. User-installed CLI/model/account behavior still depends on vendor and environment.
 - Native Windows/macOS release checks and publication are tracked by the v1.1.0 GitHub Actions run.
+
+- Initial cross-platform CI run 39391840568: Mac Intel passed all build/team/packaged checks; Windows and Mac arm64 failed locating New Session. Root cause: max-width1200 CSS hides the button text span, leaving no accessible name. Added permanent aria-label/title and forced 1100px startup in team smoke to cover compact layouts. New immutable tag v1.1.1 carries this fix; v1.1.0 was never published as a release.
