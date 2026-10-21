@@ -5,7 +5,9 @@ import { createReadStream } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 const manifest = JSON.parse(await fs.readFile('output/release-manifest.json', 'utf8'));
 await fs.mkdir('release-assets', { recursive: true });
-const archive = path.resolve('release-assets', manifest.label + '.zip');
+// No version in the ZIP name, so /releases/latest/download/<name> always points at the newest build.
+// The folder inside the ZIP keeps the versioned label.
+const archive = path.resolve('release-assets', `SuperAi-RAKKYXD-${manifest.platform}-${manifest.arch}.zip`);
 if (process.platform === 'darwin') {
   execFileSync('ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', manifest.directory, archive], { stdio: 'inherit' });
 } else {
