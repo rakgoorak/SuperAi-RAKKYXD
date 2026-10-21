@@ -38,6 +38,12 @@ export function pickAsset(assets, platform = process.platform, arch = process.ar
   return { zip, sha: sha || null };
 }
 
+/** "hard" when the release notes carry `<!-- superai-update: hard -->`, otherwise "soft". */
+export function updateKind(body) {
+  return /<!--\s*superai-update:\s*hard\s*-->/i.test(String(body || "")) ? "hard" : "soft";
+}
+const stripMarkers = (body) => String(body || "").replace(/<!--\s*superai-update:[^>]*-->\s*/gi, "").trim();
+
 export function parseChecksum(text, fileName) {
   for (const line of String(text).split(/\r?\n/)) {
     const m = /^([a-f0-9]{64})\s+\*?(.+)$/i.exec(line.trim());
@@ -81,31 +87,42 @@ export class Updater {
   }
 
   async check() {
-    if (["downloading", "ready", "installing"].includes(this.state.status)) return this.state;
+    if (["downloading", "extracting", "ready", "waiting", "installing"].includes(this.state.status)) return this.state;
     this.set({ status: "checking", error: "" });
     try {
-      const res = await this.http(`https://api.github.com/repos/${RELEASES_REPO}/releases/latest`, {
+      // The list (not /releases/latest) so a hard update is still enforced after a later soft one.
+      const res = await this.http(`https://api.github.com/repos/${RELEASES_REPO}/releases?per_page=30`, {
         headers: { Accept: "application/vnd.github+json", "User-Agent": "SuperAi-RAKKYXD-updater" },
         signal: AbortSignal.timeout(20000),
       });
       if (res.status === 404) return this.set({ status: "none", error: "ยังไม่มี release ให้ดาวน์โหลด", checkedAt: Date.now() });
       if (res.status === 403 || res.status === 429) throw new Error("GitHub จำกัดจำนวนครั้งที่ตรวจ กรุณาลองใหม่ภายหลัง");
       if (!res.ok) throw new Error(`ตรวจอัปเดตไม่สำเร็จ (${res.status})`);
-      const release = await res.json();
-      const latest = String(release.tag_name || "").replace(/^v/i, "");
+      const data = await res.json();
+      const releases = (Array.isArray(data) ? data : [data])
+        .filter((r) => r && r.tag_name && !r.draft && !r.prerelease)
+        .sort((a, b) => compareVersions(b.tag_name, a.tag_name));
+      if (!releases.length) return this.set({ status: "none", error: "ยังไม่มี release ให้ดาวน์โหลด", checkedAt: Date.now() });
+      const release = releases[0];
+      const latest = String(release.tag_name).replace(/^v/i, "");
       const asset = pickAsset(release.assets);
-      const newer = latest && compareVersions(latest, this.currentVersion) > 0;
+      const newer = compareVersions(latest, this.currentVersion) > 0;
+      // Hard update: some release newer than this one says so in its notes.
+      const mandatory = newer && releases.some((r) => compareVersions(r.tag_name, this.currentVersion) > 0 && updateKind(r.body) === "hard");
       return this.set({
         status: newer ? (asset ? "available" : "unsupported") : "latest",
         latestVersion: latest,
-        notes: String(release.body || "").slice(0, 4000),
+        mandatory,
+        notes: stripMarkers(release.body).slice(0, 4000),
         releaseUrl: release.html_url,
         asset: asset ? { name: asset.zip.name, size: asset.zip.size, url: asset.zip.browser_download_url, sha: asset.sha?.browser_download_url || "" } : null,
         checkedAt: Date.now(),
         error: newer && !asset ? "release นี้ยังไม่มีไฟล์สำหรับเครื่องนี้" : "",
       });
     } catch (err) {
-      return this.set({ status: "error", error: err.message || String(err) });
+      // A dropped connection must not hide an update an earlier check already found.
+      const known = this.state.asset && compareVersions(this.state.latestVersion || "0", this.currentVersion) > 0;
+      return this.set({ status: known ? "available" : "error", error: known ? "" : err.message || String(err) });
     }
   }
 
@@ -178,7 +195,7 @@ export class Updater {
 
   /** Start the detached copier; the caller must quit the app right after this returns. */
   async install({ execPath = process.execPath, pid = process.pid } = {}) {
-    if (this.state.status !== "ready") throw new Error("ดาวน์โหลดอัปเดตให้เสร็จก่อน");
+    if (!["ready", "waiting"].includes(this.state.status)) throw new Error("ดาวน์โหลดอัปเดตให้เสร็จก่อน");
     const target = installTarget(execPath);
     if (!target) throw new Error("ไม่พบตำแหน่งที่ติดตั้งโปรแกรม");
     // Fail early (before quitting) when the install folder is read-only, e.g. Program Files.

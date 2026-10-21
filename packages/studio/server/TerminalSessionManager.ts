@@ -1,11 +1,24 @@
 import { modelEffortArgs } from "./Providers.js";
+
+// How to submit typed commands to each TUI (see submitInput).
+const SUBMIT_PLAN: Record<string, { bracketed: boolean; enterAfterMs: number }> = {
+  codex: { bracketed: true, enterAfterMs: 250 },
+  freebuff: { bracketed: false, enterAfterMs: 1500 },
+  default: { bracketed: false, enterAfterMs: 150 },
+};
+
+// What CLIs print when they update themselves on launch (Claude Code, Codex, Freebuff, OpenCode...).
+const SELF_UPDATE = /update available|updating to|auto-?updat|successfully updated|updated to (version )?v?\d|downloading\.\.\.|installing update|new version installed/i;
+// ...and what they print when that update did not work (then the tab must not be reopened as "updated").
+export const UPDATE_FAILED = /(update|upgrade|download|install)\w*[^\n]{0,40}\b(fail|failed|error)\b|\b(fail(ed)?|errors?)\b[^\n]{0,40}\b(update|upgrade|download|install)|\b(failed to|unable to|could not|couldn't|cannot) (update|upgrade|download|install)/i;
 import { cliPath, cliEnv } from "./CliCatalog.js";
 import { spawn, ChildProcess, execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import path from "node:path";
 import os from "node:os";
-import { TerminalSession, SpawnSessionOptions, PtyProcess } from "./types.js";
+import { TerminalSession, SpawnSessionOptions, PtyProcess, RestoredSession } from "./types.js";
+import { resumeArgs, claudeTranscriptExists, findCodexSession } from "./SessionRestore.js";
 import { getCliDefinition, cliLaunch } from "./CliCatalog.js";
 
 // Prebuilt node-pty (no Visual Studio / node-gyp needed). If it can't load,
@@ -29,6 +42,8 @@ export class TerminalSessionManager {
   }
 
   public spawnSession(options: SpawnSessionOptions = {}): TerminalSession {
+    const original = options;
+    let cliSessionId: string | undefined;
     if (options.agentType) {
       const definition = getCliDefinition(options.agentType);
       const count = [...this.sessions.values()].filter(
@@ -41,19 +56,26 @@ export class TerminalSessionManager {
         throw new Error(
           `${definition.name} เปิดได้สูงสุด ${definition.maxSessions} session กรุณาปิด session เดิมก่อน`,
         );
-      if (!options.command)
+      if (!options.command) {
+        // Claude Code takes the conversation id up front, so the exact tab can be resumed later.
+        let resume = resumeArgs(options.agentType, options.resume);
+        if (options.agentType === "claude-code") {
+          cliSessionId = options.resume && options.resume !== "last" ? options.resume : options.resume ? undefined : randomUUID();
+          if (!options.resume) resume = ["--session-id", cliSessionId!];
+        }
         options = {
           ...options,
-          ...cliLaunch(
-            options.agentType,
-            modelEffortArgs(
+          ...cliLaunch(options.agentType, [
+            ...resume,
+            ...modelEffortArgs(
               options.agentType,
               options.model || (options.agentType === "opencode" ? options.openCodeModel : "") || "",
               options.effort || "",
               true,
             ),
-          ),
+          ]),
         };
+      }
     }
     if (this.sessions.size > 100)
       for (const [key, s] of this.sessions)
@@ -104,10 +126,16 @@ export class TerminalSessionManager {
       createdAt: Date.now(),
       bufferedOutput: "",
       subscribers: new Set(),
+      cliSessionId,
+      resumedFrom: original.resume,
     };
 
     const handleData = (chunk: Buffer | string) => {
       const text = chunk.toString();
+      session.lastOutputAt = Date.now();
+      const visible = text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
+      if (!session.selfUpdated && SELF_UPDATE.test(visible)) session.selfUpdated = true;
+      if (!session.updateFailed && UPDATE_FAILED.test(visible)) session.updateFailed = true;
       session.bufferedOutput += text;
       if (session.bufferedOutput.length > this.maxBufferSize) {
         session.bufferedOutput = session.bufferedOutput.slice(
@@ -175,8 +203,78 @@ export class TerminalSessionManager {
       session.bufferedOutput = `\x1b[31m[Failed to spawn "${command}": ${err.message}]\x1b[0m\r\n`;
     }
 
+    // The options as the caller gave them (CLI launch resolved again on restart), without the resume.
+    session.restart = { ...original, cwd, id: undefined, cols: undefined, rows: undefined, resume: undefined };
     this.sessions.set(id, session);
     return session;
+  }
+
+  /** Start an ended session again with the same command, folder and name, keeping its id. */
+  public restartSession(id: string): TerminalSession {
+    const session = this.sessions.get(id);
+    if (!session?.restart) throw new Error("ไม่พบ session");
+    if (session.status === "running" || session.status === "stopping") throw new Error("session ยังทำงานอยู่");
+    this.sessions.delete(id);
+    return this.spawnSession({ ...session.restart, id, resume: this.resumeFor(session, new Set()) });
+  }
+
+  /** How to pick the tab's conversation up again, or undefined to start fresh. */
+  private resumeFor(session: TerminalSession, taken: Set<string>, newestOfKind = true): string | undefined {
+    const agent = session.agentType || "";
+    if (agent === "claude-code") {
+      const id = session.cliSessionId;
+      if (id && claudeTranscriptExists(id)) return id;
+      return session.resumedFrom === "last" ? "last" : undefined;
+    }
+    if (agent === "codex") {
+      const id = session.resumedFrom && session.resumedFrom !== "last" ? session.resumedFrom : findCodexSession(session.cwd, session.createdAt, taken);
+      if (id) taken.add(id);
+      return id || undefined;
+    }
+    // The others only resume "the latest conversation in this folder": give it to one tab only.
+    if (["opencode", "antigravity", "freebuff"].includes(agent)) return newestOfKind ? "last" : undefined;
+    return undefined;
+  }
+
+  /** Open tabs, in order, with what is needed to reopen each one on the same conversation. */
+  public snapshot(): RestoredSession[] {
+    const open = [...this.sessions.values()].filter((s) => s.status === "running" && s.restart);
+    const taken = new Set<string>();
+    const newest = new Map<string, string>();
+    for (const s of open) {
+      const key = `${s.agentType}|${s.cwd.toLowerCase()}`;
+      const other = newest.get(key) && this.sessions.get(newest.get(key)!);
+      if (!other || other.createdAt < s.createdAt) newest.set(key, s.id);
+    }
+    return open
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map((s) => ({
+        id: s.id,
+        options: { ...s.restart!, name: s.name },
+        resume: this.resumeFor(s, taken, newest.get(`${s.agentType}|${s.cwd.toLowerCase()}`) === s.id),
+      }));
+  }
+
+  /** Reopen tabs saved by snapshot(), keeping their ids so the UI layout still matches. */
+  public restore(saved: RestoredSession[]): TerminalSession[] {
+    const started: TerminalSession[] = [];
+    for (const entry of saved) {
+      if (this.sessions.has(entry.id)) continue;
+      try {
+        started.push(this.spawnSession({ ...entry.options, id: entry.id, resume: entry.resume }));
+      } catch {
+        // e.g. the CLI was uninstalled meanwhile: skip that tab
+      }
+    }
+    return started;
+  }
+
+  /** Tabs that printed something in the last few seconds, i.e. a CLI that is still answering. */
+  public activeSessions(withinMs = 8000): string[] {
+    const now = Date.now();
+    return [...this.sessions.values()]
+      .filter((s) => s.status === "running" && s.agentType !== "terminal" && now - (s.lastOutputAt || 0) < withinMs)
+      .map((s) => s.name);
   }
 
   public getSession(id: string): TerminalSession | undefined {
@@ -196,9 +294,30 @@ export class TerminalSessionManager {
       mode: s.mode,
       status: s.status,
       exitCode: s.exitCode,
+      selfUpdated: !!s.selfUpdated,
+      updateFailed: !!s.updateFailed,
       createdAt: s.createdAt,
       bufferedOutput: s.bufferedOutput.slice(-1000),
     }));
+  }
+
+  /**
+   * Type a command and press Enter. Text and Enter arriving together look like a paste to
+   * TUIs such as Codex and Freebuff, which then insert a newline instead of submitting.
+   * Verified against the real CLIs:
+   * - Codex: send the text as a bracketed paste, then Enter;
+   * - Freebuff: send the text, then Enter after a longer pause;
+   * - others (Claude Code, Antigravity, OpenCode, shells): text, then Enter shortly after.
+   */
+  public submitInput(id: string, data: string): boolean {
+    if (data.length < 2 || !data.endsWith("\r")) return this.writeInput(id, data);
+    const session = this.sessions.get(id);
+    if (!session || session.status !== "running" || !session.ptyProcess) return this.writeInput(id, data);
+    const text = data.slice(0, -1);
+    const plan = SUBMIT_PLAN[session.agentType || ""] || SUBMIT_PLAN.default;
+    if (!this.writeInput(id, plan.bracketed ? `\x1b[200~${text}\x1b[201~` : text)) return false;
+    setTimeout(() => this.writeInput(id, "\r"), plan.enterAfterMs);
+    return true;
   }
 
   public writeInput(id: string, data: string): boolean {

@@ -519,6 +519,9 @@ ${report}
     controller.abort();
     return true;
   }
+  running() {
+    return [...this.runs.values()].some((run) => run.status === "running");
+  }
   usesCli(id: string) {
     const seat = `cli:${id}`;
     return [...this.runs.values()].some(

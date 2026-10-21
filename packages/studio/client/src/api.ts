@@ -66,6 +66,10 @@ export interface Session {
   status: "running" | "stopping" | "exited" | "error";
   exitCode: number | null;
   mode: "pty" | "pipe";
+  /** The CLI printed that it updated itself (it usually exits right after). */
+  selfUpdated?: boolean;
+  updateFailed?: boolean;
+  createdAt?: number;
 }
 export interface Run {
   id: string;

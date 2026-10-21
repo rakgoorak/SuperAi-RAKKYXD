@@ -321,15 +321,6 @@ input[type="checkbox"] {
   font-size: 10px;
   margin-top: 3px;
 }
-.account-local {
-  margin-top: 10px;
-  padding: 16px 3px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-top: 1px solid #1e2c37;
-  font-size: 11px;
-}
 .avatar {
   width: 29px;
   height: 29px;
@@ -339,15 +330,6 @@ input[type="checkbox"] {
   display: grid;
   place-items: center;
   font-weight: 600;
-}
-.account-local > div:nth-child(2) {
-  flex: 1;
-}
-.account-local > svg {
-  color: #8cd0b2;
-}
-.account-local small {
-  font-size: 9px;
 }
 .main-column {
   position: relative;
@@ -1543,10 +1525,7 @@ input[type="checkbox"] {
     margin-right: 9px;
     font-size: 10px;
   }
-  .account-local small {
-    display: none;
-  }
-  .mode-switch button {
+    .mode-switch button {
     padding: 5px 7px;
   }
   .mode-switch button span {
@@ -2070,8 +2049,6 @@ img.small-brand { width: 18px; height: auto; background: none; border-radius: 0;
 
 /* Usage (quota) popover */
 .usage { position: relative; }
-.usage-chip { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px; background: #13222e; font-variant-numeric: tabular-nums; }
-.usage-chip.good { color: #3ddc84; } .usage-chip.warn { color: #edcb86; } .usage-chip.low { color: #f398a3; }
 .usage-popover { position: absolute; right: 0; top: calc(100% + 8px); z-index: 40; width: 380px; max-height: min(640px, calc(100vh - 120px)); display: flex; flex-direction: column;
   background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.6); }
 .usage-popover > header { display: flex; align-items: flex-start; gap: 4px; padding: 14px 14px 10px; border-bottom: 1px solid var(--border); }
@@ -2105,3 +2082,54 @@ img.small-brand { width: 18px; height: auto; background: none; border-radius: 0;
 @keyframes usage-shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .usage-skeleton { animation: none; } }
 .settings-toggle { display: flex; gap: 8px; align-items: center; font-size: 13px; margin: 6px 0; }
+
+/* CLI versions (settings) and the outdated notice in the session dialog */
+.cli-version-list { list-style: none; margin: 8px 0 18px; padding: 0; display: grid; gap: 6px; }
+.cli-version { padding: 8px 10px; border-radius: 8px; background: var(--raised); }
+.cli-version-main { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(120px, auto) auto auto; gap: 10px; align-items: center; font-size: 12px; }
+.cli-version-main span { font-variant-numeric: tabular-nums; color: #c9d6e2; }
+.cli-version-main b { color: var(--brand-green); font-weight: 600; }
+.cli-version-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; padding: 2px 8px; border-radius: 999px; background: #13222e; justify-self: start; }
+.cli-version-badge.latest { color: #3ddc84; } .cli-version-badge.outdated { color: #edcb86; background: #2f2a18; } .cli-version-badge.error { color: #f398a3; }
+.cli-version .secondary, .cli-version .primary.compact { min-height: 28px; padding: 4px 10px; font-size: 11px; }
+.cli-version-job { margin-top: 6px; font-size: 11px; }
+.cli-version-job pre { margin: 4px 0 0; max-height: 72px; overflow: auto; white-space: pre-wrap; font-size: 10px; color: #9fb3c4; background: #0b1117; padding: 6px 8px; border-radius: 6px; }
+.outdated-notice { margin: 0 24px 12px; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #2a2616; color: #f0dfaa; font-size: 12px; line-height: 1.6; }
+.outdated-notice b { color: #fff3c9; }
+.outdated-notice span { flex: 1; }
+.outdated-notice.completed { background: #12291f; color: #a6ecc4; }
+.outdated-notice.failed { background: #2e1a1d; color: #ffc2ca; }
+.outdated-notice .secondary { flex-shrink: 0; }
+
+/* Panel over a tab whose process ended */
+.terminal-cell { position: relative; }
+.session-ended { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 6; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px;
+  background: #0f1c25f2; border: 1px solid #23465a; box-shadow: 0 10px 24px -10px #000a; }
+.session-ended.failed { border-color: #6a2f37; background: #22141af2; }
+.session-ended > div:first-child { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.session-ended strong { font-size: 12px; }
+.session-ended small { font-size: 11px; color: var(--dim); }
+.session-ended-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.session-ended-actions .secondary { min-height: 28px; padding: 4px 10px; font-size: 11px; }
+
+/* Update prompts: a card for a soft update, a full cover for a hard one */
+.update-kind { align-self: center; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #122c42; color: var(--accent); }
+.update-kind.hard { background: #3a1d1d; color: #ffb4a8; }
+.update-toast {
+  position: fixed; right: 20px; bottom: 20px; z-index: 90; width: min(360px, calc(100vw - 32px));
+  display: grid; gap: 6px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--raised); box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.6);
+  animation: update-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.update-toast strong { font-size: 14px; font-weight: 600; }
+.update-toast small { color: var(--dim); font-size: 12px; line-height: 1.5; }
+.update-toast .update-actions { margin-top: 6px; }
+.update-gate { position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; padding: 24px; background: #04090df2; }
+.update-gate section { display: grid; gap: 12px; width: min(460px, 100%); padding: 24px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.update-gate .update-kind { justify-self: start; }
+.update-gate h2 { margin: 0; font-size: 19px; font-weight: 600; }
+.update-gate p { margin: 0; color: var(--dim); font-size: 13px; line-height: 1.6; }
+.update-gate .update-status { color: inherit; }
+.update-gate progress { width: 100%; height: 8px; accent-color: var(--accent); }
+@keyframes update-in { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .update-toast { animation: none; } }

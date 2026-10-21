@@ -56,15 +56,7 @@ export function UsageButton() {
   }, []);
   const loadAll = useCallback((refresh = false) => PROVIDERS.forEach((p) => void load(p.id, refresh)), [load]);
 
-  // A quiet check after start-up and every 10 minutes keeps the button's figure current.
-  useEffect(() => {
-    const first = setTimeout(() => loadAll(), 8000);
-    const timer = setInterval(() => loadAll(), 600_000);
-    return () => {
-      clearTimeout(first);
-      clearInterval(timer);
-    };
-  }, [loadAll]);
+  // Quotas are read only when the panel is opened: each check starts CLI processes.
   useEffect(() => {
     if (!open) return;
     loadAll();
@@ -78,13 +70,6 @@ export function UsageButton() {
     };
   }, [open, loadAll]);
 
-  // The lowest remaining quota among providers that report one: shown on the button itself.
-  const lowest = Object.values(data)
-    .flatMap((p) => p.windows.map((w) => ({ p, w })))
-    .filter((x) => typeof x.w.remainingPercent === "number")
-    .sort((a, b) => a.w.remainingPercent! - b.w.remainingPercent!)[0];
-  const min = lowest ? lowest.w.remainingPercent! : null;
-  const minLabel = lowest ? `ต่ำสุด: ${PROVIDERS.find((x) => x.id === lowest.p.id)?.label} ${lowest.w.group ? `${lowest.w.group} ` : ""}${lowest.w.label} เหลือ ${min}%` : "";
   const anyLoading = Object.values(loading).some(Boolean);
 
   return (
@@ -92,7 +77,6 @@ export function UsageButton() {
       <button className={`toolbar-button ${open ? "selected" : ""}`} aria-expanded={open} aria-haspopup="dialog" title="โควตาการใช้งานของแต่ละผู้ให้บริการ" onClick={() => setOpen(!open)}>
         <Gauge size={14} />
         <span>Usage</span>
-        {min !== null && <span className={`usage-chip ${level(min)}`} title={minLabel} aria-label={minLabel}>{min}%</span>}
       </button>
       {open && (
         <section className="usage-popover" role="dialog" aria-label="โควตาการใช้งาน">

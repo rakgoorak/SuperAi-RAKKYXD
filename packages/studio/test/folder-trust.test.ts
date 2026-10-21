@@ -51,3 +51,53 @@ test('missing or unreadable configs and other CLIs are left alone', () => {
     assert.equal(trustFolder('codex', "D:\\it's", { home, codexHome: home }), false);
   } finally { fs.rmSync(home, { recursive: true, force: true }); }
 });
+
+// The macOS report: Codex had written [projects."/Users/golffy/app"] and SuperAi 1.0.2 appended
+// [projects.'/Users/golffy/app'] → "config.toml: duplicate key".
+const MAC_BROKEN = [
+  'model = "gpt-5.6-luna"',
+  '',
+  '[projects."/Users/golffy/app"]',
+  'trust_level = "trusted"',
+  '',
+  '[projects."/Users/golffy/other"]',
+  'trust_level = "trusted"',
+  '',
+  "[projects.'/Users/golffy/app']",
+  'trust_level = "trusted"',
+  '',
+].join('\n');
+
+test('repair removes only the duplicate block SuperAi appended', async () => {
+  const { repairCodexConfig, codexProjectHeader } = await import('../server/FolderTrust.js');
+  const fixed = repairCodexConfig(MAC_BROKEN);
+  assert.equal((fixed.match(/\/Users\/golffy\/app/g) || []).length, 1);
+  assert.ok(fixed.includes('[projects."/Users/golffy/app"]\ntrust_level = "trusted"'));
+  assert.ok(fixed.includes('[projects."/Users/golffy/other"]'));
+  assert.ok(fixed.startsWith('model = "gpt-5.6-luna"'));
+  // Already-valid configs are returned unchanged.
+  assert.equal(repairCodexConfig(fixed), fixed);
+  assert.equal(repairCodexConfig("[projects.'d:\\a']\ntrust_level = \"trusted\"\n"), "[projects.'d:\\a']\ntrust_level = \"trusted\"\n");
+  // Header forms Codex may write.
+  assert.equal(codexProjectHeader('[projects."C:\\\\Users\\\\a \\"b\\""]'), 'C:\\Users\\a "b"');
+  assert.equal(codexProjectHeader("[projects.'d:\\x']"), 'd:\\x');
+  assert.equal(codexProjectHeader('[ projects . bare-key ]'), 'bare-key');
+  assert.equal(codexProjectHeader('[other."x"]'), null);
+});
+
+test('a folder Codex already lists in "double-quoted" form is not added again, and a broken file is repaired', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'superai-trust-dq-'));
+  try {
+    const dir = path.resolve(home, 'App');
+    const key = process.platform === 'win32' ? dir.toLowerCase() : dir;
+    const quoted = `[projects."${key.replace(/\\/g, '\\\\')}"]\ntrust_level = "trusted"\n`;
+    fs.writeFileSync(path.join(home, 'config.toml'), quoted);
+    assert.equal(trustFolder('codex', dir, { home, codexHome: home }), false);
+    assert.equal(fs.readFileSync(path.join(home, 'config.toml'), 'utf8'), quoted);
+    // The broken file from 1.0.2: opening a tab repairs it instead of adding a third copy.
+    fs.writeFileSync(path.join(home, 'config.toml'), `${quoted}\n[projects.'${key}']\ntrust_level = "trusted"\n`);
+    assert.equal(trustFolder('codex', dir, { home, codexHome: home }), false);
+    const after = fs.readFileSync(path.join(home, 'config.toml'), 'utf8');
+    assert.equal(after.split('\n').filter((l) => l.startsWith('[projects.')).length, 1);
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});

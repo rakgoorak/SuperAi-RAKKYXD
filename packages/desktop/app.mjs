@@ -50,18 +50,64 @@ ipcMain.handle("app:external", async (e, url) => {
   trusted(e);
   await shell.openExternal(normalizeBrowserUrl(url));
 });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let applying = null;
+/**
+ * "Update now": finish the download, wait until nothing is mid-answer (unless forced),
+ * save the open tabs so they come back on the same conversations, then install and restart.
+ */
+function applyUpdate() {
+  applying ??= (async () => {
+    try {
+      if (updater.state.status === "available" || (updater.state.status === "error" && updater.state.asset)) await updater.download();
+      while (["downloading", "extracting", "checking"].includes(updater.state.status)) await sleep(400);
+      if (!["ready", "waiting"].includes(updater.state.status)) return updater.state;
+      for (;;) {
+        const busy = updater.force ? [] : server?.busy() || [];
+        if (!busy.length) break;
+        updater.set({ status: "waiting", waitingFor: busy });
+        await sleep(2000);
+        if (updater.state.status !== "waiting") return updater.state; // cancelled
+      }
+      updater.set({ waitingFor: [] });
+      server?.saveRestore();
+      try {
+        const state = await updater.install();
+        await log(`Installing update ${state.latestVersion}`);
+        setTimeout(() => app.quit(), 300);
+        return state;
+      } catch (error) {
+        server?.discardRestore();
+        updater.set({ status: "ready" });
+        throw error;
+      }
+    } finally {
+      updater.force = false;
+      applying = null;
+    }
+  })();
+  return applying;
+}
+// Check shortly after launch and every 30 minutes; a newer release downloads in the background.
+async function checkForUpdate() {
+  const state = await updater.check();
+  if (state.status === "available" && updater.packaged) void updater.download();
+}
 ipcMain.handle("update:action", async (e, action) => {
   trusted(e);
   if (action === "state") return updater.state;
   if (action === "check") return updater.check();
   if (action === "download") return updater.download();
-  if (action === "cancel") return updater.cancel(), updater.state;
-  if (action === "install") {
-    const state = await updater.install();
-    await log(`Installing update ${state.latestVersion}`);
-    setTimeout(() => app.quit(), 300);
-    return state;
+  if (action === "apply") return applyUpdate();
+  if (action === "force") {
+    updater.force = true;
+    return applying ? updater.state : applyUpdate();
   }
+  if (action === "cancel") {
+    if (updater.state.status === "waiting") return updater.set({ status: "ready", waitingFor: [] });
+    return updater.cancel(), updater.state;
+  }
+  if (action === "install") return applyUpdate();
   throw new Error("คำสั่งอัปเดตไม่ถูกต้อง");
 });
 ipcMain.handle("browser:action", async (e, action, payload) => {
@@ -165,8 +211,10 @@ else {
       });
       await window.loadURL(appUrl);
       await log(`SuperAi & RAKKYXD ${app.getVersion()} started at ${appUrl}`);
-      // Quiet check shortly after launch; the UI shows a badge when a newer release exists.
-      if (updater.packaged && !process.env.SUPERAI_TEST_MODE) setTimeout(() => void updater.check(), 4000);
+      if (updater.packaged && !process.env.SUPERAI_TEST_MODE) {
+        setTimeout(() => void checkForUpdate(), 4000);
+        setInterval(() => void checkForUpdate(), 30 * 60_000);
+      }
     } catch (error) {
       await log(error.stack || error.message);
       dialog.showErrorBox(
