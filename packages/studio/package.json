@@ -1,5 +1,5 @@
 {
-  "name": "@bridgemind/studio",
+  "name": "@superai-rakkyxd/studio",
   "version": "1.0.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@lydell/node-pty": "^1.2.0-beta.15",
-    "@opencode-multi/core": "*",
+    "@superai-rakkyxd/core": "*",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "ws": "^8.18.0"

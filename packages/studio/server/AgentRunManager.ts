@@ -9,7 +9,7 @@ import {
   LLMResponse,
   ToolDefinition,
   LLMProvider,
-} from "@opencode-multi/core";
+} from "@superai-rakkyxd/core";
 import { CliProvider, attachmentProblem } from "./CliProvider.js";
 import { cliLaunch } from "./CliCatalog.js";
 import { Seat, validateSeat } from "./Providers.js";

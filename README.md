@@ -1,122 +1,75 @@
 # SuperAi & RAKKYXD
 
-พื้นที่ทำงาน AI ภาษาไทยบน Windows และ macOS มี 3 โหมด **Agent** (Main แจกงานให้ Sub-agent), **Code** (CLI หลายแท็บ) และ **Chat** (ถามหลาย AI แล้วสรุปรวม) เลือกผู้ให้บริการ/model/effort ได้ทุกที่ พร้อม Skills, browser Preview, แนบรูป/PDF และ **พูดเพื่อพิมพ์** ภายในแอปเดียว
+พื้นที่ทำงาน AI ภาษาไทยบน Windows และ macOS ใช้ AI CLI หลายตัวพร้อมกันในหน้าต่างเดียว มี 3 โหมด **Agent**, **Code** และ **Chat** เลือกผู้ให้บริการ/model/effort ได้ทุกที่ พร้อม Skills, browser Preview, แนบรูป/PDF และพูดเพื่อพิมพ์ เริ่มได้แม้เครื่องยังไม่มีอะไรติดตั้ง
 
-## เปิดใช้งาน
+## ดาวน์โหลด (v1.2.2)
 
-ดาวน์โหลดจาก [GitHub Releases](https://github.com/rakgoorak/SuperAi-RAKKYXD/releases/latest) โดยเลือก Windows x64, Mac Apple Silicon หรือ Mac Intel อ่าน [วิธีติดตั้งและข้อกำหนด](docs/DOWNLOADS.md) ก่อนใช้งาน Repository นี้เป็น private ต้องได้รับสิทธิ์จึงดาวน์โหลดได้
+| เครื่อง | ดาวน์โหลด | ขนาด |
+| --- | --- | --- |
+| Windows 10/11 64-bit | [SuperAi-RAKKYXD-v1.2.2-windows-x64.zip](https://github.com/rakgoorak/SuperAi-RAKKYXD/releases/download/v1.2.2/SuperAi-RAKKYXD-v1.2.2-windows-x64.zip) · [sha256](https://github.com/rakgoorak/SuperAi-RAKKYXD/releases/download/v1.2.2/SuperAi-RAKKYXD-v1.2.2-windows-x64.zip.sha256) | 133 MB |
+| Mac Apple Silicon (M1 ขึ้นไป) | [SuperAi-RAKKYXD-v1.2.2-macos-arm64.zip](https://github.com/rakgoorak/SuperAi-RAKKYXD/releases/download/v1.2.2/SuperAi-RAKKYXD-v1.2.2-macos-arm64.zip) · [sha256](https://github.com/rakgoorak/SuperAi-RAKKYXD/releases/download/v1.2.2/SuperAi-RAKKYXD-v1.2.2-macos-arm64.zip.sha256) | 114 MB |
+| Mac Intel | [SuperAi-RAKKYXD-v1.2.2-macos-x64.zip](https://github.com/rakgoorak/SuperAi-RAKKYXD/releases/download/v1.2.2/SuperAi-RAKKYXD-v1.2.2-macos-x64.zip) · [sha256](https://github.com/rakgoorak/SuperAi-RAKKYXD/releases/download/v1.2.2/SuperAi-RAKKYXD-v1.2.2-macos-x64.zip.sha256) | 120 MB |
 
-Windows: แตก ZIP ทั้งโฟลเดอร์แล้วเปิด `SuperAi-RAKKYXD.exe` ส่วน Mac ให้ลาก `SuperAi-RAKKYXD.app` ไปไว้ใน Applications ครั้งแรกแอปจะเปิดหน้า **เริ่มต้นใช้งาน** ตรวจ Node.js, Git (Windows), CLI ของ AI, โปรเจกต์ และการเข้าสู่ระบบให้ทีละขั้น พร้อมปุ่มติดตั้งสิ่งที่ขาด
+รุ่นทั้งหมดอยู่ที่ [Releases](https://github.com/rakgoorak/SuperAi-RAKKYXD/releases/latest) · วิธีติดตั้งละเอียดอยู่ที่ [docs/DOWNLOADS.md](docs/DOWNLOADS.md)
 
-สำหรับการรันจาก source ต้องมี Node.js 22+ จากนั้นดับเบิลคลิก `run-studio.cmd` หรือใช้:
+> Repository นี้เป็น private ต้องล็อกอิน GitHub ด้วยบัญชีที่ได้รับสิทธิ์จึงจะดาวน์โหลดได้
 
-```powershell
+- **Windows:** แตก ZIP ทั้งโฟลเดอร์แล้วเปิด `SuperAi-RAKKYXD.exe` ถ้าขึ้น "Windows protected your PC" ให้กด **More info → Run anyway**
+- **macOS 11+:** แตก ZIP แล้วลาก `SuperAi-RAKKYXD.app` ไปไว้ใน Applications ถ้าเปิดไม่ได้ให้ไปที่ **System Settings → Privacy & Security → Open Anyway**
+
+รุ่นนี้ยังไม่มีลายเซ็นผู้พัฒนาของ Windows หรือ Apple notarization
+
+## เริ่มใช้งานครั้งแรก
+
+แอปเปิดหน้า **เริ่มต้นใช้งาน** ให้เอง ตรวจเครื่องจริงทีละขั้นและมีปุ่มติดตั้งสิ่งที่ขาด โดยไม่ต้องใช้สิทธิ์ผู้ดูแลระบบ
+
+1. Node.js 22
+2. Git for Windows (เฉพาะ Windows ส่วน macOS ใช้ `xcode-select --install`)
+3. CLI ของ AI ที่ต้องการใช้
+4. เลือกโฟลเดอร์โปรเจกต์
+5. เข้าสู่ระบบ CLI ด้วยบัญชีของคุณเอง ค่าใช้จ่ายและโควตาขึ้นกับผู้ให้บริการ
+6. เลือก model และ effort เริ่มต้นของแต่ละผู้ให้บริการ (เว้นว่างเพื่อใช้ค่าของ CLI) เปลี่ยนภายหลังได้ใน **การตั้งค่า**
+7. (ไม่บังคับ) ให้ AI เสนอ Skills ที่จำเป็นต่อโปรเจกต์
+
+## ความสามารถหลัก
+
+ทุกที่ที่เลือก AI เลือกได้ทั้ง **ผู้ให้บริการ** (Claude, ChatGPT ผ่าน Codex CLI, Antigravity, OpenCode หรือ Ollama บนเครื่อง), **Model** และ **Effort** รายชื่อรุ่นดึงจาก CLI จริงและพิมพ์ชื่อเองได้ ถ้ารุ่นใช้กับบัญชีของคุณไม่ได้ แอปจะบอกให้เปลี่ยนรุ่น
+
+- **Agent:** เลือก Main 1 ตัว และ Sub-agent 1–6 ตัว Main อ่านโปรเจกต์ วางแผน แล้วแจกงาน งานที่ไม่ต้องรอกันทำพร้อมกัน งานที่ต้องใช้ผลงานอื่นจะรอและได้รับผลนั้น หน้าจอแสดงว่าแต่ละตัวกำลังทำงานไหน ข้อความล่าสุดจาก CLI รายการงาน และไทม์ไลน์ เมื่อเสร็จ Main สรุปว่าใครทำอะไร ไฟล์ไหนเปลี่ยน และงานไหนไม่สำเร็จ สิทธิ์ให้ Sub-agent แก้ไฟล์/รันคำสั่งปิดไว้เป็นค่าเริ่มต้น
+- **Code:** Terminal, Claude Code, Codex, Antigravity CLI (`agy`), OpenCode และ Freebuff (เปิดได้ครั้งละ 1 session) หลายแท็บในหน้าต่างเดียว เลือก model และ effort ตอนเปิดแท็บ จัดคอลัมน์ ลากสลับ ปรับขนาด และขยายดูทีละช่องได้ มีช่อง **คำสั่งรวม** ส่งข้อความไปหลาย session พร้อมกัน Freebuff ใช้ได้เฉพาะโหมดนี้
+- **Chat:** เลือก Main 1–5 ตัว พิมพ์ครั้งเดียวส่งให้ทุกตัว แต่ละตัวตอบแยกการ์ด แล้วให้ผู้สรุปรวมผล เลือกได้ว่า “รวมทุกความเห็น” หรือ “คัดส่วนที่ดี ตัดส่วนที่อ่อนออก” ผู้สรุปบอกเสมอว่า AI ตัวไหนแนะนำอะไร
+- **Skills:** AI อ่านโปรเจกต์แล้วเสนอ skill จากแหล่งทางการของ [Anthropic](https://github.com/anthropics/skills) และ [OpenAI](https://github.com/openai/skills) พร้อมเหตุผล ติดตั้งเมื่อคุณกดยืนยันทีละรายการ ลงที่ `.claude/skills` และ `.agents/skills` ของโปรเจกต์ ให้ CLI เรียกใช้เองเมื่องานเกี่ยวข้อง
+- **แนบรูปและ PDF:** รองรับ PNG, JPG, GIF, WEBP และ PDF ไม่เกิน 20 MB ต่อไฟล์ ผ่านปุ่ม + หรือ Ctrl+U, วางด้วย Ctrl+V หรือลากมาวางทั้งในช่องพิมพ์และช่อง CLI ไฟล์ถูกเก็บที่ `<โปรเจกต์>/.superai/attachments/` (ควรเพิ่ม `.superai/` ใน `.gitignore`)
+- **พูดเพื่อพิมพ์:** กดค้างปุ่มไมค์แล้วพูด หรือคลิกขวาเพื่อเลือกไมค์และภาษา แปลงเสียงด้วย Whisper บนเครื่อง เสียงไม่ถูกส่งออกไปนอกเครื่อง ค่าเริ่มต้นคือโมเดล Thonburian สำหรับภาษาไทย ครั้งแรกแอปจะถามก่อนดาวน์โหลดโมเดล ≈290 MB ข้อความถูกใส่ในช่องพิมพ์ให้ตรวจก่อน แอปไม่ส่งเอง
+- **Browser Preview:** Chromium ภายในแอป เปิด `localhost` หรือ URL http/https ได้หลายแท็บ
+- **แผงด้านขวา:** แท็บสถานะ, งาน, พรอมป์ต์ที่บันทึกไว้ และ Browser
+
+## ข้อมูลบนเครื่อง
+
+ข้อมูลทั้งหมดอยู่ใน `~/.opencode-multi/` (บน Windows คือ `%USERPROFILE%\.opencode-multi\`) เช่น รายการโปรเจกต์, ประวัติ Agent/Chat, Node.js/Git/CLI ที่แอปติดตั้งให้ และไฟล์ `desktop.log` การกด "ลบจากรายการ" ไม่ลบโฟลเดอร์โปรเจกต์
+
+## สำหรับนักพัฒนา
+
+ต้องมี Node.js 22 ขึ้นไป
+
+```bash
 npm install
 npm run build
-npm start
-```
-
-## เริ่มทำงาน
-
-1. กด **เพิ่มโปรเจกต์** เลือกโฟลเดอร์และตั้งชื่อ
-2. กด **สร้าง session** เลือก Terminal, Claude Code, Codex, Antigravity CLI (`agy`, แทน Gemini CLI ที่ Google ปิดไปเมื่อมิถุนายน 2026), OpenCode หรือ Freebuff เครื่องมือที่ยังไม่ติดตั้งมีปุ่มติดตั้งจากแพ็กเกจทางการ ต้องมี Node.js 22+ / npm ก่อน ดู log ยกเลิก และลองใหม่ได้ ระบบตรวจ executable อีกครั้งหลังติดตั้ง
-3. ใช้บัญชีและขั้นตอน login ของ CLI แต่ละราย ค่าใช้จ่าย/โควตาขึ้นกับบัญชีและผู้ให้บริการ ไม่ดึง cookie เว็บไซต์มาแทนการ login CLI
-4. พิมพ์คำสั่งด้านล่าง เลือก session เป้าหมาย หรือทุก session ของโปรเจกต์นี้ Enter เพื่อส่ง และ Shift+Enter เพื่อขึ้นบรรทัดใหม่ ปุ่มสี่เหลี่ยมส่ง Ctrl+C หรือหยุดงาน Agent/Chat
-5. **Freebuff เปิดพร้อมกันได้ 1 managed session ทั้งระบบ** ต้องรอให้ process และ process ลูกปิดจริงก่อนเปิดใหม่ ข้อจำกัดนี้ไม่ใช่การป้องกันการรันคำสั่ง freebuff ด้วยตนเองนอกแอป
-
-ถ้ายังไม่ได้เลือกรุ่นของ OpenCode แอปเลือกรุ่นในกลุ่ม `opencode/` ที่ลงท้าย `-free` จากรายการที่ CLI รายงานให้ก่อน เปลี่ยนได้ใน **การตั้งค่า → model และ effort เริ่มต้น** การเลือกนี้ใช้เฉพาะ SuperAi ไม่แก้ global config ของ OpenCode ทั้งราคา สิทธิ์และความพร้อมต้องยึดตามผู้ให้บริการ
-
-การจัดวาง session เริ่มแบบ **จัดพอดีจอ** เลือกอัตโนมัติหรือ 2/3/4 คอลัมน์ได้ ช่องสุดท้ายขยายเติมพื้นที่ว่าง ลากหัวช่องเพื่อสลับตำแหน่งหรือใช้ปุ่มย้ายที่หัวช่อง ลากเส้นระหว่างช่องเพื่อปรับสัดส่วน (ใช้ปุ่มลูกศรเมื่อ focus เส้นได้ด้วย) และกดขยายเพื่อดูช่องเดียวโดย process ไม่หยุด โหมดแนวตั้งและสองคอลัมน์แบบช่องใหญ่ยังเลือกได้
-
-พิมพ์ใน CLI แต่ละช่องโดยตรงได้ ปุ่ม **คำสั่งรวม** เปิดช่องส่งให้ session ที่เลือกหรือทุก session พรอมป์ต์ที่บันทึกจะแสดงช่องนี้เพื่อให้ตรวจก่อนส่ง
-
-แผงด้านขวาสลับ **สถานะ / งาน / พรอมป์ต์ / Browser** ได้:
-- สถานะอ่าน process จริงและประวัติ Agent/Chat ไม่มีการเดา Context หรือสถานะกำลังคิดของ CLI
-- งานเพิ่ม แก้ไข ลบ ส่งคำสั่งเข้า session และทำเครื่องหมายเสร็จด้วยตนเองได้ สถานะส่งแล้วไม่ได้หมายความว่า AI ทำงานสำเร็จ
-- พรอมป์ต์บันทึกและเรียกใช้ในช่องคำสั่งได้ โดยยังไม่ส่งอัตโนมัติ
-- Browser เป็น Chromium ภายใน Desktop เปลี่ยนแท็บเครื่องมือแล้วหน้าเว็บยังอยู่ และซ่อน native view เมื่อเปิดเครื่องมืออื่นหรือ dialog
-
-หน้าสร้าง session มี **ชุด CLI** ที่บันทึกเองได้หลายชนิด ถ้าเปิดได้บางส่วนแล้วเกิดข้อผิดพลาด การลองใหม่จะเปิดเฉพาะจำนวนที่เหลือ Freebuff ยังคงไม่เกินหนึ่ง session ทั้งระบบ ข้อมูลชุด CLI งาน พรอมป์ต์ และการจัดวางบันทึกบนเครื่องนี้ผ่าน app storage
-
-ทุกที่ที่เลือก AI เลือกได้ 3 อย่าง: **ผู้ให้บริการ** (Claude, ChatGPT ผ่าน Codex CLI, Antigravity, OpenCode หรือ Ollama บนเครื่อง), **Model** และ **Effort** (ระดับความคิด) เว้นว่างเพื่อใช้ค่าที่ตั้งไว้ใน CLI ค่าตั้งต้นของแต่ละผู้ให้บริการเลือกได้ในหน้าเริ่มต้นใช้งานหรือ **การตั้งค่า → model และ effort เริ่มต้น** รายชื่อรุ่นดึงจาก CLI จริง (Codex จากรายการที่ CLI เก็บไว้, Antigravity จาก `agy models`, OpenCode จาก `opencode models`) และพิมพ์ชื่อรุ่นเองได้ บางรุ่นในรายการอาจใช้กับแพ็กเกจของบัญชีคุณไม่ได้ ถ้าเลือกแล้วใช้ไม่ได้ แอปจะแสดงข้อความของผู้ให้บริการพร้อมแนะนำให้เปลี่ยนรุ่น
-
-Effort ส่งให้ CLI ตามแบบของแต่ละตัว: Claude/Antigravity `--effort`, Codex `model_reasoning_effort`, OpenCode `--variant` (เฉพาะงานเบื้องหลัง TUI ของ OpenCode ไม่มีตัวเลือกนี้)
-
-- **Agent** เลือก Main 1 ตัว และ Sub-agent 1–6 ตัว แต่ละตัวเลือกผู้ให้บริการ/model/effort แยกกัน Main อ่านโปรเจกต์ วางแผน แล้วแจกงานให้ Sub-agent งานที่ไม่ต้องรอกันทำพร้อมกัน (Sub-agent ละ 1 งานต่อครั้ง) งานที่ต้องใช้ผลงานอื่นจะรอจนงานนั้นเสร็จแล้วได้รับผลไปด้วย หน้าจอแสดงการ์ดของแต่ละตัวว่ากำลังทำงานไหน ข้อความล่าสุดที่ CLI พิมพ์ รายการงานพร้อมผลเต็ม และไทม์ไลน์ว่าใครทำอะไรเมื่อไร เมื่อเสร็จ Main ตรวจผลและสรุปว่าใครทำอะไร ไฟล์ไหนเปลี่ยน และงานไหนไม่สำเร็จ ถ้างานก่อนหน้าล้มเหลว งานที่รออยู่จะถูก “ข้าม” และสถานะรวมเป็นไม่สำเร็จ การอนุญาตให้ Sub-agent แก้ไฟล์/รันคำสั่งเป็น checkbox ที่ปิดไว้เริ่มต้น (Main อ่านอย่างเดียวเสมอ) เมื่อเปิด: Claude ใช้ `acceptEdits` + Bash, Codex `workspace-write`, Antigravity `accept-edits` ใน `--sandbox`, OpenCode agent `build`
-- **Code** เปิด CLI หลายแท็บในหน้าต่างเดียวตามเดิม ตอนเปิด session เลือก model และ effort ได้ (ชื่อแท็บแสดงรุ่นที่เลือก) Freebuff ใช้ได้เฉพาะโหมดนี้เพราะไม่มีโหมดสั่งงานเบื้องหลัง
-- **Chat** เลือก Main 1–5 ตัว พิมพ์ครั้งเดียวส่งให้ทุกตัวพร้อมกัน แต่ละตัวตอบในการ์ดของตัวเองพร้อมชื่อ/รุ่น/effort ถ้าเปิด “ให้ AI สรุปผลรวม” จะเลือกผู้สรุปได้ และเลือกวิธีสรุป: **รวมทุกความเห็น** หรือ **คัดส่วนที่ดี ตัดส่วนที่อ่อนออก** ผู้สรุปต้องอ้างชื่อ AI ทุกครั้ง (“Claude แนะนำว่า…”) และแยกหัวข้อ สรุป / ใครเสนออะไร / จุดที่เห็นตรงกันและต่างกัน / คำแนะนำสุดท้าย ถ้ามีตัวที่ตอบไม่สำเร็จ คำตอบของตัวอื่นยังอยู่ โหมดนี้อ่านไฟล์ได้อย่างเดียว
-
-ตั้งค่าทีม Agent และชุด Chat บันทึกแยกตามโปรเจกต์ และย่อเป็นบรรทัดสรุปเมื่อเริ่มงานเพื่อให้เห็นผลลัพธ์ กดแก้ไขเพื่อเปิดอีกครั้ง ปุ่มสี่เหลี่ยมหยุด AI ทุกตัวในงานนั้นทันที
-
-## Skills
-
-ปุ่ม **Skills** (แถบซ้าย หรือหัวโหมด Agent/Chat) ให้ AI ที่เลือกอ่านโครงสร้างโปรเจกต์ (ชื่อไฟล์บนสุด, dependency, README) แล้วเสนอ skill ที่จำเป็นพร้อมเหตุผล ดึงจากแหล่งทางการเท่านั้น: [anthropics/skills](https://github.com/anthropics/skills) และ [openai/skills](https://github.com/openai/skills) (`.curated`) **ไม่มีการติดตั้งอัตโนมัติ** ต้องกด “ติดตั้ง” ทีละรายการ กด “ดูไฟล์” เพื่อตรวจบน GitHub ก่อนได้ (การ์ดบอกว่ามีสคริปต์หรือไม่)
-
-skill ที่ติดตั้งถูกคัดลอกไป `<โปรเจกต์>/.claude/skills/<ชื่อ>` (Claude Code, OpenCode) และ `<โปรเจกต์>/.agents/skills/<ชื่อ>` (Codex) แล้ว CLI จะเรียกใช้เองเมื่องานเกี่ยวข้อง ลบได้เฉพาะ skill ที่ติดตั้งผ่าน SuperAi (มีไฟล์ `.superai-skill.json`) ไม่แตะ skill ที่คุณเพิ่มเอง
-
-## แนบรูปและ PDF
-
-ส่งรูปหรือ PDF ให้ AI ได้แบบเดียวกับ Claude Desktop รองรับ PNG, JPG, GIF, WEBP และ PDF ไม่เกิน 20 MB ต่อไฟล์
-
-- **ช่องคำสั่ง:** กดปุ่ม **+** ทางซ้ายแล้วเลือก **เพิ่มไฟล์หรือรูปภาพ** หรือกด **Ctrl+U** วางรูปจากคลิปบอร์ดด้วย **Ctrl+V** หรือลากไฟล์มาวางที่ส่วนไหนของหน้าต่างก็ได้ (ยกเว้นช่อง terminal) ไฟล์จะแสดงเป็นการ์ดเหนือช่องพิมพ์ กด ✕ เพื่อเอาออกก่อนส่ง
-  - โหมดโค้ด: ตอนกดส่ง ระบบใส่ตำแหน่งไฟล์ต่อท้ายข้อความให้ session ที่เลือก
-  - โหมด Agent/Chat: ส่งไฟล์ให้ AI ทุกตัวที่เลือกอ่านเอง Claude Code ใช้เครื่องมือ Read (อ่านอย่างเดียว) Codex แนบเป็นรูป OpenCode แนบเป็นไฟล์ Antigravity อ่านจากตำแหน่งไฟล์ Codex ในโหมดนี้รับได้เฉพาะรูป และรุ่น Ollama อ่านไฟล์แนบไม่ได้ ถ้าส่งไม่ได้ แอปจะแจ้งเป็นข้อความภาษาไทยแทนการทิ้งไฟล์เงียบๆ
-- **ช่อง terminal:** คลิกช่อง CLI แล้วกด **Ctrl+V** หรือลากรูป/PDF มาวางบนช่องนั้น ระบบใส่ไฟล์ให้ CLI แต่ไม่กด Enter ให้ พิมพ์ข้อความต่อแล้วกด Enter เองได้ เมื่อแนบสำเร็จจะมีการ์ด "แนบรูปแล้ว" มุมขวาบนของช่อง
-  - Claude Code, OpenCode และ Antigravity: ระบบวางตำแหน่งไฟล์ให้ (Claude Code/OpenCode จะแสดงเป็น `[Image #1]`)
-  - Codex: ส่งรูปผ่านคลิปบอร์ดแล้วกด Ctrl+V ให้ Codex อ่านเอง สำหรับรูปที่ลากมาวาง แอปจะยืมคลิปบอร์ดประมาณ 3 วินาทีแล้วคืนของเดิมให้ ส่วน PDF จะใส่เป็นตำแหน่งไฟล์ในโปรเจกต์
-
-ไฟล์ที่วางหรือแนบจะถูกบันทึกเป็นไฟล์ใหม่ใน `<โฟลเดอร์โปรเจกต์>/.superai/attachments/` ระบบไม่ลบหรือเขียนทับไฟล์ของคุณ (ในช่อง terminal ไฟล์ที่ลากมาจากเครื่องจะใช้ตำแหน่งเดิมโดยไม่คัดลอก ยกเว้น PDF ที่ส่งให้ Codex) ถ้าไม่ต้องการให้ไฟล์เหล่านี้ติดไปกับ git ให้เพิ่มบรรทัด `.superai/` ใน `.gitignore` ของโปรเจกต์ และลบไฟล์เก่าในโฟลเดอร์นี้เองได้เมื่อไม่ใช้แล้ว
-
-## Preview
-
-เปิดเว็บของคุณจาก terminal ก่อน เช่น dev server ที่พอร์ต 3000 แล้วกด **Preview** ใส่ `localhost:3000` รองรับ URL http/https, ย้อนกลับ/ถัดไป, รีโหลด, หลายแท็บ, ปรับขนาด และเปิดใน browser ภายนอก Desktop ใช้ WebContentsView แยกจาก UI และไม่ให้เว็บไซต์เข้าถึง Node หรือ desktop API
-
-เมื่อใช้ UI ผ่าน browser ปกติ Preview ใช้ iframe ซึ่งบางเว็บไซต์บล็อกได้ เว็บที่จำกัด embedded browser, login หรือ DRM อาจต้องเปิดภายนอก ไม่ปิดการตรวจ certificate หรือการป้องกันของเว็บไซต์
-
-## พูดเพื่อพิมพ์
-
-ปุ่มไมค์อยู่ข้างปุ่มส่งในช่องพิมพ์ ใช้ได้ทุกโหมด (Agent / Code / Chat) เหมือนใน Claude:
-- **กดค้าง** แล้วพูด ปล่อยปุ่มเพื่อใส่ข้อความ หรือ **กดหนึ่งครั้ง** เพื่อเริ่มแล้วกดอีกครั้งเพื่อหยุด
-- **คลิกขวา** เพื่อเลือกไมโครโฟนและภาษา (ไทย / English / ตรวจอัตโนมัติ)
-- ข้อความถูกใส่ในช่องพิมพ์ให้ตรวจหรือแก้ก่อน แอปไม่ส่งเอง
-
-แปลงเสียงบนเครื่องด้วย Whisper ไม่ต้องติดตั้ง Python และไม่ต้องใช้ API key ใช้ครั้งแรกแอปจะถามก่อนดาวน์โหลดโมเดลครั้งเดียวจาก Hugging Face เสียงไม่ถูกส่งออกจากเครื่อง
-
-โมเดลแปลงเสียง (เลือกใน **การตั้งค่า → พูดเพื่อพิมพ์**):
-- **Thonburian** (ค่าเริ่มต้น, ≈290 MB) Whisper small ที่ Mahidol University ปรับมาสำหรับภาษาไทย แม่นยำที่สุดสำหรับภาษาไทย แต่ช้ากว่า: เครื่องโน้ตบุ๊ก 4 คอร์ใช้ประมาณ 11–20 วินาทีต่อประโยค
-- **Base** (≈135 MB) เร็วกว่า (≈5 วินาที) เหมาะกับภาษาอังกฤษ ภาษาไทยมักผิดคำ
-- **Small** (≈250 MB) หลายภาษา
-
-## ข้อมูลและการพัฒนา
-
-- ข้อมูลโปรเจกต์เดิม: `%USERPROFILE%\.opencode-multi\studio-workspaces.json`
-- ประวัติ Agent/Chat: `%USERPROFILE%\.opencode-multi\superai-conversations.json`
-- Node.js / Git / CLI ที่แอปติดตั้งให้: `%USERPROFILE%\.opencode-multi
-ode-v22`, `git`, `cli-tools`
-- โมเดลแปลงเสียง: เก็บใน cache ของแอป (ข้อมูลผู้ใช้ Electron)
-- Log desktop: `%USERPROFILE%\.opencode-multi\desktop.log`
-- โฟลเดอร์โปรเจกต์ไม่ถูกลบเมื่อเลือก “ลบจากรายการ” session เป็น process ชั่วคราว ไม่ถูกอ้างว่ายังทำงานหลัง restart
-
-```powershell
-npm run build
-npm test
+npm start          # เปิดแอป (Windows ดับเบิลคลิก run-studio.cmd ได้)
+npm test           # unit tests
 npm run test:desktop
+npm run test:team    # โหมด Agent และ Chat ด้วยข้อมูลจำลอง
 ```
 
-`test:desktop` เปิดหน้าต่าง Electron ชั่วคราวในข้อมูลทดสอบแยก ไม่ใช้ workspace จริงของผู้ใช้ ตรวจหน้าเริ่มต้นใช้งาน, browser ภายใน, navigation, dialog, โปรเจกต์, terminal และข้อจำกัด Freebuff โดยไม่ใช้บัญชี AI ส่วน `npm run test:voice` (Windows) ป้อนไฟล์เสียงแทนไมโครโฟนให้ Chromium แล้วตรวจปุ่มพูดเพื่อพิมพ์ทั้งแบบกดค้าง กดสองครั้ง และเมนูคลิกขวา ครั้งแรกดาวน์โหลดโมเดล Base ≈135 MB หากตั้ง `SUPERAI_LIVE_CLI_TEST=1` จะเพิ่มการทดสอบสนทนาจริงผ่าน OpenCode ซึ่งใช้สิทธิ์และโควตาของผู้ให้บริการ
+ถ้าจะพัฒนาเว็บ UI ให้รัน `npm run dev:server` และ `npm run dev` คนละ terminal
 
-ใช้ `npm run dev:server` และ `npm run dev` คนละ terminal เพื่อพัฒนาเว็บ UI หากแก้โค้ดแล้วเปิด Desktop ให้ build ใหม่ก่อน
+โครงสร้างเป็น npm workspaces:
 
-รุ่นนี้มี source, launcher `.cmd` และ Portable `.exe` พร้อม runtime ในโฟลเดอร์ `release` ยังไม่มี installer ของแบรนด์ที่ลงลายเซ็น และไม่ใช่ source code หรือระบบภายในของ BridgeMind
+| แพ็กเกจ | หน้าที่ |
+| --- | --- |
+| `packages/core` | แกน agent, providers และ tools |
+| `packages/studio/server` | backend Express + WebSocket + node-pty |
+| `packages/studio/client` | UI ด้วย React, Vite, Tailwind และ xterm |
+| `packages/desktop` | Electron shell และ Browser Preview |
 
-สร้าง Portable ใหม่หลัง build ด้วย `npm run package:portable` หรือทดสอบ Portable ด้วยการตั้ง `SUPERAI_PORTABLE_DIR` เป็นโฟลเดอร์รุ่นที่สร้าง แล้วรัน `npm run test:desktop`
-
-## Build และเผยแพร่ Release
-
-GitHub Actions build และทดสอบแยกบน Windows x64, macOS arm64 และ macOS Intel เมื่อ push tag `v*` หรือเรียก workflow เอง ต้องผ่านทุกแพ็กเกจก่อนเผยแพร่ Release พร้อม ZIP และ SHA-256 รันบนเครื่องตัวเองด้วย `npm ci`, `npm run build`, `npm test`, `npm run package:release`, `npm run test:release`, `npm run archive:release` โดย Mac ต้องแพ็กบน macOS ให้ตรง architecture ของ Node
-
-## ติดตั้ง CLI
-
-ปุ่มติดตั้งใช้ npm registry ทางการ ติดตั้งเฉพาะเครื่องมือที่เลือกลง `~/.opencode-multi/cli-tools` โดยไม่แก้ shell profile ยกเว้น Antigravity CLI ที่ไม่มีบน npm แอปจึงรันสคริปต์ทางการของ Google (`antigravity.google/cli/install.ps1` / `install.sh`) ซึ่งตรวจ checksum แล้วติดตั้ง `agy` ที่ `%LOCALAPPDATA%gyin` (Mac: `~/.local/bin`) และอัปเดตตัวเองอัตโนมัติ เข้าสู่ระบบด้วยบัญชี Google ครั้งแรกที่เปิด ต้องมีอินเทอร์เน็ตและเข้าสู่ระบบ CLI หลังติดตั้ง การติดตั้งสำเร็จไม่ได้ยืนยันบัญชี/โควตาหรือการรองรับชื่อรุ่นทุกชื่อ
-
-ตรวจ UI โหมด Agent และ Chat แบบแยกข้อมูลด้วย `npm run test:team` ใช้ HTTP fixtures แทน LLM/installer จริง จึงไม่ใช้โควตาหรือติดตั้ง CLI บนเครื่องที่ทดสอบ
+**Release:** เมื่อ push tag `v*` GitHub Actions จะ build และทดสอบบน Windows x64, macOS arm64 และ macOS Intel แล้วแนบไฟล์ ZIP กับ SHA-256 ขึ้น Release ดูรายละเอียดที่ [docs/RELEASE.md](docs/RELEASE.md)
