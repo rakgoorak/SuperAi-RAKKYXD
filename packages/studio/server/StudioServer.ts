@@ -14,6 +14,7 @@ import { WorkspaceRegistry } from "./WorkspaceRegistry.js";
 import { listModels, modelEffortArgs, PROVIDER_PROFILES } from "./Providers.js";
 import { SkillManager } from "./SkillManager.js";
 import { UsageManager, USAGE_PROVIDERS } from "./UsageManager.js";
+import { trustFolder } from "./FolderTrust.js";
 import { AttachmentError, MAX_ATTACHMENT_BYTES, resolveAttachments, saveAttachment } from "./AttachmentStore.js";
 
 export class StudioServer {
@@ -391,6 +392,9 @@ export class StudioServer {
           (!fs.existsSync(workingDir) || !fs.statSync(workingDir).isDirectory())
         )
           return res.status(400).json({ error: "ไม่พบโฟลเดอร์ทำงาน" });
+        // Skip the CLI's "trust this folder?" prompt for the user's own project folder.
+        if (req.body.trustFolder === true && workspace?.rootPath && workingDir === workspace.rootPath && typeof agentType === "string")
+          trustFolder(agentType, workspace.rootPath);
         const session = this.terminalManager.spawnSession({
           agentType,
           wsId,

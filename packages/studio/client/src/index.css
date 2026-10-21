@@ -2104,3 +2104,4 @@ img.small-brand { width: 18px; height: auto; background: none; border-radius: 0;
 .usage-skeleton { height: 34px; border-radius: 6px; background: linear-gradient(90deg, #142029 0%, #1b2a35 50%, #142029 100%); background-size: 200% 100%; animation: usage-shimmer 1.4s linear infinite; }
 @keyframes usage-shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .usage-skeleton { animation: none; } }
+.settings-toggle { display: flex; gap: 8px; align-items: center; font-size: 13px; margin: 6px 0; }
