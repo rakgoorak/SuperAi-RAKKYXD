@@ -8,6 +8,10 @@ import { normalizeBrowserUrl } from "./browser-url.mjs";
 import { prepareDesktopPath } from "./platform-env.mjs";
 import { Updater } from "./updater.mjs";
 prepareDesktopPath();
+// Started from inside a Claude Code session: do not pass its session markers on to the CLIs
+// opened here (with CLAUDE_CODE_CHILD_SESSION, Claude Code stops saving conversations).
+for (const name of ["CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_HOST_SESSION_ID", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_PID"])
+  delete process.env[name];
 const directory = path.dirname(fileURLToPath(import.meta.url));
 if (process.env.SUPERAI_DATA_DIR)
   app.setPath("userData", process.env.SUPERAI_DATA_DIR);
@@ -144,7 +148,13 @@ else {
         pathToFileURL(path.resolve(directory, "../studio/dist/StudioServer.js"))
           .href
       );
-      for (let port = 3888; port < 3900; port++) {
+      // The page's saved state (tab layout, mode, unsent text) belongs to its origin, so the
+      // last port is tried first: after an update the app comes back on the same address.
+      const portFile = path.join(app.getPath("userData"), "last-port.json");
+      const lastPort = await fs.readFile(portFile, "utf8").then((t) => Number(JSON.parse(t).port)).catch(() => 0);
+      const ports = Array.from({ length: 12 }, (_, i) => 3888 + i);
+      if (ports.includes(lastPort)) ports.unshift(...ports.splice(ports.indexOf(lastPort), 1));
+      for (const port of ports) {
         const candidate = new StudioServer({
           port,
           customWorkspacePath: process.env.SUPERAI_DATA_DIR
@@ -160,6 +170,8 @@ else {
         }
       }
       if (!server) throw new Error("พอร์ต 3888–3899 ถูกใช้งานทั้งหมด");
+      await fs.mkdir(path.dirname(portFile), { recursive: true }).catch(() => {});
+      await fs.writeFile(portFile, JSON.stringify({ port: server.getPort() })).catch(() => {});
       window = new BrowserWindow({
         width: 1540,
         height: 980,

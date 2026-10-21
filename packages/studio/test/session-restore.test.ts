@@ -29,7 +29,8 @@ test('the conversation each tab had is found on disk', () => {
     const dir = path.join(home, '.codex', 'sessions', String(day.getFullYear()), String(day.getMonth() + 1).padStart(2, '0'), String(day.getDate()).padStart(2, '0'));
     fs.mkdirSync(dir, { recursive: true });
     const rollout = (id: string, cwd: string, at: number) =>
-      fs.writeFileSync(path.join(dir, `rollout-${id}.jsonl`), JSON.stringify({ type: 'session_meta', payload: { id, cwd, timestamp: new Date(at).toISOString() } }) + '\n{"more":1}\n');
+      // Real rollouts start with a huge line (the whole system prompt follows the ids).
+      fs.writeFileSync(path.join(dir, `rollout-${id}.jsonl`), JSON.stringify({ timestamp: new Date().toISOString(), type: 'session_meta', payload: { session_id: id, id, timestamp: new Date(at).toISOString(), cwd, base_instructions: { text: 'x'.repeat(40_000) } } }) + '\n{"more":1}\n');
     const work = path.join(home, 'work');
     rollout('old', work, opened - 3_600_000);
     rollout('other-folder', path.join(home, 'elsewhere'), opened + 1000);
