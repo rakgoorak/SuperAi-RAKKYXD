@@ -37,27 +37,44 @@ if (process.platform === 'win32') {
     `/DSRCDIR=${manifest.directory}`,
     `/DOUTFILE=${output}`,
     `/DICON=${path.resolve('packages/desktop/assets/icon.ico')}`,
-    `/DART=${path.resolve('installer/windows')}`,
     path.resolve('installer/windows/installer.nsi'),
   ], { stdio: 'inherit' });
 } else if (process.platform === 'darwin') {
   output = path.resolve('release-assets', `SuperAi-RAKKYXD-macos-${manifest.arch}.dmg`);
-  // Disk image with the app and an Applications link: open it and drag the app across.
-  const staging = path.resolve('output', `dmg-${Date.now()}`);
-  await fs.mkdir(staging, { recursive: true });
   const app = (await fs.readdir(manifest.directory)).find((name) => name.endsWith('.app'));
   if (!app) throw new Error('No .app in the packaged release');
-  execFileSync('ditto', [path.join(manifest.directory, app), path.join(staging, app)]);
-  await fs.symlink('/Applications', path.join(staging, 'Applications'));
   await fs.rm(output, { force: true });
-  // hdiutil sometimes reports "Resource busy" on CI runners; retry a few times.
-  for (let attempt = 1; ; attempt++) {
-    try {
-      execFileSync('hdiutil', ['create', '-volname', 'SuperAi & RAKKYXD', '-srcfolder', staging, '-fs', 'HFS+', '-format', 'UDZO', '-ov', output], { stdio: 'inherit' });
-      break;
-    } catch (error) {
-      if (attempt >= 4) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 5000 * attempt));
+  // Branded window: app on the left, arrow, Applications on the right (appdmg writes the
+  // Finder layout itself, so no AppleScript/GUI session is needed on CI).
+  const spec = path.resolve('output', `dmg-${Date.now()}.json`);
+  await fs.writeFile(spec, JSON.stringify({
+    title: 'SuperAi & RAKKYXD',
+    background: path.resolve('installer/macos/dmg-background.png'),
+    'icon-size': 112,
+    window: { size: { width: 660, height: 400 } },
+    format: 'UDZO',
+    contents: [
+      { x: 180, y: 190, type: 'file', path: path.join(manifest.directory, app) },
+      { x: 480, y: 190, type: 'link', path: '/Applications' },
+    ],
+  }, null, 2));
+  try {
+    execFileSync('npx', ['--yes', 'appdmg@0.6.6', spec, output], { stdio: 'inherit' });
+  } catch (error) {
+    // Fall back to a plain disk image (app + Applications link) rather than failing the release.
+    console.warn(`appdmg failed (${error.message}); building a plain disk image`);
+    const staging = path.resolve('output', `dmg-${Date.now()}`);
+    await fs.mkdir(staging, { recursive: true });
+    execFileSync('ditto', [path.join(manifest.directory, app), path.join(staging, app)]);
+    await fs.symlink('/Applications', path.join(staging, 'Applications'));
+    for (let attempt = 1; ; attempt++) {
+      try {
+        execFileSync('hdiutil', ['create', '-volname', 'SuperAi & RAKKYXD', '-srcfolder', staging, '-fs', 'HFS+', '-format', 'UDZO', '-ov', output], { stdio: 'inherit' });
+        break;
+      } catch (hdiError) {
+        if (attempt >= 4) throw hdiError;
+        await new Promise((resolve) => setTimeout(resolve, 5000 * attempt));
+      }
     }
   }
 } else {
