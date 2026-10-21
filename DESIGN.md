@@ -1,6 +1,6 @@
 ---
 name: SuperAi & RAKKYXD
-description: Compact Thai desktop workspace with an in-app conversational voice mode.
+description: Compact Thai desktop workspace with speak-to-type and file attachments.
 colors:
   base: "#101418"
   surface: "#161c22"
@@ -21,8 +21,7 @@ colors:
   offline: "#83929f"
   danger: "#a93e48"
   terminal: "#0a0d14"
-  voice-speaking: "#8bd2b2"
-  voice-end: "#8f3b3b"
+  dictation-recording: "#f4a6a6"
 typography:
   body:
     fontFamily: '"Noto Sans Thai", "Segoe UI", sans-serif'
@@ -93,7 +92,7 @@ The approved direction is a compact, Thai-first working environment: graphite pl
 - Original SuperAi & RAKKYXD identity; compact symbols and agent initials support recognition.
 - Actual projects, sessions and errors determine what the interface displays.
 
-This document records the implementation on 2026-10-20. Sources: `packages/studio/client/src/App.tsx`, `index.css`, `components/PreviewPanel.tsx`, `components/TerminalPane.tsx`, `components/VoiceMode.tsx` and `components/SetupGuide.tsx`. Product constraints remain in `PRODUCT.md`.
+This document records the implementation on 2026-10-20. Sources: `packages/studio/client/src/App.tsx`, `index.css`, `components/PreviewPanel.tsx`, `components/TerminalPane.tsx`, `components/DictationButton.tsx` and `components/SetupGuide.tsx`. Product constraints remain in `PRODUCT.md`.
 
 ## Colors
 
@@ -101,13 +100,13 @@ The frontmatter records the core implemented values; graphite neutrals carry mos
 
 **The Operational Color Rule.** Status color must follow real application state. Agent monograms may use muted identity tints; they do not signal availability by themselves.
 
-Voice mode reuses the Studio accent for its listening orb and the green token while speaking, so color still follows real state. The only red is the end-conversation control.
+The composer mic turns to the recording tint while it listens, with a ring that grows with input level.
 
 ## Typography
 
-Studio bundles Noto Sans Thai at weights 400, 500 and 600, with Segoe UI fallback. Branding, URL fields and some technical tags use Segoe UI; terminal output uses the monospace stack above. Voice mode uses the bundled Studio font.
+Studio bundles Noto Sans Thai at weights 400, 500 and 600, with Segoe UI fallback. Branding, URL fields and some technical tags use Segoe UI; terminal output uses the monospace stack above. The dictation menu uses the bundled Studio font.
 
-The empty workspace heading is the largest Studio text: its documented default grows to (30px) at widths from (1600px), and contracts to (23px) below (1200px), then (21px) below (600px). Dialog headings use (20px); navigation and controls generally use (11–12px). Supporting status and metadata use (9–10px). Conversation copy uses generous line spacing for Thai. Voice mode states use (17px); the download prompt heading uses (22px).
+The empty workspace heading is the largest Studio text: its documented default grows to (30px) at widths from (1600px), and contracts to (23px) below (1200px), then (21px) below (600px). Dialog headings use (20px); navigation and controls generally use (11–12px). Supporting status and metadata use (9–10px). Conversation copy uses generous line spacing for Thai.
 
 **The Thai Legibility Rule.** Preserve Thai shaping and generous copy line height; do not force compact labels into uppercase or apply terminal typography to prose.
 
@@ -119,11 +118,11 @@ The project rail is (220px) by default, (240px) from (1600px), (210px) below (12
 
 Preview starts at (440px), has a (320px) minimum and a desktop maximum of (55vw), reduced to (40vw) below (1200px). Drag its left divider or use keyboard arrows in (24px) steps. Below (900px), Preview becomes a right overlay (420px), capped at (75vw), between the toolbar and footer. Narrow layouts progressively hide secondary labels; they retain the project rail rather than introducing a mobile navigation pattern.
 
-Voice mode is a full-window layer (z-index 90, below dialogs at 100) with a centered (168px) orb, status line, last exchange capped at (640px) wide, and round (56px) mic and end controls. It hides the native Preview view while open. Below (720px) the orb shrinks to (132px). Its settings sit in the settings dialog as a two-column grid that collapses to one column below (720px). The setup guide is a dialog list of numbered steps with trailing actions.
+The mic sits in the composer's trailing controls; its download prompt and right-click menu open above it as small popovers. The setup guide is a dialog list of numbered steps with trailing actions.
 
 ## Elevation & Depth
 
-Studio uses one-pixel separators and neighboring dark tones to establish regions. Shadows are limited to the selected mode, modal dialogs, and narrow-screen Preview overlay. Dialogs use a dark translucent scrim and a short (180ms) upward entrance. Button hover transitions take (140ms); loading indicators rotate continuously. Studio disables animations and transitions for reduced-motion preference. The voice orb scales with microphone level and breathes while waiting; reduced-motion removes both.
+Studio uses one-pixel separators and neighboring dark tones to establish regions. Shadows are limited to the selected mode, modal dialogs, and narrow-screen Preview overlay. Dialogs use a dark translucent scrim and a short (180ms) upward entrance. Button hover transitions take (140ms); loading indicators rotate continuously. Studio disables animations and transitions for reduced-motion preference. The recording ring follows microphone level; reduced-motion removes its transition.
 
 ## Shapes
 
@@ -138,7 +137,7 @@ Small rounded tabs and icon buttons support the compact shell. Main controls are
 - **Empty, pending and failure states:** empty workspace and conversation views give a concrete next action. Loading uses text and spinners. Success and error banners sit above the canvas; inline failures and dialog errors stay near their operation. Errors should expose a retry or actionable explanation rather than a sample success state.
 - **Preview:** native Electron uses a Chromium view with real tabs, URL entry, back/forward, reload and external opening. Browser-only Studio uses an iframe and explains sites may refuse embedding. Empty and failed navigation views offer a next action. The native view is hidden while a dialog is open, when a tab fails, and when the panel unmounts, so it cannot cover renderer dialogs.
 - **Dialogs:** centered, scrollable surfaces (560px wide; settings 640px) with titled headers, grouped fields and trailing footer actions. Destructive copy describes the affected data. Keep dialog focus handling and Escape dismissal intact.
-- **Voice mode:** hands-free turns: listen, detect end of speech, transcribe on device, send to the selected chat or team, speak the reply, listen again. The orb's state (listening, hearing, transcribing, thinking, speaking, paused) is always also written as text. Tapping the orb sends now or interrupts speech. The model download asks first and states its size. A missing Thai system voice is reported with a way to add one, not silently skipped.
+- **Speak-to-type:** press and hold the composer mic to record and release to insert, or tap to start and tap to stop; right-click picks microphone and language. Recording, downloading and transcribing states are visible on the button and in its label. Text is inserted for review, never sent. The model download asks first and states its size.
 - **Setup guide:** opens on first launch until dismissed; each step shows a real check result and, when missing, one action (install, add project, open CLI to log in). Install logs stream into the step.
 
 Visual references are `output/playwright/superai-workspace.png`. The workspace renderer screenshot shows the Chromium toolbar but may omit the separate native browser surface: a blank captured rectangle does not establish that navigation failed. Verify native page content through the browser view separately.
@@ -150,7 +149,7 @@ Visual references are `output/playwright/superai-workspace.png`. The workspace r
 - Do keep focus visible and give empty or failed operations a useful next action.
 - Do verify both the renderer and native Chromium surface when reviewing desktop Preview.
 - Don't replace real sessions with sample activity or make decorative controls appear operational.
-- Don't send voice transcripts to a model the user did not choose, or speak replies without showing them.
+- Don't send dictated text automatically; the user reviews and sends it.
 - Don't interpret a renderer-only screenshot as proof of native browser content rendering.
 
 

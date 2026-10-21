@@ -1,7 +1,7 @@
-// End-to-end voice mode: a synthesized WAV is fed to Chromium as the microphone,
-// on-device Whisper transcribes it, a local fake model answers, and the reply is
-// spoken through Windows speech. Downloads the Whisper Base model (~135 MB) on
-// first run; set SUPERAI_VOICE_TEST_DATA to a fixed folder to keep it cached.
+// End-to-end speak-to-type: a synthesized WAV is fed to Chromium as the microphone,
+// on-device Whisper transcribes it into the composer, and nothing is sent.
+// Downloads the Whisper Base model (~135 MB) on first run; set
+// SUPERAI_VOICE_TEST_DATA to a fixed folder to keep it cached.
 import { _electron as electron } from "playwright-core";
 import { createRequire } from "node:module";
 import assert from "node:assert/strict";
@@ -9,15 +9,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
-import { pathToFileURL } from "node:url";
+import { execFileSync } from "node:child_process";
 
 if (process.platform !== "win32") {
-  console.log(JSON.stringify({ skipped: "voice smoke synthesizes its input with Windows speech" }));
+  console.log(JSON.stringify({ skipped: "speak-to-type smoke synthesizes its input with Windows speech" }));
   process.exit(0);
 }
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/(\w:)/, "$1")), "../../..");
-const { SpeechService } = await import(pathToFileURL(path.join(root, "packages/studio/dist/SpeechService.js")).href);
 
 const scratch = await fs.mkdtemp(path.join(os.tmpdir(), "superai-voice-smoke-"));
 const data = process.env.SUPERAI_VOICE_TEST_DATA || path.join(scratch, "data");
@@ -25,9 +24,12 @@ const project = path.join(scratch, "project");
 await fs.mkdir(project, { recursive: true });
 
 // Speech followed by silence so end-of-utterance detection fires before the file loops.
-const spoken = await new SpeechService().synthesize("Please build a landing page for my coffee shop.", "en-US");
+const raw = path.join(scratch, "speech.wav");
+execFileSync("powershell.exe", ["-NoProfile", "-Command",
+  "Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.SetOutputToWaveFile($env:SUPERAI_WAV); $s.Speak('Please build a landing page for my coffee shop.'); $s.Dispose()"],
+  { env: { ...process.env, SUPERAI_WAV: raw }, windowsHide: true });
 const wav = path.join(scratch, "mic.wav");
-await fs.writeFile(wav, withSilence(spoken, 3));
+await fs.writeFile(wav, withSilence(await fs.readFile(raw), 3));
 
 const requests = [];
 const model = http.createServer((req, res) => {
@@ -37,7 +39,7 @@ const model = http.createServer((req, res) => {
     res.setHeader("Content-Type", "application/json");
     if (req.url === "/api/tags") return res.end(JSON.stringify({ models: [{ name: "voice-test" }] }));
     requests.push(JSON.parse(body));
-    res.end(JSON.stringify({ choices: [{ message: { content: "Sure. Your coffee shop landing page is ready." } }] }));
+    res.end(JSON.stringify({ choices: [{ message: { content: "unexpected" } }] }));
   });
 });
 await new Promise((r) => model.listen(0, "127.0.0.1", r));
@@ -99,32 +101,6 @@ try {
   await micMenu.waitFor({ state: "hidden" });
   passed.push("right-click microphone menu");
   await composer.fill("");
-  await page.getByRole("button", { name: "โหมดเสียง", exact: true }).first().click();
-  const voice = page.getByRole("dialog", { name: "โหมดเสียง" });
-  await voice.waitFor();
-  const download = voice.getByRole("button", { name: "ดาวน์โหลดและเริ่มคุย" });
-  if (await download.isVisible().catch(() => false)) { await download.click(); passed.push("asks before downloading the speech model"); }
-  await voice.locator(".voice-reply").waitFor({ timeout: 300000 });
-  const heard = await voice.locator(".voice-you").textContent();
-  assert.match(heard, /coffee shop/i);
-  passed.push(`transcribed microphone: ${heard}`);
-  assert.equal(requests.length >= 1, true);
-  const messages = requests[0].messages;
-  assert.match(messages.find((m) => m.role === "system").content, /อ่านออกเสียง/);
-  assert.match(messages.at(-1).content, /coffee shop/i);
-  passed.push("sent transcript to the chat model with the spoken-reply style");
-  assert.match(await voice.locator(".voice-reply").textContent(), /landing page is ready/);
-  await voice.getByText(/กำลังพูด/).waitFor({ timeout: 30000 });
-  passed.push("spoke the reply");
-  await voice.getByText("พูดได้เลย ฟังอยู่").waitFor({ timeout: 60000 });
-  passed.push("returned to listening for the next turn");
-  await voice.getByRole("button", { name: "ปิดไมค์" }).click();
-  await voice.getByText(/ปิดไมค์อยู่/).waitFor();
-  await page.keyboard.press("Escape");
-  await voice.waitFor({ state: "hidden" });
-  passed.push("mute and close");
-  const runs = await page.evaluate(() => fetch(`/api/workspaces`).then((r) => r.json()).then((w) => fetch(`/api/conversations/${w[0].id}`)).then((r) => r.json()));
-  assert.equal(runs[0].voice, true);
   assert.deepEqual(errors, []);
   passed.push("no renderer errors");
   console.log(JSON.stringify({ passed }, null, 1));

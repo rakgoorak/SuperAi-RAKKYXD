@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { AudioLines, Check, Download, FolderPlus, LoaderCircle, LogIn, RefreshCw, Settings2, Terminal } from "lucide-react";
+import { Check, Download, FolderPlus, LoaderCircle, LogIn, RefreshCw, Terminal } from "lucide-react";
 import { api, post, type Cli, type NodeStatus, type Workspace } from "../api";
 import { SPEECH_MODELS } from "../voice/models";
-import { listVoices, type VoiceSettings } from "../voice/speech";
+import type { VoiceSettings } from "../voice/speech";
 import { isModelCached } from "../voice/stt";
 
 interface GitStatus { required: boolean; installed: boolean; version: string | null }
@@ -26,17 +26,15 @@ interface Props {
   addProject: () => void;
   installCli: () => void;
   login: (cliId: string) => void;
-  tryVoice: () => void;
   onError: (message: string) => void;
 }
 
-export function SetupGuide({ clis, workspaces, voice, refreshClis, addProject, installCli, login, tryVoice, onError }: Props) {
+export function SetupGuide({ clis, workspaces, voice, refreshClis, addProject, installCli, login, onError }: Props) {
   const [node, setNode] = useState<NodeStatus | null>(null);
   const [git, setGit] = useState<GitStatus | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loggedIn, setLoggedIn] = useState(() => { try { return localStorage.getItem(LOGIN_KEY) === "1"; } catch { return false; } });
   const [model, setModel] = useState<boolean | null>(null);
-  const [thaiVoice, setThaiVoice] = useState<boolean | null>(null);
   const [checking, setChecking] = useState(false);
 
   const check = useCallback(async () => {
@@ -45,7 +43,6 @@ export function SetupGuide({ clis, workspaces, voice, refreshClis, addProject, i
       const [n, g] = await Promise.all([api<NodeStatus>("/api/node/status"), api<GitStatus>("/api/git/status"), refreshClis()]);
       setNode(n); setGit(g);
       setModel(await isModelCached(SPEECH_MODELS[voice.model].repo));
-      setThaiVoice((await listVoices(true).catch(() => [])).some((v) => v.lang.toLowerCase().startsWith("th")));
     } catch (e) {
       onError((e as Error).message);
     } finally {
@@ -114,17 +111,11 @@ export function SetupGuide({ clis, workspaces, voice, refreshClis, addProject, i
       ),
     },
     {
-      key: "voice", title: "โหมดเสียง (ไม่บังคับ)", done: !!model && !!thaiVoice, optional: true,
-      detail: [
-        model ? "โมเดลแปลงเสียงพร้อม" : `โมเดลแปลงเสียงดาวน์โหลดครั้งแรกตอนเปิดโหมดเสียง (${SPEECH_MODELS[voice.model].size})`,
-        thaiVoice ? "มีเสียงพูดภาษาไทย" : "ยังไม่มีเสียงพูดภาษาไทยในระบบ จึงอ่านคำตอบภาษาไทยออกเสียงไม่ได้",
-      ].join(" · "),
-      action: (
-        <div className="inline">
-          {thaiVoice === false && window.superai && <button className="secondary" onClick={() => void window.superai!.openSpeechSettings().catch((e) => onError(e.message))}><Settings2 size={14} /> เพิ่มเสียงภาษาไทย</button>}
-          <button className="secondary" disabled={!hasCli || !workspaces.length} onClick={tryVoice}><AudioLines size={14} /> ลองโหมดเสียง</button>
-        </div>
-      ),
+      key: "voice", title: "พูดเพื่อพิมพ์ (ไม่บังคับ)", done: !!model, optional: true,
+      detail: model
+        ? "โมเดลแปลงเสียงพร้อม · กดค้างปุ่มไมค์ในช่องพิมพ์แล้วพูด"
+        : `กดปุ่มไมค์ในช่องพิมพ์ครั้งแรก แอปจะถามก่อนดาวน์โหลดโมเดลแปลงเสียง (${SPEECH_MODELS[voice.model].size}) ครั้งเดียว`,
+      action: null,
     },
   ];
   const remaining = steps.filter((s) => !s.done && !s.optional).length;
@@ -148,11 +139,8 @@ export function SetupGuide({ clis, workspaces, voice, refreshClis, addProject, i
                   <span>{step.job.error || step.job.log.trim().split("\n").at(-1)}</span>
                 </div>
               )}
-              {thaiVoice === false && step.key === "voice" && (
-                <small className="muted">{window.superai?.platform === "darwin" ? "macOS: การตั้งค่าระบบ → การช่วยการเข้าถึง → เนื้อหาที่พูด → เสียงระบบ → เพิ่ม Kanya" : "Windows: การตั้งค่า → เวลาและภาษา → เสียงพูด → เพิ่มเสียง → ไทย แล้วกดตรวจอีกครั้ง"}</small>
-              )}
             </div>
-            {!step.done || step.key === "cli" || step.key === "voice" ? <div className="setup-action">{step.action}</div> : null}
+            {step.action && (!step.done || step.key === "cli") ? <div className="setup-action">{step.action}</div> : null}
           </li>
         ))}
       </ol>

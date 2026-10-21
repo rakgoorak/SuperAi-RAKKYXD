@@ -17,7 +17,6 @@ declare global {
       platform: string;
       pickFolder: () => Promise<string | null>;
       openExternal: (url: string) => Promise<void>;
-      openSpeechSettings: () => Promise<void>;
       browser: (
         action: string,
         payload?: Record<string, unknown>,

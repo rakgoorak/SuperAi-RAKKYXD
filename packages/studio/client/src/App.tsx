@@ -36,8 +36,8 @@ import {
   ShieldCheck,
   Layers,
   Radio,
-  AudioLines,
   Rocket,
+  Mic,
 } from "lucide-react";
 import { api, post, Workspace, Cli, Session, Run, AgentTeam } from "./api";
 import { SessionCanvas, type CanvasLayout } from "./components/SessionCanvas";
@@ -45,7 +45,6 @@ import { RightDock, type DockView } from "./components/RightDock";
 import { TeamEditor, TeamProgress } from "./components/TeamEditor";
 import { CliInstaller } from "./components/CliInstaller";
 import { LaunchPresets, type LaunchSeat } from "./components/LaunchPresets";
-import { VoiceMode } from "./components/VoiceMode";
 import { VoiceSettingsPanel } from "./components/VoiceSettingsPanel";
 import { DictationButton } from "./components/DictationButton";
 import { AttachMenu, AttachmentCards, ComposerDropOverlay, useComposerAttachments, useWindowDrop } from "./components/ComposerAttachments";
@@ -120,7 +119,6 @@ export function App() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [menu, setMenu] = useState("");
   const composer = useRef<HTMLTextAreaElement>(null);
-  const [voiceOpen, setVoiceOpen] = useState(false);
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(loadVoiceSettings);
   const setupShown = useRef(false);
   const [checkingModels, setCheckingModels] = useState(false);
@@ -392,7 +390,7 @@ export function App() {
       setDraft("");
       attachments.clear();
     });
-  const dropTarget = useWindowDrop(attachToComposer, connected && !dialog && !voiceOpen);
+  const dropTarget = useWindowDrop(attachToComposer, connected && !dialog);
   const interrupt = () =>
     task(async () => {
       if (mode !== "code" && activeRun) {
@@ -456,30 +454,6 @@ export function App() {
     setDialog("settings");
     void loadModels();
     void checkClis().catch((e) => setError(e.message));
-  };
-  const openVoiceMode = () => {
-    setError("");
-    if (!workspace) return setError("เพิ่มโปรเจกต์ก่อนเริ่มโหมดเสียง");
-    if (mode === "code") setMode("chat");
-    if (!(mode === "assistant" ? agentTeam?.leader.provider : model)) {
-      setError("เลือกผู้ช่วยหรือ model ในการตั้งค่าก่อนเริ่มโหมดเสียง");
-      return openSettings();
-    }
-    setDialog(null);
-    setVoiceOpen(true);
-  };
-  const submitVoice = async (text: string) => {
-    if (!workspace) throw new Error("กรุณาสร้างโปรเจกต์ก่อน");
-    const voiceMode = mode === "assistant" ? "assistant" : "chat";
-    const provider = voiceMode === "assistant" ? agentTeam?.leader.provider : model;
-    if (!provider) throw new Error("เลือกผู้ช่วยหรือ model ในการตั้งค่าก่อน");
-    if (voiceMode === "chat" && model === "cli:opencode" && openCodeModel === "auto") throw new Error("กำลังตรวจรุ่น OpenCode กรุณารอสักครู่");
-    const run = await post<Run>(`/api/conversations/${workspace.id}`, {
-      prompt: text, mode: voiceMode, model: provider, allowTools, openCodeModel, voice: true,
-      ...(voiceMode === "assistant" ? { team: agentTeam } : {}),
-    });
-    setRuns(await api<Run[]>(`/api/conversations/${workspace.id}`));
-    return run;
   };
   const closeSetup = () => {
     try { localStorage.setItem("superai-setup-dismissed", "1"); } catch {}
@@ -649,12 +623,6 @@ export function App() {
                 <Rocket size={17} />
                 <span>
                   เริ่มต้นใช้งาน<small>ตรวจ Node, Git, CLI และบัญชี</small>
-                </span>
-              </button>
-              <button onClick={openVoiceMode} title="คุยกับผู้ช่วยด้วยเสียง">
-                <AudioLines size={17} />
-                <span>
-                  โหมดเสียง<small>คุยต่อเนื่อง · ไทย / อังกฤษ</small>
                 </span>
               </button>
               <button onClick={openSettings}>
@@ -855,7 +823,7 @@ export function App() {
                         ))}
                     </div>
                     <div className="empty-hint">
-                      <AudioLines size={14} /> พิมพ์คำสั่ง หรือเปิดโหมดเสียงเพื่อคุยกับผู้ช่วย
+                      <Mic size={14} /> พิมพ์คำสั่ง หรือกดไมค์ในช่องพิมพ์เพื่อพูดแทนพิมพ์
                     </div>
                   </div>
                 )}
@@ -995,11 +963,6 @@ export function App() {
                         {composerExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                       </button>
                     )}
-                  {mode !== "code" && (
-                    <button className="text-button" onClick={openVoiceMode} title="คุยด้วยเสียงแบบต่อเนื่อง">
-                      <AudioLines size={14} /> โหมดเสียง
-                    </button>
-                  )}
                   </div>
                 </div>
                 <div className="composer-box">
@@ -1102,7 +1065,7 @@ export function App() {
                 </div>
               </div>
             </main>
-            <RightDock open={preview} view={dockView} setView={setDockView} close={() => setPreview(false)} suspended={!!dialog || voiceOpen}
+            <RightDock open={preview} view={dockView} setView={setDockView} close={() => setPreview(false)} suspended={!!dialog}
               workspace={workspace} workspaces={workspaces} sessions={sessions} runs={runs} selected={selected}
               onSelect={session => { setActiveWs(session.wsId || activeWs); setSelected(session.id); setMode("code"); }}
               onPrompt={text => { setDraft(current => current ? `${current}\n${text}` : text); setComposerShown(true); requestAnimationFrame(() => composer.current?.focus()); }} onError={showError} />
@@ -1122,17 +1085,6 @@ export function App() {
           </footer>
         </div>
       </div>
-      {voiceOpen && (
-        <VoiceMode
-          runs={runs}
-          target={mode === "assistant" ? `ทีม · ${agentTeam?.leader.name || "หัวหน้าทีม"}` : modelLabel}
-          settings={voiceSettings}
-          submit={submitVoice}
-          cancel={async (id) => { await post(`/api/runs/${id}/cancel`); }}
-          openSettings={openSettings}
-          close={() => setVoiceOpen(false)}
-        />
-      )}
       {dialog && (
         <div
           className="modal-backdrop"
@@ -1293,8 +1245,7 @@ export function App() {
               <>
                 <SetupGuide clis={clis} workspaces={workspaces} voice={voiceSettings} refreshClis={checkClis} onError={showError}
                   addProject={() => openProject()} installCli={() => openSession()}
-                  login={(id) => { setLaunchType(id); setCount(1); setLaunchPlan(null); setDialog("session"); }}
-                  tryVoice={openVoiceMode} />
+                  login={(id) => { setLaunchType(id); setCount(1); setLaunchPlan(null); setDialog("session"); }} />
                 <div className="dialog-footer">
                   <span className="muted">เปิดหน้านี้อีกครั้งได้จากแถบซ้าย “เริ่มต้นใช้งาน”</span>
                   <button className="primary" onClick={closeSetup}>เสร็จแล้ว <Check size={15} /></button>
@@ -1491,7 +1442,7 @@ export function App() {
                       ใส่ในช่องคำสั่ง
                     </button>
                   </div>
-                  <VoiceSettingsPanel settings={voiceSettings} onChange={setVoiceSettings} onError={showError} />
+                  <VoiceSettingsPanel settings={voiceSettings} onChange={setVoiceSettings} />
                 </div>
                 <div className="dialog-footer">
                   <span className="muted">บันทึกการตั้งค่าอัตโนมัติ</span>

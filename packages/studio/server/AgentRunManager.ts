@@ -102,7 +102,6 @@ export interface ConversationRun {
   error?: string;
   createdAt: number;
   events: string[];
-  voice?: boolean;
   team?: AgentTeam;
   stage?: string;
   tasks?: any[];
@@ -145,7 +144,6 @@ export class AgentRunManager {
     allowTools = false,
     openCodeModel = "",
     requestedTeam?: unknown,
-    voice = false,
     attachments: string[] = [],
   ) {
     if (!prompt.trim() || prompt.length > 50000)
@@ -181,7 +179,6 @@ export class AgentRunManager {
       output: "",
       createdAt: Date.now(),
       events: [],
-      ...(voice ? { voice: true } : {}),
       ...(team ? {team, stage:"planning", tasks:[]} : {}),
     };
     const controller = new AbortController();
@@ -243,8 +240,7 @@ export class AgentRunManager {
               name: "SuperAi",
               role: "assistant",
               systemPrompt:
-                "คุณคือ SuperAi & RAKKYXD ตอบเป็นภาษาไทย ช่วยเขียนและอธิบายโค้ด บอกตามจริงเมื่อไม่มีเครื่องมือเข้าถึงไฟล์" +
-                (voice ? " ผู้ใช้กำลังคุยด้วยเสียงและคำตอบจะถูกอ่านออกเสียง ตอบสั้น กระชับ เป็นภาษาพูดธรรมชาติ ไม่ใช้ markdown ตาราง หรือสัญลักษณ์ หากจำเป็นต้องมีโค้ด ให้บอกสั้นๆ ว่าโค้ดแสดงบนหน้าจอ" : ""),
+                "คุณคือ SuperAi & RAKKYXD ตอบเป็นภาษาไทย ช่วยเขียนและอธิบายโค้ด บอกตามจริงเมื่อไม่มีเครื่องมือเข้าถึงไฟล์",
               maxSteps: 15,
             },
             provider,

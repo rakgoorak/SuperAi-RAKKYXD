@@ -5,28 +5,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { AgentRunManager } from '../server/AgentRunManager.js';
 import { bashForGit, getGitStatus, pickPortableGitAsset, managedGitCmd } from '../server/GitInstaller.js';
-import { SpeechService } from '../server/SpeechService.js';
 import { cliPath } from '../server/CliCatalog.js';
 import { CliInstallManager } from '../server/CliInstallManager.js';
 
-test('voice runs ask the model for short spoken answers; typed runs do not', async t => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'superai-voice-'));
-  const systems: string[] = [];
-  t.mock.method(globalThis, 'fetch', async (_url: any, options: any) => {
-    systems.push(JSON.parse(options.body).messages.find((m: any) => m.role === 'system').content);
-    return new Response(JSON.stringify({ choices: [{ message: { content: 'ได้ครับ' } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  });
+test('chat runs receive attachments as the last start() argument', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'superai-attach-run-'));
   try {
     const manager = new AgentRunManager(path.join(dir, 'history.json'));
-    const wait = async (run: any) => { for (let i = 0; i < 50 && run.status === 'running'; i++) await new Promise(r => setTimeout(r, 10)); };
-    const spoken = manager.start('p', 'สวัสดี', 'test', dir, 'chat', false, '', undefined, true);
-    await wait(spoken);
-    const typed = manager.start('p', 'สวัสดี', 'test', dir, 'chat');
-    await wait(typed);
-    assert.equal(spoken.voice, true);
-    assert.equal(typed.voice, undefined);
-    assert.match(systems[0], /อ่านออกเสียง/);
-    assert.doesNotMatch(systems[1], /อ่านออกเสียง/);
+    // A local Ollama model cannot open files, so a misplaced argument would let this run start.
+    assert.throws(() => manager.start('p', 'ดูรูปนี้', 'test-model', dir, 'chat', false, '', undefined, [path.join(dir, 'a.png')]));
+    assert.equal(manager.list('p').length, 0);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -70,24 +58,4 @@ test('Git installs through the shared installer queue and reports failures', asy
   assert.throws(() => manager.start('node'), /กำลังติดตั้ง/);
   for (let i = 0; i < 50 && job.status === 'running'; i++) await new Promise(r => setTimeout(r, 10));
   assert.equal(job.status, 'failed'); assert.equal(job.error, 'ไม่มีอินเทอร์เน็ต');
-});
-
-test('system speech rejects bad input and unsupported platforms without running PowerShell', async () => {
-  const mac = new SpeechService('darwin');
-  assert.deepEqual(await mac.voices(), []);
-  await assert.rejects(mac.synthesize('hello', 'en-US'), /เฉพาะ Windows/);
-  const win = new SpeechService('win32');
-  await assert.rejects(win.synthesize('   ', 'th-TH'), /ไม่มีข้อความ/);
-  await assert.rejects(win.synthesize('hi', 'th-TH; rm -rf'), /ภาษาไม่ถูกต้อง/);
-});
-
-test('Windows system speech lists voices and returns WAV audio', { skip: process.platform !== 'win32' }, async () => {
-  const speech = new SpeechService();
-  const voices = await speech.voices();
-  const english = voices.find(v => v.lang.startsWith('en'));
-  if (!english) return;
-  const audio = await speech.synthesize('Hello from SuperAi', 'en-US');
-  assert.equal(audio.subarray(0, 4).toString('ascii'), 'RIFF');
-  if (!voices.some(v => v.lang.startsWith('th')))
-    await assert.rejects(speech.synthesize('สวัสดี', 'th-TH'), (e: any) => e.code === 'NO_VOICE');
 });

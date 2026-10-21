@@ -4,7 +4,6 @@ contextBridge.exposeInMainWorld('superai', {
   isDesktop: true, platform: process.platform,
   pickFolder: () => ipcRenderer.invoke('app:folder'),
   openExternal: url => ipcRenderer.invoke('app:external', url),
-  openSpeechSettings: () => ipcRenderer.invoke('app:speech-settings'),
   browser: (action, payload) => ipcRenderer.invoke('browser:action', action, payload),
   onBrowser: callback => listen('browser:state', callback),
   pathForFile: file => { try { return webUtils.getPathForFile(file) || ''; } catch { return ''; } },

@@ -6,7 +6,6 @@ import express, { Express, Request, Response } from "express";
 import type { ErrorRequestHandler } from "express";
 import { listClis, listOpenCodeModels, getNodeStatus, findExecutable } from "./CliCatalog.js";
 import { getGitStatus } from "./GitInstaller.js";
-import { SpeechService } from "./SpeechService.js";
 import { AgentRunManager, ollamaBase } from "./AgentRunManager.js";
 import { CliInstallManager } from "./CliInstallManager.js";
 import { WebSocketServer, WebSocket } from "ws";
@@ -17,7 +16,6 @@ import { AttachmentError, MAX_ATTACHMENT_BYTES, resolveAttachments, saveAttachme
 export class StudioServer {
   private agentRuns: AgentRunManager;
   private cliInstalls = new CliInstallManager();
-  private speech = new SpeechService();
   private app: Express;
   private server: http.Server;
   private wss: WebSocketServer;
@@ -105,21 +103,6 @@ export class StudioServer {
         res.status(400).json({ error: error.message });
       }
     });
-    this.app.get('/api/speech/voices', async (req, res) => {
-      try {
-        res.json({ supported: this.speech.supported, voices: await this.speech.voices(req.query.refresh === '1') });
-      } catch (error: any) {
-        res.status(500).json({ error: `อ่านรายการเสียงพูดไม่ได้: ${error.message}` });
-      }
-    });
-    this.app.post('/api/speech/synthesize', async (req, res) => {
-      try {
-        const audio = await this.speech.synthesize(String(req.body.text || ''), String(req.body.lang || 'th-TH'), String(req.body.voice || ''), Number(req.body.rate) || 1);
-        res.type('audio/wav').send(audio);
-      } catch (error: any) {
-        res.status(error.code === 'NO_VOICE' ? 404 : 400).json({ error: error.message, code: error.code });
-      }
-    });
     this.app.post('/api/clis/:id/install', (req,res)=> {
       try {
         const id=String(req.params.id);
@@ -175,7 +158,6 @@ export class StudioServer {
           req.body.allowTools === true,
           req.body.openCodeModel || "",
           req.body.team,
-          req.body.voice === true,
           resolveAttachments(workspace.rootPath, req.body.attachments),
         );
         res.json(run);
