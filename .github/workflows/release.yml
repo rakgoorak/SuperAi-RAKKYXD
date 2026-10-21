@@ -43,6 +43,7 @@ jobs:
         timeout-minutes: 3
       - run: npm run package:release
       - run: npm run test:release
+        timeout-minutes: 5
       - run: npm run archive:release
       - name: Ensure NSIS (Windows installer)
         if: runner.os == 'Windows'
