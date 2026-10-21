@@ -13,12 +13,14 @@ import { TerminalSessionManager } from "./TerminalSessionManager.js";
 import { WorkspaceRegistry } from "./WorkspaceRegistry.js";
 import { listModels, modelEffortArgs, PROVIDER_PROFILES } from "./Providers.js";
 import { SkillManager } from "./SkillManager.js";
+import { UsageManager, USAGE_PROVIDERS } from "./UsageManager.js";
 import { AttachmentError, MAX_ATTACHMENT_BYTES, resolveAttachments, saveAttachment } from "./AttachmentStore.js";
 
 export class StudioServer {
   private agentRuns: AgentRunManager;
   private cliInstalls = new CliInstallManager();
   private skills = new SkillManager();
+  private usage = new UsageManager();
   private app: Express;
   private server: http.Server;
   private wss: WebSocketServer;
@@ -178,6 +180,14 @@ export class StudioServer {
       } catch (err: any) {
         res.status(400).json({ error: err.message });
       }
+    });
+    this.app.get("/api/usage", async (req, res) => {
+      res.json(await this.usage.all(req.query.refresh === "1"));
+    });
+    this.app.get("/api/usage/:id", async (req, res) => {
+      const id = String(req.params.id);
+      if (!USAGE_PROVIDERS.includes(id)) return res.status(404).json({ error: "ไม่รู้จักผู้ให้บริการนี้" });
+      res.json(await this.usage.get(id, req.query.refresh === "1"));
     });
     this.app.get("/api/skills/catalog", async (req, res) => {
       try {
