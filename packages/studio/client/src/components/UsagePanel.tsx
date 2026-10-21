@@ -37,8 +37,7 @@ const ago = (t?: number) => {
 };
 
 /** Toolbar button + popover listing each provider's remaining quota. */
-export function UsageButton() {
-  const [open, setOpen] = useState(false);
+export function UsageButton({ open, onOpenChange: setOpen }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [data, setData] = useState<Record<string, ProviderUsage>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const root = useRef<HTMLDivElement>(null);
@@ -68,7 +67,7 @@ export function UsageButton() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("mousedown", onDown);
     };
-  }, [open, loadAll]);
+  }, [open, loadAll, setOpen]);
 
   const anyLoading = Object.values(loading).some(Boolean);
 

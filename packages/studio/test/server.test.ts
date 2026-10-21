@@ -6,11 +6,11 @@ import { StudioServer } from '../server/StudioServer.js';
 import WebSocket from 'ws';
 
 test('StudioServer: REST endpoints and WebSocket terminal streaming', async () => {
-  const testPort = 3889;
   const tempWorkspaceFile = path.join(os.tmpdir(), `test-server-ws-${Date.now()}.json`);
-  const server = new StudioServer({ port: testPort, customWorkspacePath: tempWorkspaceFile });
+  const server = new StudioServer({ port: 0, customWorkspacePath: tempWorkspaceFile });
 
   await server.start();
+  const testPort = server.getPort();
 
   try {
     // 1. Health check
