@@ -4,11 +4,11 @@
 
 ## ดาวน์โหลด (รุ่นล่าสุด)
 
-| เครื่อง | ดาวน์โหลด | ขนาด |
+| เครื่อง | ตัวติดตั้ง | ขนาด |
 | --- | --- | --- |
-| Windows 10/11 64-bit | [SuperAi-RAKKYXD-windows-x64.zip](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-windows-x64.zip) · [sha256](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-windows-x64.zip.sha256) | ≈130 MB |
-| Mac Apple Silicon (M1 ขึ้นไป) | [SuperAi-RAKKYXD-macos-arm64.zip](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.zip) · [sha256](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.zip.sha256) | ≈130 MB |
-| Mac Intel | [SuperAi-RAKKYXD-macos-x64.zip](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.zip) · [sha256](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.zip.sha256) | ≈130 MB |
+| Windows 10/11 64-bit | [SuperAi-RAKKYXD-Setup.exe](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-Setup.exe) | ≈90 MB |
+| Mac Apple Silicon (M1 ขึ้นไป) | [SuperAi-RAKKYXD-macos-arm64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.dmg) | ≈115 MB |
+| Mac Intel | [SuperAi-RAKKYXD-macos-x64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.dmg) | ≈120 MB |
 
 รุ่นทั้งหมดอยู่ที่ [Releases](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest) · วิธีติดตั้งละเอียดอยู่ที่ [docs/DOWNLOADS.md](docs/DOWNLOADS.md)
 
@@ -16,8 +16,10 @@
 
 ติดตั้งแล้วไม่ต้องดาวน์โหลดใหม่ทุกครั้ง: เมื่อมีเวอร์ชันใหม่ ปุ่ม **อัปเดตโปรแกรม** ที่แถบซ้ายจะขึ้นจุดสีเขียว กดดาวน์โหลดแล้ว **ติดตั้งและเปิดใหม่** ได้เลย ข้อมูลและการตั้งค่าอยู่ครบ
 
-- **Windows:** แตก ZIP ทั้งโฟลเดอร์แล้วเปิด `SuperAi-RAKKYXD.exe` ถ้าขึ้น "Windows protected your PC" ให้กด **More info → Run anyway**
-- **macOS 11+:** แตก ZIP แล้วลาก `SuperAi-RAKKYXD.app` ไปไว้ใน Applications ถ้าเปิดไม่ได้ให้ไปที่ **System Settings → Privacy & Security → Open Anyway**
+- **Windows:** เปิด `SuperAi-RAKKYXD-Setup.exe` กด **ต่อไป** เลือกโฟลเดอร์ แล้วกด **ติดตั้ง** หน้าสุดท้ายเลือกได้ว่าจะ **สร้างทางลัดบนเดสก์ท็อป** ไม่ต้องใช้สิทธิ์ผู้ดูแลระบบ ถอนการติดตั้งได้ที่ Settings → Apps ถ้าขึ้น "Windows protected your PC" ให้กด **More info → Run anyway**
+- **macOS 11+:** เปิดไฟล์ `.dmg` แล้วลาก **SuperAi & RAKKYXD** ไปที่โฟลเดอร์ **Applications** ครั้งแรกถ้าเปิดไม่ได้ให้ไปที่ **System Settings → Privacy & Security → Open Anyway**
+
+ต้องการแบบไม่ติดตั้ง (portable) ใช้ไฟล์ ZIP ในหน้า [Releases](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest) ได้ ไฟล์ `.sha256` ใช้ตรวจความถูกต้อง
 
 รุ่นนี้ยังไม่มีลายเซ็นผู้พัฒนาของ Windows หรือ Apple notarization
 

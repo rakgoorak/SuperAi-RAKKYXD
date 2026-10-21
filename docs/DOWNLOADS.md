@@ -1,20 +1,23 @@
 # ดาวน์โหลดและติดตั้ง SuperAi & RAKKYXD
 
-ดาวน์โหลด ZIP ตามเครื่องจาก [Releases](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest) (ไม่ต้องล็อกอิน GitHub) ไฟล์ `.sha256` ใช้ตรวจความถูกต้องของ ZIP
+ดาวน์โหลดตัวติดตั้งตามเครื่องจาก [Releases](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest) (ไม่ต้องล็อกอิน GitHub) ไฟล์ `.sha256` ใช้ตรวจความถูกต้องของไฟล์
 
 | เครื่อง | ไฟล์ |
 | --- | --- |
-| Windows 10/11 64-bit | `SuperAi-RAKKYXD-windows-x64.zip` |
-| Mac ชิป Apple Silicon (M1/M2/M3/M4 และรุ่นใหม่กว่า) | `SuperAi-RAKKYXD-macos-arm64.zip` |
-| Mac ชิป Intel | `SuperAi-RAKKYXD-macos-x64.zip` |
+| Windows 10/11 64-bit | `SuperAi-RAKKYXD-Setup.exe` |
+| Mac ชิป Apple Silicon (M1/M2/M3/M4 และรุ่นใหม่กว่า) | `SuperAi-RAKKYXD-macos-arm64.dmg` |
+| Mac ชิป Intel | `SuperAi-RAKKYXD-macos-x64.dmg` |
 
 ## Windows
 
-แตก ZIP ทั้งหมดก่อน แล้วเปิด `SuperAi-RAKKYXD.exe` ต้องเก็บไฟล์ทั้งโฟลเดอร์ไว้ด้วยกัน รุ่นนี้ยังไม่มีลายเซ็นผู้พัฒนา Windows จึงอาจขึ้นหน้าจอ “Windows protected your PC” ให้กด **More info → Run anyway** หลังตรวจว่าไฟล์มาจาก Releases ของ repository นี้
+แบบ portable (ไม่ติดตั้ง): ดาวน์โหลด `SuperAi-RAKKYXD-windows-x64.zip` แตกทั้งโฟลเดอร์แล้วเปิด `SuperAi-RAKKYXD.exe`
+
+
+เปิด `SuperAi-RAKKYXD-Setup.exe` แล้วทำตามขั้นตอน: เลือกโฟลเดอร์ติดตั้ง (ค่าเริ่มต้น `%LOCALAPPDATA%ProgramsSuperAi-RAKKYXD` ไม่ต้องใช้สิทธิ์ผู้ดูแลระบบ) แล้วหน้าสุดท้ายเลือก **สร้างทางลัดบนเดสก์ท็อป** และ **เปิดโปรแกรมเลย** ได้ ตัวติดตั้งเพิ่มทางลัดใน Start Menu และรายการใน Settings → Apps สำหรับถอนการติดตั้ง การถอนไม่ลบโปรเจกต์ ประวัติ และการตั้งค่าของคุณ ถ้าเลือกโฟลเดอร์ที่มีไฟล์อื่นอยู่ ตัวติดตั้งจะสร้างโฟลเดอร์ย่อย `SuperAi-RAKKYXD` ให้ รุ่นนี้ยังไม่มีลายเซ็นผู้พัฒนา Windows จึงอาจขึ้นหน้าจอ “Windows protected your PC” ให้กด **More info → Run anyway** หลังตรวจว่าไฟล์มาจาก Releases ของ repository นี้
 
 ## macOS
 
-แตก ZIP แล้วลาก `SuperAi-RAKKYXD.app` ไปไว้ใน Applications รองรับ macOS 11 ขึ้นไปตาม Electron runtime ที่ใช้ รุ่นนี้ลงลายเซ็นแบบ ad-hoc เพื่อให้เปิดบน Apple Silicon ได้ ยังไม่มี Apple Developer ID / notarization หาก macOS ปฏิเสธ ให้ตรวจที่ System Settings → Privacy & Security → Open Anyway หลังตรวจว่าไฟล์มาจาก Releases ของเจ้าของ repository นี้
+เปิดไฟล์ `.dmg` แล้วลาก **SuperAi & RAKKYXD** ไปที่โฟลเดอร์ **Applications** (ลากไอคอนจาก Applications ไปไว้ที่ Dock ได้ถ้าต้องการเปิดเร็วๆ) รองรับ macOS 11 ขึ้นไปตาม Electron runtime ที่ใช้ รุ่นนี้ลงลายเซ็นแบบ ad-hoc เพื่อให้เปิดบน Apple Silicon ได้ ยังไม่มี Apple Developer ID / notarization หาก macOS ปฏิเสธ ให้ตรวจที่ System Settings → Privacy & Security → Open Anyway หลังตรวจว่าไฟล์มาจาก Releases ของเจ้าของ repository นี้
 
 ปุ่มพูดเพื่อพิมพ์ต้องได้รับสิทธิ์ Microphone ครั้งแรกที่ใช้
 
@@ -39,4 +42,4 @@
 
 Repository นี้เป็น private ผู้ดาวน์โหลดต้องล็อกอิน GitHub ด้วยบัญชีที่เจ้าของอนุญาต ไฟล์ Release ไม่สามารถดาวน์โหลดแบบสาธารณะได้
 
-ข้อมูลโปรเจกต์ พรอมป์ต์ และโมเดลแปลงเสียงอยู่บนเครื่องผู้ใช้ ไม่รวมใน ZIP ของ Release
+ข้อมูลโปรเจกต์ พรอมป์ต์ และโมเดลแปลงเสียงอยู่บนเครื่องผู้ใช้ ไม่รวมในไฟล์ติดตั้ง
