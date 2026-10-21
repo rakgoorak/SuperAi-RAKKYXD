@@ -158,9 +158,9 @@ try {
   checks++;
   await page.getByRole('button', { name: /ทีม SuperAi/, exact: false }).first().click();
   await page.getByTitle('เปิดแผงสถานะ', { exact: true }).click();
-  await page.getByRole('button', { name: 'สนทนา', exact: true }).click();
-  await page.getByRole('heading', { name: 'เริ่มจากคำถามของคุณ', exact: true }).waitFor();
-  await page.getByRole('button', { name: 'โค้ด', exact: true }).click();
+  await page.getByRole('navigation', { name: 'โหมดทำงาน' }).getByRole('button', { name: 'Chat', exact: true }).click();
+  await page.getByRole('heading', { name: 'พิมพ์คำถามครั้งเดียว ได้ความเห็นจากทุก AI', exact: true }).waitFor();
+  await page.getByRole('navigation', { name: 'โหมดทำงาน' }).getByRole('button', { name: 'Code', exact: true }).click();
   assert.equal((await request('/api/terminals')).filter(s => s.status === 'running').length, 12);
   assert.deepEqual(errors, []); checks++;
   await page.screenshot({ path: path.join(output, 'superai-reference-dashboard.png') });

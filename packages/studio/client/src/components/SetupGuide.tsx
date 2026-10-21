@@ -4,6 +4,8 @@ import { api, post, type Cli, type NodeStatus, type Workspace } from "../api";
 import { SPEECH_MODELS } from "../voice/models";
 import type { VoiceSettings } from "../voice/speech";
 import { isModelCached } from "../voice/stt";
+import { confirmDefaults, defaultsConfirmed } from "../providers";
+import { ProviderDefaults } from "./ProviderDefaults";
 
 interface GitStatus { required: boolean; installed: boolean; version: string | null }
 interface Job { id: string; cliId: string; status: string; log: string; error?: string }
@@ -15,7 +17,7 @@ export function setupNeeded(clis: Cli[], workspaces: Workspace[]) {
   let loggedIn = false;
   try { loggedIn = localStorage.getItem(LOGIN_KEY) === "1"; } catch {}
   const node = clis[0]?.nodeReady ?? true;
-  return !node || !clis.some((c) => AI_CLIS.includes(c.id) && c.available) || !workspaces.length || !loggedIn;
+  return !node || !clis.some((c) => AI_CLIS.includes(c.id) && c.available) || !workspaces.length || !loggedIn || !defaultsConfirmed();
 }
 
 interface Props {
@@ -26,10 +28,12 @@ interface Props {
   addProject: () => void;
   installCli: () => void;
   login: (cliId: string) => void;
+  openSkills: () => void;
   onError: (message: string) => void;
 }
 
-export function SetupGuide({ clis, workspaces, voice, refreshClis, addProject, installCli, login, onError }: Props) {
+export function SetupGuide({ clis, workspaces, voice, refreshClis, addProject, installCli, login, openSkills, onError }: Props) {
+  const [defaultsDone, setDefaultsDone] = useState(defaultsConfirmed);
   const [node, setNode] = useState<NodeStatus | null>(null);
   const [git, setGit] = useState<GitStatus | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -111,6 +115,23 @@ export function SetupGuide({ clis, workspaces, voice, refreshClis, addProject, i
       ),
     },
     {
+      key: "defaults", title: "เลือก model และ effort เริ่มต้น", done: defaultsDone, optional: false,
+      detail: hasCli
+        ? "เลือกรุ่นและระดับความคิด (effort) ของแต่ละผู้ให้บริการ ใช้เป็นค่าตั้งต้นในโหมด Agent, Code และ Chat · เว้นว่างเพื่อใช้ค่าของ CLI"
+        : "ติดตั้งผู้ช่วย AI ก่อน แล้วจึงเลือก model และ effort",
+      content: hasCli && <ProviderDefaults clis={clis} onSaved={() => setDefaultsDone(true)} />,
+      action: hasCli && !defaultsDone && (
+        <button className="secondary" onClick={() => { confirmDefaults(); setDefaultsDone(true); }}>
+          <Check size={14} /> ใช้ค่านี้
+        </button>
+      ),
+    },
+    {
+      key: "skills", title: "Skills ที่จำเป็น (ไม่บังคับ)", done: false, optional: true,
+      detail: "ให้ AI วิเคราะห์โปรเจกต์แล้วเสนอ skill จากแหล่งทางการ คุณกดยืนยันก่อนติดตั้งทุกครั้ง",
+      action: workspaces.length > 0 && hasCli && <button className="secondary" onClick={openSkills}>เลือก skill</button>,
+    },
+    {
       key: "voice", title: "พูดเพื่อพิมพ์ (ไม่บังคับ)", done: !!model, optional: true,
       detail: model
         ? "โมเดลแปลงเสียงพร้อม · กดค้างปุ่มไมค์ในช่องพิมพ์แล้วพูด"
@@ -133,6 +154,7 @@ export function SetupGuide({ clis, workspaces, voice, refreshClis, addProject, i
             <div className="setup-body">
               <strong>{step.title}</strong>
               <small>{step.detail}</small>
+              {"content" in step && step.content}
               {"job" in step && step.job && (
                 <div className={`setup-job ${step.job.status}`}>
                   {step.job.status === "running" && <LoaderCircle size={12} className="spin" />}

@@ -38,11 +38,19 @@ import {
   Radio,
   Rocket,
   Mic,
+  Puzzle,
+  Users,
 } from "lucide-react";
-import { api, post, Workspace, Cli, Session, Run, AgentTeam } from "./api";
+import { api, post, Workspace, Cli, Session, Run, Seat } from "./api";
 import { SessionCanvas, type CanvasLayout } from "./components/SessionCanvas";
 import { RightDock, type DockView } from "./components/RightDock";
-import { TeamEditor, TeamProgress } from "./components/TeamEditor";
+import { AgentConfigEditor, AgentRunView, type AgentConfig } from "./components/AgentPanel";
+import { ChatConfigEditor, ChatRunView, type ChatConfig } from "./components/ChatPanel";
+import { SkillsPanel } from "./components/SkillsPanel";
+import { ProviderDefaults } from "./components/ProviderDefaults";
+import { SeatPicker } from "./components/SeatPicker";
+import { Markdown } from "./components/Markdown";
+import { HEADLESS, loadDefaults, saveDefaults, seatFor } from "./providers";
 import { CliInstaller } from "./components/CliInstaller";
 import { LaunchPresets, type LaunchSeat } from "./components/LaunchPresets";
 import { VoiceSettingsPanel } from "./components/VoiceSettingsPanel";
@@ -52,12 +60,12 @@ import { attachMode, formatPath, pastedFiles, uploadAttachment, type SavedAttach
 import { SetupGuide, setupNeeded } from "./components/SetupGuide";
 import { loadVoiceSettings, saveVoiceSettings, type VoiceSettings } from "./voice/speech";
 
-type Mode = "code" | "chat" | "assistant";
-type Dialog = "session" | "settings" | "project" | "delete" | "clear" | "setup" | null;
+type Mode = "agent" | "code" | "chat";
+type Dialog = "session" | "settings" | "project" | "delete" | "clear" | "setup" | "skills" | null;
 const modeLabels: Record<Mode, string> = {
-  code: "โค้ด",
-  chat: "สนทนา",
-  assistant: "ผู้ช่วย",
+  agent: "Agent",
+  code: "Code",
+  chat: "Chat",
 };
 const statusText: Record<string, string> = {
   running: "กำลังทำงาน",
@@ -82,7 +90,10 @@ export function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [clis, setClis] = useState<Cli[]>([]);
   const [selected, setSelected] = useState("");
-  const [mode, setMode] = useState<Mode>("code");
+  const [mode, setMode] = useState<Mode>(() => {
+    const saved = initial("superai-mode", "code");
+    return saved === "agent" || saved === "chat" ? saved : "code";
+  });
   const [preview, setPreview] = useState(
     initial("superai-preview", "true") === "true",
   );
@@ -111,11 +122,13 @@ export function App() {
   const [projectName, setProjectName] = useState("");
   const [projectPath, setProjectPath] = useState("");
   const [editing, setEditing] = useState("");
-  const [model, setModel] = useState(initial("superai-model", "cli:opencode"));
   const [models, setModels] = useState<string[]>([]);
   const [modelError, setModelError] = useState("");
   const [allowTools, setAllowTools] = useState(false);
-  const [agentTeam,setAgentTeam] = useState<AgentTeam | null>(null);
+  const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
+  const [chatConfig, setChatConfig] = useState<ChatConfig | null>(null);
+  // Model/effort for the CLI chosen in the "open session" dialog (Code mode).
+  const [sessionSeat, setSessionSeat] = useState<Seat>(() => seatFor("claude-code", ""));
   const [runs, setRuns] = useState<Run[]>([]);
   const [menu, setMenu] = useState("");
   const composer = useRef<HTMLTextAreaElement>(null);
@@ -125,20 +138,13 @@ export function App() {
   const [openCodeModel, setOpenCodeModel] = useState(
     initial("superai-opencode-model", "auto"),
   );
-  const [openCodeModels, setOpenCodeModels] = useState<string[]>([]);
-  const [checkingOpenCode, setCheckingOpenCode] = useState(false);
   const workspace = workspaces.find((w) => w.id === activeWs);
   const visible = sessions.filter((s) => s.wsId === activeWs);
   const selectedSession = visible.find((s) => s.id === selected);
   const running = visible.filter((s) => s.status === "running");
-  const conversation = runs.filter(
-    (r) => r.mode === (mode === "assistant" ? "assistant" : "chat"),
-  );
+  const conversation = runs.filter((r) => r.mode === mode);
   const activeRun = runs.find((r) => r.status === "running");
   const launchCli = clis.find((c) => c.id === launchType);
-  const modelLabel = model.startsWith("cli:")
-    ? clis.find((c) => c.id === model.slice(4))?.name || "CLI"
-    : model;
   const showError = useCallback((text: string) => {
     setError(text);
   }, []);
@@ -180,7 +186,6 @@ export function App() {
     try {
       const data = await api<{ models: string[] }>("/api/ollama/models");
       setModels(data.models);
-      setModel((current) => current || data.models[0] || "");
       if (!data.models.length)
         setModelError(
           "ยังไม่มี model ใช้คำสั่ง ollama pull qwen2.5-coder:7b ใน terminal",
@@ -234,8 +239,14 @@ export function App() {
     localStorage.setItem("superai-preview", String(preview));
   }, [preview]);
   useEffect(() => {
-    localStorage.setItem("superai-model", model);
-  }, [model]);
+    try { localStorage.setItem("superai-mode", mode); } catch {}
+  }, [mode]);
+  useEffect(() => {
+    if (connected) void loadModels();
+  }, [connected, loadModels]);
+  useEffect(() => {
+    setSessionSeat(seatFor(launchType, ""));
+  }, [launchType, dialog]);
   useEffect(() => {
     if (!activeWs) return;
     let ignore = false;
@@ -262,15 +273,15 @@ export function App() {
     if (!dismissed && setupNeeded(clis, workspaces)) setDialog("setup");
   }, [connected, clis, workspaces]);
   const loadOpenCodeModels = useCallback(async () => {
-    setCheckingOpenCode(true);
     try {
       const data = await api<{ models: string[] }>("/api/opencode/models");
-      setOpenCodeModels(data.models);
-      setOpenCodeModel((current) => current === 'auto' ? data.models.find((m) => m.startsWith('opencode/') && m.endsWith('-free')) || '' : current);
+      const free = data.models.find((m) => m.startsWith('opencode/') && m.endsWith('-free')) || '';
+      setOpenCodeModel((current) => current === 'auto' ? free : current);
+      // First run: OpenCode starts on a free model until the user picks another one.
+      const defaults = loadDefaults();
+      if (free && !defaults.opencode) saveDefaults({ ...defaults, opencode: { model: free, effort: "" } });
     } catch (e) {
       setNotice((e as Error).message);
-    } finally {
-      setCheckingOpenCode(false);
     }
   }, []);
   useEffect(() => {
@@ -290,7 +301,7 @@ export function App() {
     task(async () => {
       if (!workspace) throw new Error("กรุณาสร้างโปรเจกต์ก่อน");
       const plan = launchPlan || [{ type: launchType, count }];
-      if (plan.some(seat => seat.type === "opencode") && openCodeModel === "auto") throw new Error("กำลังตรวจรุ่น OpenCode กรุณารอ หรือเลือกรุ่นในการตั้งค่า");
+      if (plan.some(seat => seat.type === "opencode") && openCodeModel === "auto" && !(launchPlan ? loadDefaults().opencode?.model : sessionSeat.model)) throw new Error("กำลังตรวจรุ่น OpenCode กรุณารอ หรือเลือกรุ่นเอง");
       const totals = new Map<string, number>();
       for (const seat of plan) totals.set(seat.type, (totals.get(seat.type) || 0) + seat.count);
       for (const [type, amount] of totals) {
@@ -304,9 +315,13 @@ export function App() {
       try {
         for (const type of [...remaining]) {
           const cli = clis.find(c => c.id === type)!;
+            const chosen = !launchPlan && type === launchType ? sessionSeat : seatFor(type, "");
+            const supportsModel = HEADLESS.includes(type);
             const session = await post<Session>("/api/terminals/spawn", {
-              agentType: type, wsId: workspace.id, name: cli.name,
-              openCodeModel: type === "opencode" ? openCodeModel : undefined,
+              agentType: type, wsId: workspace.id,
+              name: [cli.name, supportsModel && chosen.model].filter(Boolean).join(" · "),
+              openCodeModel: type === "opencode" && !chosen.model && openCodeModel !== "auto" ? openCodeModel : undefined,
+              ...(supportsModel ? { model: chosen.model, effort: chosen.effort } : {}),
             });
             if (session.status === "error") throw new Error(`เปิด ${cli.name} ไม่สำเร็จ กรุณาตรวจการติดตั้ง CLI`);
             setSelected(session.id);
@@ -337,7 +352,6 @@ export function App() {
     });
   const send = () =>
     task(async () => {
-      if(mode==='chat'&&model==='cli:opencode'&&openCodeModel==='auto')throw new Error('กำลังตรวจรุ่น OpenCode กรุณารอ หรือเลือกรุ่นในการตั้งค่า');
       if (!draft.trim() && !attachments.items.length) return;
       if (!workspace) throw new Error("กรุณาสร้างโปรเจกต์ก่อน");
       // Save attached images/PDFs into <project>/.superai/attachments first.
@@ -373,18 +387,15 @@ export function App() {
             : "ส่งคำสั่งแล้ว",
         );
       } else {
-        const conversationModel = mode === 'assistant' ? agentTeam?.leader.provider : model;
-        if (!conversationModel)
-          throw new Error("เปิดการตั้งค่า แล้วเลือก CLI หรือ model ก่อน");
-        await post(`/api/conversations/${workspace.id}`, {
-          prompt: draft.trim() || "ช่วยดูไฟล์แนบนี้",
-          attachments: saved.map((file) => file.path),
-          mode,
-          model:conversationModel,
-          allowTools,
-          openCodeModel,
-          ...(mode === "assistant" ? {team:agentTeam} : {}),
-        });
+        const prompt = draft.trim() || "ช่วยดูไฟล์แนบนี้";
+        const files = saved.map((file) => file.path);
+        if (mode === "agent") {
+          if (!agentConfig) throw new Error("กรุณาเลือก Main และ Sub-agent ก่อน");
+          await post(`/api/conversations/${workspace.id}`, { mode, prompt, attachments: files, allowTools, main: agentConfig.main, subagents: agentConfig.subagents });
+        } else {
+          if (!chatConfig) throw new Error("กรุณาเลือก AI ที่จะถามก่อน");
+          await post(`/api/conversations/${workspace.id}`, { mode, prompt, attachments: files, panel: chatConfig.panel, summarizer: chatConfig.summarizer, summaryStyle: chatConfig.style });
+        }
         setRuns(await api<Run[]>(`/api/conversations/${workspace.id}`));
       }
       setDraft("");
@@ -478,7 +489,7 @@ export function App() {
           {connected ? "พื้นที่ทำงานของคุณ" : "กำลังเชื่อมต่อใหม่"}
         </div>
             <nav className="mode-switch" aria-label="โหมดทำงาน">
-              {(["assistant", "code", "chat"] as Mode[]).map((m) => (
+              {(["agent", "code", "chat"] as Mode[]).map((m) => (
                 <button
                   key={m}
                   className={mode === m ? "active" : ""}
@@ -625,6 +636,10 @@ export function App() {
                   เริ่มต้นใช้งาน<small>ตรวจ Node, Git, CLI และบัญชี</small>
                 </span>
               </button>
+              <button onClick={() => setDialog("skills")} disabled={!workspace} title="ให้ AI เสนอ skill ที่จำเป็นต่อโปรเจกต์นี้">
+                <Puzzle size={17} />
+                <span>Skills<small>AI เสนอ คุณกดติดตั้ง</small></span>
+              </button>
               <button onClick={openSettings}>
                 <Settings size={17} />
                 <span>การตั้งค่า</span>
@@ -705,7 +720,7 @@ export function App() {
                   <span className="section-icon">
                     {mode === "code" ? (
                       <Terminal size={16} />
-                    ) : mode === "assistant" ? (
+                    ) : mode === "agent" ? (
                       <Layers size={16} />
                     ) : (
                       <MessageSquare size={16} />
@@ -714,9 +729,9 @@ export function App() {
                   <h1>
                     {mode === "code"
                       ? "ห้องทำงาน"
-                      : mode === "assistant"
-                        ? "ทีมผู้ช่วย AI"
-                        : "บทสนทนา"}
+                      : mode === "agent"
+                        ? "ทีม Agent"
+                        : "ถามหลาย AI"}
                   </h1>
                   <span className="count-badge">
                     {mode === "code"
@@ -756,13 +771,16 @@ export function App() {
                     </>
                   ) : (
                     <>
+                      <button className="text-button" onClick={() => setDialog("skills")} disabled={!workspace} title="ให้ AI เลือก skill ที่จำเป็นต่อโปรเจกต์">
+                        <Puzzle size={13} /> Skills
+                      </button>
                       <button className="text-button" onClick={openSettings}>
-                        {mode === "assistant" ? "ตั้งค่าเริ่มต้น" : modelLabel || "เลือก model"}
+                        model และ effort เริ่มต้น
                         <ChevronDown size={13} />
                       </button>
                       <button
                         className="icon-button"
-                        title="ล้างประวัติโหมดนี้และโหมดผู้ช่วยของโปรเจกต์"
+                        title="ล้างประวัติ Agent และ Chat ของโปรเจกต์"
                         disabled={!!activeRun || !runs.length}
                         onClick={() => setDialog("clear")}
                       >
@@ -830,33 +848,22 @@ export function App() {
               </div>
               {mode !== "code" && (
                 <div className="conversation-scroll">
-                  {mode === "assistant" && <TeamEditor key={activeWs} workspaceId={activeWs} clis={clis} models={models} openCodeModels={openCodeModels} provider={model} override={openCodeModel} disabled={!!activeRun} onChange={setAgentTeam} onError={showError} discover={()=>void loadModels()}/>}
-                  {!conversation.length && mode === "assistant" ? <p className="team-instructions">พิมพ์เป้าหมายและเกณฑ์ตรวจรับด้านล่าง แล้วกดส่ง หัวหน้าจะมอบหมายงานตามลูกทีมที่เลือก</p> : !conversation.length ? (
-                    <div className="conversation-empty">
+                  {mode === "agent" ? (
+                    <AgentConfigEditor key={`agent-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun} runCount={conversation.length} onChange={setAgentConfig} />
+                  ) : (
+                    <ChatConfigEditor key={`chat-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun} runCount={conversation.length} onChange={setChatConfig} />
+                  )}
+                  {!conversation.length ? (
+                    <div className="conversation-empty compact">
                       <div className="empty-command">
-                        {mode === "assistant" ? (
-                          <Bot size={30} />
-                        ) : (
-                          <MessageSquare size={30} />
-                        )}
+                        {mode === "agent" ? <Users size={26} /> : <MessageSquare size={26} />}
                       </div>
-                      <h2>
-                        {mode === "assistant"
-                          ? "มอบหมายเป้าหมายให้ทีม AI"
-                          : "เริ่มจากคำถามของคุณ"}
-                      </h2>
+                      <h2>{mode === "agent" ? "บอกเป้าหมาย แล้วให้ทีมแบ่งงานกันทำ" : "พิมพ์คำถามครั้งเดียว ได้ความเห็นจากทุก AI"}</h2>
                       <p>
-                        {mode === "assistant"
-                          ? "Supervisor จะแบ่งงานให้ Coder, Tester และ Reviewer พร้อมรายงานผลจริง"
-                          : "ถาม อธิบายโค้ด หรือวางแผนงาน บทสนทนาถูกเก็บแยกตามโปรเจกต์"}
+                        {mode === "agent"
+                          ? "พิมพ์เป้าหมายและเกณฑ์ตรวจรับด้านล่าง Main จะแจกงานให้ Sub-agent และคุณจะเห็นว่าแต่ละตัวกำลังทำอะไร"
+                          : "แต่ละ AI ตอบแยกกัน แล้วผู้สรุปจะรวมผลพร้อมบอกว่าใครแนะนำอะไร"}
                       </p>
-                      <p className="muted">
-                        เลือกใช้บัญชี CLI ของคุณ หรือ model ของ Ollama
-                        ในการตั้งค่า
-                      </p>
-                      <button className="secondary" onClick={openSettings}>
-                        <Settings size={15} /> ตั้งค่า model
-                      </button>
                     </div>
                   ) : (
                     conversation.map((run) => (
@@ -865,51 +872,32 @@ export function App() {
                           <span className="message-author">
                             คุณ{" "}
                             <time>
-                              {new Date(run.createdAt).toLocaleTimeString(
-                                "th-TH",
-                                { hour: "2-digit", minute: "2-digit" },
-                              )}
+                              {new Date(run.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}
                             </time>
                           </span>
                           <p>{run.prompt}</p>
                         </div>
-                        {run.team && <TeamProgress run={run}/>}
-                        <div className="assistant-message">
-                          <div className="message-author">
-                            <span className="small-brand">
-                              <Command size={14} />
-                            </span>{" "}
-                            SuperAi{" "}
-                            <span
-                              className={`run-state ${run.status === "failed" ? "danger-text" : ""}`}
-                            >
-                              {run.status === "running" && (
-                                <LoaderCircle size={12} className="spin" />
-                              )}
-                              {statusText[run.status]}
-                            </span>
+                        {run.mode === "chat" && run.panel ? <ChatRunView run={run} /> : run.main ? <AgentRunView run={run} /> : null}
+                        {(run.mode === "agent" || !run.panel) && (
+                          <div className="assistant-message">
+                            <div className="message-author">
+                              <span className="small-brand">
+                                <Command size={14} />
+                              </span>{" "}
+                              {run.main ? `รายงานจาก ${run.main.name}` : "SuperAi"}{" "}
+                              <span className={`run-state ${run.status === "failed" ? "danger-text" : ""}`}>
+                                {run.status === "running" && <LoaderCircle size={12} className="spin" />}
+                                {statusText[run.status]}
+                              </span>
+                            </div>
+                            {run.output ? (
+                              <Markdown text={run.output} />
+                            ) : run.status === "running" ? (
+                              <p className="muted">รอ Main สรุปเมื่อ Sub-agent ทำงานเสร็จ…</p>
+                            ) : null}
                           </div>
-                          {run.output ? (
-                            <pre>{run.output}</pre>
-                          ) : run.status === "running" ? (
-                            <p className="muted">
-                              กำลังประมวลผลผ่านผู้ช่วยที่เลือก…
-                            </p>
-                          ) : null}
-                          {run.error && (
-                            <div className="inline-error">{run.error}</div>
-                          )}
-                          {run.events.length > 0 && (
-                            <details>
-                              <summary>
-                                บันทึกการทำงาน ({run.events.length})
-                              </summary>
-                              <pre className="event-log">
-                                {run.events.join("\n\n")}
-                              </pre>
-                            </details>
-                          )}
-                        </div>
+                        )}
+                        {run.error && <div className="inline-error">{run.error}</div>}
                       </article>
                     ))
                   )}
@@ -943,16 +931,22 @@ export function App() {
                     ) : (
                       <>
                         <Bot size={13} />
-                        <span>{mode === "assistant" ? `หัวหน้า: ${agentTeam?.leader.name || "ยังไม่เลือกทีม"}` : modelLabel || "ยังไม่ได้เลือก model"}</span>
-                        <label className="tool-permission">
-                          <input
-                            type="checkbox"
-                            checked={allowTools}
-                            onChange={(e) => setAllowTools(e.target.checked)}
-                            disabled={!!activeRun}
-                          />{" "}
-                          อนุญาตแก้ไฟล์และรันคำสั่ง
-                        </label>
+                        <span>
+                          {mode === "agent"
+                            ? `Main: ${agentConfig?.main.name || "-"} · Sub-agent ${agentConfig?.subagents.length || 0} ตัว`
+                            : `ถาม ${chatConfig?.panel.length || 0} AI${chatConfig?.summarizer ? ` · สรุปโดย ${chatConfig.summarizer.name}` : ""}`}
+                        </span>
+                        {mode === "agent" && (
+                          <label className="tool-permission">
+                            <input
+                              type="checkbox"
+                              checked={allowTools}
+                              onChange={(e) => setAllowTools(e.target.checked)}
+                              disabled={!!activeRun}
+                            />{" "}
+                            อนุญาตให้ Sub-agent แก้ไฟล์และรันคำสั่ง
+                          </label>
+                        )}
                       </>
                     )}
                   </div>
@@ -974,7 +968,9 @@ export function App() {
                     placeholder={
                       mode === "code"
                         ? "พิมพ์คำสั่งให้ session ที่เลือก…"
-                        : "วันนี้อยากให้ช่วยอะไร?"
+                        : mode === "agent"
+                          ? "บอกเป้าหมายให้ทีม เช่น ทำหน้าเข้าสู่ระบบพร้อมทดสอบ…"
+                          : "ถามคำถามเดียว ส่งให้ทุก AI ที่เลือก…"
                     }
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
@@ -1007,9 +1003,7 @@ export function App() {
                       ) : (
                         <>
                           <ShieldCheck size={12} />{" "}
-                          {(mode === "assistant" ? agentTeam?.leader.provider || "" : model).startsWith("cli:")
-                            ? "ใช้บัญชี CLI ของคุณ"
-                            : "ใช้ Ollama บนเครื่อง"}
+                          ใช้บัญชีและโควตาของแต่ละ CLI
                         </>
                       )}
                     </span>
@@ -1029,7 +1023,7 @@ export function App() {
                         title={
                           mode === "code"
                             ? "หยุดคำสั่ง (Ctrl+C)"
-                            : "ยกเลิกงานผู้ช่วย"
+                            : "หยุดงานของ AI ทุกตัว"
                         }
                         disabled={
                           busy ||
@@ -1093,7 +1087,7 @@ export function App() {
           }}
         >
           <section
-            className={`dialog ${dialog === "settings" ? "settings-dialog" : ""}`}
+            className={`dialog ${dialog === "settings" || dialog === "skills" ? "settings-dialog" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="dialog-title"
@@ -1116,18 +1110,22 @@ export function App() {
                           ? "ลบโปรเจกต์จากรายการ?"
                           : dialog === "setup"
                             ? "เริ่มต้นใช้งาน SuperAi"
-                            : "ล้างประวัติผู้ช่วย?"}
+                            : dialog === "skills"
+                              ? "Skills ของโปรเจกต์"
+                              : "ล้างประวัติ Agent และ Chat?"}
                 </h2>
                 <p>
                   {dialog === "session"
-                    ? "เลือก CLI และจำนวนพื้นที่ทำงานที่ต้องการ"
+                    ? "เลือก CLI, model, effort และจำนวนแท็บที่ต้องการ"
                     : dialog === "settings"
-                      ? "เชื่อมเครื่องมือที่คุณใช้ และเลือก model สำหรับผู้ช่วย"
+                      ? "ตรวจเครื่องมือ และเลือก model กับ effort เริ่มต้นของแต่ละผู้ให้บริการ"
                       : dialog === "project"
                         ? "เลือกโฟลเดอร์ที่ใช้ทำงานจริงบนเครื่อง"
                         : dialog === "setup"
                           ? "ทำตามทีละขั้น ระบบตรวจเครื่องของคุณจริง และติดตั้งสิ่งที่ขาดให้ได้"
-                          : "กรุณาตรวจสอบก่อนดำเนินการ"}
+                          : dialog === "skills"
+                            ? `${workspace?.name || ""} · AI เสนอ คุณเป็นคนกดติดตั้ง`
+                            : "กรุณาตรวจสอบก่อนดำเนินการ"}
                 </p>
               </div>
               <button
@@ -1193,6 +1191,12 @@ export function App() {
                     );
                   })}
                 </div>
+                {!launchPlan && HEADLESS.includes(launchType) && launchCli?.available && (
+                  <div className="session-model">
+                    <SeatPicker named={false} fixedProvider label={launchCli.name} clis={clis} ollamaModels={[]} seat={sessionSeat} onChange={setSessionSeat} />
+                    <small className="muted">เว้นว่างเพื่อใช้ค่าเริ่มต้นที่ตั้งไว้ใน CLI · เปลี่ยนภายหลังได้ด้วยคำสั่ง /model ของ CLI นั้น</small>
+                  </div>
+                )}
                 <div className="dialog-field-row">
                   <label>
                     จำนวน session
@@ -1244,11 +1248,22 @@ export function App() {
             {dialog === "setup" && (
               <>
                 <SetupGuide clis={clis} workspaces={workspaces} voice={voiceSettings} refreshClis={checkClis} onError={showError}
-                  addProject={() => openProject()} installCli={() => openSession()}
+                  addProject={() => openProject()} installCli={() => openSession()} openSkills={() => setDialog("skills")}
                   login={(id) => { setLaunchType(id); setCount(1); setLaunchPlan(null); setDialog("session"); }} />
                 <div className="dialog-footer">
                   <span className="muted">เปิดหน้านี้อีกครั้งได้จากแถบซ้าย “เริ่มต้นใช้งาน”</span>
                   <button className="primary" onClick={closeSetup}>เสร็จแล้ว <Check size={15} /></button>
+                </div>
+              </>
+            )}
+            {dialog === "skills" && (
+              <>
+                <div className="settings-content">
+                  <SkillsPanel workspace={workspace} clis={clis} ollamaModels={models} onError={showError} onNotice={setNotice} />
+                </div>
+                <div className="dialog-footer">
+                  <span className="muted">ตรวจไฟล์ของ skill บน GitHub ได้ก่อนติดตั้ง</span>
+                  <button className="primary" onClick={() => setDialog(null)}>เสร็จแล้ว <Check size={15} /></button>
                 </div>
               </>
             )}
@@ -1352,82 +1367,22 @@ export function App() {
                     ))}
                   </div>
                   <div className="settings-section-title">
-                    <h3>รุ่นของ OpenCode</h3>
-                    <button
-                      className="text-button"
-                      disabled={checkingOpenCode}
-                      onClick={loadOpenCodeModels}
-                    >
-                      <RefreshCw
-                        size={13}
-                        className={checkingOpenCode ? "spin" : ""}
-                      />{" "}
-                      ตรวจรุ่น
-                    </button>
+                    <h3>model และ effort เริ่มต้น</h3>
                   </div>
-                  <label className="settings-label">
-                    เลือกรุ่น OpenCode
-                    <select
-                      value={openCodeModel}
-                      onChange={(e) => {setOpenCodeModel(e.target.value);if(e.target.value==='auto')void loadOpenCodeModels();}}
-                    >
-                      <option value="auto">ตรวจและเลือกรุ่นที่พร้อมใช้</option><option value="">ใช้รุ่นเดิมที่ตั้งไว้ใน OpenCode</option>
-                      {openCodeModels.map((m) => (
-                        <option key={m}>{m}</option>
-                      ))}
-                    </select>
-                  </label>
                   <p className="muted">
-                    ใช้เฉพาะ SuperAi ไม่เปลี่ยนไฟล์ตั้งค่าของ OpenCode
-                    บัญชีและสิทธิ์ใช้งานขึ้นกับผู้ให้บริการรุ่นนั้น
+                    ใช้เป็นค่าตั้งต้นทุกครั้งที่เลือก AI ในโหมด Agent, Chat และเปิดแท็บในโหมด Code (เปลี่ยนแยกแต่ละตัวได้ภายหลัง) ·
+                    เว้นว่างเพื่อใช้ค่าที่ตั้งไว้ใน CLI · ค่าใช้จ่ายและโควตาขึ้นกับบัญชีของคุณ
                   </p>
+                  <ProviderDefaults clis={clis} />
                   <div className="settings-section-title">
-                    <h3>ผู้ช่วยและบทสนทนา</h3>
-                    <button
-                      className="text-button"
-                      disabled={checkingModels}
-                      onClick={loadModels}
-                    >
-                      <RefreshCw
-                        className={checkingModels ? "spin" : ""}
-                        size={13}
-                      />{" "}
-                      ตรวจ model
+                    <h3>Ollama บนเครื่อง (ไม่บังคับ)</h3>
+                    <button className="text-button" disabled={checkingModels} onClick={loadModels}>
+                      <RefreshCw className={checkingModels ? "spin" : ""} size={13} /> ตรวจ model
                     </button>
                   </div>
                   <p className="muted">
-                    เลือก CLI เพื่อใช้บัญชีเดิม หรือเลือก model ของ Ollama
-                    หากต้องการประมวลผลบนเครื่อง ค่าใช้จ่ายและโควตา CLI
-                    ขึ้นกับบัญชีของคุณ
+                    {modelError ? modelError : models.length ? `พบ ${models.length} รุ่น: ${models.slice(0, 6).join(", ")} · เลือกได้ในช่องผู้ให้บริการ “Ollama บนเครื่อง”` : "ยังไม่พบ model"}
                   </p>
-                  {modelError && (
-                    <p className="muted">
-                      Ollama (ตัวเลือกเพิ่มเติม): {modelError}
-                    </p>
-                  )}
-                  <label className="settings-label">
-                    เครื่องมือ / Model
-                    <select
-                      value={model}
-                      onChange={(e) => setModel(e.target.value)}
-                    >
-                      <option value="">เลือก CLI หรือ model</option>
-                      {clis
-                        .filter(
-                          (c) =>
-                            c.available &&
-                            ["claude-code", "codex", "opencode"].includes(c.id),
-                        )
-                        .map((c) => (
-                          <option key={c.id} value={`cli:${c.id}`}>
-                            {c.name} · บัญชี CLI
-                          </option>
-                        ))}
-                      {models.map((m) => (
-                        <option key={m}>{m}</option>
-                      ))}
-                    </select>
-                  </label>
                   <div className="setup-command">
                     <Terminal size={14} />
                     <code>ollama pull qwen2.5-coder:7b</code>
@@ -1436,6 +1391,7 @@ export function App() {
                       onClick={() => {
                         setDraft("ollama pull qwen2.5-coder:7b");
                         setMode("code");
+                        setComposerShown(true);
                         setDialog(null);
                       }}
                     >
@@ -1457,7 +1413,7 @@ export function App() {
                 <p className="confirm-description">
                   {dialog === "delete"
                     ? `ลบ “${workspaces.find((w) => w.id === editing)?.name}” จากรายการและปิด session ที่เกี่ยวข้อง ไฟล์ในโฟลเดอร์จะยังอยู่`
-                    : "ล้างประวัติสนทนาและทีมผู้ช่วยทั้งหมดของโปรเจกต์นี้ การล้างไม่ลบไฟล์โปรเจกต์"}
+                    : "ล้างประวัติ Agent และ Chat ทั้งหมดของโปรเจกต์นี้ การล้างไม่ลบไฟล์โปรเจกต์"}
                 </p>
                 <div className="dialog-footer">
                   <button className="secondary" onClick={() => setDialog(null)}>
