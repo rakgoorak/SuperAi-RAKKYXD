@@ -1,12 +1,12 @@
 # ดาวน์โหลดและติดตั้ง SuperAi & RAKKYXD
 
-ดาวน์โหลด ZIP ตามเครื่องจากหน้า Releases ของ repository นี้ ไฟล์ `.sha256` ใช้ตรวจความถูกต้องของ ZIP
+ดาวน์โหลด ZIP ตามเครื่องจาก [Releases](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest) (ไม่ต้องล็อกอิน GitHub) ไฟล์ `.sha256` ใช้ตรวจความถูกต้องของ ZIP
 
 | เครื่อง | ไฟล์ |
 | --- | --- |
-| Windows 10/11 64-bit | `SuperAi-RAKKYXD-v1.2.2-windows-x64.zip` |
-| Mac ชิป Apple Silicon (M1/M2/M3/M4 และรุ่นใหม่กว่า) | `SuperAi-RAKKYXD-v1.2.2-macos-arm64.zip` |
-| Mac ชิป Intel | `SuperAi-RAKKYXD-v1.2.2-macos-x64.zip` |
+| Windows 10/11 64-bit | `SuperAi-RAKKYXD-v1.0.0-windows-x64.zip` |
+| Mac ชิป Apple Silicon (M1/M2/M3/M4 และรุ่นใหม่กว่า) | `SuperAi-RAKKYXD-v1.0.0-macos-arm64.zip` |
+| Mac ชิป Intel | `SuperAi-RAKKYXD-v1.0.0-macos-x64.zip` |
 
 ## Windows
 
@@ -17,6 +17,10 @@
 แตก ZIP แล้วลาก `SuperAi-RAKKYXD.app` ไปไว้ใน Applications รองรับ macOS 11 ขึ้นไปตาม Electron runtime ที่ใช้ รุ่นนี้ลงลายเซ็นแบบ ad-hoc เพื่อให้เปิดบน Apple Silicon ได้ ยังไม่มี Apple Developer ID / notarization หาก macOS ปฏิเสธ ให้ตรวจที่ System Settings → Privacy & Security → Open Anyway หลังตรวจว่าไฟล์มาจาก Releases ของเจ้าของ repository นี้
 
 ปุ่มพูดเพื่อพิมพ์ต้องได้รับสิทธิ์ Microphone ครั้งแรกที่ใช้
+
+## อัปเดตเป็นเวอร์ชันใหม่
+
+ไม่ต้องลบโปรแกรมแล้วติดตั้งใหม่ โปรแกรมตรวจ Releases ให้เองทุกครั้งที่เปิด ถ้ามีเวอร์ชันใหม่ ปุ่ม **อัปเดตโปรแกรม** ที่แถบซ้ายจะขึ้นจุดสีเขียว กด **ดาวน์โหลดอัปเดต** (ตรวจ SHA-256 ให้) แล้ว **ติดตั้งและเปิดใหม่** โปรแกรมจะปิด เขียนไฟล์ใหม่ทับในโฟลเดอร์เดิม แล้วเปิดขึ้นมาเอง โปรเจกต์ ประวัติ และการตั้งค่าอยู่ครบ ต้องเก็บโปรแกรมไว้ในโฟลเดอร์ที่บัญชีของคุณเขียนได้ (ไม่ใช่ Program Files)
 
 ## เริ่มใช้งานครั้งแรก
 

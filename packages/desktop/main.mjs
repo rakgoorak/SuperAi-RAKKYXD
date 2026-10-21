@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserController } from "./browser.mjs";
 import { normalizeBrowserUrl } from "./browser-url.mjs";
 import { prepareDesktopPath } from "./platform-env.mjs";
+import { Updater } from "./updater.mjs";
 prepareDesktopPath();
 const directory = path.dirname(fileURLToPath(import.meta.url));
 if (process.env.SUPERAI_DATA_DIR)
@@ -13,6 +14,12 @@ if (process.env.SUPERAI_DATA_DIR)
 // Multithreaded on-device speech recognition (speak-to-type) needs SharedArrayBuffer.
 app.commandLine.appendSwitch("enable-features", "SharedArrayBuffer");
 let window, server, browser;
+const updater = new Updater({
+  currentVersion: app.getVersion(),
+  // SUPERAI_UPDATE_TEST lets a dev build exercise the real download/install path.
+  packaged: app.isPackaged || process.env.SUPERAI_UPDATE_TEST === "1",
+  onState: (state) => window?.webContents.send("update:state", state),
+});
 const log = async (text) => {
   try {
     const dir = path.join(os.homedir(), ".opencode-multi");
@@ -42,6 +49,20 @@ ipcMain.handle("app:folder", async (e) => {
 ipcMain.handle("app:external", async (e, url) => {
   trusted(e);
   await shell.openExternal(normalizeBrowserUrl(url));
+});
+ipcMain.handle("update:action", async (e, action) => {
+  trusted(e);
+  if (action === "state") return updater.state;
+  if (action === "check") return updater.check();
+  if (action === "download") return updater.download();
+  if (action === "cancel") return updater.cancel(), updater.state;
+  if (action === "install") {
+    const state = await updater.install();
+    await log(`Installing update ${state.latestVersion}`);
+    setTimeout(() => app.quit(), 300);
+    return state;
+  }
+  throw new Error("คำสั่งอัปเดตไม่ถูกต้อง");
 });
 ipcMain.handle("browser:action", async (e, action, payload) => {
   trusted(e);
@@ -142,7 +163,9 @@ else {
         app.quit();
       });
       await window.loadURL(appUrl);
-      await log(`SuperAi & RAKKYXD started at ${appUrl}`);
+      await log(`SuperAi & RAKKYXD ${app.getVersion()} started at ${appUrl}`);
+      // Quiet check shortly after launch; the UI shows a badge when a newer release exists.
+      if (updater.packaged && !process.env.SUPERAI_TEST_MODE) setTimeout(() => void updater.check(), 4000);
     } catch (error) {
       await log(error.stack || error.message);
       dialog.showErrorBox(

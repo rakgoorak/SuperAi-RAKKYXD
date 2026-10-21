@@ -8,4 +8,6 @@ contextBridge.exposeInMainWorld('superai', {
   onBrowser: callback => listen('browser:state', callback),
   pathForFile: file => { try { return webUtils.getPathForFile(file) || ''; } catch { return ''; } },
   stageClipboardImage: filePath => ipcRenderer.invoke('clipboard:stage-image', filePath),
+  update: action => ipcRenderer.invoke('update:action', action),
+  onUpdate: callback => listen('update:state', callback),
 });

@@ -39,6 +39,7 @@ import {
   Rocket,
   Mic,
   Puzzle,
+  Download,
   Users,
 } from "lucide-react";
 import { api, post, Workspace, Cli, Session, Run, Seat } from "./api";
@@ -47,6 +48,7 @@ import { RightDock, type DockView } from "./components/RightDock";
 import { AgentConfigEditor, AgentRunView, type AgentConfig } from "./components/AgentPanel";
 import { ChatConfigEditor, ChatRunView, type ChatConfig } from "./components/ChatPanel";
 import { SkillsPanel } from "./components/SkillsPanel";
+import { UpdatePanel, useUpdateState } from "./components/UpdatePanel";
 import { ProviderDefaults } from "./components/ProviderDefaults";
 import { SeatPicker } from "./components/SeatPicker";
 import { Markdown } from "./components/Markdown";
@@ -61,7 +63,7 @@ import { SetupGuide, setupNeeded } from "./components/SetupGuide";
 import { loadVoiceSettings, saveVoiceSettings, type VoiceSettings } from "./voice/speech";
 
 type Mode = "agent" | "code" | "chat";
-type Dialog = "session" | "settings" | "project" | "delete" | "clear" | "setup" | "skills" | null;
+type Dialog = "session" | "settings" | "project" | "delete" | "clear" | "setup" | "skills" | "update" | null;
 const modeLabels: Record<Mode, string> = {
   agent: "Agent",
   code: "Code",
@@ -132,6 +134,7 @@ export function App() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [menu, setMenu] = useState("");
   const composer = useRef<HTMLTextAreaElement>(null);
+  const update = useUpdateState();
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(loadVoiceSettings);
   const setupShown = useRef(false);
   const [checkingModels, setCheckingModels] = useState(false);
@@ -644,6 +647,17 @@ export function App() {
                 <Settings size={17} />
                 <span>การตั้งค่า</span>
               </button>
+              {update && (
+                <button onClick={() => setDialog("update")} className={update.status === "available" || update.status === "ready" ? "update-ready" : ""}
+                  title="ตรวจและติดตั้งเวอร์ชันใหม่จาก GitHub Releases">
+                  <Download size={17} />
+                  <span>
+                    {update.status === "available" ? `อัปเดตเป็น v${update.latestVersion}` : update.status === "ready" ? "พร้อมติดตั้งอัปเดต" : "อัปเดตโปรแกรม"}
+                    <small>{update.status === "downloading" ? `กำลังดาวน์โหลด ${update.progress || 0}%` : `เวอร์ชัน ${update.currentVersion}`}</small>
+                  </span>
+                  {(update.status === "available" || update.status === "ready") && <span className="update-dot" aria-label="มีอัปเดตใหม่" />}
+                </button>
+              )}
               <div className="account-local">
                 <div className="avatar">R</div>
                 <div>
@@ -1112,6 +1126,8 @@ export function App() {
                             ? "เริ่มต้นใช้งาน SuperAi"
                             : dialog === "skills"
                               ? "Skills ของโปรเจกต์"
+                              : dialog === "update"
+                                ? "อัปเดตโปรแกรม"
                               : "ล้างประวัติ Agent และ Chat?"}
                 </h2>
                 <p>
@@ -1125,6 +1141,8 @@ export function App() {
                           ? "ทำตามทีละขั้น ระบบตรวจเครื่องของคุณจริง และติดตั้งสิ่งที่ขาดให้ได้"
                           : dialog === "skills"
                             ? `${workspace?.name || ""} · AI เสนอ คุณเป็นคนกดติดตั้ง`
+                            : dialog === "update"
+                              ? "ดาวน์โหลดเวอร์ชันใหม่จาก GitHub Releases แล้วติดตั้งทับให้เอง"
                             : "กรุณาตรวจสอบก่อนดำเนินการ"}
                 </p>
               </div>
@@ -1253,6 +1271,17 @@ export function App() {
                 <div className="dialog-footer">
                   <span className="muted">เปิดหน้านี้อีกครั้งได้จากแถบซ้าย “เริ่มต้นใช้งาน”</span>
                   <button className="primary" onClick={closeSetup}>เสร็จแล้ว <Check size={15} /></button>
+                </div>
+              </>
+            )}
+            {dialog === "update" && (
+              <>
+                <div className="settings-content">
+                  <UpdatePanel state={update} onError={showError} />
+                </div>
+                <div className="dialog-footer">
+                  <span className="muted">โปรแกรมตรวจอัปเดตให้เองทุกครั้งที่เปิด</span>
+                  <button className="primary" onClick={() => setDialog(null)}>ปิด <Check size={15} /></button>
                 </div>
               </>
             )}
