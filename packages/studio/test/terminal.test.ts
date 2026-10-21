@@ -10,7 +10,7 @@ test('TerminalSessionManager: spawns a process and buffers output', async () => 
   const manager = new TerminalSessionManager();
   const isWindows = process.platform === 'win32';
   const command = isWindows ? 'cmd.exe' : 'sh';
-  const args = isWindows ? ['/c', 'echo Hello BridgeMind Multi-Terminal'] : ['-c', 'echo Hello BridgeMind Multi-Terminal'];
+  const args = isWindows ? ['/c', 'echo Hello SuperAi RAKKYXD Multi-Terminal'] : ['-c', 'echo Hello SuperAi RAKKYXD Multi-Terminal'];
 
   const session = manager.spawnSession({
     name: 'test-session',
@@ -27,7 +27,7 @@ test('TerminalSessionManager: spawns a process and buffers output', async () => 
     const timer=setTimeout(()=>reject(new Error('Terminal output timed out')),5000);
     let unsub=()=>{};
     unsub = manager.subscribe(session.id, (chunk) => {
-      if (chunk.includes('Hello BridgeMind Multi-Terminal')) {
+      if (chunk.includes('Hello SuperAi RAKKYXD Multi-Terminal')) {
         clearTimeout(timer);
         unsub();
         resolve();
@@ -35,7 +35,7 @@ test('TerminalSessionManager: spawns a process and buffers output', async () => 
     });
   });
 
-  assert.ok(session.bufferedOutput.includes('Hello BridgeMind Multi-Terminal'));
+  assert.ok(session.bufferedOutput.includes('Hello SuperAi RAKKYXD Multi-Terminal'));
   manager.killAll();
 });
 

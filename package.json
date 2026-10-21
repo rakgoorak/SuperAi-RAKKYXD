@@ -8,12 +8,12 @@
     "packages/studio/client"
   ],
   "scripts": {
-    "build": "npm --workspace=@opencode-multi/core run build && npm --workspace=@bridgemind/studio run build && npm --workspace=@bridgemind/client run build && npm --workspace=@bridgemind/desktop run build",
+    "build": "npm --workspace=@superai-rakkyxd/core run build && npm --workspace=@superai-rakkyxd/studio run build && npm --workspace=@superai-rakkyxd/client run build && npm --workspace=@superai-rakkyxd/desktop run build",
     "test": "npm run test --workspaces",
     "studio": "node packages/studio/dist/index.js",
     "app": "electron packages/desktop",
     "start": "electron packages/desktop",
-    "dev": "npm --workspace=@bridgemind/client run dev",
+    "dev": "npm --workspace=@superai-rakkyxd/client run dev",
     "dev:server": "tsx packages/studio/server/index.ts",
     "test:desktop": "node packages/desktop/test/smoke.mjs",
     "test:layout": "node packages/desktop/test/layout-smoke.mjs",
