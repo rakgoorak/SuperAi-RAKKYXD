@@ -48,6 +48,7 @@ import { AgentConfigEditor, AgentRunView, type AgentConfig } from "./components/
 import { ChatConfigEditor, ChatRunView, type ChatConfig } from "./components/ChatPanel";
 import { SkillsPanel } from "./components/SkillsPanel";
 import { UpdatePanel, useUpdateState } from "./components/UpdatePanel";
+import { UsageButton } from "./components/UsagePanel";
 import { ProviderDefaults } from "./components/ProviderDefaults";
 import { SeatPicker } from "./components/SeatPicker";
 import { Markdown } from "./components/Markdown";
@@ -683,6 +684,7 @@ export function App() {
 
             <div className="toolbar-actions">
               {mode === "code" && <button className={`toolbar-button ${composerShown ? "selected" : ""}`} title="ช่องคำสั่งรวม" aria-pressed={composerShown} onClick={() => setComposerShown(!composerShown)}><Keyboard size={14} /><span>คำสั่งรวม</span></button>}
+              <UsageButton />
               <button className={`toolbar-button ${preview && dockView === "dashboard" ? "selected" : ""}`} title="เปิดแผงสถานะ" onClick={() => { setDockView("dashboard"); setPreview(true); }}><Activity size={14} /><span>สถานะ</span></button>
               <button
                 className={`toolbar-button ${preview ? "selected" : ""}`}
