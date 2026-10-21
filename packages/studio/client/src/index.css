@@ -1942,3 +1942,31 @@ input[type="checkbox"] {
 .dictation-menu strong { padding: 6px 8px 4px; color: var(--dim); font-weight: 500; font-size: 11px; }
 .dictation-menu button { justify-content: flex-start; gap: 8px; padding: 7px 8px; border-radius: 6px; text-align: left; }
 .dictation-menu .menu-gap { display: inline-block; width: 13px; }
+
+/* Composer attachments: "+" menu, thumbnail cards, window drop overlay */
+.composer-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.composer-tools > span { font-size: 9px; color: #9eb5c7; display: flex; gap: 6px; align-items: center; }
+.attach-menu { position: relative; display: inline-flex; }
+.attach-menu > .icon-button { width: 28px; height: 28px; border-radius: 7px; }
+.attach-popover { left: 0; right: auto; }
+.attach-popover button { display: flex; align-items: center; }
+.attach-popover kbd { margin-left: auto; padding-left: 16px; color: var(--dim); font: inherit; font-size: 11px; }
+.attachment-cards { list-style: none; margin: 0; padding: 10px 12px 0; display: flex; gap: 8px; overflow-x: auto; }
+.attachment-card { position: relative; flex: 0 0 auto; width: 120px; height: 120px; border-radius: 10px; overflow: hidden; background: var(--raised); border: 1px solid var(--border); }
+.attachment-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.attachment-pdf { height: 100%; padding: 12px 10px 10px; display: flex; flex-direction: column; gap: 6px; color: var(--accent); }
+.attachment-name { color: #e1e8ee; font-size: 11px; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; word-break: break-word; }
+.attachment-meta { margin-top: auto; color: var(--dim); font-size: 10px; }
+.attachment-remove { position: absolute; top: 5px; right: 5px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: rgba(16, 20, 24, 0.8); color: #e1e8ee; border: 1px solid var(--border); }
+.attachment-remove:hover { background: #4a2c2e; color: #f4a6a6; }
+.composer-drop-overlay {
+  position: fixed; inset: 0; z-index: 60; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; padding-bottom: 140px;
+  background: rgba(10, 13, 20, 0.55); color: var(--accent); outline: 2px dashed rgba(158, 216, 255, 0.7); outline-offset: -10px;
+}
+.composer-drop-overlay strong { font-size: 15px; font-weight: 600; }
+.composer-drop-overlay span { font-size: 12px; color: var(--dim); }
+.compact-code .composer-bottom { left: 4px; justify-content: space-between; pointer-events: none; }
+.compact-code .composer-bottom > * { pointer-events: auto; }
+.compact-code .composer-tools > span { display: none; }
+.compact-code .composer-box textarea { padding-left: 40px; }

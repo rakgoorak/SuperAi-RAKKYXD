@@ -12,6 +12,7 @@ import { CliInstallManager } from "./CliInstallManager.js";
 import { WebSocketServer, WebSocket } from "ws";
 import { TerminalSessionManager } from "./TerminalSessionManager.js";
 import { WorkspaceRegistry } from "./WorkspaceRegistry.js";
+import { AttachmentError, MAX_ATTACHMENT_BYTES, resolveAttachments, saveAttachment } from "./AttachmentStore.js";
 
 export class StudioServer {
   private agentRuns: AgentRunManager;
@@ -175,6 +176,7 @@ export class StudioServer {
           req.body.openCodeModel || "",
           req.body.team,
           req.body.voice === true,
+          resolveAttachments(workspace.rootPath, req.body.attachments),
         );
         res.json(run);
       } catch (err: any) {
@@ -390,9 +392,38 @@ export class StudioServer {
       res.json({ success: ok });
     });
 
+    // Pasted / dropped images and PDFs are saved into the project folder so the
+    // CLI working there can read them by path.
+    const attachmentUpload = (folder: (req: Request) => string | undefined, missing: string) => [
+      express.raw({ type: () => true, limit: MAX_ATTACHMENT_BYTES }),
+      (req: Request, res: Response) => {
+        const root = folder(req);
+        if (!root) return res.status(404).json({ error: missing });
+        try {
+          res.json(saveAttachment(root, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)));
+        } catch (error: any) {
+          res.status(error instanceof AttachmentError ? error.status : 500).json({ error: error.message });
+        }
+      },
+    ];
+    this.app.post(
+      "/api/terminals/:id/attachments",
+      ...attachmentUpload(
+        (req) => this.terminalManager.getSession(String(req.params.id))?.cwd,
+        "ไม่พบ session นี้แล้ว กรุณาเปิด session ใหม่แล้วแนบไฟล์อีกครั้ง",
+      ),
+    );
+    this.app.post(
+      "/api/workspaces/:wsId/attachments",
+      ...attachmentUpload((req) => {
+        const root = this.workspaceRegistry.getWorkspace(String(req.params.wsId))?.rootPath;
+        return root && fs.existsSync(root) ? root : undefined;
+      }, "ไม่พบโฟลเดอร์โปรเจกต์ กรุณาตรวจโฟลเดอร์ในการตั้งค่าโปรเจกต์"),
+    );
+
     const errors:ErrorRequestHandler=(error,_req,res,next)=>{
       if(res.headersSent)return next(error);
-      res.status(error.status||500).json({error:error.status===413?'คำขอยาวเกินไป กรุณาลดข้อความแล้วลองใหม่':error.message||'ระบบทำรายการไม่สำเร็จ กรุณาลองใหม่'});
+      res.status(error.status||500).json({error:error.status===413?(_req.path.endsWith('/attachments')?'ไฟล์ใหญ่เกิน 20 MB กรุณาย่อรูปหรือแยกไฟล์ PDF ให้เล็กลงแล้วลองใหม่':'คำขอยาวเกินไป กรุณาลดข้อความแล้วลองใหม่'):error.message||'ระบบทำรายการไม่สำเร็จ กรุณาลองใหม่'});
     };
     this.app.use(errors);
     this.app.use("/api", (_req, res) =>

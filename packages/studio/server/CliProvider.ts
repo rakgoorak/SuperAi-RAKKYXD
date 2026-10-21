@@ -12,6 +12,7 @@ export function promptArguments(
   inputFile?: string,
   modelOverride = "",
   allowReadTools = false,
+  attachments: string[] = [],
 ): string[] {
   if (id === "claude-code")
     return [
@@ -19,7 +20,8 @@ export function promptArguments(
       "--output-format",
       "text",
       ...(modelOverride ? ["--model", modelOverride] : []),
-      ...(allowTools ? [] : ["--permission-mode", "plan", "--tools", allowReadTools ? "Read,Grep,Glob" : ""]),
+      // Attached images/PDFs are read with the Read tool, so keep it even in read-only chat.
+      ...(allowTools ? [] : ["--permission-mode", "plan", "--tools", allowReadTools ? "Read,Grep,Glob" : attachments.length ? "Read" : ""]),
     ];
   if (id === "codex")
     return [
@@ -30,6 +32,7 @@ export function promptArguments(
       allowTools ? "workspace-write" : "read-only",
       "--color",
       "never",
+      ...attachments.map((file) => `--image=${file}`),
       "-",
     ];
   if (id === "opencode") {
@@ -41,12 +44,26 @@ export function promptArguments(
       ...(modelOverride ? ["--model", modelOverride] : []),
       "--file",
       inputFile,
+      ...attachments.flatMap((file) => ["--file", file]),
       "--",
       "อ่านคำขอและบริบททั้งหมดจากไฟล์แนบ แล้วตอบเป็นภาษาไทย",
     ];
   }
   throw new Error("CLI นี้รองรับเฉพาะ terminal กรุณาใช้โหมดโค้ด");
 }
+/** Thai reason why a chat provider cannot take these attachments, or "" when it can. */
+export function attachmentProblem(provider: string, attachments: string[]): string {
+  if (!attachments.length) return "";
+  const id = provider.replace(/^cli:/, "");
+  if (!provider.startsWith("cli:"))
+    return "รุ่น Ollama บนเครื่องอ่านรูปหรือ PDF ที่แนบไม่ได้ กรุณาเลือก Claude Code, Codex หรือ OpenCode ในการตั้งค่า หรือส่งไฟล์ในโหมดโค้ด";
+  if (!["claude-code", "codex", "opencode"].includes(id))
+    return "CLI นี้รับไฟล์แนบในโหมดสนทนาไม่ได้ กรุณาใช้โหมดโค้ดแล้วแนบไฟล์ใน session";
+  if (id === "codex" && attachments.some((file) => !/\.(png|jpe?g|gif|webp)$/i.test(file)))
+    return "Codex ในโหมดสนทนารับได้เฉพาะรูป ไม่รับ PDF กรุณาใช้ Claude Code หรือ OpenCode สำหรับ PDF";
+  return "";
+}
+
 export class CliProvider implements LLMProvider {
   name = "cli";
   constructor(
@@ -56,6 +73,7 @@ export class CliProvider implements LLMProvider {
     private allowTools = false,
     private modelOverride = "",
     private allowReadTools = false,
+    private attachments: string[] = [],
   ) {}
   async generate(messages: LLMMessage[]): Promise<LLMResponse> {
     return this.stream(messages, () => {});
@@ -79,7 +97,7 @@ export class CliProvider implements LLMProvider {
       if (this.signal.aborted) throw new Error("ยกเลิกงานแล้ว");
       const launch = cliLaunch(
         id,
-        promptArguments(id, this.allowTools, inputFile, this.modelOverride, this.allowReadTools),
+        promptArguments(id, this.allowTools, inputFile, this.modelOverride, this.allowReadTools, this.attachments),
       );
       return await new Promise<LLMResponse>((resolve, reject) => {
         const proc = spawn(launch.command, launch.args, {

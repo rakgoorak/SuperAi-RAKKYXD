@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, shell, dialog, clipboard, nativeImage } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -50,6 +50,37 @@ ipcMain.handle("app:speech-settings", async (e) => {
   else if (process.platform === "darwin")
     await shell.openExternal("x-apple.systempreferences:com.apple.preference.universalaccess?SpeakableItems");
   else throw new Error("เปิดการตั้งค่าเสียงพูดได้บน Windows และ macOS");
+});
+// Codex reads images from the OS clipboard on Ctrl+V, so a dropped image is put on
+// the clipboard briefly; whatever the user had copied is restored afterwards.
+let clipboardRestore;
+ipcMain.handle("clipboard:stage-image", async (e, filePath) => {
+  trusted(e);
+  if (typeof filePath !== "string" || !path.isAbsolute(filePath))
+    throw new Error("ไม่พบไฟล์รูป");
+  const image = nativeImage.createFromPath(filePath);
+  if (image.isEmpty())
+    throw new Error("เปิดรูปนี้ไม่ได้ รองรับ PNG, JPG, GIF และ WEBP");
+  if (clipboardRestore) clearTimeout(clipboardRestore.timer);
+  const previous = clipboardRestore?.previous || {
+    text: clipboard.readText(),
+    html: clipboard.readHTML(),
+    image: clipboard.readImage(),
+  };
+  clipboard.writeImage(image);
+  const staged = clipboard.readImage().toBitmap().length;
+  clipboardRestore = {
+    previous,
+    timer: setTimeout(() => {
+      clipboardRestore = undefined;
+      // Leave the clipboard alone if the user copied something new meanwhile.
+      if (clipboard.readText() || clipboard.readImage().toBitmap().length !== staged) return;
+      if (!previous.image.isEmpty()) clipboard.writeImage(previous.image);
+      else if (previous.text || previous.html)
+        clipboard.write({ text: previous.text, html: previous.html || undefined });
+      else clipboard.clear();
+    }, 3000),
+  };
 });
 ipcMain.handle("browser:action", async (e, action, payload) => {
   trusted(e);

@@ -48,6 +48,8 @@ import { LaunchPresets, type LaunchSeat } from "./components/LaunchPresets";
 import { VoiceMode } from "./components/VoiceMode";
 import { VoiceSettingsPanel } from "./components/VoiceSettingsPanel";
 import { DictationButton } from "./components/DictationButton";
+import { AttachMenu, AttachmentCards, ComposerDropOverlay, useComposerAttachments, useWindowDrop } from "./components/ComposerAttachments";
+import { attachMode, formatPath, pastedFiles, uploadAttachment, type SavedAttachment } from "./attachments";
 import { SetupGuide, setupNeeded } from "./components/SetupGuide";
 import { loadVoiceSettings, saveVoiceSettings, type VoiceSettings } from "./voice/speech";
 
@@ -157,6 +159,12 @@ export function App() {
   const checkClis = useCallback(async () => {
     setClis(await api<Cli[]>("/api/clis"));
   }, []);
+  const attachments = useComposerAttachments(showError);
+  const attachToComposer = useCallback((files: File[]) => {
+    attachments.add(files);
+    setComposerShown(true);
+    requestAnimationFrame(() => composer.current?.focus());
+  }, [attachments.add]);
   const task = useCallback(async (fn: () => Promise<void>) => {
     setBusy(true);
     setError("");
@@ -332,8 +340,12 @@ export function App() {
   const send = () =>
     task(async () => {
       if(mode==='chat'&&model==='cli:opencode'&&openCodeModel==='auto')throw new Error('กำลังตรวจรุ่น OpenCode กรุณารอ หรือเลือกรุ่นในการตั้งค่า');
-      if (!draft.trim()) return;
+      if (!draft.trim() && !attachments.items.length) return;
       if (!workspace) throw new Error("กรุณาสร้างโปรเจกต์ก่อน");
+      // Save attached images/PDFs into <project>/.superai/attachments first.
+      const saved: SavedAttachment[] = [];
+      for (const item of attachments.items)
+        saved.push(await uploadAttachment(`/api/workspaces/${workspace.id}/attachments`, item.file));
       if (mode === "code") {
         const recipients =
           target === "all"
@@ -346,8 +358,11 @@ export function App() {
             "ไม่มี terminal ที่กำลังทำงาน กรุณาเปิด session ก่อน",
           );
         for (const recipient of recipients) {
+          // Codex gets project-relative paths: typed ":" and "\" can be lost through ConPTY.
+          const relative = attachMode(recipient.agentType) === "clipboard" && recipient.cwd === workspace.rootPath;
+          const paths = saved.map((file) => formatPath(relative ? file.relativePath : file.path)).join("").trim();
           const result = await post(`/api/terminals/${recipient.id}/input`, {
-            input: draft + "\r",
+            input: [draft.trim() || (paths ? "ดูไฟล์แนบนี้" : ""), paths].filter(Boolean).join(" ") + "\r",
           });
           if (!result.success)
             throw new Error(
@@ -364,7 +379,8 @@ export function App() {
         if (!conversationModel)
           throw new Error("เปิดการตั้งค่า แล้วเลือก CLI หรือ model ก่อน");
         await post(`/api/conversations/${workspace.id}`, {
-          prompt: draft,
+          prompt: draft.trim() || "ช่วยดูไฟล์แนบนี้",
+          attachments: saved.map((file) => file.path),
           mode,
           model:conversationModel,
           allowTools,
@@ -374,7 +390,9 @@ export function App() {
         setRuns(await api<Run[]>(`/api/conversations/${workspace.id}`));
       }
       setDraft("");
+      attachments.clear();
     });
+  const dropTarget = useWindowDrop(attachToComposer, connected && !dialog && !voiceOpen);
   const interrupt = () =>
     task(async () => {
       if (mode !== "code" && activeRun) {
@@ -471,6 +489,7 @@ export function App() {
 
   return (
     <div className={`app-shell ${window.superai?.platform === "darwin" ? "platform-mac" : ""}`}>
+      <ComposerDropOverlay active={dropTarget === "composer"} />
       <header className="titlebar app-drag">
         <div className="brand">
           <div className="brand-mark">
@@ -984,6 +1003,7 @@ export function App() {
                   </div>
                 </div>
                 <div className="composer-box">
+                  <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
                   <textarea
                     ref={composer}
                     rows={mode === "code" && !composerExpanded ? 1 : 3}
@@ -995,6 +1015,12 @@ export function App() {
                     }
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
+                    onPaste={(e) => {
+                      const files = pastedFiles(e.clipboardData);
+                      if (!files.length) return;
+                      e.preventDefault();
+                      attachToComposer(files);
+                    }}
                     onKeyDown={(e) => {
                       if (
                         e.key === "Enter" &&
@@ -1007,6 +1033,8 @@ export function App() {
                     }}
                   />
                   <div className="composer-bottom">
+                    <div className="composer-tools">
+                    <AttachMenu onFiles={attachToComposer} disabled={!workspace} />
                     <span>
                       {mode === "code" ? (
                         <>
@@ -1022,6 +1050,7 @@ export function App() {
                         </>
                       )}
                     </span>
+                    </div>
                     <div className="inline">
                       <DictationButton
                         settings={voiceSettings}
@@ -1052,7 +1081,7 @@ export function App() {
                         title="ส่งคำสั่ง (Enter)"
                         disabled={
                           busy ||
-                          !draft.trim() ||
+                          (!draft.trim() && !attachments.items.length) ||
                           !workspace ||
                           (mode !== "code" && !!activeRun)
                         }
@@ -1068,7 +1097,7 @@ export function App() {
                   </div>
                 </div>
                 <div className="composer-hint">
-                  <span>Enter ส่ง · Shift + Enter ขึ้นบรรทัดใหม่</span>
+                  <span>Enter ส่ง · Shift + Enter ขึ้นบรรทัดใหม่ · Ctrl+U แนบรูปหรือ PDF</span>
                   <span>ตรวจคำสั่งก่อนส่งเสมอ</span>
                 </div>
               </div>
