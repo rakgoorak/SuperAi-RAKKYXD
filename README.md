@@ -2,13 +2,13 @@
 
 พื้นที่ทำงาน AI ภาษาไทยบน Windows และ macOS ใช้ AI CLI หลายตัวพร้อมกันในหน้าต่างเดียว มี 3 โหมด **Agent**, **Code** และ **Chat** เลือกผู้ให้บริการ/model/effort ได้ทุกที่ พร้อม Skills, browser Preview, แนบรูป/PDF และพูดเพื่อพิมพ์ เริ่มได้แม้เครื่องยังไม่มีอะไรติดตั้ง
 
-## ดาวน์โหลด (v1.0.0)
+## ดาวน์โหลด (รุ่นล่าสุด)
 
 | เครื่อง | ดาวน์โหลด | ขนาด |
 | --- | --- | --- |
-| Windows 10/11 64-bit | [SuperAi-RAKKYXD-v1.0.0-windows-x64.zip](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/download/v1.0.0/SuperAi-RAKKYXD-v1.0.0-windows-x64.zip) · [sha256](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/download/v1.0.0/SuperAi-RAKKYXD-v1.0.0-windows-x64.zip.sha256) | ≈130 MB |
-| Mac Apple Silicon (M1 ขึ้นไป) | [SuperAi-RAKKYXD-v1.0.0-macos-arm64.zip](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/download/v1.0.0/SuperAi-RAKKYXD-v1.0.0-macos-arm64.zip) · [sha256](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/download/v1.0.0/SuperAi-RAKKYXD-v1.0.0-macos-arm64.zip.sha256) | ≈130 MB |
-| Mac Intel | [SuperAi-RAKKYXD-v1.0.0-macos-x64.zip](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/download/v1.0.0/SuperAi-RAKKYXD-v1.0.0-macos-x64.zip) · [sha256](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/download/v1.0.0/SuperAi-RAKKYXD-v1.0.0-macos-x64.zip.sha256) | ≈130 MB |
+| Windows 10/11 64-bit | [SuperAi-RAKKYXD-windows-x64.zip](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-windows-x64.zip) · [sha256](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-windows-x64.zip.sha256) | ≈130 MB |
+| Mac Apple Silicon (M1 ขึ้นไป) | [SuperAi-RAKKYXD-macos-arm64.zip](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.zip) · [sha256](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.zip.sha256) | ≈130 MB |
+| Mac Intel | [SuperAi-RAKKYXD-macos-x64.zip](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.zip) · [sha256](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.zip.sha256) | ≈130 MB |
 
 รุ่นทั้งหมดอยู่ที่ [Releases](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest) · วิธีติดตั้งละเอียดอยู่ที่ [docs/DOWNLOADS.md](docs/DOWNLOADS.md)
 

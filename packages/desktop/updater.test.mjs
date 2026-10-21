@@ -22,6 +22,8 @@ test("asset choice follows OS and CPU and pairs the checksum", () => {
   assert.equal(pickAsset(assets, "darwin", "arm64").sha.name, "SuperAi-RAKKYXD-v1.0.0-macos-arm64.zip.sha256");
   assert.equal(pickAsset(assets, "linux", "x64"), null);
   assert.equal(pickAsset(assets, "win32", "arm64"), null);
+  const unversioned = [{ name: "SuperAi-RAKKYXD-windows-x64.zip" }, { name: "SuperAi-RAKKYXD-windows-x64.zip.sha256" }];
+  assert.equal(pickAsset(unversioned, "win32", "x64").sha.name, "SuperAi-RAKKYXD-windows-x64.zip.sha256");
 });
 
 test("checksum lines and install targets are parsed safely", () => {
