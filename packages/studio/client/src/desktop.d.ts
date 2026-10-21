@@ -10,6 +10,17 @@ export interface BrowserState {
     canForward: boolean;
   }[];
 }
+export interface UpdateState {
+  status: "idle" | "checking" | "latest" | "none" | "available" | "unsupported" | "downloading" | "extracting" | "ready" | "installing" | "error";
+  currentVersion: string;
+  packaged: boolean;
+  latestVersion?: string;
+  notes?: string;
+  releaseUrl?: string;
+  asset?: { name: string; size: number } | null;
+  progress?: number;
+  error?: string;
+}
 declare global {
   interface Window {
     superai?: {
@@ -26,6 +37,9 @@ declare global {
       pathForFile: (file: File) => string;
       /** Puts an image file on the OS clipboard for a few seconds (Codex reads it on Ctrl+V). */
       stageClipboardImage: (filePath: string) => Promise<void>;
+      /** In-app updater: check GitHub Releases, download, verify and install. */
+      update: (action: "state" | "check" | "download" | "cancel" | "install") => Promise<UpdateState>;
+      onUpdate: (callback: (state: UpdateState) => void) => () => void;
     };
     bridgemind?: {
       isDesktop: true;

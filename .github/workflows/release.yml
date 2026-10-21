@@ -7,7 +7,7 @@ on:
       tag:
         description: Existing version tag to build
         required: true
-        default: v1.1.1
+        default: v1.0.0
 permissions:
   contents: read
 concurrency:
@@ -84,3 +84,21 @@ jobs:
           fi
           gh release upload "$RELEASE_TAG" release-assets/* --clobber
           gh release edit "$RELEASE_TAG" --draft=false --latest
+      # The in-app updater reads releases from this public repository (the source repo is private).
+      # Needs a fine-grained token with "Contents: write" on that repository, saved as RELEASES_TOKEN.
+      - name: Publish to public releases repository
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          PUBLIC_REPO: rakgoorak/SuperAi-RAKKYXD-releases
+        shell: bash
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::RELEASES_TOKEN is not set; the in-app updater will not see $RELEASE_TAG"
+            exit 0
+          fi
+          if ! gh release view "$RELEASE_TAG" --repo "$PUBLIC_REPO" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --repo "$PUBLIC_REPO" --draft --title "SuperAi & RAKKYXD $RELEASE_TAG" --notes-file docs/RELEASE.md
+          fi
+          gh release upload "$RELEASE_TAG" --repo "$PUBLIC_REPO" release-assets/* --clobber
+          gh release edit "$RELEASE_TAG" --repo "$PUBLIC_REPO" --draft=false --latest
