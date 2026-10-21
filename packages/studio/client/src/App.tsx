@@ -47,8 +47,9 @@ import { RightDock, type DockView } from "./components/RightDock";
 import { AgentConfigEditor, AgentRunView, type AgentConfig } from "./components/AgentPanel";
 import { ChatConfigEditor, ChatRunView, type ChatConfig } from "./components/ChatPanel";
 import { SkillsPanel } from "./components/SkillsPanel";
-import { UpdatePanel, useUpdateState } from "./components/UpdatePanel";
+import { UpdatePanel, UpdatePrompt, useUpdateState } from "./components/UpdatePanel";
 import { UsageButton } from "./components/UsagePanel";
+import { CliVersionsPanel, OutdatedNotice } from "./components/CliVersions";
 import { ProviderDefaults } from "./components/ProviderDefaults";
 import { SeatPicker } from "./components/SeatPicker";
 import { Markdown } from "./components/Markdown";
@@ -116,7 +117,11 @@ export function App() {
   const [connected, setConnected] = useState(false);
   const [pty, setPty] = useState(false);
   const [search, setSearch] = useState("");
-  const [draft, setDraft] = useState("");
+  // Kept across restarts (an update reopens the app), so unsent text is not lost.
+  const [draft, setDraft] = useState(() => { try { return localStorage.getItem("superai-draft") || ""; } catch { return ""; } });
+  useEffect(() => {
+    try { if (draft) localStorage.setItem("superai-draft", draft); else localStorage.removeItem("superai-draft"); } catch {}
+  }, [draft]);
   const [target, setTarget] = useState("active");
   const [launchType, setLaunchType] = useState("claude-code");
   const [count, setCount] = useState(1);
@@ -359,6 +364,11 @@ export function App() {
         throw new Error("ปิด session ไม่สำเร็จ กรุณาลองใหม่");
       await refresh();
     });
+  const restartSession = useCallback((id: string) =>
+    void task(async () => {
+      await post(`/api/terminals/${id}/restart`);
+      await refresh();
+    }), [task, refresh]);
   const send = () =>
     task(async () => {
       if (!draft.trim() && !attachments.items.length) return;
@@ -660,13 +670,6 @@ export function App() {
                   {(update.status === "available" || update.status === "ready") && <span className="update-dot" aria-label="มีอัปเดตใหม่" />}
                 </button>
               )}
-              <div className="account-local">
-                <div className="avatar">R</div>
-                <div>
-                  RAKKYXD<small>พื้นที่ทำงานบนเครื่องของคุณ</small>
-                </div>
-                <ShieldCheck size={16} />
-              </div>
             </div>
           </aside>
         )}
@@ -812,7 +815,7 @@ export function App() {
               >
                 {visible.length > 0 ? (
                   <SessionCanvas sessions={visible} workspaceId={activeWs} selected={selected} layout={layout} zoomed={zoomed} active={mode === "code"} busy={busy}
-                    select={setSelected} zoom={id => { setSelected(id); setZoomed(true); }} close={closeSession} add={openSession}
+                    select={setSelected} zoom={id => { setSelected(id); setZoomed(true); }} close={closeSession} restart={restartSession} add={openSession}
                     refresh={() => void refresh().catch(() => {})} onError={showError} />
                 ) : (
                   <div className="workspace-empty">
@@ -1208,6 +1211,7 @@ export function App() {
                     );
                   })}
                 </div>
+                {!launchPlan && launchCli?.available && launchType !== "terminal" && <OutdatedNotice key={launchType} cliId={launchType} onError={showError} />}
                 {!launchPlan && HEADLESS.includes(launchType) && launchCli?.available && (
                   <div className="session-model">
                     <SeatPicker named={false} fixedProvider label={launchCli.name} clis={clis} ollamaModels={[]} seat={sessionSeat} onChange={setSessionSeat} />
@@ -1279,7 +1283,7 @@ export function App() {
                   <UpdatePanel state={update} onError={showError} />
                 </div>
                 <div className="dialog-footer">
-                  <span className="muted">โปรแกรมตรวจอัปเดตให้เองทุกครั้งที่เปิด</span>
+                  <span className="muted">ตรวจให้เองตอนเปิดโปรแกรมและทุก 30 นาที</span>
                   <button className="primary" onClick={() => setDialog(null)}>ปิด <Check size={15} /></button>
                 </div>
               </>
@@ -1394,6 +1398,7 @@ export function App() {
                       </div>
                     ))}
                   </div>
+                  <CliVersionsPanel onError={showError} />
                   <div className="settings-section-title">
                     <h3>โฟลเดอร์โปรเจกต์</h3>
                   </div>
@@ -1492,6 +1497,7 @@ export function App() {
           </section>
         </div>
       )}
+      <UpdatePrompt state={update} onError={showError} onDetails={() => setDialog("update")} />
     </div>
   );
 }

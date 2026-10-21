@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Maximize2, Pencil, Plus, Terminal, X } from 'lucide-react';
 import { TerminalPane } from './TerminalPane';
+import { SessionEnded } from './SessionEnded';
 import type { Session } from '../api';
 
 export type CanvasLayout = 'auto' | 'tabs' | 'stack' | 'split' | '3' | '4';
@@ -16,10 +17,10 @@ interface Props {
   sessions: Session[]; workspaceId: string; selected: string; layout: CanvasLayout;
   zoomed: boolean; active: boolean; busy: boolean;
   select: (id: string) => void; zoom: (id: string) => void;
-  close: (id: string) => void; add: (type?: string) => void; refresh: () => void;
+  close: (id: string) => void; restart: (id: string) => void; add: (type?: string) => void; refresh: () => void;
   onError: (message: string) => void;
 }
-export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed, active, busy, select, zoom, close, add, refresh, onError }: Props) {
+export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed, active, busy, select, zoom, close, restart, add, refresh, onError }: Props) {
   const area = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(1000);
   const [order, setOrder] = useState<string[]>(() => {
@@ -140,7 +141,8 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
               <button className="icon-button" title={`ปิด ${s.name}`} disabled={busy} onClick={() => close(s.id)}><X size={12} /></button>
             </div>
           </div>}
-          <TerminalPane tab={{ id: s.id, sessionId: s.id, name: names[s.id] || s.name, type: s.agentType, status: s.status === 'stopping' ? 'exited' : s.status }}
+          {(s.status === 'exited' || s.status === 'error') && <SessionEnded key={`${s.id}-${s.createdAt}`} session={{ ...s, name: names[s.id] || s.name }} onRestart={restart} onClose={close} />}
+          <TerminalPane key={`${s.id}-${s.createdAt}`} tab={{ id: s.id, sessionId: s.id, name: names[s.id] || s.name, type: s.agentType, status: s.status === 'stopping' ? 'exited' : s.status }}
             visible={active && (grid || s.id === selected)} focused={active && s.id === selected} showHeader={false}
             onFocus={() => select(s.id)} onClose={() => close(s.id)} onExit={refresh} registerSender={() => {}} />
         </div>)}

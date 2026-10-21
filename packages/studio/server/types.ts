@@ -31,6 +31,25 @@ export interface TerminalSession {
   createdAt: number;
   bufferedOutput: string;
   subscribers: Set<(chunk: string) => void>;
+  /** The CLI printed that it was updating itself (it usually exits afterwards). */
+  selfUpdated?: boolean;
+  /** ...but also reported that the update failed, so it must not be reopened as "updated". */
+  updateFailed?: boolean;
+  /** Options to start the same session again (restart after a self-update or an exit). */
+  restart?: SpawnSessionOptions;
+  /** When the process last printed anything (a CLI still answering is not interrupted by an update). */
+  lastOutputAt?: number;
+  /** Claude Code conversation id given with --session-id (or the one resumed). */
+  cliSessionId?: string;
+  /** The `resume` this tab was opened with. */
+  resumedFrom?: string;
+}
+
+/** A tab saved before an update, reopened on the same conversation after the restart. */
+export interface RestoredSession {
+  id: string;
+  options: SpawnSessionOptions;
+  resume?: string;
 }
 
 export interface AgentThread {
@@ -83,6 +102,8 @@ export interface SpawnSessionOptions {
   env?: Record<string, string>;
   cols?: number;
   rows?: number;
+  /** Resume a CLI conversation: its id, or "last" for the latest one in the folder. */
+  resume?: string;
   /** Force the stdio-pipe implementation even if a PTY is available. */
   forcePipe?: boolean;
 }

@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { Updater, compareVersions, pickAsset, parseChecksum, installTarget, windowsTar } from "./updater.mjs";
+import { Updater, compareVersions, pickAsset, parseChecksum, installTarget, windowsTar, updateKind } from "./updater.mjs";
 
 test("versions compare numerically and pre-releases sort before releases", () => {
   assert.equal(compareVersions("1.10.0", "1.9.9"), 1);
@@ -104,4 +104,33 @@ test("downloads only from GitHub hosts", async () => {
   const state = await u.download();
   assert.equal(state.status, "error");
   assert.match(state.error, /GitHub/);
+});
+
+test("a hard update is detected even when a later soft release came after it", async () => {
+  assert.equal(updateKind("Fixes\n<!-- superai-update: hard -->"), "hard");
+  assert.equal(updateKind("Fixes"), "soft");
+  const os = process.platform === "win32" ? "windows" : "macos";
+  const rel = (v, body, extra = {}) => ({ tag_name: `v${v}`, body, html_url: "https://github.com/x", assets: [{ name: `S-${os}-${process.arch}.zip`, size: 1, browser_download_url: "https://github.com/a.zip" }], ...extra });
+  const list = [rel("1.0.5", "soft"), rel("1.0.4", "<!-- superai-update: hard -->\nImportant"), rel("1.0.3", "old"), rel("1.0.9", "<!-- superai-update: hard -->", { prerelease: true })];
+  const http = async () => new Response(JSON.stringify(list));
+  let s = await new Updater({ currentVersion: "1.0.3", packaged: true, http }).check();
+  assert.equal(s.latestVersion, "1.0.5");
+  assert.equal(s.mandatory, true);
+  s = await new Updater({ currentVersion: "1.0.4", packaged: true, http }).check();
+  assert.equal(s.status, "available");
+  assert.equal(s.mandatory, false);
+  s = await new Updater({ currentVersion: "1.0.2", packaged: true, http: async () => new Response(JSON.stringify([rel("1.0.4", "<!-- superai-update: hard -->\nImportant")])) }).check();
+  assert.equal(s.notes, "Important");
+});
+
+test("losing the connection keeps an update an earlier check found", async () => {
+  let online = true;
+  const os = process.platform === "win32" ? "windows" : "macos";
+  const u = new Updater({ currentVersion: "1.0.0", packaged: true, http: async () => {
+    if (!online) throw new Error("offline");
+    return release("2.0.0", [{ name: `S-${os}-${process.arch}.zip`, size: 1, browser_download_url: "https://github.com/a.zip" }]);
+  } });
+  assert.equal((await u.check()).status, "available");
+  online = false;
+  assert.equal((await u.check()).status, "available");
 });

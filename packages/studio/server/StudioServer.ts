@@ -1,6 +1,7 @@
 import http from "node:http";
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 import express, { Express, Request, Response } from "express";
 import type { ErrorRequestHandler } from "express";
@@ -14,7 +15,8 @@ import { WorkspaceRegistry } from "./WorkspaceRegistry.js";
 import { listModels, modelEffortArgs, PROVIDER_PROFILES } from "./Providers.js";
 import { SkillManager } from "./SkillManager.js";
 import { UsageManager, USAGE_PROVIDERS } from "./UsageManager.js";
-import { trustFolder } from "./FolderTrust.js";
+import { trustFolder, repairCodexConfigFile } from "./FolderTrust.js";
+import { CliVersionManager, VERSIONED_CLIS } from "./CliVersions.js";
 import { AttachmentError, MAX_ATTACHMENT_BYTES, resolveAttachments, saveAttachment } from "./AttachmentStore.js";
 
 export class StudioServer {
@@ -22,12 +24,15 @@ export class StudioServer {
   private cliInstalls = new CliInstallManager();
   private skills = new SkillManager();
   private usage = new UsageManager();
+  private versions = new CliVersionManager();
   private app: Express;
   private server: http.Server;
   private wss: WebSocketServer;
   private terminalManager: TerminalSessionManager;
   private workspaceRegistry: WorkspaceRegistry;
   private port: number = 3888;
+  /** Open tabs saved right before an in-app update, reopened on the next start. */
+  private restoreFile: string;
 
   constructor(options?: { port?: number; customWorkspacePath?: string }) {
     this.agentRuns = new AgentRunManager(
@@ -39,6 +44,9 @@ export class StudioServer {
         : undefined,
     );
     if (options?.port !== undefined) this.port = options.port;
+    this.restoreFile = options?.customWorkspacePath
+      ? path.join(path.dirname(options.customWorkspacePath), "restore.json")
+      : path.join(os.homedir(), ".opencode-multi", "superai-restore.json");
     this.terminalManager = new TerminalSessionManager();
     this.workspaceRegistry = new WorkspaceRegistry(
       options?.customWorkspacePath,
@@ -75,6 +83,8 @@ export class StudioServer {
         !info.origin || this.allowedOrigin(info.origin),
     });
 
+    // Undo the duplicate [projects] table SuperAi 1.0.2 could add to Codex's config on macOS.
+    repairCodexConfigFile();
     this.setupRoutes();
     this.setupWebSockets();
   }
@@ -180,6 +190,21 @@ export class StudioServer {
         res.json(await listModels(String(req.params.id)));
       } catch (err: any) {
         res.status(400).json({ error: err.message });
+      }
+    });
+    this.app.get("/api/cli-versions", async (req, res) => {
+      res.json(await this.versions.all(req.query.refresh === "1"));
+    });
+    this.app.get("/api/cli-updates", (_req, res) => res.json(this.versions.list()));
+    this.app.post("/api/cli-versions/:id/update", (req, res) => {
+      const id = String(req.params.id);
+      if (!VERSIONED_CLIS.includes(id)) return res.status(404).json({ error: "ไม่รู้จัก CLI นี้" });
+      try {
+        const inUse = (cli: string) =>
+          this.terminalManager.listSessions().some((s) => s.agentType === cli && ["running", "stopping"].includes(s.status)) || this.agentRuns.usesCli(cli);
+        res.json(this.versions.startUpdate(id, inUse));
+      } catch (err: any) {
+        res.status(409).json({ error: err.message });
       }
     });
     this.app.get("/api/usage", async (req, res) => {
@@ -441,10 +466,19 @@ export class StudioServer {
       res.json({ success: killed });
     });
 
+    this.app.post("/api/terminals/:id/restart", (req: Request, res: Response) => {
+      try {
+        const session = this.terminalManager.restartSession(String(req.params.id));
+        res.json({ id: session.id, status: session.status, name: session.name, agentType: session.agentType });
+      } catch (err: any) {
+        res.status(400).json({ error: err.message });
+      }
+    });
+
     this.app.post("/api/terminals/:id/input", (req: Request, res: Response) => {
       const id = String(req.params.id);
       const { input } = req.body;
-      const ok = this.terminalManager.writeInput(id, input || "");
+      const ok = this.terminalManager.submitInput(id, typeof input === "string" ? input : "");
       res.json({ success: ok });
     });
 
@@ -590,12 +624,43 @@ export class StudioServer {
         this.server.off("error", onError);
         const address = this.server.address();
         if (address && typeof address === "object") this.port = address.port;
+        this.restoreSessions();
         resolve();
       };
       this.server.once("error", onError);
       this.server.once("listening", onListening);
       this.server.listen(this.port, "127.0.0.1");
     });
+  }
+
+  /** What an update would interrupt right now: running Agent/Chat work and CLIs still answering. */
+  public busy(): string[] {
+    return [...(this.agentRuns.running() ? ["งานใน Agent/Chat"] : []), ...this.terminalManager.activeSessions()];
+  }
+
+  /** Save the open tabs so the next start reopens them on the same conversations. */
+  public saveRestore(): number {
+    const sessions = this.terminalManager.snapshot();
+    fs.mkdirSync(path.dirname(this.restoreFile), { recursive: true });
+    fs.writeFileSync(this.restoreFile, JSON.stringify({ savedAt: Date.now(), sessions }));
+    return sessions.length;
+  }
+
+  public discardRestore() {
+    fs.rmSync(this.restoreFile, { force: true });
+  }
+
+  private restoreSessions() {
+    try {
+      if (!fs.existsSync(this.restoreFile)) return;
+      const saved = JSON.parse(fs.readFileSync(this.restoreFile, "utf8"));
+      fs.rmSync(this.restoreFile, { force: true });
+      // Only right after an update: an old file (the update never finished) is ignored.
+      if (Date.now() - Number(saved?.savedAt) > 30 * 60_000 || !Array.isArray(saved?.sessions)) return;
+      this.terminalManager.restore(saved.sessions);
+    } catch {
+      // a broken file must not stop the app from starting
+    }
   }
 
   public stop(): Promise<void> {

@@ -11,10 +11,14 @@ export interface BrowserState {
   }[];
 }
 export interface UpdateState {
-  status: "idle" | "checking" | "latest" | "none" | "available" | "unsupported" | "downloading" | "extracting" | "ready" | "installing" | "error";
+  status: "idle" | "checking" | "latest" | "none" | "available" | "unsupported" | "downloading" | "extracting" | "ready" | "waiting" | "installing" | "error";
   currentVersion: string;
   packaged: boolean;
   latestVersion?: string;
+  /** Hard update: this version must be updated before the app can be used. */
+  mandatory?: boolean;
+  /** While waiting to install: what is still running (an Agent/Chat run, a CLI answering). */
+  waitingFor?: string[];
   notes?: string;
   releaseUrl?: string;
   asset?: { name: string; size: number } | null;
@@ -38,7 +42,7 @@ declare global {
       /** Puts an image file on the OS clipboard for a few seconds (Codex reads it on Ctrl+V). */
       stageClipboardImage: (filePath: string) => Promise<void>;
       /** In-app updater: check GitHub Releases, download, verify and install. */
-      update: (action: "state" | "check" | "download" | "cancel" | "install") => Promise<UpdateState>;
+      update: (action: "state" | "check" | "download" | "apply" | "force" | "cancel" | "install") => Promise<UpdateState>;
       onUpdate: (callback: (state: UpdateState) => void) => () => void;
     };
     bridgemind?: {
