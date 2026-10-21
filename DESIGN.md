@@ -1,21 +1,24 @@
 ---
 name: SuperAi & RAKKYXD
-description: Compact Thai desktop workspace with speak-to-type and file attachments.
+description: Compact Thai desktop workspace for several AI CLIs; SR logo, green-teal-blue brand on blue-black.
 colors:
-  base: "#101418"
-  surface: "#161c22"
-  raised: "#1d252d"
-  border: "#29343e"
+  base: "#0c1116"
+  surface: "#10181f"
+  raised: "#152029"
+  border: "#1e2d38"
   text: "#e1e8ee"
   dim: "#a0afbd"
-  accent: "#9ed8ff"
-  primary: "#a7dbff"
-  primary-hover: "#c4e8ff"
-  primary-text: "#122332"
+  accent: "#74b3fb"
+  brand-green: "#30f457"
+  brand-teal: "#00b89c"
+  brand-blue: "#1a8cff"
+  primary: "#30f457"
+  primary-hover: "#1a8cff"
+  primary-text: "#04140f"
   secondary: "#26323d"
   secondary-text: "#dfebf5"
   hover: "#25303b"
-  running: "#8bd2b2"
+  running: "#3ddc84"
   pending: "#edcb86"
   error: "#f398a3"
   offline: "#83929f"
@@ -160,3 +163,9 @@ The seven user-supplied BridgeMind screenshots establish the updated structure: 
 The default auto layout fits up to four columns to available canvas width with a 180px minimum column target. Six seats form three columns and two rows when width permits; nine form four columns with a full-width final seat. Fitted rows have a 176px safety floor, allowing outer scrolling when the window cannot hold every row. User-selected stack/split modes retain the 360px floor. Splitters alter row/column weights with pointer capture or keyboard arrows; headers support drag reorder, keyboard-accessible move controls, pane labels, add, focus and close. All modes retain the same keyed TerminalPane instances beneath one parent.
 
 RightDock owns width and contains a single mounted embedded PreviewPanel. Its tabs show actual process status, project tasks with explicit user completion, reusable prompts, and browser tabs. Browser native views are suspended for other dock tabs, collapsed dock, modals and dock resizing. No Context percentages, credits, completion or AI-thinking indicators are invented. Local saved state validates schema and reports storage failures. Presets launch actual installed CLIs through the existing server checks and preserve only unlaunched entries after a partial failure.
+
+## Brand
+
+Logo: the green "S" + white "R" mark with a blue orbit, and the "SuperAi & RAKKYXD" wordmark ("Ai" green, "XD" blue). Assets are generated from the brand sheet by `scripts/brand/make-icons.py` into `packages/desktop/assets` (app icons) and `packages/studio/client/public/brand` (mark, wordmark, favicons).
+
+The brand gradient (`#30f457 → #00c2a6 → #1a8cff`, dark text `#04140f`) is reserved for brand moments: primary actions, the send button, the active mode underline and a 1 px titlebar hairline. Selection, links and focus use the blue accent; everything else stays neutral blue-black so the tool reads calmly.

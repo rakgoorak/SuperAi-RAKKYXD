@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Command,
   Folder,
   FolderPlus,
   Plus,
@@ -480,12 +479,8 @@ export function App() {
       <ComposerDropOverlay active={dropTarget === "composer"} />
       <header className="titlebar app-drag">
         <div className="brand">
-          <div className="brand-mark">
-            <Command size={20} />
-          </div>
-          <strong>
-            SuperAi <span>& RAKKYXD</span>
-          </strong>
+          <img className="brand-logo" src="/brand/mark.png" alt="" draggable={false} />
+          <img className="brand-wordmark" src="/brand/wordmark.png" alt="SuperAi & RAKKYXD" draggable={false} />
         </div>
         <div className="titlebar-project">
           <span className={`status-dot ${connected ? "" : "offline"}`} />
@@ -813,9 +808,7 @@ export function App() {
                     refresh={() => void refresh().catch(() => {})} onError={showError} />
                 ) : (
                   <div className="workspace-empty">
-                    <div className="empty-command">
-                      <Command size={32} />
-                    </div>
+                    <img className="empty-logo" src="/brand/mark.png" alt="" draggable={false} />
                     <h2>ไอเดียของคุณ เริ่มได้ที่นี่</h2>
                     <p>
                       เลือกโปรเจกต์ เปิดผู้ช่วยที่ถนัด
@@ -895,9 +888,7 @@ export function App() {
                         {(run.mode === "agent" || !run.panel) && (
                           <div className="assistant-message">
                             <div className="message-author">
-                              <span className="small-brand">
-                                <Command size={14} />
-                              </span>{" "}
+                              <img className="small-brand" src="/brand/mark.png" alt="" />{" "}
                               {run.main ? `รายงานจาก ${run.main.name}` : "SuperAi"}{" "}
                               <span className={`run-state ${run.status === "failed" ? "danger-text" : ""}`}>
                                 {run.status === "running" && <LoaderCircle size={12} className="spin" />}
