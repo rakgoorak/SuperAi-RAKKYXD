@@ -28,7 +28,9 @@ test('trusts a project folder in Claude, Codex and Antigravity without touching 
     const toml = fs.readFileSync(path.join(p.codexHome, 'config.toml'), 'utf8');
     assert.ok(toml.startsWith('model = "gpt"'));
     const key = process.platform === 'win32' ? dir.toLowerCase() : dir;
-    assert.ok(toml.includes(`[projects.'${key}']\ntrust_level = "trusted"`));
+    // Written the way Codex writes keys itself: 'd:\x' on Windows, "/path" elsewhere.
+    const header = process.platform === 'win32' ? `[projects.'${key}']` : `[projects."${key.replace(/\\/g, '\\\\')}"]`;
+    assert.ok(toml.includes(`${header}\ntrust_level = "trusted"`), toml);
     const agy = JSON.parse(fs.readFileSync(path.join(p.home, '.gemini', 'antigravity-cli', 'settings.json'), 'utf8'));
     assert.deepEqual(agy.trustedWorkspaces, ['C:\\Users\\me', dir]);
     assert.equal(agy.theme, 'dark');
