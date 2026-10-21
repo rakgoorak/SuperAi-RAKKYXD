@@ -663,9 +663,23 @@ export function App() {
               {update && (
                 <button onClick={() => setDialog("update")} className={update.status === "available" || update.status === "ready" ? "update-ready" : ""}
                   title="ตรวจและติดตั้งเวอร์ชันใหม่จาก GitHub Releases">
-                  <Download size={17} />
+                  {update.status === "checking" ? (
+                    <LoaderCircle size={17} className="spin" />
+                  ) : update.status === "latest" ? (
+                    <Check size={17} />
+                  ) : (
+                    <Download size={17} />
+                  )}
                   <span>
-                    {update.status === "available" ? `อัปเดตเป็น v${update.latestVersion}` : update.status === "ready" ? "พร้อมติดตั้งอัปเดต" : "อัปเดตโปรแกรม"}
+                    {update.status === "available"
+                      ? `อัปเดตเป็น v${update.latestVersion}`
+                      : update.status === "ready"
+                      ? "พร้อมติดตั้งอัปเดต"
+                      : update.status === "checking"
+                      ? "กำลังตรวจอัปเดต…"
+                      : update.status === "latest"
+                      ? "เวอร์ชันล่าสุดแล้ว"
+                      : "อัปเดตโปรแกรม"}
                     <small>{update.status === "downloading" ? `กำลังดาวน์โหลด ${update.progress || 0}%` : `เวอร์ชัน ${update.currentVersion}`}</small>
                   </span>
                   {(update.status === "available" || update.status === "ready") && <span className="update-dot" aria-label="มีอัปเดตใหม่" />}

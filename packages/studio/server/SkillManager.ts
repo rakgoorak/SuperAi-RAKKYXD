@@ -5,13 +5,16 @@ import { LocalProvider, extractJson } from "./AgentRunManager.js";
 import { Seat, validateSeat } from "./Providers.js";
 
 /**
- * Agent Skills (folders with a SKILL.md) from fixed, official sources only.
+ * Agent Skills (folders with a SKILL.md) from fixed official sources and skills.sh.
  * Installed into the project so Claude Code (.claude/skills) and Codex/OpenCode (.agents/skills)
  * pick them up and invoke them by themselves.
  */
 export const SKILL_SOURCES = [
   { id: "anthropic", label: "Anthropic", repo: "anthropics/skills", branch: "main", prefix: "skills/" },
   { id: "openai", label: "OpenAI", repo: "openai/skills", branch: "main", prefix: "skills/.curated/" },
+  { id: "vercel", label: "Vercel / skills.sh", repo: "vercel-labs/agent-skills", branch: "main", prefix: "skills/" },
+  { id: "vercel-tools", label: "Vercel Tools", repo: "vercel-labs/skills", branch: "main", prefix: "skills/" },
+  { id: "supabase", label: "Supabase", repo: "supabase/agent-skills", branch: "main", prefix: "skills/" },
 ] as const;
 export const SKILL_TARGETS = [".claude/skills", ".agents/skills"];
 const MARKER = ".superai-skill.json";
@@ -26,6 +29,18 @@ export interface SkillInfo {
   description: string;
   files: string[];
   url: string;
+  repo?: string;
+  branch?: string;
+  prefix?: string;
+  installs?: number;
+  reason?: string;
+}
+
+export interface SkillInstallOptions {
+  repo?: string;
+  branch?: string;
+  prefix?: string;
+  files?: string[];
 }
 
 type Fetch = typeof fetch;
@@ -53,6 +68,8 @@ function frontMatter(text: string) {
 
 export class SkillManager {
   private cache: { at: number; skills: SkillInfo[] } | null = null;
+  private searchCache = new Map<string, SkillInfo>();
+
   constructor(private http: Fetch = (...args) => fetch(...args)) {}
 
   private async json(url: string) {
@@ -61,6 +78,7 @@ export class SkillManager {
     if (!res.ok) throw new Error(`โหลดรายการ skill ไม่สำเร็จ (${res.status})`);
     return res.json();
   }
+
   private raw(repo: string, branch: string, file: string) {
     return `https://raw.githubusercontent.com/${repo}/${branch}/${file.split("/").map(encodeURIComponent).join("/")}`;
   }
@@ -92,6 +110,9 @@ export class SkillManager {
               description: description.slice(0, 600),
               files: files.filter((f) => f.startsWith(dir)).map((f) => f.slice(dir.length)),
               url: `https://github.com/${source.repo}/tree/${source.branch}/${dir}`,
+              repo: source.repo,
+              branch: source.branch,
+              prefix: dir,
             };
           }),
         );
@@ -103,6 +124,65 @@ export class SkillManager {
     if (!skills.length) throw new Error(errors.join(" · ") || "ไม่พบ skill จากแหล่งทางการ ตรวจอินเทอร์เน็ตแล้วลองใหม่");
     this.cache = { at: Date.now(), skills };
     return skills;
+  }
+
+  /** Search the skills.sh public registry for community and ecosystem skills. */
+  async search(query: string): Promise<SkillInfo[]> {
+    const q = query.trim();
+    if (q.length < 2) return [];
+    try {
+      const res = await this.http(`https://skills.sh/api/search?q=${encodeURIComponent(q)}&limit=20`, {
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) return [];
+      const data: any = await res.json();
+      const list = Array.isArray(data?.skills) ? data.skills : [];
+      const results: SkillInfo[] = [];
+      for (const item of list) {
+        if (!item || !item.source || (!item.name && !item.skillId)) continue;
+        const name = String(item.name || item.skillId || "").trim();
+        const repo = String(item.source).trim();
+        if (!NAME.test(name) || !/^[\w.-]+\/[\w.-]+$/.test(repo)) continue;
+        const skill: SkillInfo = {
+          source: "skills.sh",
+          sourceLabel: `skills.sh (${repo})`,
+          name,
+          description: "",
+          files: ["SKILL.md"],
+          url: `https://github.com/${repo}`,
+          repo,
+          branch: "main",
+          prefix: `skills/${name}/`,
+          installs: typeof item.installs === "number" ? item.installs : undefined,
+        };
+        this.searchCache.set(`skills.sh:${name}`, skill);
+        results.push(skill);
+      }
+      // Populate descriptions for top 8 in parallel
+      await Promise.allSettled(
+        results.slice(0, 8).map(async (skill) => {
+          try {
+            const paths = [`skills/${skill.name}/SKILL.md`, `${skill.name}/SKILL.md`, "SKILL.md"];
+            for (const p of paths) {
+              const res = await this.http(this.raw(skill.repo!, skill.branch || "main", p), {
+                signal: AbortSignal.timeout(5000),
+              });
+              if (res.ok) {
+                const fm = frontMatter(await res.text());
+                if (fm.description) {
+                  skill.description = fm.description.slice(0, 600);
+                  skill.prefix = p.slice(0, p.lastIndexOf("/") + 1);
+                  break;
+                }
+              }
+            }
+          } catch {}
+        }),
+      );
+      return results;
+    } catch {
+      return [];
+    }
   }
 
   installed(root: string) {
@@ -130,25 +210,71 @@ export class SkillManager {
     return result;
   }
 
-  async install(root: string, sourceId: string, name: string) {
-    const source = SKILL_SOURCES.find((s) => s.id === sourceId);
-    const skill = (await this.catalog()).find((s) => s.source === sourceId && s.name === name);
-    if (!source || !skill) throw new Error("ไม่พบ skill นี้ในแหล่งทางการ");
+  async install(root: string, sourceId: string, name: string, options?: SkillInstallOptions) {
+    if (!NAME.test(name)) throw new Error("ชื่อ skill ไม่ถูกต้อง");
     if (this.installed(root).some((s) => s.name === name)) throw new Error(`มี skill ชื่อ ${name} ในโปรเจกต์แล้ว`);
-    if (skill.files.length > MAX_FILES) throw new Error("skill นี้มีไฟล์มากเกินไป ติดตั้งเองจากหน้า GitHub แทน");
+
+    const source = SKILL_SOURCES.find((s) => s.id === sourceId);
+    let repo = "", branch = "main", prefix = `skills/${name}/`;
+    let fileList: string[] = [];
+
+    if (source) {
+      const skill = (await this.catalog()).find((s) => s.source === sourceId && s.name === name);
+      if (!skill) throw new Error("ไม่พบ skill นี้ในแหล่งทางการ");
+      repo = source.repo;
+      branch = source.branch;
+      prefix = `${source.prefix}${name}/`;
+      fileList = skill.files;
+    } else if (options?.repo) {
+      repo = options.repo;
+      branch = options.branch || "main";
+      if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error("repository ไม่ถูกต้อง");
+      try {
+        let treeData: any;
+        try {
+          treeData = await this.json(`https://api.github.com/repos/${repo}/git/trees/${branch}?recursive=1`);
+        } catch {
+          if (branch === "main") {
+            branch = "master";
+            treeData = await this.json(`https://api.github.com/repos/${repo}/git/trees/${branch}?recursive=1`);
+          } else throw new Error("ไม่พบ branch ใน repository");
+        }
+        const blobs: string[] = (treeData.tree || []).filter((n: any) => n.type === "blob").map((n: any) => n.path);
+        let dir = options.prefix || "";
+        if (!dir || !blobs.some((b) => b.startsWith(dir) && b.endsWith("SKILL.md"))) {
+          const skillMd = blobs.find((b) => b.endsWith(`/${name}/SKILL.md`) || b === `${name}/SKILL.md` || (b.endsWith("/SKILL.md") && b.includes(name)));
+          if (skillMd) {
+            dir = skillMd.slice(0, skillMd.lastIndexOf("/") + 1);
+          } else {
+            dir = `skills/${name}/`;
+          }
+        }
+        prefix = dir;
+        fileList = blobs.filter((b) => b.startsWith(dir)).map((b) => b.slice(dir.length));
+      } catch {
+        fileList = options.files && options.files.length ? options.files : ["SKILL.md"];
+      }
+    } else {
+      throw new Error("ไม่พบ skill นี้ในแหล่งที่รองรับ");
+    }
+
+    if (!fileList.length) fileList = ["SKILL.md"];
+    if (fileList.length > MAX_FILES) throw new Error("skill นี้มีไฟล์มากเกินไป ติดตั้งเองจากหน้า GitHub แทน");
+
     const contents: { file: string; data: Buffer }[] = [];
     let total = 0;
-    for (const file of skill.files) {
+    for (const file of fileList) {
       const parts = file.split("/");
       if (parts.some((p) => !p || p === "." || p === ".." || /[\0:\\]/.test(p))) throw new Error("พบชื่อไฟล์ที่ไม่ปลอดภัยใน skill");
-      const res = await this.http(this.raw(source.repo, source.branch, `${source.prefix}${name}/${file}`), { signal: AbortSignal.timeout(30000) });
+      const res = await this.http(this.raw(repo, branch, `${prefix}${file}`), { signal: AbortSignal.timeout(30000) });
       if (!res.ok) throw new Error(`ดาวน์โหลด ${file} ไม่สำเร็จ (${res.status})`);
       const data = Buffer.from(await res.arrayBuffer());
       total += data.length;
       if (total > MAX_BYTES) throw new Error("skill นี้มีขนาดใหญ่เกินไป");
       contents.push({ file, data });
     }
-    const marker = JSON.stringify({ source: sourceId, repo: source.repo, name, installedAt: new Date().toISOString() }, null, 2);
+
+    const marker = JSON.stringify({ source: sourceId, repo, name, installedAt: new Date().toISOString() }, null, 2);
     for (const target of SKILL_TARGETS) {
       const finalDir = path.join(root, target, name);
       const temp = `${finalDir}.superai-tmp`;

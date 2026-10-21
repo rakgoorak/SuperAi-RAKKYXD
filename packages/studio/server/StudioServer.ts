@@ -215,6 +215,14 @@ export class StudioServer {
       if (!USAGE_PROVIDERS.includes(id)) return res.status(404).json({ error: "ไม่รู้จักผู้ให้บริการนี้" });
       res.json(await this.usage.get(id, req.query.refresh === "1"));
     });
+    this.app.get("/api/skills/search", async (req, res) => {
+      try {
+        const q = String(req.query.q || "").trim();
+        res.json(await this.skills.search(q));
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
     this.app.get("/api/skills/catalog", async (req, res) => {
       try {
         res.json(await this.skills.catalog(req.query.refresh === "1"));
@@ -235,7 +243,12 @@ export class StudioServer {
       const workspace = skillWorkspace(req, res);
       if (!workspace) return;
       try {
-        res.json(await this.skills.install(workspace.rootPath, String(req.body.source || ""), String(req.body.name || "")));
+        res.json(await this.skills.install(workspace.rootPath, String(req.body.source || ""), String(req.body.name || ""), {
+          repo: req.body.repo,
+          branch: req.body.branch,
+          prefix: req.body.prefix,
+          files: req.body.files,
+        }));
       } catch (err: any) {
         res.status(400).json({ error: err.message });
       }
