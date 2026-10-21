@@ -127,4 +127,43 @@ mask = Image.new("L", pad.size, 0); ImageDraw.Draw(mask).rounded_rectangle((0, 0
 chip = Image.new("RGBA", pad.size, (0, 0, 0, 0)); chip.paste(pad, (0, 0), mask); chip.alpha_composite(hm, (12, 8))
 head.alpha_composite(chip, (hw - chip.width - 14, (hh - chip.height) // 2))
 head.convert("RGB").save(inst / "header.bmp")
+# macOS .dmg window background (660x400 points; @2x for Retina): app on the left, Applications on the right.
+def dmg_background(scale: int) -> Image.Image:
+    from PIL import ImageFont
+    w, h = 660 * scale, 400 * scale
+    bg = Image.new("RGBA", (w, h))
+    d = ImageDraw.Draw(bg)
+    for y in range(h):
+        t = y / (h - 1)
+        d.line([(0, y), (w, y)], fill=(round(9 - 6 * t), round(20 - 10 * t), round(29 - 13 * t), 255))
+    fx = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    f = ImageDraw.Draw(fx)
+    f.polygon([(-40 * scale, 120 * scale), (90 * scale, -10 * scale), (112 * scale, -10 * scale), (-18 * scale, 120 * scale)], fill=(48, 244, 87, 150))
+    f.polygon([(w - 110 * scale, h + 10 * scale), (w + 20 * scale, h - 120 * scale), (w + 42 * scale, h - 120 * scale), (w - 88 * scale, h + 10 * scale)], fill=(0, 114, 251, 150))
+    f.ellipse((60 * scale, 110 * scale, 300 * scale, 300 * scale), fill=(0, 194, 166, 34))
+    f.ellipse((360 * scale, 110 * scale, 600 * scale, 300 * scale), fill=(26, 140, 255, 34))
+    bg = Image.alpha_composite(bg, fx.filter(ImageFilter.GaussianBlur(18 * scale)))
+    d = ImageDraw.Draw(bg)
+    # Arrow from the app (x=180) to Applications (x=480), at icon height (y=190).
+    y = 190 * scale
+    for i, x in enumerate(range(262 * scale, 392 * scale, 2)):
+        t = i / ((392 - 262) * scale / 2)
+        col = (round(48 + (26 - 48) * t), round(244 + (140 - 244) * t), round(87 + (255 - 87) * t), 255)
+        d.ellipse((x - 2 * scale, y - 2 * scale, x + 2 * scale, y + 2 * scale), fill=col)
+    d.polygon([(400 * scale, y), (384 * scale, y - 11 * scale), (384 * scale, y + 11 * scale)], fill=(26, 140, 255, 255))
+    wm = word.copy()
+    wm.thumbnail((190 * scale, 60 * scale), Image.LANCZOS)
+    bg.alpha_composite(wm, ((w - wm.width) // 2, 30 * scale))
+    font = ImageFont.truetype("C:/Windows/Fonts/LeelawUI.ttf", 15 * scale)
+    text = "ลากไปที่ Applications เพื่อติดตั้ง"
+    tw = d.textlength(text, font=font)
+    d.text(((w - tw) / 2, 318 * scale), text, font=font, fill=(200, 214, 226, 255))
+    return bg.convert("RGB")
+
+
+mac = ROOT / "installer/macos"
+mac.mkdir(parents=True, exist_ok=True)
+dmg_background(1).save(mac / "dmg-background.png")
+dmg_background(2).save(mac / "dmg-background@2x.png")
+
 print("mark", mark.size, "->", m.size, "| wordmark", word.size, "->", w.size)

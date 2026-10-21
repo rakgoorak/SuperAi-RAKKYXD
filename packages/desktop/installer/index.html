@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'" />
+  <title>ติดตั้ง SuperAi &amp; RAKKYXD</title>
+  <link rel="stylesheet" href="installer.css" />
+</head>
+<body data-state="welcome">
+  <header class="titlebar">
+    <span class="titlebar-name">ติดตั้ง SuperAi &amp; RAKKYXD</span>
+    <div class="window-buttons">
+      <button type="button" data-window="minimize" aria-label="ย่อหน้าต่าง"><svg viewBox="0 0 12 12"><path d="M2 6h8" /></svg></button>
+      <button type="button" data-window="close" aria-label="ปิดตัวติดตั้ง"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+    </div>
+  </header>
+
+  <section class="stage" aria-hidden="true">
+    <div class="streak streak-green"></div>
+    <div class="streak streak-blue"></div>
+    <div class="aurora"></div>
+    <div class="emblem">
+      <svg class="orbit" viewBox="0 0 400 260">
+        <defs>
+          <linearGradient id="orbit-gradient" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0" stop-color="#30f457" />
+            <stop offset="0.55" stop-color="#00c2a6" />
+            <stop offset="1" stop-color="#1a8cff" />
+          </linearGradient>
+          <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="4" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+        <ellipse class="orbit-track" cx="200" cy="130" rx="182" ry="96" />
+        <ellipse class="orbit-progress" cx="200" cy="130" rx="182" ry="96" pathLength="1000" filter="url(#glow)" />
+        <g class="orbit-star"><path d="M0 -11 L2.6 -2.6 L11 0 L2.6 2.6 L0 11 L-2.6 2.6 L-11 0 L-2.6 -2.6 Z" /></g>
+      </svg>
+      <img class="mark" src="../../studio/client/dist/brand/mark.png" alt="" draggable="false" />
+    </div>
+    <p class="tagline">SMARTER <i></i> FASTER <i></i> TOGETHER</p>
+  </section>
+
+  <main class="panel">
+    <!-- Welcome -->
+    <div class="view view-welcome">
+      <img class="wordmark" src="../../studio/client/dist/brand/wordmark.png" alt="SuperAi & RAKKYXD" draggable="false" />
+      <h1 id="welcome-title">AI ทุกตัวของคุณ<br />ในหน้าต่างเดียว</h1>
+      <p class="lead">Claude, ChatGPT, Antigravity, OpenCode และ Freebuff ทำงานร่วมกันในโหมด Agent, Code และ Chat</p>
+
+      <div class="field">
+        <span class="field-label">ติดตั้งที่</span>
+        <div class="location">
+          <span class="location-path" id="location" title=""></span>
+          <button type="button" class="ghost" id="change">เปลี่ยน</button>
+        </div>
+      </div>
+
+      <label class="toggle">
+        <input type="checkbox" id="desktop" checked />
+        <span class="switch" aria-hidden="true"></span>
+        <span>สร้างทางลัดบนเดสก์ท็อป</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="launch" checked />
+        <span class="switch" aria-hidden="true"></span>
+        <span>เปิดโปรแกรมเมื่อติดตั้งเสร็จ</span>
+      </label>
+
+      <div class="actions">
+        <button type="button" class="primary" id="install"><span id="install-label">ติดตั้ง</span>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5" /></svg></button>
+        <p class="meta" id="meta"></p>
+      </div>
+    </div>
+
+    <!-- Installing -->
+    <div class="view view-installing" aria-live="polite">
+      <h1>กำลังติดตั้ง</h1>
+      <p class="percent"><span id="percent">0</span><small>%</small></p>
+      <ol class="steps">
+        <li data-step="copy"><span class="dot"></span>คัดลอกไฟล์โปรแกรม</li>
+        <li data-step="shortcuts"><span class="dot"></span>สร้างทางลัด</li>
+        <li data-step="register"><span class="dot"></span>ลงทะเบียนใน Settings → Apps</li>
+      </ol>
+      <p class="meta" id="target"></p>
+    </div>
+
+    <!-- Done -->
+    <div class="view view-done">
+      <h1>พร้อมใช้งานแล้ว</h1>
+      <p class="lead">ติดตั้ง SuperAi &amp; RAKKYXD <span id="done-version"></span> เรียบร้อย เปิดได้จาก Start Menu<span id="done-desktop"> หรือทางลัดบนเดสก์ท็อป</span></p>
+      <div class="actions">
+        <button type="button" class="primary" id="open">เปิด SuperAi &amp; RAKKYXD
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5" /></svg></button>
+        <button type="button" class="ghost" id="finish">ปิด</button>
+      </div>
+      <p class="meta">อัปเดตครั้งต่อไปกดปุ่ม “อัปเดตโปรแกรม” ในแอปได้เลย ไม่ต้องติดตั้งใหม่</p>
+    </div>
+
+    <!-- Error -->
+    <div class="view view-error" role="alert">
+      <h1>ติดตั้งไม่สำเร็จ</h1>
+      <p class="lead error-text" id="error"></p>
+      <div class="actions">
+        <button type="button" class="primary" id="retry">ลองอีกครั้ง</button>
+      </div>
+    </div>
+  </main>
+  <script src="installer.js"></script>
+</body>
+</html>
