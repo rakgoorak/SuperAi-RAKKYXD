@@ -1,6 +1,6 @@
 {
   "name": "superai-rakkyxd",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -17,6 +17,7 @@
     "dev:server": "tsx packages/studio/server/index.ts",
     "test:desktop": "node packages/desktop/test/smoke.mjs",
     "test:layout": "node packages/desktop/test/layout-smoke.mjs",
+    "test:usage-overlay": "node packages/desktop/test/usage-overlay-smoke.mjs",
     "test:reference": "node packages/desktop/test/reference-smoke.mjs",
     "package:portable": "node scripts/package-portable.mjs",
     "package:release": "node scripts/package-release.mjs",

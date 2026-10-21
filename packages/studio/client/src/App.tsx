@@ -111,6 +111,7 @@ export function App() {
   const [dockView, setDockView] = useState<DockView>("browser");
   const [launchPlan, setLaunchPlan] = useState<LaunchSeat[] | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [usageOpen, setUsageOpen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -693,7 +694,7 @@ export function App() {
 
             <div className="toolbar-actions">
               {mode === "code" && <button className={`toolbar-button ${composerShown ? "selected" : ""}`} title="ช่องคำสั่งรวม" aria-pressed={composerShown} onClick={() => setComposerShown(!composerShown)}><Keyboard size={14} /><span>คำสั่งรวม</span></button>}
-              <UsageButton />
+              <UsageButton open={usageOpen} onOpenChange={setUsageOpen} />
               <button className={`toolbar-button ${preview && dockView === "dashboard" ? "selected" : ""}`} title="เปิดแผงสถานะ" onClick={() => { setDockView("dashboard"); setPreview(true); }}><Activity size={14} /><span>สถานะ</span></button>
               <button
                 className={`toolbar-button ${preview ? "selected" : ""}`}
@@ -1075,7 +1076,7 @@ export function App() {
                 </div>
               </div>
             </main>
-            <RightDock open={preview} view={dockView} setView={setDockView} close={() => setPreview(false)} suspended={!!dialog}
+            <RightDock open={preview} view={dockView} setView={setDockView} close={() => setPreview(false)} suspended={!!dialog || usageOpen}
               workspace={workspace} workspaces={workspaces} sessions={sessions} runs={runs} selected={selected}
               onSelect={session => { setActiveWs(session.wsId || activeWs); setSelected(session.id); setMode("code"); }}
               onPrompt={text => { setDraft(current => current ? `${current}\n${text}` : text); setComposerShown(true); requestAnimationFrame(() => composer.current?.focus()); }} onError={showError} />
