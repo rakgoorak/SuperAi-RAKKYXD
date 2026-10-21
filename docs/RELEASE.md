@@ -15,9 +15,9 @@
 
 ## เลือกดาวน์โหลด
 
-- Windows 10/11: `SuperAi-RAKKYXD-v1.0.0-windows-x64.zip` แตกทั้งโฟลเดอร์แล้วเปิด `SuperAi-RAKKYXD.exe`
-- Mac Apple Silicon: `SuperAi-RAKKYXD-v1.0.0-macos-arm64.zip` แตกไฟล์แล้วลาก `SuperAi-RAKKYXD.app` ไปไว้ใน Applications
-- Mac Intel: `SuperAi-RAKKYXD-v1.0.0-macos-x64.zip`
+- Windows 10/11: `SuperAi-RAKKYXD-windows-x64.zip` แตกทั้งโฟลเดอร์แล้วเปิด `SuperAi-RAKKYXD.exe`
+- Mac Apple Silicon: `SuperAi-RAKKYXD-macos-arm64.zip` แตกไฟล์แล้วลาก `SuperAi-RAKKYXD.app` ไปไว้ใน Applications
+- Mac Intel: `SuperAi-RAKKYXD-macos-x64.zip`
 
 ไฟล์ `.sha256` ใช้ตรวจความถูกต้องของ ZIP รุ่นนี้ยังไม่มีลายเซ็นผู้พัฒนาของ Windows หรือ Apple notarization
 
