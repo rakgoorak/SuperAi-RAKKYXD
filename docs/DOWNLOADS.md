@@ -4,9 +4,9 @@
 
 | เครื่อง | ไฟล์ |
 | --- | --- |
-| Windows 10/11 64-bit | `SuperAi-RAKKYXD-v1.1.1-windows-x64.zip` |
-| Mac ชิป Apple Silicon (M1/M2/M3/M4 และรุ่นใหม่กว่า) | `SuperAi-RAKKYXD-v1.1.1-macos-arm64.zip` |
-| Mac ชิป Intel | `SuperAi-RAKKYXD-v1.1.1-macos-x64.zip` |
+| Windows 10/11 64-bit | `SuperAi-RAKKYXD-v1.2.2-windows-x64.zip` |
+| Mac ชิป Apple Silicon (M1/M2/M3/M4 และรุ่นใหม่กว่า) | `SuperAi-RAKKYXD-v1.2.2-macos-arm64.zip` |
+| Mac ชิป Intel | `SuperAi-RAKKYXD-v1.2.2-macos-x64.zip` |
 
 ## Windows
 
