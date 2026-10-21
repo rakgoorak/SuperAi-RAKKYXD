@@ -425,9 +425,9 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
                 closeReader();
               }
             }}
-            className="terminal-reader absolute inset-1.5 z-[5] overflow-auto rounded-md bg-[#0a0d14] px-4 pt-3 pb-14 outline-none"
+            className="terminal-reader absolute inset-1.5 z-[5] overflow-auto rounded-md bg-[#0a0d14] px-4 pt-3 pb-6 outline-none"
           >
-            <div className="mb-2 text-[11px] text-slate-500 select-none">โหมดอ่าน · CLI ยังทำงานอยู่ · กด Esc หรือปุ่มมุมขวาล่างเพื่อกลับไปพิมพ์</div>
+            <div className="mb-2 pr-32 text-[11px] text-slate-500 select-none">โหมดอ่าน · CLI ยังทำงานอยู่ · กด Esc หรือปุ่มมุมขวาบนเพื่อกลับไปพิมพ์</div>
             {readerText || <span className="text-slate-500">ยังไม่มีข้อความ</span>}
           </div>
         )}
@@ -438,8 +438,10 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
               if (reading) closeReader();
               else setReading(true);
             }}
-            className={`absolute right-3 bottom-3 z-10 flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] shadow ${
-              reading ? 'border-cyan-500/60 bg-[#0e1a26] text-cyan-200' : 'border-[#1f293d] bg-[#0e131f]/90 text-slate-400 opacity-70 hover:opacity-100 hover:text-slate-200'
+            // Top-right: the bottom row is where CLIs draw their own status line. A ring, because the
+            // global `button { border: 0 }` rule wins over Tailwind's border width here.
+            className={`absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium shadow-lg ring-1 ${
+              reading ? 'ring-cyan-400/70 bg-[#0e2a3a] text-cyan-100' : 'ring-cyan-500/40 bg-[#10202c] text-cyan-200 hover:bg-[#15303f] hover:text-cyan-100'
             }`}
             title={reading ? 'กลับไปพิมพ์ใน terminal (Esc)' : 'อ่านข้อความใน terminal แบบตัวหนังสือปกติ สระและวรรณยุกต์ไม่เพี้ยน'}
             aria-pressed={reading}
