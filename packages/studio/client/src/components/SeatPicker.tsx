@@ -1,5 +1,5 @@
-import { useId } from "react";
 import { X } from "lucide-react";
+import { ModelCombo } from "./ModelCombo";
 import type { Cli, Seat } from "../api";
 import { EFFORTS, EFFORT_LABEL, HEADLESS, PROVIDER_LABEL, loadDefaults, useModels } from "../providers";
 
@@ -19,7 +19,6 @@ interface Props {
 
 /** Pick a provider, then a model and an effort level for it. */
 export function SeatPicker({ seat, onChange, clis, ollamaModels, label, named = true, onRemove, disabled, fixedProvider }: Props) {
-  const id = useId();
   const cli = seat.provider.startsWith("cli:") ? seat.provider.slice(4) : "";
   const { list, error } = useModels(cli);
   const efforts = (seat.model && list?.modelEfforts?.[seat.model]) || list?.efforts || EFFORTS[cli] || [];
@@ -54,15 +53,12 @@ export function SeatPicker({ seat, onChange, clis, ollamaModels, label, named = 
       <label>
         Model
         {cli ? (
-          <input aria-label={`model ของ${label}`} value={seat.model} list={`${id}-models`} maxLength={200} placeholder="ค่าเริ่มต้นของ CLI" disabled={disabled}
-            onChange={(e) => onChange({ ...seat, model: e.target.value.trim(), effort: efforts.includes(seat.effort) || !seat.effort ? seat.effort : "" })} />
+          <ModelCombo label={`model ของ${label}`} value={seat.model} options={list?.models || []} placeholder="ค่าเริ่มต้นของ CLI" disabled={disabled}
+            onChange={(model) => onChange({ ...seat, model: model.trim(), effort: efforts.includes(seat.effort) || !seat.effort ? seat.effort : "" })} />
         ) : (
-          <input aria-label={`model ของ${label}`} value={seat.provider} list={`${id}-models`} maxLength={150} placeholder="ชื่อรุ่น Ollama" disabled={disabled}
-            onChange={(e) => onChange({ ...seat, provider: e.target.value.trim() })} />
+          <ModelCombo label={`model ของ${label}`} value={seat.provider} options={ollamaModels} maxLength={150} placeholder="ชื่อรุ่น Ollama" disabled={disabled}
+            onChange={(model) => onChange({ ...seat, provider: model.trim() })} />
         )}
-        <datalist id={`${id}-models`}>
-          {(cli ? list?.models || [] : ollamaModels).map((m) => <option key={m} value={m} />)}
-        </datalist>
       </label>
       <label>
         Effort

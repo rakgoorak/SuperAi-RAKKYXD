@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { CliVersionManager, parseVersion, compareVersions } from '../server/CliVersions.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { CliVersionManager, parseVersion, compareVersions, CONFIRMED_LATEST } from '../server/CliVersions.js';
 import { TerminalSessionManager, UPDATE_FAILED } from '../server/TerminalSessionManager.js';
 
 test('version strings from every CLI are parsed and compared', () => {
@@ -109,4 +112,33 @@ test('an update that failed is flagged so the tab is not reopened as "updated"',
   for (const line of ['Failed to update Claude Code', 'Error installing update', 'Could not download the new version', 'upgrade failed']) assert.ok(UPDATE_FAILED.test(line), line);
   for (const line of ['Update available: 1.0 -> 1.1', 'Successfully updated to 1.1', 'Downloading...']) assert.ok(!UPDATE_FAILED.test(line), line);
   manager.killAll();
+});
+
+test('a CLI with no registry (Antigravity) is "latest" once its own updater says so', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'superai-cli-latest-'));
+  const confirmedFile = path.join(dir, 'confirmed.json');
+  let installed = '1.4.4';
+  let proc: any;
+  const deps = {
+    installed: () => true, run: async () => installed, latest: async () => null,
+    spawnUpdate: () => { proc = fakeProcess(); return proc; }, confirmedFile,
+  };
+  try {
+    const m = new CliVersionManager(deps);
+    assert.equal((await m.check('antigravity')).status, 'unknown');
+    const job = m.startUpdate('antigravity', () => false);
+    proc.stdout.write('Checking for updates... (current version 1.4.4)\n✓ You are already on the latest version.\n');
+    proc.emit('close', 0);
+    for (let i = 0; i < 50 && job.status === 'running'; i++) await new Promise((r) => setTimeout(r, 10));
+    assert.equal(job.status, 'completed');
+    assert.equal((await m.check('antigravity')).status, 'latest');
+    // Remembered after a restart, and only for that exact version.
+    assert.equal((await new CliVersionManager(deps).check('antigravity', true)).status, 'latest');
+    installed = '1.4.5';
+    assert.equal((await new CliVersionManager(deps).check('antigravity', true)).status, 'unknown');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  for (const line of ['You are already on the latest version.', 'Already up to date', 'Successfully updated to 1.5.0']) assert.ok(CONFIRMED_LATEST.test(line), line);
+  for (const line of ['Checking for updates...', 'Update available: 1.5.0']) assert.ok(!CONFIRMED_LATEST.test(line), line);
 });
