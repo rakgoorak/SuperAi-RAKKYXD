@@ -39,4 +39,8 @@ try {
   await request(`/api/terminals/${terminal.id}/kill`,{});
   await eventually(async()=>!(await request('/api/terminals')).some(s=>s.id===terminal.id)); passed.push('PTY cleanup');
   console.log(JSON.stringify({platform:process.platform,arch:process.arch,passed,errors}));
-} finally { await app.close(); await new Promise(resolve=>website.close(resolve)); }
+} finally {
+  await app.close().catch(() => {});
+  await new Promise(resolve => website.close(resolve)).catch(() => {});
+  process.exit(errors.length ? 1 : 0);
+}
