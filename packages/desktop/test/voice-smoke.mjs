@@ -67,7 +67,8 @@ try {
   // Speak-to-type: click, speak, click again; text lands in the composer unsent.
   const composer = page.getByRole("textbox", { name: "คำสั่ง", exact: true });
   await composer.fill("Note:");
-  await page.getByRole("button", { name: "พูดเพื่อพิมพ์" }).click();
+  const mic = page.getByRole("button", { name: /กดค้างเพื่ออัดเสียง/ });
+  await mic.click();
   const confirm = page.getByRole("dialog", { name: "ดาวน์โหลดโมเดลแปลงเสียง" });
   if (await confirm.isVisible().catch(() => false)) await confirm.getByRole("button", { name: "ดาวน์โหลด" }).click();
   const stop = page.getByRole("button", { name: /กำลังฟัง/ });
@@ -77,7 +78,26 @@ try {
   await page.waitForFunction(() => /coffee shop/i.test(document.querySelector('textarea[aria-label="คำสั่ง"]').value), null, { timeout: 120000 });
   assert.match(await composer.inputValue(), /^Note: .*coffee shop/i);
   assert.equal(requests.length, 0, "dictation must not send anything");
-  passed.push(`dictation typed into composer: ${await composer.inputValue()}`);
+  passed.push(`tap to start, tap to stop: ${await composer.inputValue()}`);
+  // Press and hold: recording ends when the button is released.
+  await composer.fill("");
+  await page.getByRole("button", { name: /กดค้างเพื่ออัดเสียง/ }).waitFor();
+  const box = await mic.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await stop.waitFor({ timeout: 60000 });
+  await page.waitForTimeout(5500);
+  await page.mouse.up();
+  await page.waitForFunction(() => /coffee shop/i.test(document.querySelector('textarea[aria-label="คำสั่ง"]').value), null, { timeout: 120000 });
+  assert.equal(requests.length, 0);
+  passed.push(`press and hold: ${await composer.inputValue()}`);
+  // Right-click opens microphone and language settings.
+  await mic.click({ button: "right" });
+  const micMenu = page.getByRole("menu", { name: "ตั้งค่าไมโครโฟน" });
+  await micMenu.getByRole("menuitemradio", { name: /English/ }).waitFor();
+  await micMenu.getByRole("menuitemradio", { name: /English/ }).click();
+  await micMenu.waitFor({ state: "hidden" });
+  passed.push("right-click microphone menu");
   await composer.fill("");
   await page.getByRole("button", { name: "โหมดเสียง", exact: true }).first().click();
   const voice = page.getByRole("dialog", { name: "โหมดเสียง" });

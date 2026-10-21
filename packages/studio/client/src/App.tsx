@@ -1025,6 +1025,7 @@ export function App() {
                     <div className="inline">
                       <DictationButton
                         settings={voiceSettings}
+                        onSettingsChange={setVoiceSettings}
                         onError={showError}
                         onText={(text) => {
                           setDraft((current) => (current.trim() ? `${current.replace(/\s+$/, "")} ${text}` : text));
