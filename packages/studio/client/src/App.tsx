@@ -135,6 +135,11 @@ export function App() {
   const [menu, setMenu] = useState("");
   const composer = useRef<HTMLTextAreaElement>(null);
   const update = useUpdateState();
+  // Record the project folder as trusted in Claude Code / Codex / Antigravity so new tabs skip their "trust this folder?" prompt.
+  const [trustFolders, setTrustFolders] = useState(() => initial("superai-trust-folders", "1") === "1");
+  useEffect(() => {
+    try { localStorage.setItem("superai-trust-folders", trustFolders ? "1" : "0"); } catch {}
+  }, [trustFolders]);
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(loadVoiceSettings);
   const setupShown = useRef(false);
   const [checkingModels, setCheckingModels] = useState(false);
@@ -325,6 +330,7 @@ export function App() {
               name: [cli.name, supportsModel && chosen.model].filter(Boolean).join(" · "),
               openCodeModel: type === "opencode" && !chosen.model && openCodeModel !== "auto" ? openCodeModel : undefined,
               ...(supportsModel ? { model: chosen.model, effort: chosen.effort } : {}),
+              trustFolder: trustFolders,
             });
             if (session.status === "error") throw new Error(`เปิด ${cli.name} ไม่สำเร็จ กรุณาตรวจการติดตั้ง CLI`);
             setSelected(session.id);
@@ -1388,6 +1394,17 @@ export function App() {
                       </div>
                     ))}
                   </div>
+                  <div className="settings-section-title">
+                    <h3>โฟลเดอร์โปรเจกต์</h3>
+                  </div>
+                  <label className="tool-permission settings-toggle">
+                    <input type="checkbox" checked={trustFolders} onChange={(e) => setTrustFolders(e.target.checked)} />
+                    เชื่อถือโฟลเดอร์โปรเจกต์ให้ CLI อัตโนมัติ (ไม่ต้องตอบ “trust this folder” ทุกครั้งที่เปิดแท็บ)
+                  </label>
+                  <p className="muted">
+                    ใช้กับ Claude Code, Codex และ Antigravity เฉพาะโฟลเดอร์ที่คุณเพิ่มเป็นโปรเจกต์ เทียบเท่ากับการกด “Yes, I trust this folder” เอง
+                    ปิดไว้ถ้าต้องการให้ CLI ถามก่อนทุกครั้ง
+                  </p>
                   <div className="settings-section-title">
                     <h3>model และ effort เริ่มต้น</h3>
                   </div>
