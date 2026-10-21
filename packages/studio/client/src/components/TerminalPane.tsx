@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { X, Terminal as TerminalIcon, Bot, Sparkles, Cpu, Circle, ImagePlus, AlertTriangle } from 'lucide-react';
+import { X, Terminal as TerminalIcon, Bot, Sparkles, Cpu, Circle, ImagePlus, AlertTriangle, BookOpen } from 'lucide-react';
 import { attachMode, formatPath, isPdf, isSupportedAttachment, isSupportedImage, pastedFiles, uploadAttachment, UNSUPPORTED_ATTACHMENT, type SavedAttachment } from '../attachments';
+import { bufferText, loadTerminalThaiFont } from '../terminalText';
 
 export interface TerminalTab {
   id: string;
@@ -60,6 +61,9 @@ interface AttachNotice {
 
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
+// Started once: every terminal waits for the Thai face before xterm measures widths.
+const thaiFontReady = Promise.race([loadTerminalThaiFont(), sleep(1500)]);
+
 export function tabIcon(type: string, className = 'w-3.5 h-3.5') {
   switch (type) {
     case 'claude-code':
@@ -95,6 +99,12 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   const [notice, setNotice] = useState<AttachNotice | null>(null);
   const [dragging, setDragging] = useState(false);
   const noticeTimer = useRef<number>();
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
+  // Reading mode: the buffer as plain text so Thai reads like normal text. The CLI keeps running.
+  const [reading, setReading] = useState(false);
+  const [readerText, setReaderText] = useState('');
+  const readerRef = useRef<HTMLDivElement>(null);
 
   const showNotice = (next: AttachNotice | null) => {
     window.clearTimeout(noticeTimer.current);
@@ -121,9 +131,16 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
-    term.open(containerRef.current);
     termRef.current = term;
     fitRef.current = fit;
+    // Output arriving before this is buffered by xterm and drawn on open.
+    let disposed = false;
+    void thaiFontReady.then(() => {
+      if (disposed || !containerRef.current) return;
+      term.open(containerRef.current);
+      safeFit();
+      if (focusedRef.current) term.focus();
+    });
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws/terminal/${tab.sessionId}`);
@@ -249,6 +266,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
     observer.observe(containerRef.current);
 
     return () => {
+      disposed = true;
       window.clearTimeout(autoTimer);
       observer.disconnect();
       host.removeEventListener('paste', onPaste, true);
@@ -279,6 +297,35 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
     });
     return () => window.cancelAnimationFrame(id);
   }, [visible, focused]);
+
+  // Keep the reading view in step with the terminal while it is shown (at most ~5 updates a second).
+  useEffect(() => {
+    const term = termRef.current;
+    if (!reading || !visible || !term) return;
+    let timer: number | undefined;
+    const update = () => {
+      timer = undefined;
+      const el = readerRef.current;
+      const atBottom = !el || el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+      setReaderText(bufferText(term.buffer.active));
+      if (atBottom) requestAnimationFrame(() => { if (readerRef.current) readerRef.current.scrollTop = readerRef.current.scrollHeight; });
+    };
+    const schedule = () => { if (timer === undefined) timer = window.setTimeout(update, 200); };
+    update();
+    readerRef.current?.focus();
+    const parsed = term.onWriteParsed(schedule);
+    const switched = term.buffer.onBufferChange(schedule);
+    return () => {
+      window.clearTimeout(timer);
+      parsed.dispose();
+      switched.dispose();
+    };
+  }, [reading, visible, tab.sessionId]);
+
+  const closeReader = () => {
+    setReading(false);
+    requestAnimationFrame(() => termRef.current?.focus());
+  };
 
   const hasFiles = (event: React.DragEvent) => !!tab.sessionId && Array.from(event.dataTransfer.types).includes('Files');
 
@@ -366,6 +413,40 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
               </button>
             )}
           </div>
+        )}
+        {tab.sessionId && reading && (
+          <div
+            ref={readerRef}
+            tabIndex={0}
+            aria-label={`ข้อความใน ${tab.name}`}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                closeReader();
+              }
+            }}
+            className="terminal-reader absolute inset-1.5 z-[5] overflow-auto rounded-md bg-[#0a0d14] px-4 pt-3 pb-14 outline-none"
+          >
+            <div className="mb-2 text-[11px] text-slate-500 select-none">โหมดอ่าน · CLI ยังทำงานอยู่ · กด Esc หรือปุ่มมุมขวาล่างเพื่อกลับไปพิมพ์</div>
+            {readerText || <span className="text-slate-500">ยังไม่มีข้อความ</span>}
+          </div>
+        )}
+        {tab.sessionId && (
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              if (reading) closeReader();
+              else setReading(true);
+            }}
+            className={`absolute right-3 bottom-3 z-10 flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] shadow ${
+              reading ? 'border-cyan-500/60 bg-[#0e1a26] text-cyan-200' : 'border-[#1f293d] bg-[#0e131f]/90 text-slate-400 opacity-70 hover:opacity-100 hover:text-slate-200'
+            }`}
+            title={reading ? 'กลับไปพิมพ์ใน terminal (Esc)' : 'อ่านข้อความใน terminal แบบตัวหนังสือปกติ สระและวรรณยุกต์ไม่เพี้ยน'}
+            aria-pressed={reading}
+          >
+            {reading ? <TerminalIcon className="w-3 h-3" /> : <BookOpen className="w-3 h-3" />}
+            <span>{reading ? 'กลับไปพิมพ์' : 'อ่านแบบข้อความ'}</span>
+          </button>
         )}
         {tab.sessionId ? (
           <div ref={containerRef} className="w-full h-full" />

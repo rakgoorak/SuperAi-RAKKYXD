@@ -2154,3 +2154,6 @@ img.small-brand { width: 18px; height: auto; background: none; border-radius: 0;
 }
 .model-combo-list li.active { background: #1b2c39; color: #fff; }
 .model-combo-list li[aria-selected="true"] { color: var(--accent); }
+
+/* Terminal reading mode: the CLI's output as normal text so Thai vowels and tone marks sit right. */
+.terminal-reader { font-family: "Noto Sans Thai", "Segoe UI", sans-serif; font-size: 15px; line-height: 1.75; color: #e2e8f0; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }

@@ -61,6 +61,21 @@ app = await electron.launch({ executablePath: require('electron'), args: [path.r
   await write('\x1b[6;1HWorking: old long status that must disappear');
   await write('\x1b[6;1H\x1b[2KDone');
   assert.equal((await page.locator('.xterm-rows > div').nth(5).textContent()).trim(), 'Done');
+  // xterm must have measured with the Thai face already loaded, or marks drift.
+  assert.ok(await page.evaluate(() => document.fonts.check('15px "Noto Sans Thai"', 'ก')), 'Noto Sans Thai must be loaded for the terminal');
+  // Reading mode shows the same output as plain text, then Esc returns to the live terminal.
+  await page.getByRole('button', { name: 'อ่านแบบข้อความ' }).click();
+  await page.waitForTimeout(300);
+  const reader = page.locator('.terminal-reader');
+  assert.ok((await reader.textContent()).includes(thai), 'reading view must contain the Thai output unchanged');
+  await page.screenshot({ path: path.join(output, 'reader.png') });
+  await write('\r\nหลังเปิดโหมดอ่าน');
+  await page.waitForTimeout(300);
+  assert.ok((await reader.textContent()).includes('หลังเปิดโหมดอ่าน'), 'reading view must follow new output');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  assert.equal(await reader.count(), 0);
+  assert.ok(await page.locator('.xterm').isVisible());
   const beforeResize = resizes.length;
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(800, 500));
   await page.waitForTimeout(300);
