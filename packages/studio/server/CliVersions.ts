@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import os from "node:os";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
@@ -67,7 +69,12 @@ interface Deps {
   run: (id: string, args: string[], timeout: number) => Promise<string>;
   latest: (pkg: string) => Promise<string | null>;
   spawnUpdate: (id: string, args: string[]) => ChildProcess;
+  /** Where versions the CLI itself confirmed as latest are kept (CLIs not published on npm). */
+  confirmedFile?: string;
 }
+
+// What a CLI's own updater prints when the installed version is the newest one.
+export const CONFIRMED_LATEST = /already (on|using|running|at|have) (the )?(latest|newest|most recent)|(is|are|already) up[ -]to[ -]date|no (new )?updates? (available|found)|successfully (updated|upgraded|installed)|updated to (version )?v?\d/i;
 
 const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").replace(/\r(?!\n)/g, "\n");
 
@@ -94,13 +101,33 @@ const defaultDeps: Deps = {
       env: { ...process.env, ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0", CI: "1" },
     });
   },
+  confirmedFile: path.join(os.homedir(), ".opencode-multi", "superai-cli-latest.json"),
 };
 
 export class CliVersionManager {
   private cache = new Map<string, CliVersion>();
   private latestCache = new Map<string, { at: number; value: string | null }>();
   private jobs: UpdateJob[] = [];
-  constructor(private deps: Deps = defaultDeps) {}
+  /** Versions a CLI's own updater said are the latest, for CLIs whose latest we cannot look up. */
+  private confirmed: Record<string, string> = {};
+  constructor(private deps: Deps = defaultDeps) {
+    try {
+      if (deps.confirmedFile) this.confirmed = JSON.parse(fs.readFileSync(deps.confirmedFile, "utf8")) || {};
+    } catch {
+      this.confirmed = {};
+    }
+  }
+
+  private confirm(id: string, version: string) {
+    this.confirmed[id] = version;
+    if (!this.deps.confirmedFile) return;
+    try {
+      fs.mkdirSync(path.dirname(this.deps.confirmedFile), { recursive: true });
+      fs.writeFileSync(this.deps.confirmedFile, JSON.stringify(this.confirmed));
+    } catch {
+      // only a convenience: the status falls back to "unknown"
+    }
+  }
 
   private async latest(id: string) {
     const pkg = NPM_PACKAGE[id];
@@ -124,6 +151,12 @@ export class CliVersionManager {
         this.latest(id),
       ]);
       const installed = installedText.startsWith("ERROR") ? null : parseVersion(installedText);
+      // No registry to ask (Antigravity): trust the CLI's own updater for the version it confirmed.
+      if (!latest && installed && this.confirmed[id] === installed) {
+        result = { id, name, installed, latest: installed, status: "latest", checkedAt: Date.now(), note: "CLI ยืนยันเองว่าเป็นเวอร์ชันล่าสุด (ตอนกดอัปเดตครั้งล่าสุด)" };
+        this.cache.set(id, result);
+        return result;
+      }
       const status: CliVersion["status"] = !installed ? "error" : !latest ? "unknown" : compareVersions(installed, latest) < 0 ? "outdated" : "latest";
       result = {
         id, name, installed, latest, status, checkedAt: Date.now(),
@@ -167,6 +200,10 @@ export class CliVersionManager {
     const done = async (code: number | null, error?: string) => {
       clearTimeout(timer);
       if (job.status !== "running") return;
+      if (code === 0 && !error && !NPM_PACKAGE[id] && CONFIRMED_LATEST.test(job.log)) {
+        const now = parseVersion((await this.deps.run(id, ["--version"], 90_000).catch(() => "")) || "");
+        if (now) this.confirm(id, now);
+      }
       const after = await this.check(id, true).catch(() => null);
       job.after = after?.installed ?? null;
       job.status = code === 0 && !error ? "completed" : "failed";

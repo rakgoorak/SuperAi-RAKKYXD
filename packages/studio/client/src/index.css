@@ -2133,3 +2133,24 @@ img.small-brand { width: 18px; height: auto; background: none; border-radius: 0;
 .update-gate progress { width: 100%; height: 8px; accent-color: var(--accent); }
 @keyframes update-in { from { opacity: 0; transform: translateY(8px); } }
 @media (prefers-reduced-motion: reduce) { .update-toast { animation: none; } }
+
+/* Model field: free typing plus the full list of the provider's models */
+.model-combo { position: relative; display: flex; min-width: 0; }
+.seat-picker .model-combo input { padding-right: 30px; }
+.model-combo-toggle {
+  position: absolute; top: 1px; right: 1px; bottom: 1px; width: 28px; display: grid; place-items: center;
+  border: 0; border-radius: 0 5px 5px 0; background: transparent; color: var(--dim); cursor: pointer;
+}
+.model-combo-toggle:hover:not(:disabled) { color: #e1edf6; background: #ffffff0d; }
+.model-combo-toggle:disabled { opacity: .35; cursor: default; }
+.model-combo-list {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 40; margin: 0; padding: 4px;
+  max-height: 260px; overflow-y: auto; list-style: none; border: 1px solid #495f70; border-radius: 8px;
+  background: #0f1a22; box-shadow: 0 16px 32px -12px rgba(0, 0, 0, 0.7);
+}
+.model-combo-list li {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 5px;
+  font-size: 12px; color: #d3e1ec; cursor: pointer; overflow-wrap: anywhere;
+}
+.model-combo-list li.active { background: #1b2c39; color: #fff; }
+.model-combo-list li[aria-selected="true"] { color: var(--accent); }
