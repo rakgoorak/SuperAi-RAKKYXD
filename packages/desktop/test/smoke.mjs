@@ -270,9 +270,9 @@ try {
   assert.deepEqual(options, ["1 session"]);
   await page.getByRole("button", { name: "ยกเลิก", exact: true }).click();
   checks++;
-  await page.getByRole("button", { name: "สนทนา", exact: true }).click();
+  await page.getByRole("navigation", { name: "โหมดทำงาน" }).getByRole("button", { name: "Chat", exact: true }).click();
   await page
-    .getByRole("heading", { name: "เริ่มจากคำถามของคุณ", exact: true })
+    .getByRole("heading", { name: "พิมพ์คำถามครั้งเดียว ได้ความเห็นจากทุก AI", exact: true })
     .waitFor();
   if(process.env.SUPERAI_LIVE_CLI_TEST==='1') {
     await eventually(()=>page.evaluate(()=>{const m=localStorage.getItem('superai-opencode-model');return !!m&&m!=='auto';}));
@@ -281,18 +281,18 @@ try {
     for(let i=0;i<90;i++) {
       const projects=(await request('/api/workspaces')).body;const project=projects.find(w=>w.name==='โปรเจกต์ทดสอบ');
       const runs=(await request(`/api/conversations/${project.id}`)).body;
-      if(runs[0]&&runs[0].status!=='running') {assert.equal(runs[0].status,'completed',runs[0].error);assert.ok(runs[0].output.includes('พร้อม'));break;}
+      if(runs[0]&&runs[0].status!=='running') {assert.equal(runs[0].status,'completed',runs[0].error);assert.ok((runs[0].output||runs[0].panel?.[0]?.output||"").includes("พร้อม"));break;}
       if(i===89)throw new Error('Live CLI conversation timed out');
       await new Promise(r=>setTimeout(r,1000));
     }
     checks++;
   }
-  await page.getByRole("button", { name: "ผู้ช่วย", exact: true }).click();
+  await page.getByRole("navigation", { name: "โหมดทำงาน" }).getByRole("button", { name: "Agent", exact: true }).click();
   await page
-    .getByRole("heading", { name: "มอบหมายเป้าหมายให้ทีม AI", exact: true })
+    .getByRole("heading", { name: "บอกเป้าหมาย แล้วให้ทีมแบ่งงานกันทำ", exact: true })
     .waitFor();
   checks++;
-  await page.getByRole("button", { name: "โค้ด", exact: true }).click();
+  await page.getByRole("navigation", { name: "โหมดทำงาน" }).getByRole("button", { name: "Code", exact: true }).click();
   await page
     .getByRole("button", { name: "ปิด Terminal", exact: true })
     .first()

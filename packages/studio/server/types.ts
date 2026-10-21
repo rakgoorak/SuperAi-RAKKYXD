@@ -69,6 +69,9 @@ export interface Workspace {
 
 export interface SpawnSessionOptions {
   openCodeModel?: string;
+  /** Model and effort for CLI sessions opened from Code mode ("" = CLI default). */
+  model?: string;
+  effort?: string;
   agentType?: string;
   wsId?: string;
   threadId?: string;

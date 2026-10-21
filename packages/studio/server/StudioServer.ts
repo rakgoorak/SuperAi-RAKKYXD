@@ -11,11 +11,14 @@ import { CliInstallManager } from "./CliInstallManager.js";
 import { WebSocketServer, WebSocket } from "ws";
 import { TerminalSessionManager } from "./TerminalSessionManager.js";
 import { WorkspaceRegistry } from "./WorkspaceRegistry.js";
+import { listModels, modelEffortArgs, PROVIDER_PROFILES } from "./Providers.js";
+import { SkillManager } from "./SkillManager.js";
 import { AttachmentError, MAX_ATTACHMENT_BYTES, resolveAttachments, saveAttachment } from "./AttachmentStore.js";
 
 export class StudioServer {
   private agentRuns: AgentRunManager;
   private cliInstalls = new CliInstallManager();
+  private skills = new SkillManager();
   private app: Express;
   private server: http.Server;
   private wss: WebSocketServer;
@@ -71,6 +74,17 @@ export class StudioServer {
 
     this.setupRoutes();
     this.setupWebSockets();
+  }
+
+  /** Validated model/effort for a Code-mode CLI session ("" keeps the CLI default). */
+  private sessionModel(agentType: unknown, model: unknown, effort: unknown) {
+    const id = typeof agentType === "string" ? agentType : "";
+    const m = typeof model === "string" ? model.trim() : "";
+    const e = typeof effort === "string" ? effort.trim() : "";
+    if (m && (m.length > 200 || !/^[\w.:/@+-]+$/.test(m) || m.startsWith("-"))) throw new Error("ชื่อรุ่นไม่ถูกต้อง");
+    if (e && !PROVIDER_PROFILES[id]?.efforts.includes(e)) throw new Error("ระดับ effort ไม่ถูกต้องสำหรับ CLI นี้");
+    if ((m || e) && !modelEffortArgs(id, m, e, true).length) return {};
+    return { model: m, effort: e };
   }
 
   private allowedOrigin(origin: string): boolean {
@@ -145,24 +159,69 @@ export class StudioServer {
     );
     this.app.post("/api/conversations/:wsId", (req, res) => {
       try {
-        const workspace = this.workspaceRegistry.getWorkspace(
-          String(req.params.wsId),
-        );
+        const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
         if (!workspace) return res.status(404).json({ error: "ไม่พบโปรเจกต์" });
-        const run = this.agentRuns.start(
-          workspace.id,
-          String(req.body.prompt || ""),
-          String(req.body.model || ""),
-          workspace.rootPath,
-          req.body.mode === "assistant" ? "assistant" : "chat",
-          req.body.allowTools === true,
-          req.body.openCodeModel || "",
-          req.body.team,
-          resolveAttachments(workspace.rootPath, req.body.attachments),
+        const attachments = resolveAttachments(workspace.rootPath, req.body.attachments);
+        const body = { ...req.body, prompt: String(req.body.prompt || ""), attachments };
+        res.json(
+          req.body.mode === "agent"
+            ? this.agentRuns.startAgent(workspace.id, workspace.rootPath, body)
+            : this.agentRuns.startChat(workspace.id, workspace.rootPath, body),
         );
-        res.json(run);
       } catch (err: any) {
         res.status(400).json({ error: err.message });
+      }
+    });
+    this.app.get("/api/providers/:id/models", async (req, res) => {
+      try {
+        res.json(await listModels(String(req.params.id)));
+      } catch (err: any) {
+        res.status(400).json({ error: err.message });
+      }
+    });
+    this.app.get("/api/skills/catalog", async (req, res) => {
+      try {
+        res.json(await this.skills.catalog(req.query.refresh === "1"));
+      } catch (err: any) {
+        res.status(503).json({ error: err.message });
+      }
+    });
+    const skillWorkspace = (req: Request, res: Response) => {
+      const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!workspace) res.status(404).json({ error: "ไม่พบโปรเจกต์" });
+      return workspace;
+    };
+    this.app.get("/api/workspaces/:wsId/skills", (req, res) => {
+      const workspace = skillWorkspace(req, res);
+      if (workspace) res.json(this.skills.installed(workspace.rootPath));
+    });
+    this.app.post("/api/workspaces/:wsId/skills", async (req, res) => {
+      const workspace = skillWorkspace(req, res);
+      if (!workspace) return;
+      try {
+        res.json(await this.skills.install(workspace.rootPath, String(req.body.source || ""), String(req.body.name || "")));
+      } catch (err: any) {
+        res.status(400).json({ error: err.message });
+      }
+    });
+    this.app.delete("/api/workspaces/:wsId/skills/:name", (req, res) => {
+      const workspace = skillWorkspace(req, res);
+      if (!workspace) return;
+      try {
+        res.json(this.skills.uninstall(workspace.rootPath, String(req.params.name)));
+      } catch (err: any) {
+        res.status(400).json({ error: err.message });
+      }
+    });
+    this.app.post("/api/workspaces/:wsId/skills/recommend", async (req, res) => {
+      const workspace = skillWorkspace(req, res);
+      if (!workspace) return;
+      const controller = new AbortController();
+      res.on("close", () => { if (!res.writableEnded) controller.abort(); });
+      try {
+        res.json(await this.skills.recommend(workspace.rootPath, req.body.seat, String(req.body.goal || ""), controller.signal));
+      } catch (err: any) {
+        if (!res.headersSent) res.status(400).json({ error: err.message });
       }
     });
     this.app.delete("/api/conversations/:wsId", (req, res) => {
@@ -328,6 +387,7 @@ export class StudioServer {
           threadId,
           name,
           openCodeModel: req.body.openCodeModel,
+          ...this.sessionModel(agentType, req.body.model, req.body.effort),
           forcePipe: req.body.forcePipe === true,
           command,
           args,

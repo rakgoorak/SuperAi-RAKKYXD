@@ -151,7 +151,7 @@ export function listClis() {
     installerReady: true,
     nodeReady: nodeStatus.ready,
     nodeStatus,
-    teamSupported: ['claude-code','codex','opencode'].includes(c.id),
+    teamSupported: ['claude-code','codex','opencode','antigravity'].includes(c.id),
   }));
 }
 

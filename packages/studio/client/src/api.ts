@@ -48,9 +48,15 @@ export interface Cli {
   nodeStatus?: NodeStatus;
   teamSupported?: boolean;
 }
-export interface TeamSeat { name:string; provider:string; model:string; }
-export type TeamRole = 'coder'|'tester'|'reviewer';
-export interface AgentTeam { leader:TeamSeat; members:(TeamSeat & {role:TeamRole})[]; }
+/** One AI seat: tool ("cli:<id>" or an Ollama model), model and effort ("" = CLI default). */
+export interface Seat { name: string; provider: string; model: string; effort: string; }
+export interface ModelList { models: string[]; efforts: string[]; modelEfforts?: Record<string, string[]>; note?: string; }
+export type StepStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "skipped";
+export interface PanelAnswer { seat: Seat; status: StepStatus; output: string; error?: string; }
+export interface AgentTask { id: string; title: string; assignee: number; instructions: string; dependsOn: string[]; status: StepStatus; output: string; error?: string; }
+export interface Activity { at: number; who: string; text: string; }
+export interface SkillInfo { source: string; sourceLabel: string; name: string; description: string; files: string[]; url: string; reason?: string; }
+export interface InstalledSkill { name: string; source: string; managed: boolean; targets: string[]; }
 export interface Session {
   id: string;
   name: string;
@@ -65,14 +71,20 @@ export interface Run {
   id: string;
   wsId: string;
   prompt: string;
-  mode: "chat" | "assistant";
-  model: string;
-  status: string;
+  mode: "chat" | "agent";
+  status: "running" | "completed" | "failed" | "cancelled";
   output: string;
   error?: string;
-  events: string[];
   createdAt: number;
-  team?:AgentTeam;
-  stage?:string;
-  tasks?:{id:string;title:string;assignedAgent:TeamRole;status:string;result?:string}[];
+  allowTools: boolean;
+  activity: Activity[];
+  panel?: PanelAnswer[];
+  summarizer?: Seat | null;
+  summaryStyle?: "merge" | "best";
+  summaryStatus?: StepStatus;
+  main?: Seat;
+  subagents?: Seat[];
+  stage?: string;
+  plan?: string;
+  tasks?: AgentTask[];
 }

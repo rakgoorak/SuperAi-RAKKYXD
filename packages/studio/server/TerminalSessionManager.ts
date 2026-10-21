@@ -1,3 +1,4 @@
+import { modelEffortArgs } from "./Providers.js";
 import { cliPath, cliEnv } from "./CliCatalog.js";
 import { spawn, ChildProcess, execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -45,9 +46,12 @@ export class TerminalSessionManager {
           ...options,
           ...cliLaunch(
             options.agentType,
-            options.agentType === "opencode" && options.openCodeModel
-              ? ["--model", options.openCodeModel]
-              : [],
+            modelEffortArgs(
+              options.agentType,
+              options.model || (options.agentType === "opencode" ? options.openCodeModel : "") || "",
+              options.effort || "",
+              true,
+            ),
           ),
         };
     }
