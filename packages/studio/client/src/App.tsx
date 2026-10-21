@@ -11,7 +11,6 @@ import {
   Bot,
   Settings,
   Globe,
-  Mic,
   LayoutGrid,
   Rows2,
   Activity,
@@ -26,7 +25,6 @@ import {
   X,
   Check,
   Search,
-  ArrowUpRight,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -38,6 +36,8 @@ import {
   ShieldCheck,
   Layers,
   Radio,
+  Rocket,
+  Mic,
 } from "lucide-react";
 import { api, post, Workspace, Cli, Session, Run, AgentTeam } from "./api";
 import { SessionCanvas, type CanvasLayout } from "./components/SessionCanvas";
@@ -45,9 +45,15 @@ import { RightDock, type DockView } from "./components/RightDock";
 import { TeamEditor, TeamProgress } from "./components/TeamEditor";
 import { CliInstaller } from "./components/CliInstaller";
 import { LaunchPresets, type LaunchSeat } from "./components/LaunchPresets";
+import { VoiceSettingsPanel } from "./components/VoiceSettingsPanel";
+import { DictationButton } from "./components/DictationButton";
+import { AttachMenu, AttachmentCards, ComposerDropOverlay, useComposerAttachments, useWindowDrop } from "./components/ComposerAttachments";
+import { attachMode, formatPath, pastedFiles, uploadAttachment, type SavedAttachment } from "./attachments";
+import { SetupGuide, setupNeeded } from "./components/SetupGuide";
+import { loadVoiceSettings, saveVoiceSettings, type VoiceSettings } from "./voice/speech";
 
 type Mode = "code" | "chat" | "assistant";
-type Dialog = "session" | "settings" | "project" | "delete" | "clear" | null;
+type Dialog = "session" | "settings" | "project" | "delete" | "clear" | "setup" | null;
 const modeLabels: Record<Mode, string> = {
   code: "โค้ด",
   chat: "สนทนา",
@@ -113,7 +119,8 @@ export function App() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [menu, setMenu] = useState("");
   const composer = useRef<HTMLTextAreaElement>(null);
-  const dictationAfter = useRef(Date.now());
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(loadVoiceSettings);
+  const setupShown = useRef(false);
   const [checkingModels, setCheckingModels] = useState(false);
   const [openCodeModel, setOpenCodeModel] = useState(
     initial("superai-opencode-model", "auto"),
@@ -150,6 +157,12 @@ export function App() {
   const checkClis = useCallback(async () => {
     setClis(await api<Cli[]>("/api/clis"));
   }, []);
+  const attachments = useComposerAttachments(showError);
+  const attachToComposer = useCallback((files: File[]) => {
+    attachments.add(files);
+    setComposerShown(true);
+    requestAnimationFrame(() => composer.current?.focus());
+  }, [attachments.add]);
   const task = useCallback(async (fn: () => Promise<void>) => {
     setBusy(true);
     setError("");
@@ -239,30 +252,15 @@ export function App() {
       clearInterval(timer);
     };
   }, [activeWs]);
+  useEffect(() => saveVoiceSettings(voiceSettings), [voiceSettings]);
+  // First launch: walk new users through Node, Git, CLI, project and login.
   useEffect(() => {
-    const receive = (text: string) => {
-      setComposerShown(true);
-      setDraft((current) => (current ? `${current}\n${text}` : text));
-      setNotice("รับข้อความจาก SuperAi Voice แล้ว ตรวจข้อความก่อนกดส่ง");
-      requestAnimationFrame(() => composer.current?.focus());
-    };
-    const unsub = window.superai?.onVoiceText(receive);
-    const timer = setInterval(async () => {
-      try {
-        const messages = await api<{ id: number; text: string }[]>(
-          `/api/dictation?after=${dictationAfter.current}`,
-        );
-        for (const message of messages) {
-          dictationAfter.current = Math.max(dictationAfter.current, message.id);
-          receive(message.text);
-        }
-      } catch {}
-    }, 1200);
-    return () => {
-      unsub?.();
-      clearInterval(timer);
-    };
-  }, []);
+    if (setupShown.current || !connected || !clis.length) return;
+    setupShown.current = true;
+    let dismissed = false;
+    try { dismissed = localStorage.getItem("superai-setup-dismissed") === "1"; } catch {}
+    if (!dismissed && setupNeeded(clis, workspaces)) setDialog("setup");
+  }, [connected, clis, workspaces]);
   const loadOpenCodeModels = useCallback(async () => {
     setCheckingOpenCode(true);
     try {
@@ -340,8 +338,12 @@ export function App() {
   const send = () =>
     task(async () => {
       if(mode==='chat'&&model==='cli:opencode'&&openCodeModel==='auto')throw new Error('กำลังตรวจรุ่น OpenCode กรุณารอ หรือเลือกรุ่นในการตั้งค่า');
-      if (!draft.trim()) return;
+      if (!draft.trim() && !attachments.items.length) return;
       if (!workspace) throw new Error("กรุณาสร้างโปรเจกต์ก่อน");
+      // Save attached images/PDFs into <project>/.superai/attachments first.
+      const saved: SavedAttachment[] = [];
+      for (const item of attachments.items)
+        saved.push(await uploadAttachment(`/api/workspaces/${workspace.id}/attachments`, item.file));
       if (mode === "code") {
         const recipients =
           target === "all"
@@ -354,8 +356,11 @@ export function App() {
             "ไม่มี terminal ที่กำลังทำงาน กรุณาเปิด session ก่อน",
           );
         for (const recipient of recipients) {
+          // Codex gets project-relative paths: typed ":" and "\" can be lost through ConPTY.
+          const relative = attachMode(recipient.agentType) === "clipboard" && recipient.cwd === workspace.rootPath;
+          const paths = saved.map((file) => formatPath(relative ? file.relativePath : file.path)).join("").trim();
           const result = await post(`/api/terminals/${recipient.id}/input`, {
-            input: draft + "\r",
+            input: [draft.trim() || (paths ? "ดูไฟล์แนบนี้" : ""), paths].filter(Boolean).join(" ") + "\r",
           });
           if (!result.success)
             throw new Error(
@@ -372,7 +377,8 @@ export function App() {
         if (!conversationModel)
           throw new Error("เปิดการตั้งค่า แล้วเลือก CLI หรือ model ก่อน");
         await post(`/api/conversations/${workspace.id}`, {
-          prompt: draft,
+          prompt: draft.trim() || "ช่วยดูไฟล์แนบนี้",
+          attachments: saved.map((file) => file.path),
           mode,
           model:conversationModel,
           allowTools,
@@ -382,7 +388,9 @@ export function App() {
         setRuns(await api<Run[]>(`/api/conversations/${workspace.id}`));
       }
       setDraft("");
+      attachments.clear();
     });
+  const dropTarget = useWindowDrop(attachToComposer, connected && !dialog);
   const interrupt = () =>
     task(async () => {
       if (mode !== "code" && activeRun) {
@@ -447,17 +455,15 @@ export function App() {
     void loadModels();
     void checkClis().catch((e) => setError(e.message));
   };
-  const openVoice = () =>
-    task(async () => {
-      if (!window.superai)
-        throw new Error(
-          "เปิด SuperAi Voice ได้จากโปรแกรม Desktop หรือ npm run voice",
-        );
-      await window.superai.openVoice();
-    });
+  const closeSetup = () => {
+    try { localStorage.setItem("superai-setup-dismissed", "1"); } catch {}
+    setDialog(null);
+  };
+  const closeDialog = () => (dialog === "setup" ? closeSetup() : setDialog(null));
 
   return (
     <div className={`app-shell ${window.superai?.platform === "darwin" ? "platform-mac" : ""}`}>
+      <ComposerDropOverlay active={dropTarget === "composer"} />
       <header className="titlebar app-drag">
         <div className="brand">
           <div className="brand-mark">
@@ -613,19 +619,11 @@ export function App() {
               )}
             </div>
             <div className="sidebar-bottom">
-              <button
-                onClick={openVoice}
-                title={
-                  window.superai
-                    ? "เปิดโปรแกรมพูดเพื่อพิมพ์"
-                    : "ใช้จาก Desktop หรือ npm run voice"
-                }
-              >
-                <Mic size={17} />
+              <button onClick={() => setDialog("setup")} title="ตรวจความพร้อมและตั้งค่าเริ่มต้น">
+                <Rocket size={17} />
                 <span>
-                  SuperAi Voice<small>พูดเพื่อพิมพ์ · ไทย / อังกฤษ</small>
+                  เริ่มต้นใช้งาน<small>ตรวจ Node, Git, CLI และบัญชี</small>
                 </span>
-                <ArrowUpRight size={14} />
               </button>
               <button onClick={openSettings}>
                 <Settings size={17} />
@@ -825,8 +823,7 @@ export function App() {
                         ))}
                     </div>
                     <div className="empty-hint">
-                      <Keyboard size={14} /> พิมพ์คำสั่ง หรือใช้ SuperAi Voice
-                      เพื่อพูดแทนพิมพ์
+                      <Mic size={14} /> พิมพ์คำสั่ง หรือกดไมค์ในช่องพิมพ์เพื่อพูดแทนพิมพ์
                     </div>
                   </div>
                 )}
@@ -966,12 +963,10 @@ export function App() {
                         {composerExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                       </button>
                     )}
-                  <button className="text-button" onClick={openVoice}>
-                    <Mic size={14} /> พูดเพื่อพิมพ์
-                  </button>
                   </div>
                 </div>
                 <div className="composer-box">
+                  <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
                   <textarea
                     ref={composer}
                     rows={mode === "code" && !composerExpanded ? 1 : 3}
@@ -983,6 +978,12 @@ export function App() {
                     }
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
+                    onPaste={(e) => {
+                      const files = pastedFiles(e.clipboardData);
+                      if (!files.length) return;
+                      e.preventDefault();
+                      attachToComposer(files);
+                    }}
                     onKeyDown={(e) => {
                       if (
                         e.key === "Enter" &&
@@ -995,6 +996,8 @@ export function App() {
                     }}
                   />
                   <div className="composer-bottom">
+                    <div className="composer-tools">
+                    <AttachMenu onFiles={attachToComposer} disabled={!workspace} />
                     <span>
                       {mode === "code" ? (
                         <>
@@ -1010,7 +1013,17 @@ export function App() {
                         </>
                       )}
                     </span>
+                    </div>
                     <div className="inline">
+                      <DictationButton
+                        settings={voiceSettings}
+                        onSettingsChange={setVoiceSettings}
+                        onError={showError}
+                        onText={(text) => {
+                          setDraft((current) => (current.trim() ? `${current.replace(/\s+$/, "")} ${text}` : text));
+                          requestAnimationFrame(() => composer.current?.focus());
+                        }}
+                      />
                       <button
                         className="icon-button"
                         title={
@@ -1031,7 +1044,7 @@ export function App() {
                         title="ส่งคำสั่ง (Enter)"
                         disabled={
                           busy ||
-                          !draft.trim() ||
+                          (!draft.trim() && !attachments.items.length) ||
                           !workspace ||
                           (mode !== "code" && !!activeRun)
                         }
@@ -1047,7 +1060,7 @@ export function App() {
                   </div>
                 </div>
                 <div className="composer-hint">
-                  <span>Enter ส่ง · Shift + Enter ขึ้นบรรทัดใหม่</span>
+                  <span>Enter ส่ง · Shift + Enter ขึ้นบรรทัดใหม่ · Ctrl+U แนบรูปหรือ PDF</span>
                   <span>ตรวจคำสั่งก่อนส่งเสมอ</span>
                 </div>
               </div>
@@ -1076,7 +1089,7 @@ export function App() {
         <div
           className="modal-backdrop"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget && !busy) setDialog(null);
+            if (e.target === e.currentTarget && !busy) closeDialog();
           }}
         >
           <section
@@ -1085,7 +1098,7 @@ export function App() {
             aria-modal="true"
             aria-labelledby="dialog-title"
             onKeyDown={(e) => {
-              if (e.key === "Escape" && !busy) setDialog(null);
+              if (e.key === "Escape" && !busy) { e.stopPropagation(); closeDialog(); }
             }}
           >
             <div className="dialog-heading">
@@ -1101,7 +1114,9 @@ export function App() {
                           : "เพิ่มโปรเจกต์"
                         : dialog === "delete"
                           ? "ลบโปรเจกต์จากรายการ?"
-                          : "ล้างประวัติผู้ช่วย?"}
+                          : dialog === "setup"
+                            ? "เริ่มต้นใช้งาน SuperAi"
+                            : "ล้างประวัติผู้ช่วย?"}
                 </h2>
                 <p>
                   {dialog === "session"
@@ -1110,14 +1125,16 @@ export function App() {
                       ? "เชื่อมเครื่องมือที่คุณใช้ และเลือก model สำหรับผู้ช่วย"
                       : dialog === "project"
                         ? "เลือกโฟลเดอร์ที่ใช้ทำงานจริงบนเครื่อง"
-                        : "กรุณาตรวจสอบก่อนดำเนินการ"}
+                        : dialog === "setup"
+                          ? "ทำตามทีละขั้น ระบบตรวจเครื่องของคุณจริง และติดตั้งสิ่งที่ขาดให้ได้"
+                          : "กรุณาตรวจสอบก่อนดำเนินการ"}
                 </p>
               </div>
               <button
                 className="icon-button"
                 title="ปิดหน้าต่าง"
                 disabled={busy}
-                onClick={() => setDialog(null)}
+                onClick={closeDialog}
               >
                 <X size={18} />
               </button>
@@ -1221,6 +1238,17 @@ export function App() {
                     )}{" "}
                     เปิด {launchTotal} session
                   </button>
+                </div>
+              </>
+            )}
+            {dialog === "setup" && (
+              <>
+                <SetupGuide clis={clis} workspaces={workspaces} voice={voiceSettings} refreshClis={checkClis} onError={showError}
+                  addProject={() => openProject()} installCli={() => openSession()}
+                  login={(id) => { setLaunchType(id); setCount(1); setLaunchPlan(null); setDialog("session"); }} />
+                <div className="dialog-footer">
+                  <span className="muted">เปิดหน้านี้อีกครั้งได้จากแถบซ้าย “เริ่มต้นใช้งาน”</span>
+                  <button className="primary" onClick={closeSetup}>เสร็จแล้ว <Check size={15} /></button>
                 </div>
               </>
             )}
@@ -1414,16 +1442,7 @@ export function App() {
                       ใส่ในช่องคำสั่ง
                     </button>
                   </div>
-                  <div className="settings-section-title">
-                    <h3>SuperAi Voice & RAKKYXD</h3>
-                  </div>
-                  <p className="muted">
-                    โปรแกรมพูดเพื่อพิมพ์แยก รองรับไทย/อังกฤษ ใช้ Whisper
-                    บนเครื่อง กด Ctrl + Shift + Space เพื่ออัดหรือหยุด
-                  </p>
-                  <button className="secondary" onClick={openVoice}>
-                    <Mic size={15} /> เปิดโปรแกรมเสียง
-                  </button>
+                  <VoiceSettingsPanel settings={voiceSettings} onChange={setVoiceSettings} />
                 </div>
                 <div className="dialog-footer">
                   <span className="muted">บันทึกการตั้งค่าอัตโนมัติ</span>

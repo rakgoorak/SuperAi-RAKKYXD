@@ -1,4 +1,4 @@
-import { cliPath } from "./CliCatalog.js";
+import { cliPath, cliEnv } from "./CliCatalog.js";
 import { spawn, ChildProcess, execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
@@ -78,6 +78,7 @@ export class TerminalSessionManager {
 
     const env: Record<string, string> = {
       ...(process.env as Record<string, string>),
+      ...cliEnv(),
       PATH: [cliPath(), enhancedPath].join(path.delimiter),
       TERM: "xterm-256color",
       COLORTERM: "truecolor",

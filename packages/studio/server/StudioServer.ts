@@ -4,17 +4,18 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import express, { Express, Request, Response } from "express";
 import type { ErrorRequestHandler } from "express";
-import { listClis, listOpenCodeModels } from "./CliCatalog.js";
+import { listClis, listOpenCodeModels, getNodeStatus, findExecutable } from "./CliCatalog.js";
+import { getGitStatus } from "./GitInstaller.js";
 import { AgentRunManager, ollamaBase } from "./AgentRunManager.js";
 import { CliInstallManager } from "./CliInstallManager.js";
 import { WebSocketServer, WebSocket } from "ws";
 import { TerminalSessionManager } from "./TerminalSessionManager.js";
 import { WorkspaceRegistry } from "./WorkspaceRegistry.js";
+import { AttachmentError, MAX_ATTACHMENT_BYTES, resolveAttachments, saveAttachment } from "./AttachmentStore.js";
 
 export class StudioServer {
   private agentRuns: AgentRunManager;
   private cliInstalls = new CliInstallManager();
-  private dictations: { id: number; text: string }[] = [];
   private app: Express;
   private server: http.Server;
   private wss: WebSocketServer;
@@ -84,10 +85,28 @@ export class StudioServer {
   private setupRoutes(): void {
     this.app.get("/api/clis", (_req, res) => res.json(listClis()));
     this.app.get('/api/cli-installs', (_req,res)=>res.json(this.cliInstalls.list()));
+    this.app.get('/api/node/status', (_req, res) => res.json(getNodeStatus()));
+    this.app.post('/api/node/install', (_req, res) => {
+      try {
+        res.json(this.cliInstalls.start('node'));
+      } catch (error: any) {
+        res.status(400).json({ error: error.message });
+      }
+    });
+    this.app.get('/api/git/status', (_req, res) => res.json(getGitStatus(findExecutable)));
+    this.app.post('/api/git/install', (_req, res) => {
+      try {
+        if (process.platform !== 'win32') return res.status(400).json({ error: 'บน macOS ให้ติดตั้ง Git ด้วย xcode-select --install' });
+        if (getGitStatus(findExecutable).installed) return res.status(409).json({ error: 'มี Git พร้อมใช้งานแล้ว' });
+        res.json(this.cliInstalls.start('git'));
+      } catch (error: any) {
+        res.status(400).json({ error: error.message });
+      }
+    });
     this.app.post('/api/clis/:id/install', (req,res)=> {
       try {
         const id=String(req.params.id);
-        if(this.terminalManager.listSessions().some(s=>s.agentType===id && ['running','stopping'].includes(s.status)) || this.agentRuns.usesCli(id)) return res.status(409).json({error:'CLI นี้กำลังใช้งานอยู่ กรุณาปิด session/หยุดทีมก่อนติดตั้ง'});
+        if(id !== 'node' && (this.terminalManager.listSessions().some(s=>s.agentType===id && ['running','stopping'].includes(s.status)) || this.agentRuns.usesCli(id))) return res.status(409).json({error:'CLI นี้กำลังใช้งานอยู่ กรุณาปิด session/หยุดทีมก่อนติดตั้ง'});
         res.json(this.cliInstalls.start(id));
       } catch(error:any) {res.status(400).json({error:error.message});}
     });
@@ -139,6 +158,7 @@ export class StudioServer {
           req.body.allowTools === true,
           req.body.openCodeModel || "",
           req.body.team,
+          resolveAttachments(workspace.rootPath, req.body.attachments),
         );
         res.json(run);
       } catch (err: any) {
@@ -155,22 +175,6 @@ export class StudioServer {
     });
     this.app.post("/api/runs/:id/cancel", (req, res) =>
       res.json({ success: this.agentRuns.cancel(String(req.params.id)) }),
-    );
-    this.app.post("/api/dictation", (req, res) => {
-      const text = req.body.text;
-      if (typeof text !== "string" || !text.trim() || text.length > 50000)
-        return res.status(400).json({ error: "ข้อความเสียงไม่ถูกต้อง" });
-      this.dictations.push({
-        id: Math.max(Date.now(), (this.dictations.at(-1)?.id || 0) + 1),
-        text,
-      });
-      this.dictations = this.dictations.slice(-20);
-      res.json({ success: true });
-    });
-    this.app.get("/api/dictation", (req, res) =>
-      res.json(
-        this.dictations.filter((d) => d.id > Number(req.query.after || 0)),
-      ),
     );
     this.app.patch("/api/workspaces/:wsId", (req, res) => {
       try {
@@ -370,9 +374,38 @@ export class StudioServer {
       res.json({ success: ok });
     });
 
+    // Pasted / dropped images and PDFs are saved into the project folder so the
+    // CLI working there can read them by path.
+    const attachmentUpload = (folder: (req: Request) => string | undefined, missing: string) => [
+      express.raw({ type: () => true, limit: MAX_ATTACHMENT_BYTES }),
+      (req: Request, res: Response) => {
+        const root = folder(req);
+        if (!root) return res.status(404).json({ error: missing });
+        try {
+          res.json(saveAttachment(root, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)));
+        } catch (error: any) {
+          res.status(error instanceof AttachmentError ? error.status : 500).json({ error: error.message });
+        }
+      },
+    ];
+    this.app.post(
+      "/api/terminals/:id/attachments",
+      ...attachmentUpload(
+        (req) => this.terminalManager.getSession(String(req.params.id))?.cwd,
+        "ไม่พบ session นี้แล้ว กรุณาเปิด session ใหม่แล้วแนบไฟล์อีกครั้ง",
+      ),
+    );
+    this.app.post(
+      "/api/workspaces/:wsId/attachments",
+      ...attachmentUpload((req) => {
+        const root = this.workspaceRegistry.getWorkspace(String(req.params.wsId))?.rootPath;
+        return root && fs.existsSync(root) ? root : undefined;
+      }, "ไม่พบโฟลเดอร์โปรเจกต์ กรุณาตรวจโฟลเดอร์ในการตั้งค่าโปรเจกต์"),
+    );
+
     const errors:ErrorRequestHandler=(error,_req,res,next)=>{
       if(res.headersSent)return next(error);
-      res.status(error.status||500).json({error:error.status===413?'คำขอยาวเกินไป กรุณาลดข้อความแล้วลองใหม่':error.message||'ระบบทำรายการไม่สำเร็จ กรุณาลองใหม่'});
+      res.status(error.status||500).json({error:error.status===413?(_req.path.endsWith('/attachments')?'ไฟล์ใหญ่เกิน 20 MB กรุณาย่อรูปหรือแยกไฟล์ PDF ให้เล็กลงแล้วลองใหม่':'คำขอยาวเกินไป กรุณาลดข้อความแล้วลองใหม่'):error.message||'ระบบทำรายการไม่สำเร็จ กรุณาลองใหม่'});
     };
     this.app.use(errors);
     this.app.use("/api", (_req, res) =>

@@ -7,11 +7,9 @@ export async function stageApp(appRoot, root = process.cwd()) {
   await fs.mkdir(appRoot, { recursive: true });
   const metadata = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
   await fs.writeFile(path.join(appRoot, 'package.json'), JSON.stringify({ name: 'superai-rakkyxd', productName: 'SuperAi & RAKKYXD', version: metadata.version, type: 'module', main: 'bootstrap.mjs' }, null, 2));
-  await fs.writeFile(path.join(appRoot, 'bootstrap.mjs'), `import path from 'node:path';
-const voice = process.argv.includes('--superai-voice') || path.basename(process.execPath).toLowerCase().includes('voice');
-await import(voice ? './packages/voice/main.mjs' : './packages/desktop/main.mjs');
+  await fs.writeFile(path.join(appRoot, 'bootstrap.mjs'), `await import('./packages/desktop/main.mjs');
 `);
-  for (const relative of ['packages/desktop', 'packages/studio/dist', 'packages/studio/client/dist', 'packages/voice']) {
+  for (const relative of ['packages/desktop', 'packages/studio/dist', 'packages/studio/client/dist']) {
     await fs.cp(path.join(root, relative), path.join(appRoot, relative), {
       recursive: true, filter: source => !/[\\/](test|__pycache__)([\\/]|$)/.test(source) && !source.endsWith('.test.mjs'),
     });

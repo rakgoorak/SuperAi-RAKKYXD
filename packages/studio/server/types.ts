@@ -39,7 +39,7 @@ export interface AgentThread {
   type:
     | "claude-code"
     | "codex"
-    | "gemini"
+    | "antigravity"
     | "opencode"
     | "freebuff"
     | "antigravity"

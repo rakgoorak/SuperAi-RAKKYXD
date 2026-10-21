@@ -1,6 +1,6 @@
 {
   "name": "superai-rakkyxd",
-  "version": "1.1.1",
+  "version": "1.2.2",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -8,13 +8,12 @@
     "packages/studio/client"
   ],
   "scripts": {
-    "build": "npm --workspace=@opencode-multi/core run build && npm --workspace=@bridgemind/studio run build && npm --workspace=@bridgemind/client run build && npm --workspace=@bridgemind/desktop run build && npm --workspace=@superai/voice run build",
+    "build": "npm --workspace=@opencode-multi/core run build && npm --workspace=@bridgemind/studio run build && npm --workspace=@bridgemind/client run build && npm --workspace=@bridgemind/desktop run build",
     "test": "npm run test --workspaces",
     "studio": "node packages/studio/dist/index.js",
     "app": "electron packages/desktop",
     "start": "electron packages/desktop",
     "dev": "npm --workspace=@bridgemind/client run dev",
-    "voice": "electron packages/voice",
     "dev:server": "tsx packages/studio/server/index.ts",
     "test:desktop": "node packages/desktop/test/smoke.mjs",
     "test:layout": "node packages/desktop/test/layout-smoke.mjs",
@@ -23,7 +22,8 @@
     "package:release": "node scripts/package-release.mjs",
     "archive:release": "node scripts/archive-release.mjs",
     "test:release": "node packages/desktop/test/release-smoke.mjs",
-    "test:team": "node packages/desktop/test/team-smoke.mjs"
+    "test:team": "node packages/desktop/test/team-smoke.mjs",
+    "test:voice": "node packages/desktop/test/voice-smoke.mjs"
   },
   "devDependencies": {
     "@electron/packager": "^18.3.6",

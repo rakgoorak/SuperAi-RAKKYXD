@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { StudioServer } from '../server/StudioServer.js';
 
-test('API: project CRUD, real CLI catalog, Freebuff conflict, dictation and origin isolation',async()=>{
+test('API: project CRUD, real CLI catalog, Freebuff conflict and origin isolation',async()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'superai-api-'));
  const server=new StudioServer({port:0,customWorkspacePath:path.join(dir,'projects.json')});
  await server.start();const base=`http://127.0.0.1:${server.getPort()}`;
@@ -21,9 +21,6 @@ test('API: project CRUD, real CLI catalog, Freebuff conflict, dictation and orig
   const first=await request('/api/terminals/spawn','POST',{wsId:ws.id,agentType:'freebuff',forcePipe:true,command:process.execPath,args:['-e','setInterval(()=>{},1000)']}).then(r=>r.json());assert.equal(first.status,'running');
   const conflict=await request('/api/terminals/spawn','POST',{wsId:ws.id,agentType:'freebuff'});assert.equal(conflict.status,409);assert.match((await conflict.json()).error,/1 session/);
   assert.equal((await request('/api/terminals/spawn','POST',{wsId:ws.id,agentType:'unknown'})).status,400);
-  await request('/api/dictation','POST',{text:'สร้างเว็บไซต์ภาษาไทย'});
-  const dictations=await request('/api/dictation?after=0').then(r=>r.json());assert.equal(dictations.at(-1).text,'สร้างเว็บไซต์ภาษาไทย');
-  assert.equal((await request('/api/dictation','POST',{text:''})).status,400);
   await request(`/api/workspaces/${ws.id}`,'DELETE');
   let sessions:any[]=[];
   for(let i=0;i<100;i++){sessions=await request('/api/terminals').then(r=>r.json());if(!sessions.some((s:any)=>s.wsId===ws.id))break;await new Promise(r=>setTimeout(r,30));}
