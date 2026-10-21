@@ -211,7 +211,18 @@ export class Updater {
         `Stop-Transcript | Out-Null`,
         `if ($app -lt 8 -and $rest -lt 8) { Remove-Item -LiteralPath ${q(source)} -Recurse -Force -ErrorAction SilentlyContinue }`,
       ].join("\r\n"), "utf8");
-      spawn("powershell.exe", ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+      // A launcher starts the installer and exits at once, so the installer is not in the app's
+      // process tree and survives a tree kill (taskkill /T) when the app closes.
+      const inner = `Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList @('-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',${q(`"${script}"`)})`;
+      // Wait for the hand-off: quitting while the launcher is still starting would kill it too.
+      // Not "detached": a console-less (DETACHED_PROCESS) launcher cannot start the installer.
+      const launcher = spawn("powershell.exe", ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", inner], { stdio: "ignore", windowsHide: true });
+      const code = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("เริ่มตัวติดตั้งไม่สำเร็จ (หมดเวลา) กรุณาลองใหม่")), 20000);
+        launcher.once("error", (e) => { clearTimeout(timer); reject(e); });
+        launcher.once("exit", (c) => { clearTimeout(timer); resolve(c); });
+      });
+      if (code !== 0) throw new Error(`เริ่มตัวติดตั้งไม่สำเร็จ (รหัส ${code})`);
     } else {
       const script = path.join(work, "install.sh");
       const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
