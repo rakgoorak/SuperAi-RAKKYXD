@@ -1,26 +1,36 @@
-# SuperAi & RAKKYXD v1.1.1
+# SuperAi & RAKKYXD v1.2.2
 
-พื้นที่ทำงาน AI ภาษาไทย พร้อมโปรแกรม SuperAi Voice แยกต่างหาก
+พื้นที่ทำงาน AI ภาษาไทย ใช้ AI CLI หลายตัวได้ในโปรแกรมเดียว เริ่มได้แม้เครื่องยังไม่มีอะไรติดตั้ง
 
-- จัด session หลายช่อง ปรับคอลัมน์ ขยายช่อง และลากจัดวางได้
-- CLI: Claude Code, Codex, Gemini CLI, OpenCode, Freebuff และ Terminal
-- ปุ่มติดตั้ง Claude Code, Codex, Gemini CLI, OpenCode และ Freebuff พร้อม log / ยกเลิก / ลองใหม่ (ต้องมี Node.js 22+ / npm)
-- โหมดผู้ช่วยเลือกหัวหน้าและลูกทีม 1–3 คน พร้อม CLI/model แยกกัน หัวหน้าวางแผน ลูกทีมทำตามลำดับ ส่งผลกลับ และหัวหน้าสรุปภาษาไทย
-- แสดงความคืบหน้า ผลรายงานแต่ละงาน และเก็บทีมแยกตามโปรเจกต์
-- Gemini CLI / Freebuff ใช้ terminal ได้ ส่วนทีมอัตโนมัติรองรับ Claude Code / Codex / OpenCode / Ollama
+## มีอะไรใหม่
+
+- **หน้าเริ่มต้นใช้งาน** เปิดเองครั้งแรก ตรวจเครื่องจริงทีละขั้น: Node.js 22, Git for Windows, CLI ของ AI, โปรเจกต์ และการเข้าสู่ระบบ พร้อมปุ่มติดตั้งสิ่งที่ขาด ไม่ต้องใช้สิทธิ์ผู้ดูแลระบบ
+- **พูดเพื่อพิมพ์แบบ Claude** ปุ่มไมค์ในช่องพิมพ์ กดค้างแล้วปล่อย หรือกดครั้งเดียวเพื่อเริ่มแล้วกดอีกครั้งเพื่อหยุด คลิกขวาเลือกไมค์และภาษา แปลงเสียงบนเครื่อง ไม่ต้องใช้ Python หรือ API key ข้อความเข้าช่องพิมพ์ให้ตรวจก่อนส่ง
+- **แนบรูปและ PDF แบบ Claude Desktop** ปุ่ม + (Ctrl+U), Ctrl+V วางรูป และลากไฟล์มาวาง ทั้งในช่องพิมพ์และในช่อง CLI แต่ละช่อง
+- **Antigravity CLI (`agy`)** แทน Gemini CLI ที่ Google ปิดไปแล้ว ติดตั้งด้วยสคริปต์ทางการของ Google
+- **ถอดโปรแกรม SuperAi Voice แยกเดิมออก** เหลือ `SuperAi-RAKKYXD.exe` ตัวเดียว
+
+## มีอยู่แล้ว
+
+- session หลายช่อง: Claude Code, Codex, Antigravity CLI, OpenCode, Freebuff และ Terminal จัดคอลัมน์ ขยาย และลากจัดวางได้
+- โหมดผู้ช่วย: หัวหน้าและลูกทีม 1–3 คน แต่ละคนเลือก CLI/model แยกกันได้
 - Browser Preview แบบ Chromium ภายในแอป
-- Voice ภาษาไทย/อังกฤษ โดยใช้ Python และโมเดลเสียงบนเครื่อง
 
 ## เลือกดาวน์โหลด
 
-- Windows: `windows-x64.zip` — แตกทั้งโฟลเดอร์แล้วเปิด EXE
-- Mac Apple Silicon: `macos-arm64.zip` — แตกแล้วลากสองแอปไป Applications
-- Mac Intel: `macos-x64.zip`
+- Windows 10/11: `SuperAi-RAKKYXD-v1.2.2-windows-x64.zip` แตกทั้งโฟลเดอร์แล้วเปิด `SuperAi-RAKKYXD.exe`
+- Mac Apple Silicon: `SuperAi-RAKKYXD-v1.2.2-macos-arm64.zip` แตกไฟล์แล้วลาก `SuperAi-RAKKYXD.app` ไปไว้ใน Applications
+- Mac Intel: `SuperAi-RAKKYXD-v1.2.2-macos-x64.zip`
 
-CLI กดติดตั้งในหน้า session ได้และต้องล็อกอินเอง Voice ต้องมี Python 3.10+ และโมเดลเสียง ไฟล์นี้ยังไม่มี Windows publisher signature หรือ Apple Developer ID / notarization โปรดอ่าน INSTALL-TH.md ที่รวมใน ZIP
+ไฟล์ `.sha256` ใช้ตรวจความถูกต้องของ ZIP โปรดอ่าน `INSTALL-TH.md` ใน ZIP รุ่นนี้ยังไม่มีลายเซ็นผู้พัฒนาของ Windows หรือ Apple Developer ID / notarization
 
-ทุกแพ็กเกจถูก build และทดสอบ startup, PTY จริง, Browser isolation และการส่งข้อความจาก Voice บน OS/architecture ของไฟล์นั้นก่อนเผยแพร่ การทดสอบไม่เปิดไมโครโฟนและไม่ใช้บัญชี CLI ของผู้ใช้ จึงยังต้องทดสอบไมค์จริงและการวางข้อความลงแอปที่คุณใช้
+## ข้อควรรู้
+
+- พูดเพื่อพิมพ์ใช้ครั้งแรกจะถามก่อนดาวน์โหลดโมเดลแปลงเสียง (Thonburian ≈290 MB สำหรับภาษาไทย) ครั้งเดียว บนเครื่อง 4 คอร์ภาษาไทยใช้เวลาประมาณ 11–20 วินาทีต่อประโยค
+- CLI ต้องเข้าสู่ระบบด้วยบัญชีของคุณเอง ค่าใช้จ่ายและโควตาขึ้นกับผู้ให้บริการ
+
+## การทดสอบ
+
+ทุกแพ็กเกจถูก build และทดสอบบน OS/architecture ของไฟล์นั้นก่อนเผยแพร่: การเปิดโปรแกรม, PTY จริง, Browser isolation, หน้าจอจัดทีมและติดตั้ง CLI (ใช้ fixtures โดยไม่ใช้โควตา AI หรือบัญชีของผู้ใช้) การทดสอบไม่เปิดไมโครโฟนจริง
 
 Repository แบบ private: ดาวน์โหลดได้เฉพาะบัญชี GitHub ที่ได้รับสิทธิ์
-
-เพิ่มการทดสอบหน้าจอจัดทีมและติดตั้ง CLI ด้วย fixtures โดยไม่ใช้โควตา AI หรือเปลี่ยนเครื่องมือของผู้ใช้
