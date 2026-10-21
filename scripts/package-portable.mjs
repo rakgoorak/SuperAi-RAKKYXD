@@ -40,6 +40,6 @@ async function include(name,from,parentTarget){
   try{await include(dependency,directory,target);}catch(error){if(!(dependency in optional))throw error;}
  }
 }
-for(const name of ['express','ws','@lydell/node-pty','@opencode-multi/core'])await include(name,root,appRoot);
+for(const name of ['express','ws','@lydell/node-pty','@superai-rakkyxd/core'])await include(name,root,appRoot);
 await fs.writeFile(path.join(destination,'PORTABLE.txt'),'SuperAi & RAKKYXD\r\nOpen SuperAi-RAKKYXD.exe.\r\nKeep this entire folder together. Voice mode downloads its speech model on first use. CLI agents require their own accounts.\r\n');
 console.log(JSON.stringify({directory:destination,main:path.join(destination,'SuperAi-RAKKYXD.exe'),runtimePackages:visited.size}));
