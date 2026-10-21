@@ -11,7 +11,7 @@ if (process.argv[1] && process.argv[1].match(/index\.(js|ts)$/)) {
   const server = new StudioServer({ port: PORT });
   server.start().then(() => {
     console.log(`\n======================================================`);
-    console.log(`  🚀 BridgeMind Multi-Agent Studio Server Running`);
+    console.log(`  🚀 SuperAi & RAKKYXD Studio Server Running`);
     console.log(`  📡 API & WebSocket Server: http://localhost:${PORT}`);
     console.log(`======================================================\n`);
   });
