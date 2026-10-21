@@ -44,6 +44,12 @@ jobs:
       - run: npm run package:release
       - run: npm run test:release
       - run: npm run archive:release
+      - name: Ensure NSIS (Windows installer)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue) -and -not (Test-Path "${env:ProgramFiles(x86)}\NSIS\makensis.exe")) { choco install nsis -y --no-progress }
+      - run: npm run installer:release
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: release-${{ matrix.label }}

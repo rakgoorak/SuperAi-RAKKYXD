@@ -1,0 +1,67 @@
+// Build the end-user installer from the packaged app (run after package:release):
+//   Windows -> release-assets/SuperAi-RAKKYXD-Setup.exe   (NSIS: pick folder, desktop shortcut, uninstaller)
+//   macOS   -> release-assets/SuperAi-RAKKYXD-macos-<arch>.dmg (drag the app to Applications)
+// Names carry no version so /releases/latest/download/<name> always serves the newest build.
+import fs from 'node:fs/promises';
+import { existsSync, createReadStream } from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+
+const manifest = JSON.parse(await fs.readFile('output/release-manifest.json', 'utf8'));
+await fs.mkdir('release-assets', { recursive: true });
+
+async function checksum(file) {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(file)) hash.update(chunk);
+  await fs.writeFile(file + '.sha256', `${hash.digest('hex')}  ${path.basename(file)}\n`);
+}
+
+function makensis() {
+  const candidates = [
+    ...(process.env.PATH || '').split(path.delimiter).map((dir) => path.join(dir, 'makensis.exe')),
+    path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'NSIS', 'makensis.exe'),
+    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'NSIS', 'makensis.exe'),
+  ];
+  const found = candidates.find((file) => existsSync(file));
+  if (!found) throw new Error('NSIS (makensis) is required: winget install NSIS.NSIS');
+  return found;
+}
+
+let output;
+if (process.platform === 'win32') {
+  output = path.resolve('release-assets', 'SuperAi-RAKKYXD-Setup.exe');
+  execFileSync(makensis(), [
+    '/V2', '/INPUTCHARSET', 'UTF8',
+    `/DVERSION=${manifest.version}`,
+    `/DSRCDIR=${manifest.directory}`,
+    `/DOUTFILE=${output}`,
+    `/DICON=${path.resolve('packages/desktop/assets/icon.ico')}`,
+    `/DART=${path.resolve('installer/windows')}`,
+    path.resolve('installer/windows/installer.nsi'),
+  ], { stdio: 'inherit' });
+} else if (process.platform === 'darwin') {
+  output = path.resolve('release-assets', `SuperAi-RAKKYXD-macos-${manifest.arch}.dmg`);
+  // Disk image with the app and an Applications link: open it and drag the app across.
+  const staging = path.resolve('output', `dmg-${Date.now()}`);
+  await fs.mkdir(staging, { recursive: true });
+  const app = (await fs.readdir(manifest.directory)).find((name) => name.endsWith('.app'));
+  if (!app) throw new Error('No .app in the packaged release');
+  execFileSync('ditto', [path.join(manifest.directory, app), path.join(staging, app)]);
+  await fs.symlink('/Applications', path.join(staging, 'Applications'));
+  await fs.rm(output, { force: true });
+  // hdiutil sometimes reports "Resource busy" on CI runners; retry a few times.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      execFileSync('hdiutil', ['create', '-volname', 'SuperAi & RAKKYXD', '-srcfolder', staging, '-fs', 'HFS+', '-format', 'UDZO', '-ov', output], { stdio: 'inherit' });
+      break;
+    } catch (error) {
+      if (attempt >= 4) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 5000 * attempt));
+    }
+  }
+} else {
+  throw new Error('Build installers on Windows or macOS');
+}
+await checksum(output);
+console.log(output);

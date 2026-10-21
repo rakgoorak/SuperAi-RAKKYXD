@@ -97,4 +97,34 @@ m.save(public / "mark.png")
 w = word.copy()
 w.thumbnail((560, 560), Image.LANCZOS)
 w.save(public / "wordmark.png")
+# Installer artwork (NSIS): welcome/finish sidebar and page header, at 2x for high-DPI screens.
+inst = ROOT / "installer/windows"
+inst.mkdir(parents=True, exist_ok=True)
+sw, sh = 328, 628
+side = Image.new("RGBA", (sw, sh))
+sd = ImageDraw.Draw(side)
+for y in range(sh):
+    t = y / (sh - 1)
+    sd.line([(0, y), (sw, y)], fill=(round(8 - 6 * t), round(22 - 12 * t), round(32 - 14 * t), 255))
+streaks = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
+st = ImageDraw.Draw(streaks)
+st.polygon([(-40, 150), (60, 50), (90, 50), (-10, 150)], fill=(48, 244, 87, 120))  # green streak, top left
+st.polygon([(sw - 90, sh - 40), (sw + 10, sh - 140), (sw + 40, sh - 140), (sw - 60, sh - 40)], fill=(0, 114, 251, 120))  # blue, bottom right
+side = Image.alpha_composite(side, streaks.filter(ImageFilter.GaussianBlur(6)))
+glow = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
+ImageDraw.Draw(glow).ellipse((20, 150, sw - 20, 380), fill=(0, 180, 150, 60))
+side = Image.alpha_composite(side, glow.filter(ImageFilter.GaussianBlur(40)))
+sm = mark.copy(); sm.thumbnail((sw - 56, 200), Image.LANCZOS)
+side.alpha_composite(sm, ((sw - sm.width) // 2, 170))
+swm = word.copy(); swm.thumbnail((sw - 70, 120), Image.LANCZOS)
+side.alpha_composite(swm, ((sw - swm.width) // 2, 170 + sm.height + 28))
+side.convert("RGB").save(inst / "sidebar.bmp")
+hw, hh = 300, 114
+head = Image.new("RGBA", (hw, hh), (255, 255, 255, 255))  # MUI page headers are white
+hm = mark.copy(); hm.thumbnail((150, 86), Image.LANCZOS)
+pad = Image.new("RGBA", (hm.width + 24, hm.height + 16), (10, 20, 28, 255))  # dark chip so the white "R" stays visible
+mask = Image.new("L", pad.size, 0); ImageDraw.Draw(mask).rounded_rectangle((0, 0, pad.width - 1, pad.height - 1), 14, fill=255)
+chip = Image.new("RGBA", pad.size, (0, 0, 0, 0)); chip.paste(pad, (0, 0), mask); chip.alpha_composite(hm, (12, 8))
+head.alpha_composite(chip, (hw - chip.width - 14, (hh - chip.height) // 2))
+head.convert("RGB").save(inst / "header.bmp")
 print("mark", mark.size, "->", m.size, "| wordmark", word.size, "->", w.size)

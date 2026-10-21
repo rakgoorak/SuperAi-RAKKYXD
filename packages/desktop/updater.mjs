@@ -207,6 +207,9 @@ export class Updater {
         `robocopy ${q(source)} ${q(target)} /E /XD ${q(path.join(source, "resources", "app"))} /R:20 /W:1 /NFL /NDL /NP | Out-Null`,
         `$rest = $LASTEXITCODE`,
         `Write-Output "robocopy app=$app rest=$rest"`,
+        // Installed with Setup.exe: keep the version in Settings > Apps in step with the files.
+        `$key = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SuperAi-RAKKYXD'`,
+        `if ($app -lt 8 -and (Test-Path $key) -and ((Get-ItemProperty $key).InstallLocation -eq ${q(target)})) { Set-ItemProperty $key -Name DisplayVersion -Value ${q(this.state.latestVersion)} }`,
         `Start-Process -FilePath ${q(exe)}`,
         `Stop-Transcript | Out-Null`,
         `if ($app -lt 8 -and $rest -lt 8) { Remove-Item -LiteralPath ${q(source)} -Recurse -Force -ErrorAction SilentlyContinue }`,
