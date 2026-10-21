@@ -45,14 +45,20 @@ export function findCodexSession(cwd: string, since: number, taken: Set<string>,
     try { files = fs.readdirSync(dir).filter((f) => f.endsWith(".jsonl")); } catch { continue; }
     for (const file of files) {
       try {
+        // The first line also holds the whole system prompt (often > 16 KB), so read only its
+        // start and pick the fields Codex writes first, instead of parsing the full line.
         const fd = fs.openSync(path.join(dir, file), "r");
         const buf = Buffer.alloc(16_384);
         const n = fs.readSync(fd, buf, 0, buf.length, 0);
         fs.closeSync(fd);
-        const first = buf.subarray(0, n).toString("utf8").split("\n")[0];
-        const meta = JSON.parse(first)?.payload;
-        const at = Date.parse(meta?.timestamp);
-        if (meta?.id && meta.cwd && samePath(meta.cwd, cwd) && at >= since - 10_000 && !taken.has(meta.id)) found.push({ id: meta.id, at });
+        const head = buf.subarray(0, n).toString("utf8").split("\n")[0];
+        const payload = head.slice(head.indexOf('"payload":'));
+        if (!head.includes('"session_meta"') || payload.length < 12) continue;
+        const id = /"id":"([^"]+)"/.exec(payload)?.[1];
+        const at = Date.parse(/"timestamp":"([^"]+)"/.exec(payload)?.[1] || "");
+        const rawCwd = /"cwd":"((?:[^"\\]|\\.)*)"/.exec(payload)?.[1];
+        const folder = rawCwd !== undefined ? JSON.parse(`"${rawCwd}"`) : "";
+        if (id && folder && samePath(folder, cwd) && at >= since - 10_000 && !taken.has(id)) found.push({ id, at });
       } catch {
         // a partial or unreadable rollout: skip it
       }
