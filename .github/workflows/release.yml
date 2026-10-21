@@ -63,7 +63,7 @@ jobs:
         with:
           name: diagnostics-${{ matrix.label }}
           path: |
-            output/release-check-*/workspace.png
+            output/release-check-*/*.png
             output/team-check-*/*.png
           if-no-files-found: ignore
   publish:
