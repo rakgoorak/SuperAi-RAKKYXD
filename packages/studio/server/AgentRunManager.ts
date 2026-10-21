@@ -11,7 +11,7 @@ import {
   ToolDefinition,
   LLMProvider,
 } from "@opencode-multi/core";
-import { CliProvider } from "./CliProvider.js";
+import { CliProvider, attachmentProblem } from "./CliProvider.js";
 import { AgentTeam, validateTeam } from "./AgentTeam.js";
 import { cliLaunch } from "./CliCatalog.js";
 export function ollamaBase() {
@@ -144,6 +144,7 @@ export class AgentRunManager {
     allowTools = false,
     openCodeModel = "",
     requestedTeam?: unknown,
+    attachments: string[] = [],
   ) {
     if (!prompt.trim() || prompt.length > 50000)
       throw new Error("กรุณาระบุคำสั่งไม่เกิน 50,000 ตัวอักษร");
@@ -162,6 +163,12 @@ export class AgentRunManager {
       members:["coder","tester","reviewer"].map(role=>({role,name:role,provider:model,model:openCodeModel && model === "cli:opencode" ? openCodeModel : ""})),
     }) : undefined;
     if (team) for (const seat of [team.leader,...team.members]) if(seat.provider.startsWith("cli:")) cliLaunch(seat.provider.slice(4));
+    for (const seat of team ? [team.leader, ...team.members] : [{ name: "", provider: model }]) {
+      const problem = attachmentProblem(seat.provider, attachments);
+      if (problem) throw new Error(seat.name ? `${seat.name}: ${problem}` : problem);
+    }
+    if (attachments.length)
+      prompt = `${prompt}\n\nไฟล์แนบ (อ่านจากตำแหน่งนี้ได้):\n${attachments.map((file) => `- "${file}"`).join("\n")}`;
     const run: ConversationRun = {
       id: randomUUID(),
       wsId,
@@ -179,7 +186,7 @@ export class AgentRunManager {
     this.controllers.set(run.id, controller);
     try {this.save();}catch(error){this.runs.delete(run.id);this.controllers.delete(run.id);throw error;}
     const makeProvider = (providerId:string, override:string, tools:boolean, readTools=false) => providerId.startsWith("cli:")
-      ? new CliProvider(providerId,cwd,controller.signal,tools,override,readTools)
+      ? new CliProvider(providerId,cwd,controller.signal,tools,override,readTools,attachments)
       : new LocalProvider(providerId,controller.signal);
     const provider = makeProvider(team?.leader.provider || model, team ? team.leader.model : openCodeModel, team ? false : allowTools, !!team && allowTools);
     const note = (text: string) => {

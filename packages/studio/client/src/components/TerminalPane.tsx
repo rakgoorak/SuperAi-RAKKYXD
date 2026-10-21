@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { X, Terminal as TerminalIcon, Bot, Sparkles, Cpu, Circle } from 'lucide-react';
+import { X, Terminal as TerminalIcon, Bot, Sparkles, Cpu, Circle, ImagePlus, AlertTriangle } from 'lucide-react';
+import { attachMode, formatPath, isPdf, isSupportedAttachment, isSupportedImage, pastedFiles, uploadAttachment, UNSUPPORTED_ATTACHMENT, type SavedAttachment } from '../attachments';
 
 export interface TerminalTab {
   id: string;
@@ -50,6 +51,15 @@ const THEME = {
   brightWhite: '#f8fafc',
 };
 
+interface AttachNotice {
+  kind: 'busy' | 'ok' | 'error';
+  text: string;
+  detail?: string;
+  thumb?: string;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 export function tabIcon(type: string, className = 'w-3.5 h-3.5') {
   switch (type) {
     case 'claude-code':
@@ -81,6 +91,20 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   const wsRef = useRef<WebSocket | null>(null);
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
+  const attachRef = useRef<((files: File[], source: 'paste' | 'drop') => Promise<void>) | null>(null);
+  const [notice, setNotice] = useState<AttachNotice | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const noticeTimer = useRef<number>();
+
+  const showNotice = (next: AttachNotice | null) => {
+    window.clearTimeout(noticeTimer.current);
+    setNotice((previous) => {
+      if (previous?.thumb && previous.thumb !== next?.thumb) URL.revokeObjectURL(previous.thumb);
+      return next;
+    });
+    if (next && next.kind !== 'busy') noticeTimer.current = window.setTimeout(() => showNotice(null), next.kind === 'error' ? 12000 : 6000);
+  };
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
 
   // Create xterm + websocket once per session.
   useEffect(() => {
@@ -137,6 +161,78 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
       onExitRef.current();
     };
 
+    // Image/PDF paste and drop: hand the file to the CLI the way that CLI accepts
+    // it (see attachments.ts). Nothing is submitted; the user keeps typing.
+    const upload = (file: File) => uploadAttachment(`/api/terminals/${tab.sessionId}/attachments`, file);
+    const attach = async (files: File[], source: 'paste' | 'drop') => {
+      const mode = attachMode(tab.type);
+      const native = window.superai;
+      const images = files.filter(isSupportedImage);
+      const firstImage = images[0];
+      showNotice({ kind: 'busy', text: 'กำลังแนบไฟล์…' });
+      try {
+        let saved: SavedAttachment | undefined;
+        let staged = 0;
+        for (const file of files) {
+          const existing = native?.pathForFile(file) || '';
+          if (!isSupportedAttachment(file) && (file.type.startsWith('image/') || !existing)) {
+            throw new Error(file.type.startsWith('image/') ? UNSUPPORTED_ATTACHMENT : `ไฟล์ "${file.name}" ไม่มีตำแหน่งบนเครื่อง ให้บันทึกลงเครื่องก่อนแล้วลากมาวางใหม่`);
+          }
+          if (mode === 'clipboard' && isSupportedImage(file)) {
+            if (source === 'paste') {
+              send('\x16'); // Codex reads the image straight from the clipboard.
+              continue;
+            }
+            if (native) {
+              const filePath = existing || (saved = await upload(file)).path;
+              if (staged++) await sleep(700);
+              await native.stageClipboardImage(filePath);
+              send('\x16');
+              continue;
+            }
+          }
+          if (mode === 'clipboard' && isPdf(file)) {
+            // A project-relative path has no ":" or "\" for ConPTY to drop.
+            saved = await upload(file);
+            term.paste(formatPath(saved.relativePath));
+            continue;
+          }
+          if (existing) {
+            term.paste(formatPath(existing));
+            continue;
+          }
+          saved = await upload(file);
+          term.paste(formatPath(saved.path));
+        }
+        const count = files.length > 1 ? ` ${files.length} ไฟล์` : '';
+        showNotice({
+          kind: 'ok',
+          text: firstImage ? `แนบรูปแล้ว${count}` : files.some(isPdf) ? `แนบ PDF แล้ว${count}` : 'ใส่ตำแหน่งไฟล์แล้ว',
+          detail: saved
+            ? `บันทึกที่ ${saved.relativePath} · พิมพ์ข้อความต่อแล้วกด Enter เพื่อส่ง`
+            : mode === 'clipboard' && firstImage
+              ? 'ส่งให้ Codex ผ่านคลิปบอร์ดแล้ว · พิมพ์ข้อความต่อแล้วกด Enter เพื่อส่ง'
+              : 'พิมพ์ข้อความต่อแล้วกด Enter เพื่อส่ง',
+          thumb: firstImage ? URL.createObjectURL(firstImage) : undefined,
+        });
+      } catch (error: any) {
+        showNotice({ kind: 'error', text: 'แนบไฟล์ไม่สำเร็จ', detail: error?.message || 'กรุณาลองใหม่อีกครั้ง' });
+      } finally {
+        term.focus();
+      }
+    };
+    attachRef.current = attach;
+    // Capture phase: runs before xterm's own paste handler; text paste falls through untouched.
+    const onPaste = (event: ClipboardEvent) => {
+      const files = pastedFiles(event.clipboardData);
+      if (!files.length) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void attach(files, 'paste');
+    };
+    const host = containerRef.current;
+    host.addEventListener('paste', onPaste, true);
+
     const dataSub = term.onData(send);
     const resizeSub = term.onResize(sendResize);
     registerSender(tab.id, send);
@@ -155,6 +251,8 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
     return () => {
       window.clearTimeout(autoTimer);
       observer.disconnect();
+      host.removeEventListener('paste', onPaste, true);
+      attachRef.current = null;
       dataSub.dispose();
       resizeSub.dispose();
       registerSender(tab.id, null);
@@ -182,9 +280,35 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
     return () => window.cancelAnimationFrame(id);
   }, [visible, focused]);
 
+  const hasFiles = (event: React.DragEvent) => !!tab.sessionId && Array.from(event.dataTransfer.types).includes('Files');
+
   return (
     <div
       onMouseDown={onFocus}
+      data-terminal-pane={tab.sessionId ? '' : undefined}
+      onDragEnter={(event) => {
+        if (!hasFiles(event)) return;
+        event.preventDefault();
+        setDragging(true);
+      }}
+      onDragOver={(event) => {
+        if (!hasFiles(event)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+        if (!dragging) setDragging(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={(event) => {
+        if (!hasFiles(event)) return;
+        event.preventDefault();
+        event.stopPropagation(); // the window-level drop (composer) must not take it too
+        setDragging(false);
+        onFocus();
+        const files = Array.from(event.dataTransfer.files);
+        if (files.length) void attachRef.current?.(files, 'drop');
+      }}
       className={`${visible ? 'flex' : 'hidden'} flex-col min-h-0 min-w-0 h-full bg-[#0a0d14] ${
         showHeader ? `rounded-lg border ${focused ? 'border-cyan-500/70 shadow-[0_0_0_1px_rgba(0,210,255,0.15)]' : 'border-[#1f293d]'}` : ''
       } overflow-hidden`}
@@ -209,7 +333,40 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
           </button>
         </div>
       )}
-      <div className="flex-1 min-h-0 p-1.5">
+      <div className="relative flex-1 min-h-0 p-1.5">
+        {dragging && (
+          <div className="absolute inset-1.5 z-10 flex flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed border-cyan-400/80 bg-[#0a0d14]/85 text-cyan-200 text-sm pointer-events-none">
+            <ImagePlus className="w-6 h-6" />
+            <span>วางไฟล์เพื่อแนบให้ {tab.name}</span>
+            <span className="text-[11px] text-slate-400">รูปหรือ PDF จะถูกบันทึกใน .superai/attachments ของโปรเจกต์</span>
+          </div>
+        )}
+        {notice && (
+          <div
+            role={notice.kind === 'error' ? 'alert' : 'status'}
+            aria-label="สถานะการแนบไฟล์"
+            className={`absolute right-3 top-3 z-10 max-w-[min(360px,calc(100%-24px))] flex items-center gap-2 rounded-md border px-2 py-1.5 text-[11px] shadow-lg ${
+              notice.kind === 'error' ? 'border-rose-500/60 bg-[#2a1118] text-rose-100' : 'border-cyan-500/50 bg-[#0e1a26] text-slate-200'
+            }`}
+          >
+            {notice.thumb ? (
+              <img src={notice.thumb} alt="" className="w-9 h-9 rounded object-cover shrink-0 border border-white/10" />
+            ) : notice.kind === 'error' ? (
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-300" />
+            ) : (
+              <ImagePlus className="w-4 h-4 shrink-0 text-cyan-300" />
+            )}
+            <div className="min-w-0">
+              <div className="font-medium">{notice.text}</div>
+              {notice.detail && <div className="text-slate-400 break-words">{notice.detail}</div>}
+            </div>
+            {notice.kind !== 'busy' && (
+              <button onClick={() => showNotice(null)} className="ml-1 p-0.5 text-slate-500 hover:text-slate-200 rounded shrink-0" title="ปิดข้อความ" aria-label="ปิดข้อความ">
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        )}
         {tab.sessionId ? (
           <div ref={containerRef} className="w-full h-full" />
         ) : (

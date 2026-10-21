@@ -15,7 +15,8 @@ const app = await electron.launch({
 let checks = 0;
 const measurements = [];
 try {
-  const page = await app.firstWindow();
+  const page = await app.firstWindow(); // Setup guide is covered by smoke.mjs.
+  await page.waitForSelector('.app-shell'); await page.evaluate(() => localStorage.setItem('superai-setup-dismissed', '1')); await page.reload(); await page.waitForSelector('.app-shell');
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.waitForSelector('.app-shell');
@@ -74,7 +75,10 @@ try {
       await page.getByRole('button', { name: 'Preview', exact: true }).click();
       await page.waitForSelector('.preview-panel');
       assert.equal((await measure()).columns, 1);
-      await request('/api/dictation', { text: 'ทดสอบแจ้งเตือนขณะเปิด Preview' });
+      const composerToggle = page.getByTitle('ช่องคำสั่งรวม', { exact: true });
+      if (await composerToggle.getAttribute('aria-pressed') !== 'true') await composerToggle.click();
+      await page.getByRole('textbox', { name: 'คำสั่ง', exact: true }).fill('echo ทดสอบแจ้งเตือนขณะเปิด Preview');
+      await page.getByRole('textbox', { name: 'คำสั่ง', exact: true }).press('Enter');
       await page.waitForSelector('.message-banner:not(.error)');
       assert.ok(await page.evaluate(() => {
         const toast = document.querySelector('.message-banner').getBoundingClientRect();

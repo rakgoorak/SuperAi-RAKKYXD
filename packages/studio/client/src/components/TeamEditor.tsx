@@ -38,7 +38,7 @@ export function TeamEditor({workspaceId,clis,models,openCodeModels,provider,over
         {member&&fields(role,member)}
       </div>;})}
     </fieldset>
-    <p className="team-footnote">หากต้องการแก้ไฟล์/รันทดสอบ ให้เปิด “อนุญาตแก้ไฟล์และรันคำสั่ง” ด้านล่าง · เลือกอย่างน้อย 1 ลูกทีม · เว้นรุ่น CLI ว่างเพื่อใช้ค่าเริ่มต้น · ใช้บัญชีและโควตาของแต่ละ CLI · Gemini/Freebuff ใช้ในโหมดโค้ดได้ ส่วนทีมอัตโนมัติยังไม่รองรับ</p>
+    <p className="team-footnote">หากต้องการแก้ไฟล์/รันทดสอบ ให้เปิด “อนุญาตแก้ไฟล์และรันคำสั่ง” ด้านล่าง · เลือกอย่างน้อย 1 ลูกทีม · เว้นรุ่น CLI ว่างเพื่อใช้ค่าเริ่มต้น · ใช้บัญชีและโควตาของแต่ละ CLI · Antigravity CLI/Freebuff ใช้ในโหมดโค้ดได้ ส่วนทีมอัตโนมัติยังไม่รองรับ</p>
   </section>;
 }
 export function TeamProgress({run}:{run:Run}) {

@@ -11,12 +11,11 @@ const electronExecutable=require('electron');const runtime=path.dirname(electron
 await fs.mkdir(path.dirname(destination),{recursive:true});
 await fs.cp(runtime,destination,{recursive:true,filter:source=>!source.endsWith('default_app.asar')});
 await fs.rename(path.join(destination,'electron.exe'),path.join(destination,'SuperAi-RAKKYXD.exe'));
-await fs.copyFile(path.join(destination,'SuperAi-RAKKYXD.exe'),path.join(destination,'SuperAiVoice-RAKKYXD.exe'));
 await fs.mkdir(appRoot,{recursive:true});
 await fs.writeFile(path.join(appRoot,'package.json'),JSON.stringify({name:'superai-rakkyxd',productName:'SuperAi & RAKKYXD',version:'1.0.0',type:'module',main:'bootstrap.mjs'},null,2));
-await fs.writeFile(path.join(appRoot,'bootstrap.mjs'),`import path from 'node:path';\nconst voice=process.argv.includes('--superai-voice')||path.basename(process.execPath).toLowerCase().includes('voice');\nawait import(voice?'./packages/voice/main.mjs':'./packages/desktop/main.mjs');\n`);
+await fs.writeFile(path.join(appRoot,'bootstrap.mjs'),`await import('./packages/desktop/main.mjs');\n`);
 const copy=async(relative)=>fs.cp(path.join(root,relative),path.join(appRoot,relative),{recursive:true,filter:source=>!/[\\/](test|__pycache__)([\\/]|$)/.test(source)&&!source.endsWith('.test.mjs')});
-for(const relative of ['packages/desktop','packages/studio/dist','packages/studio/client/dist','packages/voice'])await copy(relative);
+for(const relative of ['packages/desktop','packages/studio/dist','packages/studio/client/dist'])await copy(relative);
 await fs.copyFile(path.join(root,'README.md'),path.join(destination,'README.md'));
 const topModules=path.join(appRoot,'node_modules');const versions=new Map();const visited=new Map();
 async function packageRoot(name,from){
@@ -42,5 +41,5 @@ async function include(name,from,parentTarget){
  }
 }
 for(const name of ['express','ws','@lydell/node-pty','@opencode-multi/core'])await include(name,root,appRoot);
-await fs.writeFile(path.join(destination,'PORTABLE.txt'),'SuperAi & RAKKYXD\r\nOpen SuperAi-RAKKYXD.exe for the workspace.\r\nOpen SuperAiVoice-RAKKYXD.exe for dictation.\r\nKeep this entire folder together. Voice requires Python 3.10+ and a Whisper model. CLI agents require their own installation and accounts.\r\n');
-console.log(JSON.stringify({directory:destination,main:path.join(destination,'SuperAi-RAKKYXD.exe'),voice:path.join(destination,'SuperAiVoice-RAKKYXD.exe'),runtimePackages:visited.size}));
+await fs.writeFile(path.join(destination,'PORTABLE.txt'),'SuperAi & RAKKYXD\r\nOpen SuperAi-RAKKYXD.exe.\r\nKeep this entire folder together. Voice mode downloads its speech model on first use. CLI agents require their own accounts.\r\n');
+console.log(JSON.stringify({directory:destination,main:path.join(destination,'SuperAi-RAKKYXD.exe'),runtimePackages:visited.size}));

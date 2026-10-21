@@ -19,7 +19,8 @@ await new Promise(resolve=>service.listen(0,'127.0.0.1',resolve));
 const app=await electron.launch({executablePath:require('electron'),args:['packages/desktop'],env:{...process.env,SUPERAI_DATA_DIR:data,SUPERAI_OLLAMA_URL:`http://127.0.0.1:${service.address().port}`,SUPERAI_TEST_MODE:'1'},timeout:60000});
 const passed=[],errors=[];
 try{
- const page=await app.firstWindow();page.on('pageerror',e=>errors.push(e.message));await page.waitForSelector('.app-shell');
+ const page=await app.firstWindow();page.on('pageerror',e=>errors.push(e.message));await page.waitForSelector('.app-shell'); // Setup guide is covered by smoke.mjs.
+  await page.waitForSelector('.app-shell'); await page.evaluate(() => localStorage.setItem('superai-setup-dismissed', '1')); await page.reload(); await page.waitForSelector('.app-shell');
  await app.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows()[0];w.unmaximize();w.setContentSize(1100,760);});
  const request=(route,body)=>page.evaluate(async({route,body})=>{const res=await fetch(route,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:undefined);if(!res.ok)throw new Error(await res.text());return res.json();},{route,body});
  await request('/api/workspaces',{name:'Team fixture',rootPath:data});

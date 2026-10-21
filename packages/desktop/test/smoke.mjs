@@ -29,8 +29,7 @@ const app = await electron.launch({
   env: { ...process.env, SUPERAI_DATA_DIR: data },
   timeout: 60000,
 });
-let checks = 0,
-  voiceApp;
+let checks = 0;
 try {
   const page = await app.firstWindow();
   const errors = [];
@@ -39,6 +38,14 @@ try {
   await page.waitForFunction(() =>
     document.querySelector(".statusbar")?.textContent.includes("เชื่อมต่อแล้ว"),
   );
+  // A fresh profile opens the first-run setup guide with real machine checks.
+  const setup = page.getByRole("dialog", { name: "เริ่มต้นใช้งาน SuperAi" });
+  await setup.waitFor();
+  await setup.getByText("Node.js 22", { exact: true }).waitFor();
+  await setup.getByText("เข้าสู่ระบบบัญชี AI", { exact: true }).waitFor();
+  await setup.getByRole("button", { name: "เสร็จแล้ว" }).click();
+  await setup.waitFor({ state: "hidden" });
+  checks++;
   const request = async (route, options) =>
     page.evaluate(
       async ({ route, options }) => {
@@ -158,6 +165,98 @@ try {
   );
   checks++;
   await page.screenshot({ path: path.join(output, "superai-terminal.png") });
+  // Paste / drop: text paste still reaches the shell; images are saved into the
+  // project's .superai/attachments and their path is typed (not submitted).
+  const terminalText = () =>
+    page.evaluate(() =>
+      fetch("/api/terminals")
+        .then((r) => r.json())
+        .then((s) => s.map((x) => x.bufferedOutput).join("").replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "").replace(/[\r\n]/g, "")),
+    );
+  const pngBase64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const transfer = async (kind, payload) =>
+    page.evaluate(
+      ({ kind, payload }) => {
+        const dt = new DataTransfer();
+        if (payload.text) dt.setData("text/plain", payload.text);
+        if (payload.png) {
+          const bytes = Uint8Array.from(atob(payload.png), (c) => c.charCodeAt(0));
+          dt.items.add(new File([bytes], payload.name, { type: "image/png" }));
+        }
+        const target = document.querySelector(".xterm textarea");
+        if (kind === "paste")
+          target.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+        else {
+          for (const type of ["dragenter", "dragover", "drop"])
+            target.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+        }
+      },
+      { kind, payload },
+    );
+  await transfer("paste", { text: "SUPERAI_TEXT_PASTE" });
+  await eventually(async () => (await terminalText()).includes("SUPERAI_TEXT_PASTE"));
+  assert.equal(await fs.stat(path.join(data, ".superai")).catch(() => null), null);
+  checks++;
+  const attachments = path.join(data, ".superai", "attachments");
+  const savedImages = () => fs.readdir(attachments).catch(() => []);
+  await transfer("paste", { png: pngBase64, name: "screenshot.png" });
+  await page.getByRole("status", { name: "สถานะการแนบไฟล์" }).getByText("แนบรูปแล้ว", { exact: true }).waitFor();
+  await eventually(async () => (await savedImages()).length === 1);
+  const [pasted] = await savedImages();
+  assert.match(pasted, /^image-\d{8}-\d{6}-[0-9a-f]{6}\.png$/);
+  assert.equal((await fs.readFile(path.join(attachments, pasted))).toString("base64"), pngBase64);
+  await eventually(async () => (await terminalText()).includes(pasted));
+  checks++;
+  await transfer("drop", { png: pngBase64, name: "dropped.png" });
+  await eventually(async () => (await savedImages()).length === 2);
+  const dropped = (await savedImages()).find((name) => name !== pasted);
+  await eventually(async () => (await terminalText()).includes(dropped));
+  await page.screenshot({ path: path.join(output, "superai-attach.png") });
+  checks++;
+  // Composer: paste an image, drop a PDF outside the panes, remove one card, send.
+  const composerBox = page.getByRole("textbox", { name: "คำสั่ง", exact: true });
+  const cards = page.getByRole("list", { name: "ไฟล์แนบ" }).getByRole("listitem");
+  await composerBox.evaluate((el, png) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([Uint8Array.from(atob(png), (c) => c.charCodeAt(0))], "clip.png", { type: "image/png" }));
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, pngBase64);
+  await cards.first().getByRole("img", { name: "clip.png" }).waitFor();
+  const dragDocument = (name, types) =>
+    page.evaluate(({ name, types }) => {
+      window.__superaiDrag ||= {};
+      if (!window.__superaiDrag[name]) {
+        const dt = new DataTransfer();
+        dt.items.add(new File(["%PDF-1.4\n1 0 obj << /Type /Page >> endobj\n2 0 obj << /Type /Page >> endobj\n%%EOF\n"], name, { type: "application/pdf" }));
+        window.__superaiDrag[name] = dt;
+      }
+      const target = document.querySelector(".composer-box");
+      for (const type of types)
+        target.dispatchEvent(new DragEvent(type, { dataTransfer: window.__superaiDrag[name], bubbles: true, cancelable: true }));
+    }, { name, types });
+  await dragDocument("spec.pdf", ["dragenter", "dragover"]);
+  await page.getByText("วางเพื่อแนบในช่องคำสั่ง", { exact: true }).waitFor();
+  await dragDocument("spec.pdf", ["drop"]);
+  await page.getByText("วางเพื่อแนบในช่องคำสั่ง", { exact: true }).waitFor({ state: "hidden" });
+  await cards.filter({ hasText: "spec.pdf" }).getByText("PDF · 2 หน้า").waitFor();
+  await dragDocument("extra.pdf", ["dragenter", "dragover", "drop"]);
+  await cards.filter({ hasText: "extra.pdf" }).waitFor();
+  await page.getByRole("button", { name: "เอา extra.pdf ออก", exact: true }).click();
+  await eventually(async () => (await cards.count()) === 2);
+  await page.screenshot({ path: path.join(output, "superai-composer-attach.png") });
+  await request(`/api/terminals/${(await request("/api/terminals")).body[0].id}/input`, { method: "POST", body: JSON.stringify({ input: "\x1b" }) });
+  await composerBox.fill("echo SUPERAI_COMPOSER");
+  await page.getByRole("button", { name: "ส่งคำสั่ง (Enter)", exact: true }).click();
+  await eventually(async () => (await cards.count()) === 0);
+  const composerFiles = (await savedImages()).filter((name) => name !== pasted && name !== dropped);
+  assert.equal(composerFiles.length, 2);
+  assert.ok(composerFiles.some((name) => /^document-.*\.pdf$/.test(name)));
+  await eventually(async () => {
+    const text = await terminalText();
+    return text.includes("SUPERAI_COMPOSER") && composerFiles.every((name) => text.includes(name));
+  });
+  checks++;
   await page
     .getByRole("button", { name: "สร้าง session", exact: false })
     .click();
@@ -170,27 +269,6 @@ try {
     .allTextContents();
   assert.deepEqual(options, ["1 session"]);
   await page.getByRole("button", { name: "ยกเลิก", exact: true }).click();
-  checks++;
-  voiceApp = await electron.launch({
-    executablePath: process.env.SUPERAI_PORTABLE_DIR ? path.join(process.env.SUPERAI_PORTABLE_DIR,"SuperAiVoice-RAKKYXD.exe") : require("electron"),
-    args: process.env.SUPERAI_PORTABLE_DIR ? [] : ["packages/voice"],
-    env: { ...process.env, SUPERAI_VOICE_DATA_DIR: path.join(data, "voice") },
-    timeout: 60000,
-  });
-  const voice = await voiceApp.firstWindow();
-  await voice.waitForSelector("#transcript");
-  await voice.locator("#transcript").fill("สร้างเว็บไซต์ภาษาไทยจากเสียง");
-  await voice.locator("#deliver").click();
-  await page.waitForFunction(() =>
-    document
-      .querySelector('textarea[aria-label="คำสั่ง"]')
-      .value.includes("สร้างเว็บไซต์ภาษาไทยจากเสียง"),
-  );
-  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'คำสั่ง');
-  checks++;
-  await voice.screenshot({ path: path.join(output, "superai-voice.png") });
-  const capture = await voice.evaluate(() => window.voice.capture());
-  assert.equal(capture.ok, true);
   checks++;
   await page.getByRole("button", { name: "สนทนา", exact: true }).click();
   await page
@@ -237,7 +315,6 @@ try {
     }),
   );
 } finally {
-  await voiceApp?.close();
   await app.close();
   await new Promise((r) => website.close(r));
 }

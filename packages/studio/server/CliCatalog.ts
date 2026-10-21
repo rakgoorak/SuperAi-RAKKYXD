@@ -1,8 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
+import { managedNodeDir, managedNodeBin, installNode22 } from "./NodeInstaller.js";
+import { managedGitCmd, bashForGit } from "./GitInstaller.js";
+
+export { managedNodeDir, managedNodeBin, installNode22 };
 
 export const CLI_DEFINITIONS = [
   {
@@ -18,16 +22,99 @@ export const CLI_DEFINITIONS = [
     maxSessions: 12,
   },
   { id: "codex", name: "Codex", command: "codex", maxSessions: 12 },
-  { id: "gemini", name: "Gemini CLI", command: "gemini", maxSessions: 12 },
+  // Gemini CLI was retired in June 2026; Google replaced it with Antigravity CLI (agy).
+  { id: "antigravity", name: "Antigravity CLI", command: "agy", maxSessions: 12 },
   { id: "opencode", name: "OpenCode", command: "opencode", maxSessions: 12 },
   { id: "freebuff", name: "Freebuff", command: "freebuff", maxSessions: 1 },
 ];
 export const INSTALL_PACKAGES: Record<string, string> = {
-  'claude-code':'@anthropic-ai/claude-code', codex:'@openai/codex', gemini:'@google/gemini-cli', opencode:'opencode-ai', freebuff:'freebuff',
+  'claude-code':'@anthropic-ai/claude-code', codex:'@openai/codex', opencode:'opencode-ai', freebuff:'freebuff',
 };
+// Not on npm (the npm names "agy"/"antigravity" are unrelated placeholders): Google's
+// own installer downloads a SHA-512-verified binary. Fixed URLs only.
+export const INSTALL_SCRIPTS: Record<string, { win32: string; posix: string }> = {
+  antigravity: { win32: 'https://antigravity.google/cli/install.ps1', posix: 'https://antigravity.google/cli/install.sh' },
+};
+export const antigravityBin = () =>
+  process.platform === 'win32' ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'agy', 'bin') : path.join(os.homedir(), '.local', 'bin');
 export const managedCliPrefix = () => path.join(os.homedir(), '.opencode-multi', 'cli-tools');
 export const managedCliBin = () => process.platform === 'win32' ? managedCliPrefix() : path.join(managedCliPrefix(), 'bin');
-export const cliPath = () => [...new Set([managedCliBin(), path.join(os.homedir(), '.local','bin'), ...(process.env.PATH || '').split(path.delimiter)])].join(path.delimiter);
+export const cliPath = () => [
+  ...new Set([
+    managedCliBin(),
+    managedNodeBin(),
+    ...(process.platform === 'win32' ? [managedGitCmd(), antigravityBin()] : []),
+    path.join(os.homedir(), '.local', 'bin'),
+    ...(process.env.PATH || '').split(path.delimiter),
+  ]),
+].filter(Boolean).join(path.delimiter);
+
+// Environment for spawned CLIs: managed PATH plus Git Bash for Claude Code on Windows.
+export function cliEnv(): Record<string, string> {
+  const env: Record<string, string> = { PATH: cliPath() };
+  if (process.platform === 'win32' && !process.env.CLAUDE_CODE_GIT_BASH_PATH) {
+    const git = findExecutable('git');
+    const bash = git && bashForGit(git);
+    if (bash) env.CLAUDE_CODE_GIT_BASH_PATH = bash;
+  }
+  return env;
+}
+
+export interface NodeStatus {
+  installed: boolean;
+  ready: boolean;
+  version: string | null;
+  major: number;
+  isManaged: boolean;
+  nodePath: string | null;
+  npmPath: string | null;
+}
+
+export function getNodeStatus(
+  customFind = findExecutable,
+  customVersion?: (node: string) => string,
+): NodeStatus {
+  const node = customFind('node');
+  const npm = customFind('npm');
+  if (!node || !npm) {
+    return {
+      installed: false,
+      ready: false,
+      version: null,
+      major: 0,
+      isManaged: false,
+      nodePath: node || null,
+      npmPath: npm || null,
+    };
+  }
+
+  let ver = '';
+  try {
+    if (customVersion) {
+      ver = customVersion(node);
+    } else {
+      ver = execFileSync(node, ['-p', 'process.versions.node'], {
+        encoding: 'utf8',
+        timeout: 5000,
+        windowsHide: true,
+      }).trim();
+    }
+  } catch {
+    ver = '';
+  }
+
+  const major = parseInt(ver.split('.')[0] || '0', 10);
+  const isManaged = path.resolve(node).toLowerCase().startsWith(path.resolve(managedNodeDir()).toLowerCase());
+  return {
+    installed: true,
+    ready: major >= 22,
+    version: ver || null,
+    major: isNaN(major) ? 0 : major,
+    isManaged,
+    nodePath: node,
+    npmPath: npm,
+  };
+}
 
 export function getCliDefinition(id: string) {
   const definition = CLI_DEFINITIONS.find((c) => c.id === id);
@@ -55,11 +142,15 @@ export function findExecutable(command: string): string | null {
 }
 
 export function listClis() {
+  const nodeStatus = getNodeStatus();
   return CLI_DEFINITIONS.map((c) => ({
     ...c,
     available: !!findExecutable(c.command),
-    installPackage: INSTALL_PACKAGES[c.id],
-    installerReady: !!findExecutable('node') && !!findExecutable('npm'),
+    installPackage: INSTALL_PACKAGES[c.id] || (INSTALL_SCRIPTS[c.id] ? 'antigravity.google' : undefined),
+    needsNode: !!INSTALL_PACKAGES[c.id],
+    installerReady: true,
+    nodeReady: nodeStatus.ready,
+    nodeStatus,
     teamSupported: ['claude-code','codex','opencode'].includes(c.id),
   }));
 }
@@ -92,7 +183,6 @@ export function cliLaunch(
       codex: "@openai/codex",
       opencode: "opencode-ai",
       freebuff: "freebuff",
-      gemini: "@google/gemini-cli",
       "claude-code": "@anthropic-ai/claude-code",
     };
     const packageName = packages[id];
