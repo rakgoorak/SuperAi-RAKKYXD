@@ -38,6 +38,6 @@ export async function stageApp(appRoot, root = process.cwd()) {
       try { await include(dependency, directory, target); } catch (error) { if (!(dependency in (data.optionalDependencies || {}))) throw error; }
     }
   }
-  for (const name of ['express', 'ws', '@lydell/node-pty', '@opencode-multi/core']) await include(name, root, appRoot);
+  for (const name of ['express', 'ws', '@lydell/node-pty', '@superai-rakkyxd/core']) await include(name, root, appRoot);
   return visited.size;
 }

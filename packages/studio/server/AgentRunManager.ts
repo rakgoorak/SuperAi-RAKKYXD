@@ -10,7 +10,7 @@ import {
   LLMResponse,
   ToolDefinition,
   LLMProvider,
-} from "@opencode-multi/core";
+} from "@superai-rakkyxd/core";
 import { CliProvider, attachmentProblem } from "./CliProvider.js";
 import { AgentTeam, validateTeam } from "./AgentTeam.js";
 import { cliLaunch } from "./CliCatalog.js";

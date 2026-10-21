@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { LLMProvider, LLMMessage, LLMResponse } from "@opencode-multi/core";
+import { LLMProvider, LLMMessage, LLMResponse } from "@superai-rakkyxd/core";
 import { cliLaunch, cliEnv } from "./CliCatalog.js";
 
 export function promptArguments(
