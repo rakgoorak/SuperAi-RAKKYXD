@@ -120,6 +120,7 @@ else {
         minWidth: 1040,
         minHeight: 680,
         title: "SuperAi & RAKKYXD",
+        icon: path.join(directory, "assets", process.platform === "win32" ? "icon.ico" : "icon.png"),
         backgroundColor: "#111519",
         show: false,
         autoHideMenuBar: true,
