@@ -55,7 +55,7 @@ export type StepStatus = "pending" | "running" | "completed" | "failed" | "cance
 export interface PanelAnswer { seat: Seat; status: StepStatus; output: string; error?: string; }
 export interface AgentTask { id: string; title: string; assignee: number; instructions: string; dependsOn: string[]; status: StepStatus; output: string; error?: string; }
 export interface Activity { at: number; who: string; text: string; }
-export interface SkillInfo { source: string; sourceLabel: string; name: string; description: string; files: string[]; url: string; reason?: string; }
+export interface SkillInfo { source: string; sourceLabel: string; name: string; description: string; files: string[]; url: string; repo?: string; branch?: string; prefix?: string; installs?: number; reason?: string; }
 export interface InstalledSkill { name: string; source: string; managed: boolean; targets: string[]; }
 export interface Session {
   id: string;

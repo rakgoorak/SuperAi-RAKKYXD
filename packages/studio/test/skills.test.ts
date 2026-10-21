@@ -70,3 +70,57 @@ test('multi-line YAML descriptions are read in full', async () => {
   const [skill] = await new SkillManager(http).catalog();
   assert.equal(skill.description, 'First line second line');
 });
+
+test('search finds skills from skills.sh and reads descriptions', async () => {
+  const http = (async (url: any) => {
+    const u = String(url);
+    if (u.includes('skills.sh/api/search')) {
+      return new Response(JSON.stringify({
+        skills: [
+          { id: 'vercel-labs/agent-browser/agent-browser', source: 'vercel-labs/agent-browser', skillId: 'agent-browser', name: 'agent-browser', installs: 1000 },
+        ],
+      }));
+    }
+    if (u.includes('SKILL.md')) {
+      return new Response('---\nname: agent-browser\ndescription: Browser automation CLI\n---\nbody');
+    }
+    return new Response('{}', { status: 404 });
+  }) as typeof fetch;
+
+  const manager = new SkillManager(http);
+  const results = await manager.search('browser');
+  assert.equal(results.length, 1);
+  assert.equal(results[0].name, 'agent-browser');
+  assert.equal(results[0].repo, 'vercel-labs/agent-browser');
+  assert.equal(results[0].installs, 1000);
+  assert.equal(results[0].description, 'Browser automation CLI');
+});
+
+test('install works for skills from skills.sh with custom repo options', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'superai-sh-skill-'));
+  try {
+    const http = (async (url: any) => {
+      const u = String(url);
+      if (u.includes('api.github.com/repos/vercel-labs/agent-browser')) {
+        return new Response(JSON.stringify({
+          tree: [
+            { type: 'blob', path: 'skills/agent-browser/SKILL.md' },
+            { type: 'blob', path: 'skills/agent-browser/helper.sh' },
+          ],
+        }));
+      }
+      if (u.endsWith('SKILL.md')) return new Response('---\nname: agent-browser\n---\n# content');
+      return new Response('echo hello');
+    }) as typeof fetch;
+
+    const manager = new SkillManager(http);
+    await manager.install(root, 'skills.sh', 'agent-browser', { repo: 'vercel-labs/agent-browser' });
+    for (const target of ['.claude/skills', '.agents/skills']) {
+      assert.ok(fs.existsSync(path.join(root, target, 'agent-browser', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(root, target, 'agent-browser', 'helper.sh')));
+      assert.ok(fs.existsSync(path.join(root, target, 'agent-browser', '.superai-skill.json')));
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -1957,6 +1957,13 @@ input[type="checkbox"] {
 .installed-skills li { display: flex; gap: 10px; align-items: center; font-size: 12px; }
 .installed-skills small { color: var(--dim); font-size: 10px; }
 .installed-skills .icon-button { margin-left: auto; }
+.skill-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 10px; }
+.skill-tabs button { padding: 5px 12px; font-size: 12px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--dim); cursor: pointer; transition: all 0.15s; }
+.skill-tabs button:hover { color: #e1edf6; background: rgba(255, 255, 255, 0.04); }
+.skill-tabs button.active { background: #1a2732; color: #fff; border-color: var(--border); font-weight: 500; }
+.skills-search-bar { display: flex; gap: 8px; margin-bottom: 10px; }
+.skills-search-bar input { flex: 1; padding: 7px 10px; border: 1px solid var(--border); background: #0b141b; color: #e1edf6; border-radius: 6px; font-size: 12px; }
+.skills-search-bar input:focus { border-color: var(--accent); outline: none; }
 
 @media (max-width: 1100px) {
   .seat-picker, .seat-picker.unnamed { grid-template-columns: 1fr 1fr; }

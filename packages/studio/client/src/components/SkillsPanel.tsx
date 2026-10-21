@@ -19,11 +19,20 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState("");
 
+  const [tab, setTab] = useState<"catalog" | "skills.sh">("catalog");
+  const [shQuery, setShQuery] = useState("");
+  const [shResults, setShResults] = useState<SkillInfo[]>([]);
+  const [shSearching, setShSearching] = useState(false);
+  const [shHasSearched, setShHasSearched] = useState(false);
+
   const load = useCallback(async (refresh = false) => {
     if (!workspace) return;
     setLoading("catalog");
     try {
-      const [c, i] = await Promise.all([api<SkillInfo[]>(`/api/skills/catalog${refresh ? "?refresh=1" : ""}`), api<InstalledSkill[]>(`/api/workspaces/${workspace.id}/skills`)]);
+      const [c, i] = await Promise.all([
+        api<SkillInfo[]>(`/api/skills/catalog${refresh ? "?refresh=1" : ""}`),
+        api<InstalledSkill[]>(`/api/workspaces/${workspace.id}/skills`),
+      ]);
       setCatalog(c);
       setInstalled(i);
     } catch (e) {
@@ -32,6 +41,7 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
       setLoading("");
     }
   }, [workspace, onError]);
+
   useEffect(() => { void load(); }, [load]);
 
   if (!workspace) return <p className="muted">เพิ่มโปรเจกต์ก่อน แล้วค่อยเลือก skill ให้โปรเจกต์นั้น</p>;
@@ -48,10 +58,18 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
       setLoading("");
     }
   };
+
   const install = async (skill: SkillInfo) => {
     setLoading(`install:${skill.name}`);
     try {
-      await post(`/api/workspaces/${workspace.id}/skills`, { source: skill.source, name: skill.name });
+      await post(`/api/workspaces/${workspace.id}/skills`, {
+        source: skill.source,
+        name: skill.name,
+        repo: skill.repo,
+        branch: skill.branch,
+        prefix: skill.prefix,
+        files: skill.files,
+      });
       onNotice(`ติดตั้ง skill ${skill.name} แล้ว · AI จะเรียกใช้เองเมื่องานเกี่ยวข้อง`);
       await load();
     } catch (e) {
@@ -60,6 +78,7 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
       setLoading("");
     }
   };
+
   const remove = async (name: string) => {
     setLoading(`remove:${name}`);
     try {
@@ -72,16 +91,42 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
       setLoading("");
     }
   };
+
+  const searchSkillsSh = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const q = shQuery.trim();
+    if (q.length < 2) {
+      onError("กรุณากรอกคำค้นหาอย่างน้อย 2 ตัวอักษร");
+      return;
+    }
+    setShSearching(true);
+    setShHasSearched(true);
+    try {
+      const res = await api<SkillInfo[]>(`/api/skills/search?q=${encodeURIComponent(q)}`);
+      setShResults(res);
+    } catch (err: any) {
+      onError(err.message || "ค้นหาบน skills.sh ไม่สำเร็จ");
+    } finally {
+      setShSearching(false);
+    }
+  };
+
   const card = (skill: SkillInfo) => (
-    <li key={`${skill.source}/${skill.name}`} className="skill-card">
+    <li key={`${skill.source}/${skill.repo || ""}/${skill.name}`} className="skill-card">
       <div>
         <strong>{skill.name}</strong>
-        <small>{skill.sourceLabel} · {skill.files.length} ไฟล์{skill.files.some((f) => /\.(py|js|sh|ps1|ts)$/i.test(f)) ? " · มีสคริปต์" : ""}</small>
+        <small>
+          {skill.sourceLabel} · {skill.files.length} ไฟล์
+          {skill.files.some((f) => /\.(py|js|sh|ps1|ts)$/i.test(f)) ? " · มีสคริปต์" : ""}
+          {typeof skill.installs === "number" ? ` · ${skill.installs.toLocaleString()} ติดตั้ง` : ""}
+        </small>
         {skill.reason && <p className="skill-reason">เหตุผล: {skill.reason}</p>}
         <p>{skill.description || "ไม่มีคำอธิบาย"}</p>
       </div>
       <div className="skill-actions">
-        <a className="text-button" href={skill.url} target="_blank" rel="noreferrer" title="ดูไฟล์ทั้งหมดบน GitHub ก่อนติดตั้ง"><ExternalLink size={13} /> ดูไฟล์</a>
+        <a className="text-button" href={skill.url} target="_blank" rel="noreferrer" title="ดูไฟล์ทั้งหมดบน GitHub ก่อนติดตั้ง">
+          <ExternalLink size={13} /> ดูไฟล์
+        </a>
         {isInstalled(skill.name) ? (
           <span className="success-text">ติดตั้งแล้ว</span>
         ) : (
@@ -92,11 +137,13 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
       </div>
     </li>
   );
+
   const shown = catalog.filter((s) => `${s.name} ${s.description}`.toLowerCase().includes(filter.toLowerCase()));
+
   return (
     <div className="skills-panel">
       <p className="muted">
-        Skill คือชุดคำแนะนำ/สคริปต์ที่ AI เรียกใช้เองเมื่องานเกี่ยวข้อง ดึงจากแหล่งทางการของ Anthropic และ OpenAI เท่านั้น ติดตั้งลงโปรเจกต์
+        Skill คือชุดคำแนะนำ/สคริปต์ที่ AI เรียกใช้เองเมื่องานเกี่ยวข้อง ดึงจากแหล่งทางการของ Anthropic, OpenAI และ Vercel (skills.sh) ติดตั้งลงโปรเจกต์
         <code>{workspace.name}</code> ที่ <code>.claude/skills</code> (Claude, OpenCode) และ <code>.agents/skills</code> (Codex) · ติดตั้งเมื่อคุณกดยืนยันเท่านั้น
       </p>
       <section className="skills-recommend">
@@ -130,17 +177,66 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
         </section>
       )}
       <section>
-        <div className="settings-section-title">
-          <h3>skill ทั้งหมด ({catalog.length})</h3>
-          <button className="text-button" disabled={!!loading} onClick={() => void load(true)}>
-            <RefreshCw size={13} className={loading === "catalog" ? "spin" : ""} /> โหลดใหม่
+        <div className="skill-tabs">
+          <button
+            type="button"
+            className={tab === "catalog" ? "active" : ""}
+            onClick={() => setTab("catalog")}
+          >
+            แค็ตตาล็อกหลัก ({catalog.length})
+          </button>
+          <button
+            type="button"
+            className={tab === "skills.sh" ? "active" : ""}
+            onClick={() => setTab("skills.sh")}
+          >
+            ค้นหาบน skills.sh
           </button>
         </div>
-        <label className="project-search">
-          <Search size={14} />
-          <input placeholder="ค้นหา skill" aria-label="ค้นหา skill" value={filter} onChange={(e) => setFilter(e.target.value)} />
-        </label>
-        <ul className="skill-list">{shown.map(card)}</ul>
+
+        {tab === "catalog" ? (
+          <>
+            <div className="settings-section-title">
+              <span className="muted">รวม Anthropic, OpenAI, Vercel Labs และ Supabase</span>
+              <button className="text-button" disabled={!!loading} onClick={() => void load(true)}>
+                <RefreshCw size={13} className={loading === "catalog" ? "spin" : ""} /> โหลดใหม่
+              </button>
+            </div>
+            <label className="project-search">
+              <Search size={14} />
+              <input placeholder="ค้นหาในแค็ตตาล็อกหลัก" aria-label="ค้นหา skill" value={filter} onChange={(e) => setFilter(e.target.value)} />
+            </label>
+            <ul className="skill-list">{shown.map(card)}</ul>
+          </>
+        ) : (
+          <>
+            <div className="settings-section-title">
+              <span className="muted">ค้นหาจากสารบบโอเพนซอร์สของ skills.sh (Vercel Labs)</span>
+            </div>
+            <form onSubmit={(e) => void searchSkillsSh(e)} className="skills-search-bar">
+              <input
+                placeholder="พิมพ์ชื่อ skill เช่น browser, react, docker, python..."
+                value={shQuery}
+                onChange={(e) => setShQuery(e.target.value)}
+                disabled={shSearching}
+              />
+              <button className="primary" type="submit" disabled={shSearching || shQuery.trim().length < 2}>
+                {shSearching ? <LoaderCircle size={14} className="spin" /> : <Search size={14} />} ค้นหา
+              </button>
+            </form>
+            {shSearching && <p className="muted">กำลังค้นหาและดึงข้อมูลจาก skills.sh…</p>}
+            {shHasSearched && !shSearching && (
+              shResults.length > 0 ? (
+                <ul className="skill-list">{shResults.map(card)}</ul>
+              ) : (
+                <p className="muted">ไม่พบ skill ที่ตรงกับคำค้นหา "{shQuery}" บน skills.sh</p>
+              )
+            )}
+            {!shHasSearched && (
+              <p className="muted">พิมพ์คำค้นหาเพื่อค้นหา Agent Skills เพิ่มเติมจากสารบบของ skills.sh</p>
+            )}
+          </>
+        )}
       </section>
     </div>
   );
