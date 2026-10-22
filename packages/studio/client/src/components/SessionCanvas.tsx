@@ -148,7 +148,7 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
             </div>
           </div>}
           {(s.status === 'exited' || s.status === 'error') && paneView(s) !== 'chat' && <SessionEnded key={`${s.id}-${s.createdAt}`} session={{ ...s, name: names[s.id] || s.name }} onRestart={restart} onClose={close} />}
-          <TerminalPane key={`${s.id}-${s.createdAt}`} tab={{ id: s.id, sessionId: s.id, name: names[s.id] || s.name, type: s.agentType, status: s.status === 'stopping' ? 'exited' : s.status, view: paneView(s) }}
+          <TerminalPane key={`${s.id}-${s.createdAt}`} tab={{ id: s.id, sessionId: s.id, authOnly: s.authOnly, name: names[s.id] || s.name, type: s.agentType, status: s.status === 'stopping' ? 'exited' : s.status, view: paneView(s) }}
             visible={active && (grid || s.id === selected)} focused={active && s.id === selected} showHeader={false}
             onFocus={() => select(s.id)} onClose={() => close(s.id)} onExit={refresh} registerSender={() => {}} onSwitchView={view => switchView(s.id, view)} />
         </div>)}

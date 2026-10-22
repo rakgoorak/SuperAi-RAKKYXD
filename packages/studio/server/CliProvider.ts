@@ -6,6 +6,7 @@ import os from "node:os";
 import { LLMProvider, LLMMessage, LLMResponse } from "@superai-rakkyxd/core";
 import { cliLaunch, cliEnv } from "./CliCatalog.js";
 import { modelEffortArgs } from "./Providers.js";
+import { cliAuth, isAuthFailure } from "./CliAuth.js";
 
 // Windows limits a command line to 32,767 characters; agy only takes the prompt as an argument.
 const INLINE_PROMPT_LIMIT = 24000;
@@ -73,6 +74,10 @@ export function promptArguments(
 /** Short, actionable failure text: prefer the provider's own JSON error message over raw logs. */
 export function cliFailure(provider: string, model: string, errors: string, output: string, code: number | null) {
   const raw = (errors || output).replace(/\x1b\[[0-9;]*m/g, "");
+  const id = provider.replace(/^cli:/, "");
+  const authText = `${errors}\n${output}`.replace(/\x1b\[[0-9;]*m/g, "");
+  cliAuth.failure(id, authText);
+  if (isAuthFailure(authText)) return `${provider}: บัญชียังไม่พร้อมหรือหมดอายุ กรุณากดเข้าสู่ระบบในหน้าแชต หรือเปิด Terminal ของผู้ให้บริการแล้วเข้าสู่ระบบ จากนั้นกดตรวจอีกครั้ง`;
   const message = [...raw.matchAll(/"message"\s*:\s*"([^"]{3,400})"/g)].at(-1)?.[1];
   const modelProblem = /model.*(not supported|not found|does not exist|unknown)|Model not found/i.test(message || raw);
   const detail = message || raw.trim().split("\n").slice(-6).join("\n") || `exit ${code}`;
@@ -127,6 +132,9 @@ export class CliProvider implements LLMProvider {
       : undefined;
     try {
       if (inputFile) await fs.writeFile(inputFile, prompt, "utf8");
+      if (this.signal.aborted) throw new Error("ยกเลิกงานแล้ว");
+      try { await cliAuth.requireReady(id); }
+      catch (error) { if (this.signal.aborted) throw new Error("ยกเลิกงานแล้ว"); throw error; }
       if (this.signal.aborted) throw new Error("ยกเลิกงานแล้ว");
       const inline = longInline && inputFile
         ? `Read the full request from the file "${inputFile}" and follow it. Answer in Thai.`

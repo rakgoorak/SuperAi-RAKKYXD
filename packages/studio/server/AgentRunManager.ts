@@ -13,6 +13,7 @@ import {
 import { CliProvider, attachmentProblem } from "./CliProvider.js";
 import { cliLaunch } from "./CliCatalog.js";
 import { Seat, validateSeat } from "./Providers.js";
+import { skillPrompt } from "./ChatSkills.js";
 
 export function ollamaBase() {
   const value = process.env.SUPERAI_OLLAMA_URL || "http://127.0.0.1:11434";
@@ -337,11 +338,12 @@ export class AgentRunManager {
       summarizer, summaryStyle: style, summaryStatus: summarizer ? "pending" : undefined,
     };
     return this.launch(run, async (controller, note) => {
-      const question = `${history ? `บทสนทนาก่อนหน้า:\n${history}\n\n` : ""}${prompt}`;
       await Promise.all(
         run.panel!.map(async (answer) => {
           note(answer.seat.name, `เริ่มคิด (${describe(answer.seat)})`);
           try {
+            const selected = answer.seat.provider.startsWith("cli:") ? skillPrompt(prompt, cwd, answer.seat.provider.slice(4)) : prompt;
+            const question = `${history ? `บทสนทนาก่อนหน้า:\n${history}\n\n` : ""}${selected}`;
             const text = await this.ask(answer.seat, `ตอบเป็นภาษาไทย ให้เหตุผลประกอบ\n\n${question}`, cwd, controller.signal, {
               tools: false, readTools: true, attachments,
               onChunk: (t) => { if (!controller.signal.aborted) answer.output += t; },

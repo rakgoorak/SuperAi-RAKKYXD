@@ -36,6 +36,10 @@ declare global {
         action: string,
         payload?: Record<string, unknown>,
       ) => Promise<BrowserState>;
+      /** Clears the selected core browser credential and the shared Preview session; not CLI login. */
+      forgetSession: (service: "chatgpt" | "claude" | "gemini" | "deepseek" | "copilot") => Promise<
+        { success: true; previewCleared: true } | { success: false; error: string }
+      >;
       onBrowser: (callback: (state: BrowserState) => void) => () => void;
       /** Absolute path of a dropped file, or '' when it has none (e.g. dragged from a web page). */
       pathForFile: (file: File) => string;
@@ -50,15 +54,6 @@ declare global {
       platform: string;
       pickFolder: () => Promise<string | null>;
       openExternal: (url: string) => Promise<void>;
-      browserLogin: (
-        service: string,
-      ) => Promise<{
-        success: boolean;
-        service?: string;
-        details?: string;
-        error?: string;
-      }>;
-      logout: (service: string) => Promise<{ success: boolean }>;
     };
   }
 }

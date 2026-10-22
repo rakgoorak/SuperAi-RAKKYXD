@@ -18,18 +18,27 @@ function defaultConfig(clis: Cli[]): ChatConfig {
   return { panel: ids.map((id, i) => seatFor(id, `Main ${i + 1}`)), summarizer: seatFor(ids[0], "ผู้สรุป"), style: "merge" };
 }
 
-export function ChatConfigEditor({ workspaceId, clis, ollamaModels, disabled, runCount, onChange }: {
-  workspaceId: string; clis: Cli[]; ollamaModels: string[]; disabled: boolean; runCount: number; onChange: (c: ChatConfig) => void;
+export function ChatConfigEditor({ workspaceId, clis, ollamaModels, disabled, runCount, onChange, value }: {
+  workspaceId: string; clis: Cli[]; ollamaModels: string[]; disabled: boolean; runCount: number; onChange: (c: ChatConfig) => void; value?: ChatConfig | null;
 }) {
   const key = `superai-chat-v1:${workspaceId}`;
-  const [config, setConfig] = useState<ChatConfig>(() => {
+  const [savedConfig, setSavedConfig] = useState<ChatConfig>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(key) || "null");
       if (saved && Array.isArray(saved.panel) && saved.panel.length && saved.panel.every(validSeat) && (saved.summarizer === null || validSeat(saved.summarizer))) return { ...saved, style: saved.style === "best" ? "best" : "merge" };
     } catch {}
     return defaultConfig(clis);
   });
+  // A newly mounted workspace first publishes its own saved configuration, rather
+  // than inheriting the previous workspace's value for the render before effects run.
+  const [initialized, setInitialized] = useState(false);
+  const config = initialized && value ? value : savedConfig;
+  const setConfig = (update: ChatConfig | ((current: ChatConfig) => ChatConfig)) => {
+    const next = typeof update === 'function' ? update(config) : update;
+    setSavedConfig(next); onChange(next);
+  };
   useEffect(() => {
+    setInitialized(true);
     onChange(config);
     try { localStorage.setItem(key, JSON.stringify(config)); } catch {}
   }, [config, key, onChange]);

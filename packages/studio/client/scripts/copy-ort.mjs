@@ -6,5 +6,13 @@ const require = createRequire(import.meta.url);
 const dist = path.dirname(require.resolve('@huggingface/transformers'));
 const target = path.resolve('public', 'ort');
 await fs.mkdir(target, { recursive: true });
-for (const name of await fs.readdir(dist))
-  if (/^ort-wasm.*\.(mjs|wasm)$/.test(name)) await fs.copyFile(path.join(dist, name), path.join(target, name));
+for (const name of await fs.readdir(dist)) {
+  if (/^ort-wasm.*\.(mjs|wasm)$/.test(name)) {
+    const dest = path.join(target, name);
+    try {
+      const { existsSync } = await import('node:fs');
+      if (existsSync(dest)) continue;
+    } catch {}
+    await fs.copyFile(path.join(dist, name), dest);
+  }
+}

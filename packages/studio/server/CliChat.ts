@@ -4,6 +4,8 @@ import path from "node:path";
 import { cliLaunch, cliEnv } from "./CliCatalog.js";
 import { modelEffortArgs } from "./Providers.js";
 import { cliFailure } from "./CliProvider.js";
+import { cliAuth } from "./CliAuth.js";
+import { skillPrompt } from "./ChatSkills.js";
 
 // Chat view for Code sessions: each message runs the CLI headless with its JSON event stream and
 // resumes the same conversation, so the client can draw messages and tool calls instead of a TUI.
@@ -251,14 +253,15 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
 
 type Spawner = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
 interface Chat extends ChatSnapshot { turns: number; proc?: ChildProcess; cancelled?: boolean; listeners: Set<(m: ChatMessage) => void>; saveTimer?: NodeJS.Timeout }
-export interface ChatRequest { agent: string; cwd: string; text: string; model?: string; effort?: string; attachments?: string[] }
+export interface ChatRequest { agent: string; cwd: string; text: string; model?: string; effort?: string; attachments?: string[]; skillId?: string }
 
 export class CliChatManager {
   private chats = new Map<string, Chat>();
   /** Called when a chat's conversation id or running state changes, e.g. to save the session list. */
   onChange?: (id: string) => void;
   /** `dir` keeps each chat as <id>.json so it survives an app restart. */
-  constructor(private spawner: Spawner = spawn, private dir?: string, private launcher: typeof cliLaunch = cliLaunch) {}
+  constructor(private spawner: Spawner = spawn, private dir?: string, private launcher: typeof cliLaunch = cliLaunch,
+    private timeouts = { startup: 90000, turn: 600000 }) {}
 
   private file(id: string): string | undefined {
     return this.dir && /^[\w-]+$/.test(id) ? path.join(this.dir, `${id}.json`) : undefined;
@@ -334,6 +337,7 @@ export class CliChatManager {
   setConversation(id: string, conversationId: string) {
     const chat = this.chat(id);
     if (chat.conversationId === conversationId) return;
+    if (chat.running) throw new Error("แชตยังตอบข้อความก่อนหน้าอยู่ กรุณารอให้เสร็จก่อนเปลี่ยนบทสนทนา");
     chat.conversationId = conversationId;
     this.save(id, chat, true);
   }
@@ -345,10 +349,13 @@ export class CliChatManager {
     if (!text) throw new Error("กรุณาพิมพ์ข้อความ");
     const chat = this.chat(id);
     if (chat.running) throw new Error(`${NAMES[agent]} ยังตอบข้อความก่อนหน้าอยู่ รอให้เสร็จหรือกดหยุดก่อน`);
+    if (agent === "codex" && chat.conversationId && [...this.chats.values()].some((other) => other !== chat && other.running && other.conversationId === chat.conversationId))
+      throw new Error("Codex ยังตอบบทสนทนานี้อยู่ในอีกแท็บ กรุณารอให้เสร็จก่อน");
     const files = request.attachments || [];
     const attached = agent === "codex" ? files.filter((f) => IMAGE.test(f)) : agent === "opencode" ? files : [];
     const listed = files.filter((f) => !attached.includes(f));
-    const prompt = listed.length ? `${text}\n\nไฟล์แนบ:\n${listed.map((f) => `- ${f}`).join("\n")}` : text;
+    const selected = skillPrompt(text, request.cwd, agent, request.skillId);
+    const prompt = listed.length ? `${selected}\n\nไฟล์แนบ:\n${listed.map((f) => `- ${f}`).join("\n")}` : selected;
     if (prompt.length > MAX_PROMPT) throw new Error("ข้อความยาวเกินไป กรุณาแบ่งส่งหรือใส่ไว้ในไฟล์แล้วแนบแทน");
     const args = chatArguments(agent, { prompt, conversationId: chat.conversationId, model: request.model, effort: request.effort, files: attached });
 
@@ -364,9 +371,11 @@ export class CliChatManager {
     const parse = chatParser(agent, prefix);
     let proc: ChildProcess;
     let pending = "", errors = "", failed = false, finished = false;
+    let startupTimer: NodeJS.Timeout | undefined, turnTimer: NodeJS.Timeout | undefined, timedOut = false;
     const finish = (problem?: string) => {
       if (finished) return;
       finished = true;
+      clearTimeout(startupTimer); clearTimeout(turnTimer);
       chat.proc = undefined;
       for (const item of chat.items)
         if (item.kind === "tool" && item.status === "running" && item.id.startsWith(`${prefix}-`)) this.put(id, chat, { ...item, status: chat.cancelled ? "failed" : "done" });
@@ -379,6 +388,7 @@ export class CliChatManager {
     };
     const apply = (line: string) => {
       const update = parse(line);
+      if (Object.keys(update).length) clearTimeout(startupTimer);
       if (update.conversationId && update.conversationId !== chat.conversationId) {
         chat.conversationId = update.conversationId;
         this.onChange?.(id);
@@ -386,7 +396,8 @@ export class CliChatManager {
       for (const item of update.items || []) this.put(id, chat, item);
       if (update.error && !chat.cancelled) {
         failed = true;
-        this.put(id, chat, { id: `${prefix}-error`, kind: "error", text: `${NAMES[agent]}: ${update.error}` });
+        cliAuth.failure(agent, update.error);
+        this.put(id, chat, { id: `${prefix}-error`, kind: "error", text: cliFailure(agent, request.model || "", update.error, "", 1) });
       }
     };
     try {
@@ -402,6 +413,15 @@ export class CliChatManager {
       return;
     }
     chat.proc = proc;
+    const timeout = () => {
+      timedOut = true;
+      // Keep the turn occupied until close confirms that the child stopped.
+      if (process.platform === "win32" && proc.pid) execFile("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true }, () => {});
+      else if (proc.pid) { try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill(); } }
+      else proc.kill();
+    };
+    startupTimer = setTimeout(timeout, this.timeouts.startup); startupTimer.unref();
+    turnTimer = setTimeout(timeout, this.timeouts.turn); turnTimer.unref();
     proc.stdin?.on("error", () => {});
     // Codex and Claude Code read the prompt from stdin; the others take it as an argument.
     proc.stdin?.end(agent === "codex" || agent === "claude-code" ? prompt : undefined, "utf8");
@@ -416,7 +436,7 @@ export class CliChatManager {
     proc.on("error", (error) => finish(`เปิด ${NAMES[agent]} ไม่สำเร็จ: ${error.message}`));
     proc.on("close", (code) => {
       if (pending.trim()) apply(pending);
-      finish(code === 0 ? undefined : cliFailure(NAMES[agent], request.model || "", errors, "", code));
+      finish(timedOut ? "CLI ไม่ตอบกลับภายในเวลาที่กำหนด ตรวจบัญชีและการเชื่อมต่อใน Terminal แล้วลองส่งใหม่" : code === 0 ? undefined : cliFailure(agent, request.model || "", errors, "", code));
     });
   }
 

@@ -1,6 +1,25 @@
-# SuperAi & RAKKYXD v1.0.10
+# SuperAi & RAKKYXD v1.0.11
 
-## มีอะไรใหม่ใน v1.0.10
+## มีอะไรใหม่ใน v1.0.11
+
+- **ยกระดับความปลอดภัยและป้องกันข้อมูลหลุด (Security Hardening):**
+  - กรองและปกปิด Credential (API Keys, Bearer tokens, GitHub tokens) ใน Log Sanitizer อัตโนมัติ ป้องกันข้อมูลรั่วไหลลงดิสก์หรือบันทึกประวัติ พร้อมจำกัดสิทธิ์โฟลเดอร์ `0o700` และไฟล์ `0o600`
+  - ตรวจสอบความปลอดภัย Localhost Server & WebSocket อย่างเข้มงวด ทั้ง Host, Origin และ Referer ป้องกัน DNS Rebinding และ CSRF พร้อมเพิ่ม Header ความปลอดภัย (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`)
+  - ตรวจสอบ SHA-256 Checksum ของ PortableGit และไฟล์ติดตั้งภายนอกทุกครั้ง ปฏิเสธการรัน Binary แปลกปลอมหรือไม่ผ่านการตรวจสอบ
+  - รองรับระบบ Authenticode Code Signing บน Windows และ Apple Developer ID Hardened Runtime + Notarization บน macOS
+- **หน้าเริ่มต้นใช้งานและ Mission Control Setup โฉมใหม่:**
+  - เพิ่มแถบสถานะความพร้อมระบบแบบเรียลไทม์ (% Ready)
+  - ปุ่ม "ติดตั้งสิ่งที่ขาดอัตโนมัติ" (One-Click Auto-Setup) ดาวน์โหลดและติดตั้ง Git, Node.js 22 และ CLI ที่จำเป็นได้ในคลิกเดียว
+  - จัดระเบียบ Checklist ตรวจสอบความพร้อมของระบบเป็นหมวดหมู่ชัดเจน พร้อม Badge แสดงสถานะ
+- **Studio Launch Hub ดีไซน์ Cyber-Obsidian:**
+  - ปรับโฉมหน้าแรกเมื่อเปิดห้องทำงานใหม่ สวยงาม ทันสมัย ใช้งานง่าย
+  - 3 โหมดทำงานหลัก: Coding Studio, Multi-Agent Team, และ Chat & Plan
+  - แถบสถานะผู้ช่วย AI (Claude Code, OpenAI Codex, OpenCode, Google Antigravity) ตรวจสอบความพร้อมและเข้าถึงได้ทันที
+  - Quick-starter Prompt Chips สำหรับเริ่มต้นโปรเจกต์ ตรวจสอบความปลอดภัย หรือแก้บักในคลิกเดียว
+- **ปรับปรุงเสถียรภาพชุดทดสอบและสคริปต์ Build:**
+  - ปรับปรุงสคริปต์ทดสอบให้รองรับ Node test runner ได้สมบูรณ์ ผ่านการทดสอบ 139/139 ทุกโมดูล
+
+## ใน v1.0.10
 
 - **หน้าแชตแบบ Claude สำหรับ Claude Code, Codex, Antigravity และ OpenCode:** session ใหม่เปิดเป็นหน้าแชต ข้อความเป็นบับเบิล คำตอบแสดง Markdown (ตาราง โค้ด ลิงก์) ภาษาไทยไม่เพี้ยน งานที่ AI ทำแสดงเป็นการ์ดย่อพับได้ เช่น "รัน 2 คำสั่ง · อ่าน 1 ไฟล์" กดดูคำสั่งและผลลัพธ์ได้ มีช่องพิมพ์ของตัวเอง (Enter ส่ง, Shift+Enter ขึ้นบรรทัดใหม่) แนบรูป/PDF ได้ และมีปุ่มหยุด
 - **แชตกับ Terminal เป็นบทสนทนาเดียวกัน:** ปุ่ม **แชต | Terminal** มุมขวาบน กด Terminal จะเปิด TUI ของ CLI ต่อจากบทสนทนาในแชต กลับมาแชตก็คุยต่อจากที่ทำใน Terminal (Freebuff ยังใช้ได้เฉพาะ Terminal)

@@ -36,12 +36,14 @@ import {
   Layers,
   Radio,
   Rocket,
-  Mic,
   Puzzle,
   Download,
   Users,
+  Sparkles,
+  Wand2,
+  Lightbulb,
 } from "lucide-react";
-import { api, post, Workspace, Cli, Session, Run, Seat } from "./api";
+import { api, post, loginProvider, Workspace, Cli, Session, Run, Seat } from "./api";
 import { paneView } from "./paneView";
 import { SessionCanvas, type CanvasLayout } from "./components/SessionCanvas";
 import { RightDock, type DockView } from "./components/RightDock";
@@ -62,6 +64,7 @@ import { DictationButton } from "./components/DictationButton";
 import { AttachMenu, AttachmentCards, ComposerDropOverlay, useComposerAttachments, useWindowDrop } from "./components/ComposerAttachments";
 import { attachMode, formatPath, pastedFiles, uploadAttachment, type SavedAttachment } from "./attachments";
 import { SetupGuide, setupNeeded } from "./components/SetupGuide";
+import { ChatQuickControls } from "./components/ChatQuickControls";
 import { loadVoiceSettings, saveVoiceSettings, type VoiceSettings } from "./voice/speech";
 
 type Mode = "agent" | "code" | "chat";
@@ -288,6 +291,32 @@ export function App() {
     try { dismissed = localStorage.getItem("superai-setup-dismissed") === "1"; } catch {}
     if (!dismissed && setupNeeded(clis, workspaces)) setDialog("setup");
   }, [connected, clis, workspaces]);
+  useEffect(() => {
+    if (dialog !== "setup") return;
+    const previous = document.activeElement;
+    const panel = document.querySelector<HTMLElement>('[role="dialog"]');
+    if (!panel) return;
+    const controls = () => Array.from(panel.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]',
+    )).filter((element) => element.getClientRects().length > 0);
+    controls()[0]?.focus();
+    const keepFocus = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const items = controls();
+      const first = items[0];
+      const last = items.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault(); last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault(); first?.focus();
+      }
+    };
+    panel.addEventListener("keydown", keepFocus);
+    return () => {
+      panel.removeEventListener("keydown", keepFocus);
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+    };
+  }, [dialog]);
   const loadOpenCodeModels = useCallback(async () => {
     try {
       const data = await api<{ models: string[] }>("/api/opencode/models");
@@ -377,11 +406,21 @@ export function App() {
       await post(`/api/terminals/${id}/view`, { view });
       await refresh();
     }), [task, refresh]);
+  useEffect(() => {
+    const opened = (event: Event) => {
+      const id = (event as CustomEvent<string>).detail;
+      setMode("code"); setDialog(null);
+      void refresh().then(() => setSelected(id), (e) => showError((e as Error).message));
+    };
+    window.addEventListener("superai:login-session", opened);
+    return () => window.removeEventListener("superai:login-session", opened);
+  }, [refresh, showError]);
   const send = () =>
     task(async () => {
       if (!draft.trim() && !attachments.items.length) return;
       if (!workspace) throw new Error("กรุณาสร้างโปรเจกต์ก่อน");
       // Save attached images/PDFs into <project>/.superai/attachments first.
+      if (mode === "chat" && /^\/skills?\s*$/.test(draft.trim())) { setNotice("เลือก skill จากรายการเหนือช่องพิมพ์ แล้วระบุงานที่ต้องการ"); return; }
       const saved: SavedAttachment[] = [];
       for (const item of attachments.items)
         saved.push(await uploadAttachment(`/api/workspaces/${workspace.id}/attachments`, item.file));
@@ -864,48 +903,113 @@ export function App() {
                     select={setSelected} zoom={id => { setSelected(id); setZoomed(true); }} close={closeSession} restart={restartSession} add={openSession} switchView={switchView}
                     refresh={() => void refresh().catch(() => {})} onError={showError} />
                 ) : (
-                  <div className="workspace-empty">
-                    <img className="empty-logo" src="/brand/mark.png" alt="" draggable={false} />
-                    <h2>ไอเดียของคุณ เริ่มได้ที่นี่</h2>
-                    <p>
-                      เลือกโปรเจกต์ เปิดผู้ช่วยที่ถนัด
-                      <br />
-                      แล้วสร้างงานของคุณในพื้นที่เดียว
-                    </p>
-                    <button
-                      className="primary"
-                      disabled={!workspace}
-                      onClick={() => openSession()}
-                    >
-                      <Plus size={16} /> เปิด session แรก
-                    </button>
-                    <div className="available-agents">
-                      {clis
-                        .filter((c) => c.id !== "terminal")
-                        .map((c) => (
-                          <button
-                            key={c.id}
-                            onClick={() => openSession(c.id)}
-                            title={
-                              c.available
-                                ? `เปิด ${c.name}`
-                                : `${c.name} ยังไม่ติดตั้ง`
-                            }
-                          >
-                            <span
-                              className={`agent-monogram ${c.available ? "" : "unavailable"}`}
+                  <div className="studio-hub-container">
+                    {/* Hero Header */}
+                    <div className="studio-hub-hero">
+                      <div className="studio-hub-badge">
+                        <Sparkles size={13} className="text-cyan-400" />
+                        <span>SuperAi & RAKKYXD Studio Hub</span>
+                      </div>
+                      <h2>สร้างสรรค์ไอเดียได้เร็วขึ้นด้วยทีม AI อัจฉริยะ</h2>
+                      <p>
+                        โปรเจกต์: <strong className="text-white">{workspace?.name || "เริ่มต้นโปรเจกต์"}</strong>
+                        {workspace?.rootPath && <span className="hub-path-pill">{workspace.rootPath}</span>}
+                      </p>
+                    </div>
+
+                    {/* 3 Core Workflow Cards */}
+                    <div className="studio-hub-cards">
+                      <div className="hub-workflow-card card-code" onClick={() => openSession()}>
+                        <div className="hub-card-icon-wrap icon-code">
+                          <Terminal size={22} />
+                        </div>
+                        <div className="hub-card-content">
+                          <h3>โหมดห้องทำงาน (Coding Studio)</h3>
+                          <p>เปิด Terminal สด พร้อม AI คู่คิดที่ช่วยแก้โค้ด รันคำสั่ง และคอมไพล์ในโปรเจกต์</p>
+                          <span className="hub-card-action">
+                            <Plus size={14} /> เปิดเซสชันแรก
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="hub-workflow-card card-agent" onClick={() => setMode("agent")}>
+                        <div className="hub-card-icon-wrap icon-agent">
+                          <Layers size={22} />
+                        </div>
+                        <div className="hub-card-content">
+                          <h3>โหมดทีม Agent (Multi-Agent)</h3>
+                          <p>แบ่งงาน วางแผนขั้นตอน และให้หลาย AI โมเดลช่วยกันแก้โจทย์คู่ขนานอัตโนมัติ</p>
+                          <span className="hub-card-action">
+                            <Wand2 size={14} /> เริ่มทีม Agent
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="hub-workflow-card card-chat" onClick={() => setMode("chat")}>
+                        <div className="hub-card-icon-wrap icon-chat">
+                          <MessageSquare size={22} />
+                        </div>
+                        <div className="hub-card-content">
+                          <h3>โหมดถาม-ตอบ (Chat & Plan)</h3>
+                          <p>สนทนาอิสระ ระดมไอเดีย หรือเปรียบเทียบผลลัพธ์จาก AI หลายค่ายในจอเดียว</p>
+                          <span className="hub-card-action">
+                            <MessageSquare size={14} /> เริ่มถาม-ตอบ
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quick Assistant Selector */}
+                    <div className="studio-hub-assistants">
+                      <div className="hub-section-title">
+                        <span>เลือกเปิดผู้ช่วย AI ประจำการ</span>
+                      </div>
+                      <div className="hub-agents-grid">
+                        {clis
+                          .filter((c) => c.id !== "terminal")
+                          .map((c) => (
+                            <button
+                              key={c.id}
+                              className={`hub-agent-pill ${c.available ? "agent-ready" : "agent-missing"}`}
+                              onClick={() => openSession(c.id)}
+                              title={c.available ? `คลิกเพื่อเปิด ${c.name}` : `${c.name} ยังไม่ติดตั้ง`}
                             >
-                              {c.name.slice(0, 1)}
-                            </span>
-                            <span>{c.name}</span>
-                            <small>
-                              {c.available ? "พร้อมใช้" : "ยังไม่ติดตั้ง"}
-                            </small>
+                              <span className="hub-agent-avatar">{c.name.slice(0, 1)}</span>
+                              <div className="hub-agent-text">
+                                <strong>{c.name}</strong>
+                                <small>{c.available ? "พร้อมใช้" : "คลิกเพื่อติดตั้ง"}</small>
+                              </div>
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+
+                    {/* Quick Starters & Inspirations */}
+                    <div className="studio-hub-prompts">
+                      <div className="hub-section-title">
+                        <Lightbulb size={13} className="text-amber-400" />
+                        <span>ไอเดียสั่งงานเริ่มต้น (คลิกเพื่อเริ่มงานทันที)</span>
+                      </div>
+                      <div className="hub-prompts-list">
+                        {[
+                          "🚀 เริ่มต้นโครงสร้างโปรเจกต์เว็บสมัยใหม่ด้วย React & Tailwind",
+                          "🔍 วิเคราะห์หาจุดบกพร่องและปรับปรุงโค้ดในโปรเจกต์นี้",
+                          "⚡ เขียนฟังก์ชันเชื่อมต่อ API และจัดการข้อมูล",
+                          "📖 สรุปและสร้างเอกสารคู่มือ README ให้โปรเจกต์นี้",
+                        ].map((promptText, i) => (
+                          <button
+                            key={i}
+                            className="hub-prompt-chip"
+                            onClick={() => {
+                              setDraft(promptText);
+                              setComposerShown(true);
+                              openSession();
+                            }}
+                          >
+                            <span>{promptText}</span>
                           </button>
                         ))}
-                    </div>
-                    <div className="empty-hint">
-                      <Mic size={14} /> พิมพ์คำสั่ง หรือกดไมค์ในช่องพิมพ์เพื่อพูดแทนพิมพ์
+                      </div>
                     </div>
                   </div>
                 )}
@@ -915,7 +1019,7 @@ export function App() {
                   {mode === "agent" ? (
                     <AgentConfigEditor key={`agent-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun} runCount={conversation.length} onChange={setAgentConfig} />
                   ) : (
-                    <ChatConfigEditor key={`chat-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun} runCount={conversation.length} onChange={setChatConfig} />
+                    <ChatConfigEditor key={`chat-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun} runCount={conversation.length} onChange={setChatConfig} value={chatConfig} />
                   )}
                   {!conversation.length ? (
                     <div className="conversation-empty compact">
@@ -1022,6 +1126,7 @@ export function App() {
                   </div>
                 </div>
                 <div className="composer-box">
+                  {mode === "chat" && chatConfig && workspace && <ChatQuickControls workspaceId={workspace.id} config={chatConfig} onChange={setChatConfig} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} draft={draft} onDraft={setDraft} />}
                   <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
                   <textarea
                     ref={composer}
@@ -1186,7 +1291,7 @@ export function App() {
                       : dialog === "project"
                         ? "เลือกโฟลเดอร์ที่ใช้ทำงานจริงบนเครื่อง"
                         : dialog === "setup"
-                          ? "ทำตามทีละขั้น ระบบตรวจเครื่องของคุณจริง และติดตั้งสิ่งที่ขาดให้ได้"
+                          ? "ตรวจเครื่องมือและบัญชีแยกตามผู้ให้บริการ · บาง CLI ต้องตรวจบัญชีใน Terminal"
                           : dialog === "skills"
                             ? `${workspace?.name || ""} · AI เสนอ คุณเป็นคนกดติดตั้ง`
                             : dialog === "update"
@@ -1197,6 +1302,7 @@ export function App() {
               <button
                 className="icon-button"
                 title="ปิดหน้าต่าง"
+                aria-label="ปิดหน้าต่าง"
                 disabled={busy}
                 onClick={closeDialog}
               >
@@ -1206,7 +1312,7 @@ export function App() {
             {error && (
               <div className="dialog-error" role="alert">
                 <AlertCircle size={15} />
-                {error}
+                {dialog === "setup" ? "ดำเนินการไม่สำเร็จ กรุณาตรวจเครื่องมือหรือลองใหม่" : error}
               </div>
             )}
             {dialog === "session" && (
@@ -1316,7 +1422,7 @@ export function App() {
               <>
                 <SetupGuide clis={clis} workspaces={workspaces} voice={voiceSettings} refreshClis={checkClis} onError={showError}
                   addProject={() => openProject()} installCli={() => openSession()} openSkills={() => setDialog("skills")}
-                  login={(id) => { setLaunchType(id); setCount(1); setLaunchPlan(null); setDialog("session"); }} />
+                  login={(id) => { void task(() => loginProvider(id, { wsId: workspace?.id || workspaces[0]?.id })); }} />
                 <div className="dialog-footer">
                   <span className="muted">เปิดหน้านี้อีกครั้งได้จากแถบซ้าย “เริ่มต้นใช้งาน”</span>
                   <button className="primary" onClick={closeSetup}>เสร็จแล้ว <Check size={15} /></button>

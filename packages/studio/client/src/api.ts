@@ -51,6 +51,12 @@ export interface Cli {
 /** One AI seat: tool ("cli:<id>" or an Ollama model), model and effort ("" = CLI default). */
 export interface Seat { name: string; provider: string; model: string; effort: string; }
 export interface ModelList { models: string[]; efforts: string[]; modelEfforts?: Record<string, string[]>; note?: string; }
+export interface CliAuthStatus { id: string; status: "authenticated" | "login-required" | "unknown" | "not-installed"; note: string; checkedAt: number; loginCommand: string }
+export interface ChatSkill { id: string; name: string; description: string; source: string; path: string }
+export async function loginProvider(id: string, context: { sessionId?: string; wsId?: string }) {
+  const session = await post<{ id: string }>(`/api/clis/${id}/login`, context);
+  window.dispatchEvent(new CustomEvent("superai:login-session", { detail: session.id }));
+}
 export type StepStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "skipped";
 export interface PanelAnswer { seat: Seat; status: StepStatus; output: string; error?: string; }
 export interface AgentTask { id: string; title: string; assignee: number; instructions: string; dependsOn: string[]; status: StepStatus; output: string; error?: string; }
@@ -58,6 +64,7 @@ export interface Activity { at: number; who: string; text: string; }
 export interface SkillInfo { source: string; sourceLabel: string; name: string; description: string; files: string[]; url: string; repo?: string; branch?: string; prefix?: string; installs?: number; reason?: string; }
 export interface InstalledSkill { name: string; source: string; managed: boolean; targets: string[]; }
 export interface Session {
+  authOnly?: boolean;
   id: string;
   name: string;
   agentType: string;

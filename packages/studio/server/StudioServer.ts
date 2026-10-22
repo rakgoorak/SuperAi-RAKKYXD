@@ -6,7 +6,9 @@ import os from "node:os";
 import { fileURLToPath } from "node:url";
 import express, { Express, Request, Response } from "express";
 import type { ErrorRequestHandler } from "express";
-import { listClis, listOpenCodeModels, getNodeStatus, findExecutable } from "./CliCatalog.js";
+import { listClis, listOpenCodeModels, getNodeStatus, findExecutable, cliLaunch, getCliDefinition } from "./CliCatalog.js";
+import { cliAuth, LOGIN_ARGS } from "./CliAuth.js";
+import { chatSkills } from "./ChatSkills.js";
 import { getGitStatus } from "./GitInstaller.js";
 import { AgentRunManager, ollamaBase } from "./AgentRunManager.js";
 import { CliInstallManager } from "./CliInstallManager.js";
@@ -74,6 +76,16 @@ export class StudioServer {
           .json({ error: "อนุญาตเฉพาะการเชื่อมต่อในเครื่อง" });
       if (origin && !this.allowedOrigin(origin))
         return res.status(403).json({ error: "ไม่อนุญาตต้นทางนี้" });
+      const referer = req.headers.referer;
+      if (referer) {
+        try {
+          const refOrigin = new URL(referer).origin;
+          if (!this.allowedOrigin(refOrigin))
+            return res.status(403).json({ error: "ไม่อนุญาตการเรียกจากแหล่งที่มานี้" });
+        } catch {}
+      }
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("X-Frame-Options", "DENY");
       next();
     });
     this.app.use(express.json({limit:'1mb'}));
@@ -91,8 +103,11 @@ export class StudioServer {
     this.server = http.createServer(this.app);
     this.wss = new WebSocketServer({
       server: this.server,
-      verifyClient: (info: { origin: string }) =>
-        !info.origin || this.allowedOrigin(info.origin),
+      verifyClient: (info: { origin: string; req: http.IncomingMessage }) => {
+        if (info.origin) return this.allowedOrigin(info.origin);
+        const host = info.req.headers.host?.split(":")[0];
+        return !host || ["localhost", "127.0.0.1", "::1", "["].includes(host);
+      },
     });
 
     // Undo the duplicate [projects] table SuperAi 1.0.2 could add to Codex's config on macOS.
@@ -162,6 +177,27 @@ export class StudioServer {
 
   private setupRoutes(): void {
     this.app.get("/api/clis", (_req, res) => res.json(listClis()));
+    this.app.get("/api/clis/:id/auth", async (req, res) => {
+      try { res.json(await cliAuth.get(String(req.params.id), req.query.refresh === "1")); }
+      catch (error: any) { res.status(400).json({ error: error.message }); }
+    });
+    this.app.post("/api/clis/:id/login", (req, res) => {
+      try {
+        const id = String(req.params.id);
+        if (!(id in LOGIN_ARGS)) throw new Error("ไม่รู้จักผู้ให้บริการนี้");
+        const context = req.body?.sessionId ? this.terminalManager.getSession(String(req.body.sessionId)) : undefined;
+        if (req.body?.sessionId && (!context || context.agentType !== id)) throw new Error("ไม่พบ session ของผู้ให้บริการนี้");
+        const workspace = this.workspaceRegistry.getWorkspace(String(context?.wsId || req.body?.wsId || ""));
+        if (!context && !workspace) throw new Error("กรุณาเลือกโปรเจกต์ก่อนเข้าสู่ระบบ");
+        const existing = this.terminalManager.listSessions().find((s) => s.agentType === id && s.status === "running" && (this.terminalManager.getSession(s.id)?.restart?.authOnly || id === "freebuff"));
+        if (existing) return res.json({ id: existing.id });
+        const launch = cliLaunch(id, LOGIN_ARGS[id]);
+        const session = this.terminalManager.spawnSession({ agentType: id, ...launch, authOnly: true,
+          name: `${getCliDefinition(id).name} · เข้าสู่ระบบ`, cwd: context?.cwd || workspace!.rootPath, wsId: context?.wsId || workspace?.id });
+        this.views.set(session.id, "terminal");
+        res.json({ id: session.id });
+      } catch (error: any) { res.status(400).json({ error: error.message }); }
+    });
     this.app.get('/api/cli-installs', (_req,res)=>res.json(this.cliInstalls.list()));
     this.app.get('/api/node/status', (_req, res) => res.json(getNodeStatus()));
     this.app.post('/api/node/install', (_req, res) => {
@@ -242,6 +278,11 @@ export class StudioServer {
       } catch (err: any) {
         res.status(400).json({ error: err.message });
       }
+    });
+    this.app.get("/api/workspaces/:wsId/chat-skills/:provider", (req, res) => {
+      const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!workspace) return res.status(404).json({ error: "ไม่พบโปรเจกต์" });
+      res.json(chatSkills(workspace.rootPath, String(req.params.provider)));
     });
     this.app.get("/api/cli-versions", async (req, res) => {
       res.json(await this.versions.all(req.query.refresh === "1"));
@@ -544,12 +585,14 @@ export class StudioServer {
     });
 
     // Switch a session between its chat and its terminal; both continue the same conversation.
-    this.app.post("/api/terminals/:id/view", (req: Request, res: Response) => {
+    this.app.post("/api/terminals/:id/view", async (req: Request, res: Response) => {
       const id = String(req.params.id);
       const session = this.terminalManager.getSession(id);
       if (!session) return res.status(404).json({ error: "ไม่พบ session นี้แล้ว" });
       const view = req.body?.view === "terminal" ? "terminal" : "chat";
+      if (view === "chat" && session.restart?.authOnly) return res.status(400).json({ error: "แท็บนี้ใช้เข้าสู่ระบบ กรุณากลับไปแท็บแชตเดิมแล้วกดตรวจบัญชีอีกครั้ง" });
       if (view === "chat" && !CHAT_CLIS.includes(session.agentType || "")) return res.status(400).json({ error: "CLI นี้ยังไม่รองรับมุมมองแชต" });
+      if ((session.sleeping || session.status === "stopping") && !(view === "chat" && session.sleeping && session.exitObserved && session.terminationConfirmed)) return res.status(409).json({ error: "Terminal กำลังปิด กรุณารอให้ปิดเสร็จก่อน" });
       try {
         if (view === "terminal") {
           if (this.chats.isRunning(id)) return res.status(409).json({ error: "รอให้แชตตอบเสร็จหรือกดหยุดก่อน แล้วค่อยสลับไป Terminal" });
@@ -558,10 +601,11 @@ export class StudioServer {
           // Carry on in the chat from where the terminal got to, then stop the TUI so only one writes.
           const conversation = this.terminalManager.conversationOf(id);
           if (conversation) this.chats.setConversation(id, conversation);
-          this.terminalManager.sleepSession(id);
+          await this.terminalManager.sleepSession(id);
         } else {
-          this.terminalManager.sleepSession(id);
+          await this.terminalManager.sleepSession(id);
         }
+        if (this.terminalManager.getSession(id) !== session) return res.status(409).json({ error: "session เปลี่ยนไปแล้ว กรุณาลองใหม่" });
         this.views.set(id, view);
         this.saveSessions();
         res.json({ success: true, view });
@@ -571,10 +615,16 @@ export class StudioServer {
     });
 
     // Chat view of a Code session: the same CLI, model and folder, driven through its JSON stream.
+    this.app.get("/api/terminals/:id/chat/settings", (req, res) => {
+      const session = this.terminalManager.getSession(String(req.params.id));
+      if (!session) return res.status(404).json({ error: "ไม่พบ session นี้แล้ว" });
+      res.json({ agent: session.agentType, model: session.restart?.model || session.restart?.openCodeModel || "", effort: session.restart?.effort || "",
+        skills: chatSkills(session.cwd, session.agentType || "") });
+    });
     this.app.get("/api/terminals/:id/chat", (req: Request, res: Response) => {
       res.json(this.chats.snapshot(String(req.params.id)));
     });
-    this.app.post("/api/terminals/:id/chat", (req: Request, res: Response) => {
+    this.app.post("/api/terminals/:id/chat", async (req: Request, res: Response) => {
       const id = String(req.params.id);
       const session = this.terminalManager.getSession(id);
       if (!session) return res.status(404).json({ error: "ไม่พบ session นี้แล้ว กรุณาเปิด session ใหม่" });
@@ -582,17 +632,28 @@ export class StudioServer {
       if (!CHAT_CLIS.includes(agent)) return res.status(400).json({ error: "CLI นี้ยังไม่รองรับมุมมองแชต กรุณาใช้ terminal" });
       // One writer per conversation: while its terminal is open, the chat waits.
       if (this.viewOf(id) !== "chat") return res.status(409).json({ error: "session นี้เปิดอยู่ในโหมด Terminal กรุณาสลับเป็นแชตก่อน" });
+      if (session.sleeping || ["running", "stopping"].includes(session.status)) return res.status(409).json({ error: "Terminal ยังปิดไม่เสร็จ กรุณารอก่อนส่งข้อความ" });
       const files: unknown[] = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
       const attachments = files.filter((f): f is string => typeof f === "string" && path.isAbsolute(f) && fs.existsSync(f));
       try {
+        if (typeof req.body?.text !== "string" || !req.body.text.trim()) throw new Error("กรุณาพิมพ์ข้อความ");
+        const chosen = this.sessionModel(agent,
+          req.body.model === undefined ? session.restart?.model || (agent === "opencode" ? session.restart?.openCodeModel : "") : req.body.model,
+          req.body.effort === undefined ? session.restart?.effort : req.body.effort);
+        if (req.body.skillId !== undefined && (typeof req.body.skillId !== "string" || !/^[a-f0-9]{20}$/.test(req.body.skillId))) throw new Error("skill ไม่ถูกต้อง");
+        await cliAuth.requireReady(agent);
+        if (this.terminalManager.getSession(id) !== session || this.viewOf(id) !== "chat") return res.status(409).json({ error: "session เปลี่ยนไปแล้ว กรุณาลองใหม่" });
+        if (session.sleeping || ["running", "stopping"].includes(session.status)) return res.status(409).json({ error: "Terminal ยังปิดไม่เสร็จ กรุณารอก่อนส่งข้อความ" });
         this.chats.send(id, {
           agent,
           cwd: session.cwd,
           text: typeof req.body?.text === "string" ? req.body.text : "",
-          model: session.restart?.model || (agent === "opencode" ? session.restart?.openCodeModel : undefined),
-          effort: session.restart?.effort,
+          ...chosen,
+          skillId: req.body.skillId,
           attachments,
         });
+        session.restart = { ...session.restart, ...chosen };
+        this.saveSessions();
         res.json({ success: true });
       } catch (err: any) {
         res.status(/ยังตอบ/.test(err.message) ? 409 : 400).json({ error: err.message });
@@ -605,6 +666,7 @@ export class StudioServer {
     this.app.post("/api/terminals/:id/restart", (req: Request, res: Response) => {
       try {
         const id = String(req.params.id);
+        if (this.chats.isRunning(id)) return res.status(409).json({ error: "แชตยังตอบข้อความก่อนหน้าอยู่ กรุณารอให้เสร็จก่อนเปิด Terminal" });
         const session = this.terminalManager.restartSession(id, this.viewOf(id) === "chat" ? this.chats.conversationId(id) : undefined);
         this.saveSessions();
         res.json({ id: session.id, status: session.status, name: session.name, agentType: session.agentType });
