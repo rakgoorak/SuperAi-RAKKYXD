@@ -49,14 +49,20 @@ export const cliPath = () => [
   ]),
 ].filter(Boolean).join(path.delimiter);
 
+/**
+ * Only for installing or updating the CLIs themselves (global installs). npm 12 blocks install
+ * scripts by default, and Claude Code's postinstall copies its native claude.exe over a
+ * placeholder, so a blocked script leaves a CLI that cannot start. Never put this in a session's
+ * environment: npm 12 refuses every project install (`npm ci`) while it is set (EALLOWSCRIPTS).
+ */
+export const cliInstallEnv = (): Record<string, string> => ({
+  npm_config_allow_scripts: Object.values(INSTALL_PACKAGES).join(","),
+});
+
 // Environment for spawned CLIs: managed PATH plus Git Bash for Claude Code on Windows.
 export function cliEnv(): Record<string, string> {
   const env: Record<string, string> = {
     PATH: cliPath(),
-    // npm 12 blocks install scripts by default. Claude Code's postinstall copies its native
-    // claude.exe over a placeholder, so a blocked script leaves a CLI that cannot start. This
-    // covers our installer and the CLIs' own updaters (`claude update` runs npm itself).
-    npm_config_allow_scripts: Object.values(INSTALL_PACKAGES).join(","),
   };
   if (process.platform === 'win32' && !process.env.CLAUDE_CODE_GIT_BASH_PATH) {
     const git = findExecutable('git');

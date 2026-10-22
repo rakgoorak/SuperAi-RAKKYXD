@@ -12,7 +12,7 @@ test('a Claude Code npm install without its native claude.exe counts as not inst
   const fs = await import('node:fs');
   const os = await import('node:os');
   const path = await import('node:path');
-  const { incompleteInstall, cliEnv } = await import('../server/CliCatalog.js');
+  const { incompleteInstall, cliEnv, cliInstallEnv } = await import('../server/CliCatalog.js');
   const prefix = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-prefix-'));
   const shim = path.join(prefix, 'claude.cmd');
   const bin = path.join(prefix, 'node_modules', '@anthropic-ai', 'claude-code', 'bin');
@@ -28,5 +28,6 @@ test('a Claude Code npm install without its native claude.exe counts as not inst
   assert.equal(incompleteInstall('codex', shim), false);
   assert.equal(incompleteInstall('claude-code', path.join(os.tmpdir(), 'elsewhere', 'claude.exe')), false, 'native installs are not judged');
   fs.rmSync(prefix, { recursive: true, force: true });
-  assert.match(cliEnv().npm_config_allow_scripts, /@anthropic-ai\/claude-code/, 'npm may run Claude Code\'s postinstall');
+  assert.match(cliInstallEnv().npm_config_allow_scripts, /@anthropic-ai\/claude-code/, 'npm may run Claude Code\'s postinstall');
+  assert.equal(cliEnv().npm_config_allow_scripts, undefined, 'sessions never get it: npm 12 then refuses every project install');
 });
