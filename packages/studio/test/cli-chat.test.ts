@@ -72,6 +72,9 @@ test('turn arguments resume the conversation and keep edits in the project', () 
   assert.equal(shellCommand('git status'), 'git status');
 });
 
+// Tests must not depend on the CLIs being installed (CI has none).
+const launch = (id: string, args: string[]) => ({ command: id, args });
+
 function fakeSpawner() {
   const calls: { command: string; args: string[]; stdin: string; proc: any }[] = [];
   const spawner = (command: string, args: string[]) => {
@@ -84,18 +87,25 @@ function fakeSpawner() {
     calls.push(call);
     return proc;
   };
+  // Like a real child process: 'close' only after stdout and stderr have been read to the end.
   const finish = (proc: any, events: unknown[], code = 0, stderr = '') => {
-    proc.stdout.write(events.map((e) => JSON.stringify(e)).join('\n'));
-    proc.stderr.write(stderr);
-    setImmediate(() => proc.emit('close', code));
+    const ended = (stream: PassThrough) => new Promise((r) => stream.once('end', r));
+    Promise.all([ended(proc.stdout), ended(proc.stderr)]).then(() => proc.emit('close', code));
+    proc.stdout.end(events.map((e) => JSON.stringify(e)).join('\n'));
+    proc.stderr.end(stderr);
   };
   return { calls, spawner, finish };
 }
-const settle = () => new Promise((r) => setTimeout(r, 20));
+// Waits for the chat's turn to finish (or a short pause when nothing is running), however busy the machine.
+const settle = async (chats?: CliChatManager, id?: string) => {
+  const until = Date.now() + 5000;
+  do await new Promise((r) => setTimeout(r, 10));
+  while (chats && id && chats.isRunning(id) && Date.now() < until);
+};
 
 test('the manager streams items, resumes the next turn and rejects overlapping turns', async () => {
   const fake = fakeSpawner();
-  const chats = new CliChatManager(fake.spawner as any);
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch);
   const seen: ChatMessage[] = [];
   chats.subscribe('s1', (m) => seen.push(m));
   assert.equal(seen[0].type, 'snapshot');
@@ -110,7 +120,7 @@ test('the manager streams items, resumes the next turn and rejects overlapping t
     { type: 'item.completed', item: { id: 'item_0', type: 'agent_message', text: 'ตอบแล้ว' } },
     { type: 'turn.completed' },
   ]);
-  await settle();
+  await settle(chats, 's1');
   assert.match(turn.stdin, /สวัสดี\n\nไฟล์แนบ:\n- C:\/x\/spec\.pdf/, 'non-image files are listed in the prompt');
   const chat = chats.snapshot('s1');
   assert.equal(chat.running, false);
@@ -123,7 +133,7 @@ test('the manager streams items, resumes the next turn and rejects overlapping t
   const resumed = fake.calls[1].args;
   assert.deepEqual(resumed.slice(resumed.indexOf('exec'), resumed.indexOf('exec') + 3), ['exec', 'resume', 'th-1']);
   fake.finish(fake.calls[1].proc, [], 1, '{"message":"usage limit reached"}');
-  await settle();
+  await settle(chats, 's1');
   const last = chats.snapshot('s1').items.at(-1)!;
   assert.equal(last.kind, 'error');
   assert.match((last as any).text, /usage limit reached/);
@@ -131,14 +141,15 @@ test('the manager streams items, resumes the next turn and rejects overlapping t
 
 test('stopping a turn marks running tools and says it stopped', async () => {
   const fake = fakeSpawner();
-  const chats = new CliChatManager(fake.spawner as any);
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch);
   chats.send('s2', { agent: 'antigravity', cwd: process.cwd(), text: 'ทำงาน' });
   const proc = fake.calls[0].proc;
   proc.stdout.write(JSON.stringify({ event: 'step_update', step_update: { step_index: 1, state: 'ACTIVE', step_type: 'tool', tool_name: 'run_command', tool_info: { parameters: { CommandLine: 'sleep 99' } } } }) + '\n');
-  await settle();
+  const until = Date.now() + 5000;
+  while (!chats.snapshot('s2').items.some((i) => i.kind === 'tool') && Date.now() < until) await settle();
   assert.equal(chats.cancel('s2'), true);
   proc.emit('close', 1);
-  await settle();
+  await settle(chats, 's2');
   const items = chats.snapshot('s2').items;
   assert.equal((items.find((i) => i.kind === 'tool') as any).status, 'failed');
   assert.deepEqual([items.at(-1)!.kind, (items.at(-1) as any).text], ['notice', 'หยุดแล้ว']);
@@ -191,7 +202,7 @@ test('chat history is saved to disk and comes back; deleting removes it', async 
   const pathMod = await import('node:path');
   const dir = fsMod.mkdtempSync(pathMod.join(osMod.tmpdir(), 'superai-chats-'));
   const fake = fakeSpawner();
-  const first = new CliChatManager(fake.spawner as any, dir);
+  const first = new CliChatManager(fake.spawner as any, dir, launch);
   const changes: string[] = [];
   first.onChange = (id) => changes.push(id);
   first.send('s1', { agent: 'claude-code', cwd: process.cwd(), text: 'จำคำว่า KIWI' });
@@ -200,10 +211,10 @@ test('chat history is saved to disk and comes back; deleting removes it', async 
     { type: 'assistant', message: { id: 'm', content: [{ type: 'text', text: 'จำแล้ว' }] } },
     { type: 'assistant', message: { id: 'm2', content: [{ type: 'tool_use', id: 'cut', name: 'Bash', input: { command: 'sleep 9' } }] } },
   ]);
-  await settle();
+  await settle(first, 's1');
   assert.match(fake.calls[0].stdin, /KIWI/, 'Claude Code reads the prompt from stdin');
   assert.ok(changes.includes('s1'));
-  const second = new CliChatManager(fake.spawner as any, dir);
+  const second = new CliChatManager(fake.spawner as any, dir, launch);
   const back = second.snapshot('s1');
   assert.equal(back.conversationId, 'sess-9');
   assert.deepEqual(back.items.filter((i) => i.kind !== 'tool').map((i) => (i as any).text), ['จำคำว่า KIWI', 'จำแล้ว']);
@@ -212,10 +223,18 @@ test('chat history is saved to disk and comes back; deleting removes it', async 
   assert.equal(resumed[resumed.indexOf('--resume') + 1], 'sess-9');
   assert.ok(second.snapshot('s1').items.some((i) => i.id === 't2-user'), 'turn ids continue after a restart');
   fake.finish(fake.calls[1].proc, []);
-  await settle();
+  await settle(second, 's1');
   second.setConversation('s1', 'from-terminal');
-  assert.equal(new CliChatManager(fake.spawner as any, dir).conversationId('s1'), 'from-terminal');
+  assert.equal(new CliChatManager(fake.spawner as any, dir, launch).conversationId('s1'), 'from-terminal');
   second.drop('s1');
   assert.equal(fsMod.existsSync(pathMod.join(dir, 's1.json')), false);
   fsMod.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a CLI that is not installed is refused before the message joins the chat', () => {
+  const fake = fakeSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, () => { throw new Error('ยังไม่ได้ติดตั้ง Codex'); });
+  assert.throws(() => chats.send('s9', { agent: 'codex', cwd: process.cwd(), text: 'สวัสดี' }), /ยังไม่ได้ติดตั้ง/);
+  assert.deepEqual(chats.snapshot('s9'), { items: [], running: false, conversationId: undefined }, 'not stuck as running');
+  assert.equal(fake.calls.length, 0);
 });

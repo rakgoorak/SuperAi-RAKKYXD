@@ -258,7 +258,7 @@ export class CliChatManager {
   /** Called when a chat's conversation id or running state changes, e.g. to save the session list. */
   onChange?: (id: string) => void;
   /** `dir` keeps each chat as <id>.json so it survives an app restart. */
-  constructor(private spawner: Spawner = spawn, private dir?: string) {}
+  constructor(private spawner: Spawner = spawn, private dir?: string, private launcher: typeof cliLaunch = cliLaunch) {}
 
   private file(id: string): string | undefined {
     return this.dir && /^[\w-]+$/.test(id) ? path.join(this.dir, `${id}.json`) : undefined;
@@ -352,6 +352,8 @@ export class CliChatManager {
     if (prompt.length > MAX_PROMPT) throw new Error("ข้อความยาวเกินไป กรุณาแบ่งส่งหรือใส่ไว้ในไฟล์แล้วแนบแทน");
     const args = chatArguments(agent, { prompt, conversationId: chat.conversationId, model: request.model, effort: request.effort, files: attached });
 
+    // Resolved first: a CLI that is not installed is refused before the message joins the chat.
+    const launch = this.launcher(agent, args);
     const prefix = `t${++chat.turns}`;
     this.put(id, chat, { id: `${prefix}-user`, kind: "user", text, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}) });
     chat.running = true;
@@ -359,7 +361,6 @@ export class CliChatManager {
     this.emit(chat, { type: "state", running: true });
     this.onChange?.(id);
 
-    const launch = cliLaunch(agent, args);
     const parse = chatParser(agent, prefix);
     let proc: ChildProcess;
     let pending = "", errors = "", failed = false, finished = false;
