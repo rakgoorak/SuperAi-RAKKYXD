@@ -4,7 +4,7 @@ import os from "node:os";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
-import { cliLaunch, cliEnv, findExecutable, getCliDefinition } from "./CliCatalog.js";
+import { cliLaunch, cliEnv, cliInstallEnv, findExecutable, getCliDefinition } from "./CliCatalog.js";
 
 /**
  * Installed vs latest version of each AI CLI, and updating it with the CLI's own updater,
@@ -98,7 +98,8 @@ const defaultDeps: Deps = {
     const launch = cliLaunch(id, args);
     return spawn(launch.command, launch.args, {
       windowsHide: true, cwd: os.tmpdir(), stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0", CI: "1" },
+      // The CLI's own updater installs itself globally with npm (see cliInstallEnv).
+      env: { ...process.env, ...cliEnv(), ...cliInstallEnv(), NO_COLOR: "1", FORCE_COLOR: "0", CI: "1" },
     });
   },
   confirmedFile: path.join(os.homedir(), ".opencode-multi", "superai-cli-latest.json"),
