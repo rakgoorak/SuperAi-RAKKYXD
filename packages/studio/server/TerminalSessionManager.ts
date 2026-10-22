@@ -153,6 +153,15 @@ export class TerminalSessionManager {
 
     const handleExit = (code: number | null) => {
       session.exitObserved = true;
+      if (session.sleeping) {
+        session.sleeping = false;
+        session.dormant = true;
+        session.status = "exited";
+        session.exitCode = null;
+        session.ptyProcess = undefined;
+        session.process = undefined;
+        return;
+      }
       if (session.status === "exited") return;
       if (session.status !== "error")
         session.status =
@@ -209,13 +218,72 @@ export class TerminalSessionManager {
     return session;
   }
 
-  /** Start an ended session again with the same command, folder and name, keeping its id. */
-  public restartSession(id: string): TerminalSession {
+  /**
+   * Start an ended or dormant session again with the same command, folder and name, keeping its
+   * id (a new createdAt makes the client reconnect). `resume` picks the conversation; by default
+   * the one it last had.
+   */
+  public restartSession(id: string, resume?: string): TerminalSession {
     const session = this.sessions.get(id);
     if (!session?.restart) throw new Error("ไม่พบ session");
     if (session.status === "running" || session.status === "stopping") throw new Error("session ยังทำงานอยู่");
     this.sessions.delete(id);
-    return this.spawnSession({ ...session.restart, id, resume: this.resumeFor(session, new Set()) });
+    try {
+      return this.spawnSession({ ...session.restart, name: session.name, id, resume: resume || this.resumeFor(session, new Set()) });
+    } catch (error) {
+      this.sessions.set(id, session); // e.g. the session limit: keep the saved session
+      throw error;
+    }
+  }
+
+  /** A saved session brought back without starting its CLI; restartSession opens it on demand. */
+  public addDormant(entry: { id: string; options: SpawnSessionOptions; createdAt?: number; resume?: string }): TerminalSession {
+    const existing = this.sessions.get(entry.id);
+    if (existing) return existing;
+    const options = entry.options;
+    const session: TerminalSession = {
+      agentType: options.agentType || "terminal",
+      wsId: options.wsId,
+      threadId: options.threadId,
+      id: entry.id,
+      name: options.name || options.agentType || "session",
+      command: options.command || "",
+      args: options.args,
+      cwd: options.cwd || process.cwd(),
+      mode: ptyModule && !options.forcePipe ? "pty" : "pipe",
+      status: "exited",
+      exitCode: null,
+      createdAt: entry.createdAt || Date.now(),
+      bufferedOutput: "",
+      subscribers: new Set(),
+      cliSessionId: options.agentType === "claude-code" && entry.resume !== "last" ? entry.resume : undefined,
+      resumedFrom: entry.resume,
+      restart: { ...options, id: undefined, cols: undefined, rows: undefined, resume: undefined },
+      dormant: true,
+    };
+    this.sessions.set(entry.id, session);
+    return session;
+  }
+
+  /** Stop the CLI but keep the session (its chat goes on without a terminal). */
+  public sleepSession(id: string): boolean {
+    const session = this.sessions.get(id);
+    if (!session) return false;
+    if (session.status !== "running") {
+      session.dormant = true;
+      return true;
+    }
+    session.sleeping = true;
+    this.terminate(session);
+    return true;
+  }
+
+  /** The conversation a session's CLI is on (or was on), for resuming it elsewhere. */
+  public conversationOf(id: string): string | undefined {
+    const session = this.sessions.get(id);
+    if (!session) return undefined;
+    const resume = this.resumeFor(session, new Set());
+    return resume === "last" ? undefined : resume;
   }
 
   /** How to pick the tab's conversation up again, or undefined to start fresh. */
@@ -231,6 +299,8 @@ export class TerminalSessionManager {
       if (id) taken.add(id);
       return id || undefined;
     }
+    // A known conversation (e.g. from the chat view) is resumed exactly.
+    if (session.resumedFrom && session.resumedFrom !== "last") return session.resumedFrom;
     // The others only resume "the latest conversation in this folder": give it to one tab only.
     if (["opencode", "antigravity", "freebuff"].includes(agent)) return newestOfKind ? "last" : undefined;
     return undefined;
@@ -255,12 +325,27 @@ export class TerminalSessionManager {
       }));
   }
 
+  /**
+   * Every AI session the user still has (running or dormant), oldest first, with what is needed
+   * to bring it back after the app restarts. Ended tabs and plain shells are not kept.
+   */
+  public records(): (RestoredSession & { createdAt: number })[] {
+    const taken = new Set<string>();
+    return [...this.sessions.values()]
+      .filter((s) => s.restart && s.agentType !== "terminal" && !s.closeRequested && (s.status === "running" || s.dormant))
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map((s) => ({ id: s.id, options: { ...s.restart!, name: s.name }, createdAt: s.createdAt, resume: this.resumeFor(s, taken, false) }));
+  }
+
   /** Reopen tabs saved by snapshot(), keeping their ids so the UI layout still matches. */
   public restore(saved: RestoredSession[]): TerminalSession[] {
     const started: TerminalSession[] = [];
     for (const entry of saved) {
-      if (this.sessions.has(entry.id)) continue;
+      const existing = this.sessions.get(entry.id);
       try {
+        // Already brought back as a saved session: just start it (it was running before the update).
+        if (existing?.dormant) started.push(this.restartSession(entry.id, entry.resume));
+        if (existing) continue;
         started.push(this.spawnSession({ ...entry.options, id: entry.id, resume: entry.resume }));
       } catch {
         // e.g. the CLI was uninstalled meanwhile: skip that tab
@@ -297,6 +382,7 @@ export class TerminalSessionManager {
       selfUpdated: !!s.selfUpdated,
       updateFailed: !!s.updateFailed,
       createdAt: s.createdAt,
+      dormant: !!s.dormant,
       bufferedOutput: s.bufferedOutput.slice(-1000),
     }));
   }

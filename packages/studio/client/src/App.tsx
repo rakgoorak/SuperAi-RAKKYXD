@@ -42,6 +42,7 @@ import {
   Users,
 } from "lucide-react";
 import { api, post, Workspace, Cli, Session, Run, Seat } from "./api";
+import { paneView } from "./paneView";
 import { SessionCanvas, type CanvasLayout } from "./components/SessionCanvas";
 import { RightDock, type DockView } from "./components/RightDock";
 import { AgentConfigEditor, AgentRunView, type AgentConfig } from "./components/AgentPanel";
@@ -155,7 +156,8 @@ export function App() {
   const workspace = workspaces.find((w) => w.id === activeWs);
   const visible = sessions.filter((s) => s.wsId === activeWs);
   const selectedSession = visible.find((s) => s.id === selected);
-  const running = visible.filter((s) => s.status === "running");
+  // Chat sessions take messages without a running terminal.
+  const running = visible.filter((s) => s.status === "running" || paneView(s) === "chat");
   const conversation = runs.filter((r) => r.mode === mode);
   const activeRun = runs.find((r) => r.status === "running");
   const launchCli = clis.find((c) => c.id === launchType);
@@ -370,6 +372,11 @@ export function App() {
       await post(`/api/terminals/${id}/restart`);
       await refresh();
     }), [task, refresh]);
+  const switchView = useCallback((id: string, view: "chat" | "terminal") =>
+    void task(async () => {
+      await post(`/api/terminals/${id}/view`, { view });
+      await refresh();
+    }), [task, refresh]);
   const send = () =>
     task(async () => {
       if (!draft.trim() && !attachments.items.length) return;
@@ -390,6 +397,14 @@ export function App() {
             "ไม่มี terminal ที่กำลังทำงาน กรุณาเปิด session ก่อน",
           );
         for (const recipient of recipients) {
+          // A pane in chat view takes the message as a chat turn; files go along as paths.
+          if (paneView(recipient) === "chat") {
+            await post(`/api/terminals/${recipient.id}/chat`, {
+              text: draft.trim() || "ดูไฟล์แนบนี้",
+              attachments: saved.map((file) => file.path),
+            });
+            continue;
+          }
           // Codex gets project-relative paths: typed ":" and "\" can be lost through ConPTY.
           const relative = attachMode(recipient.agentType) === "clipboard" && recipient.cwd === workspace.rootPath;
           const paths = saved.map((file) => formatPath(relative ? file.relativePath : file.path)).join("").trim();
@@ -436,6 +451,10 @@ export function App() {
               );
         if (!recipients.length) throw new Error("ไม่มี session ที่กำลังทำงาน");
         for (const s of recipients) {
+          if (paneView(s) === "chat") {
+            await post(`/api/terminals/${s.id}/chat/cancel`);
+            continue;
+          }
           const r = await post(`/api/terminals/${s.id}/input`, {
             input: "\u0003",
           });
@@ -613,20 +632,32 @@ export function App() {
                       {activeWs === ws.id && (
                         <div className="project-sessions">
                           {entries.map((s) => (
-                            <button
-                              key={s.id}
-                              className={`sidebar-session ${s.id === selected && mode === "code" ? "active" : ""}`}
-                              onClick={() => {
-                                setSelected(s.id);
-                                setMode("code");
-                              }}
-                            >
-                              <Terminal size={13} />
-                              <span>{s.name}</span>
-                              <span
-                                className={`status-dot ${s.status === "running" ? "" : s.status === "error" ? "bad" : "offline"}`}
-                              />
-                            </button>
+                            <div key={s.id} className="sidebar-session-row">
+                              <button
+                                className={`sidebar-session ${s.id === selected && mode === "code" ? "active" : ""}`}
+                                onClick={() => {
+                                  setSelected(s.id);
+                                  setMode("code");
+                                }}
+                              >
+                                {paneView(s) === "chat" ? <MessageSquare size={13} /> : <Terminal size={13} />}
+                                <span>{s.name}</span>
+                                <span
+                                  className={`status-dot ${s.status === "running" || paneView(s) === "chat" ? "" : s.status === "error" ? "bad" : "offline"}`}
+                                />
+                              </button>
+                              <button
+                                className="sidebar-session-delete"
+                                title={`ลบ ${s.name}`}
+                                aria-label={`ลบ ${s.name}`}
+                                disabled={busy}
+                                onClick={() => {
+                                  if (window.confirm(`ลบ session "${s.name}"?\nประวัติแชตใน session นี้จะถูกลบด้วย`)) closeSession(s.id);
+                                }}
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
                           ))}
                           <button
                             className="add-session-link"
@@ -830,7 +861,7 @@ export function App() {
               >
                 {visible.length > 0 ? (
                   <SessionCanvas sessions={visible} workspaceId={activeWs} selected={selected} layout={layout} zoomed={zoomed} active={mode === "code"} busy={busy}
-                    select={setSelected} zoom={id => { setSelected(id); setZoomed(true); }} close={closeSession} restart={restartSession} add={openSession}
+                    select={setSelected} zoom={id => { setSelected(id); setZoomed(true); }} close={closeSession} restart={restartSession} add={openSession} switchView={switchView}
                     refresh={() => void refresh().catch(() => {})} onError={showError} />
                 ) : (
                   <div className="workspace-empty">

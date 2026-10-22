@@ -1,4 +1,5 @@
 import http from "node:http";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
@@ -18,6 +19,7 @@ import { UsageManager, USAGE_PROVIDERS } from "./UsageManager.js";
 import { trustFolder, repairCodexConfigFile } from "./FolderTrust.js";
 import { CliVersionManager, VERSIONED_CLIS } from "./CliVersions.js";
 import { AttachmentError, MAX_ATTACHMENT_BYTES, resolveAttachments, saveAttachment } from "./AttachmentStore.js";
+import { CliChatManager, CHAT_CLIS } from "./CliChat.js";
 
 export class StudioServer {
   private agentRuns: AgentRunManager;
@@ -25,6 +27,12 @@ export class StudioServer {
   private skills = new SkillManager();
   private usage = new UsageManager();
   private versions = new CliVersionManager();
+  private chats: CliChatManager;
+  /** Sessions kept across app restarts (with their chat view state); written only once started. */
+  private sessionsFile: string;
+  private sessionsLoaded = false;
+  private saveTimer?: NodeJS.Timeout;
+  private views = new Map<string, "chat" | "terminal">();
   private app: Express;
   private server: http.Server;
   private wss: WebSocketServer;
@@ -47,6 +55,10 @@ export class StudioServer {
     this.restoreFile = options?.customWorkspacePath
       ? path.join(path.dirname(options.customWorkspacePath), "restore.json")
       : path.join(os.homedir(), ".opencode-multi", "superai-restore.json");
+    const dataDir = options?.customWorkspacePath ? path.dirname(options.customWorkspacePath) : path.join(os.homedir(), ".opencode-multi");
+    this.sessionsFile = path.join(dataDir, "superai-sessions.json");
+    this.chats = new CliChatManager(undefined, path.join(dataDir, "superai-chats"));
+    this.chats.onChange = () => this.saveSessions();
     this.terminalManager = new TerminalSessionManager();
     this.workspaceRegistry = new WorkspaceRegistry(
       options?.customWorkspacePath,
@@ -87,6 +99,45 @@ export class StudioServer {
     repairCodexConfigFile();
     this.setupRoutes();
     this.setupWebSockets();
+  }
+
+  private viewOf(id: string): "chat" | "terminal" {
+    return this.views.get(id) || "terminal";
+  }
+
+  /** Write the session list (chat sessions resume their chat's conversation). */
+  private saveSessions() {
+    if (!this.sessionsLoaded) return;
+    const sessions = this.terminalManager.records().map((r) => {
+      const view = this.viewOf(r.id);
+      return { ...r, view, resume: (view === "chat" && this.chats.conversationId(r.id)) || r.resume };
+    });
+    try {
+      fs.mkdirSync(path.dirname(this.sessionsFile), { recursive: true });
+      fs.writeFileSync(this.sessionsFile, JSON.stringify({ savedAt: Date.now(), sessions }));
+    } catch {
+      // the list is saved again on the next change
+    }
+  }
+
+  /** Bring back the saved sessions without starting their CLIs. */
+  private loadSessions() {
+    this.sessionsLoaded = true;
+    try {
+      const saved = JSON.parse(fs.readFileSync(this.sessionsFile, "utf8"));
+      for (const entry of Array.isArray(saved?.sessions) ? saved.sessions : []) {
+        if (typeof entry?.id !== "string" || !entry.options || typeof entry.options !== "object") continue;
+        this.terminalManager.addDormant({
+          id: entry.id,
+          options: entry.options,
+          createdAt: Number(entry.createdAt) || undefined,
+          resume: typeof entry.resume === "string" && entry.resume ? entry.resume : undefined,
+        });
+        this.views.set(entry.id, entry.view === "chat" ? "chat" : "terminal");
+      }
+    } catch {
+      // first start, or an unreadable file: start with no sessions
+    }
   }
 
   /** Validated model/effort for a Code-mode CLI session ("" keeps the CLI default). */
@@ -398,7 +449,7 @@ export class StudioServer {
                   : "completed",
           });
       }
-      res.json(this.terminalManager.listSessions());
+      res.json(this.terminalManager.listSessions().map((s) => ({ ...s, view: this.viewOf(s.id) })));
     });
 
     this.app.post("/api/terminals/spawn", (req: Request, res: Response) => {
@@ -433,7 +484,7 @@ export class StudioServer {
         // Skip the CLI's "trust this folder?" prompt for the user's own project folder.
         if (req.body.trustFolder === true && workspace?.rootPath && workingDir === workspace.rootPath && typeof agentType === "string")
           trustFolder(agentType, workspace.rootPath);
-        const session = this.terminalManager.spawnSession({
+        const spawnOptions = {
           agentType,
           wsId,
           threadId,
@@ -446,7 +497,14 @@ export class StudioServer {
           cwd: workingDir,
           cols: Number(cols) || undefined,
           rows: Number(rows) || undefined,
-        });
+        };
+        // CLIs with a chat view open as a chat: no terminal process until the user switches to it.
+        const chat = !command && CHAT_CLIS.includes(agentType) && req.body.view !== "terminal";
+        const session = chat
+          ? this.terminalManager.addDormant({ id: randomUUID(), options: { ...spawnOptions, cwd: workingDir || process.cwd() } })
+          : this.terminalManager.spawnSession(spawnOptions);
+        this.views.set(session.id, chat ? "chat" : "terminal");
+        this.saveSessions();
 
         // Link to thread if provided
         if (wsId && threadId) {
@@ -465,6 +523,8 @@ export class StudioServer {
           status: session.status,
           agentType: session.agentType,
           wsId: session.wsId,
+          dormant: !!session.dormant,
+          view: this.viewOf(session.id),
         });
       } catch (err: any) {
         res
@@ -475,13 +535,78 @@ export class StudioServer {
 
     this.app.post("/api/terminals/:id/kill", (req: Request, res: Response) => {
       const id = String(req.params.id);
+      // Closing deletes the session: its saved entry and its chat history go too.
       const killed = this.terminalManager.killSession(id);
+      this.chats.drop(id);
+      this.views.delete(id);
+      this.saveSessions();
       res.json({ success: killed });
+    });
+
+    // Switch a session between its chat and its terminal; both continue the same conversation.
+    this.app.post("/api/terminals/:id/view", (req: Request, res: Response) => {
+      const id = String(req.params.id);
+      const session = this.terminalManager.getSession(id);
+      if (!session) return res.status(404).json({ error: "ไม่พบ session นี้แล้ว" });
+      const view = req.body?.view === "terminal" ? "terminal" : "chat";
+      if (view === "chat" && !CHAT_CLIS.includes(session.agentType || "")) return res.status(400).json({ error: "CLI นี้ยังไม่รองรับมุมมองแชต" });
+      try {
+        if (view === "terminal") {
+          if (this.chats.isRunning(id)) return res.status(409).json({ error: "รอให้แชตตอบเสร็จหรือกดหยุดก่อน แล้วค่อยสลับไป Terminal" });
+          if (session.status !== "running" && session.status !== "stopping") this.terminalManager.restartSession(id, this.chats.conversationId(id));
+        } else if (session.status === "running") {
+          // Carry on in the chat from where the terminal got to, then stop the TUI so only one writes.
+          const conversation = this.terminalManager.conversationOf(id);
+          if (conversation) this.chats.setConversation(id, conversation);
+          this.terminalManager.sleepSession(id);
+        } else {
+          this.terminalManager.sleepSession(id);
+        }
+        this.views.set(id, view);
+        this.saveSessions();
+        res.json({ success: true, view });
+      } catch (err: any) {
+        res.status(400).json({ error: err.message });
+      }
+    });
+
+    // Chat view of a Code session: the same CLI, model and folder, driven through its JSON stream.
+    this.app.get("/api/terminals/:id/chat", (req: Request, res: Response) => {
+      res.json(this.chats.snapshot(String(req.params.id)));
+    });
+    this.app.post("/api/terminals/:id/chat", (req: Request, res: Response) => {
+      const id = String(req.params.id);
+      const session = this.terminalManager.getSession(id);
+      if (!session) return res.status(404).json({ error: "ไม่พบ session นี้แล้ว กรุณาเปิด session ใหม่" });
+      const agent = session.agentType || "";
+      if (!CHAT_CLIS.includes(agent)) return res.status(400).json({ error: "CLI นี้ยังไม่รองรับมุมมองแชต กรุณาใช้ terminal" });
+      // One writer per conversation: while its terminal is open, the chat waits.
+      if (this.viewOf(id) !== "chat") return res.status(409).json({ error: "session นี้เปิดอยู่ในโหมด Terminal กรุณาสลับเป็นแชตก่อน" });
+      const files: unknown[] = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
+      const attachments = files.filter((f): f is string => typeof f === "string" && path.isAbsolute(f) && fs.existsSync(f));
+      try {
+        this.chats.send(id, {
+          agent,
+          cwd: session.cwd,
+          text: typeof req.body?.text === "string" ? req.body.text : "",
+          model: session.restart?.model || (agent === "opencode" ? session.restart?.openCodeModel : undefined),
+          effort: session.restart?.effort,
+          attachments,
+        });
+        res.json({ success: true });
+      } catch (err: any) {
+        res.status(/ยังตอบ/.test(err.message) ? 409 : 400).json({ error: err.message });
+      }
+    });
+    this.app.post("/api/terminals/:id/chat/cancel", (req: Request, res: Response) => {
+      res.json({ success: this.chats.cancel(String(req.params.id)) });
     });
 
     this.app.post("/api/terminals/:id/restart", (req: Request, res: Response) => {
       try {
-        const session = this.terminalManager.restartSession(String(req.params.id));
+        const id = String(req.params.id);
+        const session = this.terminalManager.restartSession(id, this.viewOf(id) === "chat" ? this.chats.conversationId(id) : undefined);
+        this.saveSessions();
         res.json({ id: session.id, status: session.status, name: session.name, agentType: session.agentType });
       } catch (err: any) {
         res.status(400).json({ error: err.message });
@@ -608,6 +733,11 @@ export class StudioServer {
         ws.on("close", () => {
           unsubscribe();
         });
+      } else if (pathname.startsWith("/ws/chat/")) {
+        const unsubscribe = this.chats.subscribe(pathname.replace("/ws/chat/", ""), (message) => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+        });
+        ws.on("close", unsubscribe);
       } else {
         // Generic event listener
         ws.send(JSON.stringify({ type: "connected", time: Date.now() }));
@@ -637,7 +767,11 @@ export class StudioServer {
         this.server.off("error", onError);
         const address = this.server.address();
         if (address && typeof address === "object") this.port = address.port;
+        this.loadSessions();
         this.restoreSessions();
+        // A terminal's conversation id is only known once its CLI has written it: save now and then.
+        this.saveTimer = setInterval(() => this.saveSessions(), 60_000);
+        this.saveTimer.unref();
         resolve();
       };
       this.server.once("error", onError);
@@ -648,7 +782,8 @@ export class StudioServer {
 
   /** What an update would interrupt right now: running Agent/Chat work and CLIs still answering. */
   public busy(): string[] {
-    return [...(this.agentRuns.running() ? ["งานใน Agent/Chat"] : []), ...this.terminalManager.activeSessions()];
+    const chats = this.chats.running().map((id) => `แชตของ ${this.terminalManager.getSession(id)?.name || "session"}`);
+    return [...(this.agentRuns.running() ? ["งานใน Agent/Chat"] : []), ...this.terminalManager.activeSessions(), ...chats];
   }
 
   /** Save the open tabs so the next start reopens them on the same conversations. */
@@ -678,7 +813,10 @@ export class StudioServer {
 
   public stop(): Promise<void> {
     return new Promise((resolve, reject) => {
+      clearInterval(this.saveTimer);
+      this.saveSessions();
       this.agentRuns.stop();
+      this.chats.stopAll();
       this.cliInstalls.stop();
       this.terminalManager.killAll();
       for (const client of this.wss.clients) client.terminate();

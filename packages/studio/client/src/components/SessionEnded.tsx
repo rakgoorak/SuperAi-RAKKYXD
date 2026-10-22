@@ -38,6 +38,21 @@ export function SessionEnded({ session, onRestart, onClose }: { session: Session
     }
   }, [seconds, kept, autoRestart, clean, session.id, onRestart, onClose]);
 
+  // A saved session after the app restarted: nothing ended, it waits to be opened again.
+  if (session.dormant)
+    return (
+      <div className="session-ended" role="status">
+        <div>
+          <strong>{session.name} พักไว้</strong>
+          <small>เปิดต่อเพื่อทำงานต่อจากบทสนทนาเดิม</small>
+        </div>
+        <div className="session-ended-actions">
+          <button className="secondary" onClick={() => onRestart(session.id)}><RotateCw size={13} /> เปิดต่อ</button>
+          <button className="secondary" onClick={() => { if (window.confirm(`ลบ session "${session.name}"?`)) onClose(session.id); }}><X size={13} /> ลบ</button>
+        </div>
+      </div>
+    );
+
   const title = autoRestart
     ? `${session.name} อัปเดตตัวเองเสร็จแล้ว`
     : clean

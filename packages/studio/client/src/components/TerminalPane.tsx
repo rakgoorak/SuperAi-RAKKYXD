@@ -2,9 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { X, Terminal as TerminalIcon, Bot, Sparkles, Cpu, Circle, ImagePlus, AlertTriangle, BookOpen } from 'lucide-react';
+import { X, Terminal as TerminalIcon, Bot, Sparkles, Cpu, Circle, ImagePlus, AlertTriangle, BookOpen, MessageSquare } from 'lucide-react';
 import { attachMode, formatPath, isPdf, isSupportedAttachment, isSupportedImage, pastedFiles, uploadAttachment, UNSUPPORTED_ATTACHMENT, type SavedAttachment } from '../attachments';
 import { bufferText, loadTerminalThaiFont } from '../terminalText';
+import { CHAT_CLIS, paneView, type PaneView } from '../paneView';
+import { ChatView } from './ChatView';
 
 export interface TerminalTab {
   id: string;
@@ -14,6 +16,7 @@ export interface TerminalTab {
   /** Command typed into the shell once it is ready (e.g. `claude`, `codex`). */
   autoCommand?: string;
   status: 'connecting' | 'running' | 'exited' | 'error';
+  view?: PaneView;
 }
 
 interface TerminalPaneProps {
@@ -26,6 +29,8 @@ interface TerminalPaneProps {
   onExit: () => void;
   /** Lets the parent send text to this terminal (prompt bar). */
   registerSender: (id: string, sender: ((data: string) => void) | null) => void;
+  /** Switch between chat and terminal (the server starts or pauses the CLI). */
+  onSwitchView?: (view: PaneView) => void;
 }
 
 const THEME = {
@@ -88,6 +93,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   onClose,
   onExit,
   registerSender,
+  onSwitchView,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -105,6 +111,9 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   const [reading, setReading] = useState(false);
   const [readerText, setReaderText] = useState('');
   const readerRef = useRef<HTMLDivElement>(null);
+  // Chat view (Codex, Antigravity): the same CLI driven through its JSON stream. The PTY keeps running underneath.
+  const chatCapable = !!tab.sessionId && CHAT_CLIS.includes(tab.type) && !!onSwitchView;
+  const chatting = chatCapable && paneView({ agentType: tab.type, view: tab.view }) === 'chat';
 
   const showNotice = (next: AttachNotice | null) => {
     window.clearTimeout(noticeTimer.current);
@@ -293,10 +302,11 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
           fitRef.current?.fit();
         } catch {}
       }
-      if (focused) termRef.current?.focus();
+      // Hidden under the chat view, the terminal must not take the keyboard.
+      if (focused && !chatting) termRef.current?.focus();
     });
     return () => window.cancelAnimationFrame(id);
-  }, [visible, focused]);
+  }, [visible, focused, chatting]);
 
   // Keep the reading view in step with the terminal while it is shown (at most ~5 updates a second).
   useEffect(() => {
@@ -431,24 +441,45 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
             {readerText || <span className="text-slate-500">ยังไม่มีข้อความ</span>}
           </div>
         )}
+        {chatting && (
+          <div className="absolute inset-0 z-[7]">
+            <ChatView sessionId={tab.sessionId!} name={tab.name.split('·')[0].trim() || tab.name} focused={visible && focused} />
+          </div>
+        )}
         {tab.sessionId && (
-          <button
-            onClick={(event) => {
-              event.stopPropagation();
-              if (reading) closeReader();
-              else setReading(true);
-            }}
-            // Top-right: the bottom row is where CLIs draw their own status line. A ring, because the
-            // global `button { border: 0 }` rule wins over Tailwind's border width here.
-            className={`absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium shadow-lg ring-1 ${
-              reading ? 'ring-cyan-400/70 bg-[#0e2a3a] text-cyan-100' : 'ring-cyan-500/40 bg-[#10202c] text-cyan-200 hover:bg-[#15303f] hover:text-cyan-100'
-            }`}
-            title={reading ? 'กลับไปพิมพ์ใน terminal (Esc)' : 'อ่านข้อความใน terminal แบบตัวหนังสือปกติ สระและวรรณยุกต์ไม่เพี้ยน'}
-            aria-pressed={reading}
-          >
-            {reading ? <TerminalIcon className="w-3 h-3" /> : <BookOpen className="w-3 h-3" />}
-            <span>{reading ? 'กลับไปพิมพ์' : 'อ่านแบบข้อความ'}</span>
-          </button>
+          // Top-right: the bottom row is where CLIs draw their own status line.
+          <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+            {!chatting && (
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (reading) closeReader();
+                  else setReading(true);
+                }}
+                // A ring, because the global `button { border: 0 }` rule wins over Tailwind's border width here.
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium shadow-lg ring-1 ${
+                  reading ? 'ring-cyan-400/70 bg-[#0e2a3a] text-cyan-100' : 'ring-cyan-500/40 bg-[#10202c] text-cyan-200 hover:bg-[#15303f] hover:text-cyan-100'
+                }`}
+                title={reading ? 'กลับไปพิมพ์ใน terminal (Esc)' : 'อ่านข้อความใน terminal แบบตัวหนังสือปกติ สระและวรรณยุกต์ไม่เพี้ยน'}
+                aria-pressed={reading}
+              >
+                {reading ? <TerminalIcon className="w-3 h-3" /> : <BookOpen className="w-3 h-3" />}
+                <span>{reading ? 'กลับไปพิมพ์' : 'อ่านแบบข้อความ'}</span>
+              </button>
+            )}
+            {chatCapable && (
+              <div className="pane-view-switch" role="group" aria-label="มุมมอง session">
+                <button aria-pressed={chatting} onClick={(event) => { event.stopPropagation(); setReading(false); if (!chatting) onSwitchView?.('chat'); }}
+                  title="คุยแบบแชต · ปิด TUI แล้วคุยต่อจากบทสนทนาเดิม">
+                  <MessageSquare className="w-3 h-3" /> แชต
+                </button>
+                <button aria-pressed={!chatting} onClick={(event) => { event.stopPropagation(); if (chatting) onSwitchView?.('terminal'); }}
+                  title="เปิด TUI ของ CLI ต่อจากบทสนทนาเดียวกัน">
+                  <TerminalIcon className="w-3 h-3" /> Terminal
+                </button>
+              </div>
+            )}
+          </div>
         )}
         {tab.sessionId ? (
           <div ref={containerRef} className="w-full h-full" />

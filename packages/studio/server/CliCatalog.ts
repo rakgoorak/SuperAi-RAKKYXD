@@ -51,7 +51,13 @@ export const cliPath = () => [
 
 // Environment for spawned CLIs: managed PATH plus Git Bash for Claude Code on Windows.
 export function cliEnv(): Record<string, string> {
-  const env: Record<string, string> = { PATH: cliPath() };
+  const env: Record<string, string> = {
+    PATH: cliPath(),
+    // npm 12 blocks install scripts by default. Claude Code's postinstall copies its native
+    // claude.exe over a placeholder, so a blocked script leaves a CLI that cannot start. This
+    // covers our installer and the CLIs' own updaters (`claude update` runs npm itself).
+    npm_config_allow_scripts: Object.values(INSTALL_PACKAGES).join(","),
+  };
   if (process.platform === 'win32' && !process.env.CLAUDE_CODE_GIT_BASH_PATH) {
     const git = findExecutable('git');
     const bash = git && bashForGit(git);
@@ -141,11 +147,31 @@ export function findExecutable(command: string): string | null {
   return null;
 }
 
+/**
+ * Claude Code installed from npm whose postinstall never ran (or whose update stopped half way)
+ * has a tiny placeholder or no bin/claude.exe at all: the command exists but cannot start.
+ */
+export function incompleteInstall(id: string, executable: string | null): boolean {
+  if (id !== "claude-code" || !executable) return false;
+  const dir = path.dirname(executable);
+  for (const root of [path.join(dir, "node_modules"), path.join(dir, "..", "lib", "node_modules")]) {
+    const pkg = path.join(root, "@anthropic-ai", "claude-code");
+    if (!fs.existsSync(path.join(pkg, "package.json"))) continue;
+    try {
+      return fs.statSync(path.join(pkg, "bin", "claude.exe")).size < 1_000_000;
+    } catch {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function listClis() {
   const nodeStatus = getNodeStatus();
   return CLI_DEFINITIONS.map((c) => ({
     ...c,
-    available: !!findExecutable(c.command),
+    // An incomplete install shows as missing, so the app offers to install it again.
+    available: !!findExecutable(c.command) && !incompleteInstall(c.id, findExecutable(c.command)),
     installPackage: INSTALL_PACKAGES[c.id] || (INSTALL_SCRIPTS[c.id] ? 'antigravity.google' : undefined),
     needsNode: !!INSTALL_PACKAGES[c.id],
     installerReady: true,

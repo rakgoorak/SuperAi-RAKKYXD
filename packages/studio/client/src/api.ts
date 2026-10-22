@@ -66,6 +66,10 @@ export interface Session {
   status: "running" | "stopping" | "exited" | "error";
   exitCode: number | null;
   mode: "pty" | "pipe";
+  /** Kept without a running CLI (saved session after a restart, or a chat whose terminal is closed). */
+  dormant?: boolean;
+  /** Shown as a chat (Claude Code, Codex, Antigravity, OpenCode) or as the CLI's terminal. */
+  view?: "chat" | "terminal";
   /** The CLI printed that it updated itself (it usually exits right after). */
   selfUpdated?: boolean;
   updateFailed?: boolean;
