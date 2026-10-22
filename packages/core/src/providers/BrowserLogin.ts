@@ -1,12 +1,12 @@
-import { chromium, BrowserContext } from 'playwright-core';
+import { chromium, BrowserContext, Browser } from 'playwright-core';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { CredentialStore, sessionService } from './CredentialStore.js';
 
 export interface BrowserLoginResult {
   success: boolean;
   provider: string;
-  token?: string;
   details?: string;
   error?: string;
 }
@@ -18,13 +18,13 @@ const PROVIDER_TARGETS: Record<
   chatgpt: {
     name: 'ChatGPT (OpenAI)',
     url: 'https://chatgpt.com/auth/login',
-    cookieNames: ['__Secure-next-auth.session-token', 'session-token', '_puid'],
+    cookieNames: ['__Secure-next-auth.session-token', 'session-token'],
     domain: 'chatgpt.com',
   },
   claude: {
     name: 'Claude (Anthropic)',
     url: 'https://claude.ai/login',
-    cookieNames: ['sessionKey', 'intercom-session-'],
+    cookieNames: ['sessionKey'],
     domain: 'claude.ai',
   },
   gemini: {
@@ -43,29 +43,28 @@ const PROVIDER_TARGETS: Record<
 
 export class BrowserLoginManager {
   private configDir: string;
-  private authFile: string;
-
-  constructor() {
-    this.configDir = path.join(os.homedir(), '.opencode-multi');
-    this.authFile = path.join(this.configDir, 'auth.json');
+  constructor(private store = new CredentialStore(), configDir = path.join(os.homedir(), '.opencode-multi')) {
+    this.configDir = configDir;
   }
 
   async saveToken(provider: string, token: string): Promise<void> {
-    await fs.mkdir(this.configDir, { recursive: true });
-    let existing: Record<string, string> = {};
-    try {
-      existing = JSON.parse(await fs.readFile(this.authFile, 'utf-8'));
-    } catch {}
+    this.store.saveSession(provider, token);
+  }
 
-    existing[provider] = token;
-    await fs.writeFile(this.authFile, JSON.stringify(existing, null, 2), 'utf-8');
+  async logout(provider: string): Promise<{ success: boolean }> {
+    sessionService(provider);
+    this.store.forgetSession(provider);
+    // Older releases persisted Chromium's own cookie/localStorage copy here.
+    await fs.rm(path.join(this.configDir, `browser-profile-${provider}`), { recursive: true, force: true });
+    return { success: true };
   }
 
   async login(
     providerKey: 'chatgpt' | 'claude' | 'gemini' | 'deepseek',
     onStatus?: (msg: string) => void
   ): Promise<BrowserLoginResult> {
-    const target = PROVIDER_TARGETS[providerKey] || PROVIDER_TARGETS.chatgpt;
+    const target = PROVIDER_TARGETS[sessionService(providerKey)];
+    if (!target) throw new Error('Unsupported browser login service');
     onStatus?.(`Preparing browser login for ${target.name}...`);
 
     try {
@@ -75,13 +74,12 @@ export class BrowserLoginManager {
       for (const ctx of contexts) {
         const cookies = await ctx.cookies();
         for (const cookieName of target.cookieNames) {
-          const match = cookies.find((c) => c.name.includes(cookieName) || c.domain.includes(target.domain));
+          const match = cookies.find((c) => matchesSessionCookie(c, cookieName, target.domain));
           if (match && match.value && match.value.length > 10) {
             await this.saveToken(providerKey, match.value);
             return {
               success: true,
               provider: providerKey,
-              token: match.value,
               details: `Extracted active session from open Chrome tab (${match.name})`,
             };
           }
@@ -92,33 +90,30 @@ export class BrowserLoginManager {
     }
 
     onStatus?.(`Opening browser window to ${target.url}... Please log in on the opened window.`);
-    const userDataDir = path.join(this.configDir, `browser-profile-${providerKey}`);
-    await fs.mkdir(userDataDir, { recursive: true });
-
+    // A nonpersistent context avoids keeping another cookie/localStorage credential copy.
     let context: BrowserContext | null = null;
+    let browser: Browser | null = null;
     try {
       try {
-        context = await chromium.launchPersistentContext(userDataDir, {
+        browser = await chromium.launch({
           headless: false,
           channel: process.platform === 'win32' ? 'chrome' : undefined,
-          viewport: { width: 1280, height: 800 },
         });
       } catch {
         try {
-          context = await chromium.launchPersistentContext(userDataDir, {
+          browser = await chromium.launch({
             headless: false,
             channel: process.platform === 'win32' ? 'msedge' : undefined,
-            viewport: { width: 1280, height: 800 },
           });
         } catch {
-          context = await chromium.launchPersistentContext(userDataDir, {
+          browser = await chromium.launch({
             headless: false,
-            viewport: { width: 1280, height: 800 },
           });
         }
       }
 
-      const page = context.pages()[0] || (await context.newPage());
+      context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      const page = await context.newPage();
       await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
 
       const maxWaitMs = 120_000;
@@ -132,27 +127,11 @@ export class BrowserLoginManager {
 
         const cookies = await context.cookies();
         for (const cookieName of target.cookieNames) {
-          const found = cookies.find((c) => c.name.toLowerCase().includes(cookieName.toLowerCase()));
+          const found = cookies.find((c) => matchesSessionCookie(c, cookieName, target.domain));
           if (found && found.value && found.value.length > 15) {
             extractedToken = found.value;
             break;
           }
-        }
-
-        if (!extractedToken && !page.isClosed()) {
-          try {
-            const lsToken = await page.evaluate(() => {
-              for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i) || '';
-                if (key.includes('token') || key.includes('session') || key.includes('auth')) {
-                  const val = localStorage.getItem(key);
-                  if (val && val.length > 20) return val;
-                }
-              }
-              return null;
-            });
-            if (lsToken) extractedToken = lsToken;
-          } catch {}
         }
 
         if (extractedToken) {
@@ -169,7 +148,6 @@ export class BrowserLoginManager {
         return {
           success: true,
           provider: providerKey,
-          token: extractedToken,
           details: `Captured session credentials from ${target.name}`,
         };
       } else {
@@ -185,8 +163,21 @@ export class BrowserLoginManager {
       return {
         success: false,
         provider: providerKey,
-        error: `Browser login error: ${err.message}`,
+        error: 'Browser login failed; verify browser access and OS credential storage.',
       };
+    } finally {
+      if (context) await context.close().catch(() => {});
+      if (browser) await browser.close().catch(() => {});
     }
   }
+}
+
+export function matchesSessionCookie(
+  cookie: { name: string; domain: string; secure: boolean; expires: number },
+  name: string,
+  domain: string,
+): boolean {
+  const host = cookie.domain.replace(/^\./, '').toLowerCase();
+  return cookie.name === name && host === domain && cookie.secure &&
+    (cookie.expires === -1 || cookie.expires > Date.now() / 1000);
 }

@@ -6,6 +6,63 @@ import path from 'node:path';
 import { resumeArgs, claudeTranscriptExists, findCodexSession } from '../server/SessionRestore.js';
 import { TerminalSessionManager } from '../server/TerminalSessionManager.js';
 
+test('sleep waits for both CLI exit and process-tree termination before releasing the session', async (t) => {
+  const manager = new TerminalSessionManager();
+  const session = manager.addDormant({ id: 'handoff', options: { agentType: 'codex' } });
+  session.status = 'running';
+  session.dormant = false;
+  t.mock.method(manager as any, 'terminate', () => {});
+  let resolved = false;
+  const sleeping = manager.sleepSession(session.id).then(() => { resolved = true; });
+  assert.equal(session.status, 'stopping');
+  assert.throws(() => manager.restartSession(session.id), /ยังทำงาน/);
+  session.exitObserved = true;
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(resolved, false, 'the parent exiting does not prove its children stopped');
+  session.terminationConfirmed = true;
+  await sleeping;
+  assert.equal(session.status, 'exited');
+  assert.equal(session.dormant, true);
+  assert.equal(session.sleeping, false);
+});
+
+test('a handoff timeout keeps the writer occupied and can complete after exit', async (t) => {
+  const manager = new TerminalSessionManager();
+  const session = manager.addDormant({ id: 'slow-handoff', options: { agentType: 'codex' } });
+  session.status = 'running';
+  t.mock.method(manager as any, 'terminate', () => {});
+  await assert.rejects(manager.sleepSession(session.id, 0), /ยังปิดไม่เสร็จ/);
+  assert.equal(session.status, 'stopping');
+  assert.throws(() => manager.restartSession(session.id), /ยังทำงาน/);
+  session.exitObserved = session.terminationConfirmed = true;
+  assert.equal(await manager.sleepSession(session.id), true);
+  assert.equal(session.status, 'exited');
+});
+
+test('a real pipe process closes before the terminal becomes dormant', async () => {
+  const manager = new TerminalSessionManager();
+  const session = manager.spawnSession({ command: process.execPath, args: ['-e', 'setTimeout(() => {}, 20000)'], forcePipe: true });
+  try {
+    assert.equal(await manager.sleepSession(session.id), true);
+    assert.equal(session.exitObserved, true);
+    assert.equal(session.terminationConfirmed, true);
+    assert.equal(session.process, undefined);
+    assert.equal(session.status, 'exited');
+  } finally { manager.killAll(); }
+});
+
+test('closing a tab during handoff cannot release it back to chat', async (t) => {
+  const manager = new TerminalSessionManager();
+  const session = manager.addDormant({ id: 'closed-handoff', options: { agentType: 'codex' } });
+  session.status = 'running';
+  t.mock.method(manager as any, 'terminate', () => {});
+  const sleeping = manager.sleepSession(session.id);
+  assert.equal(manager.killSession(session.id), true);
+  await assert.rejects(sleeping, /session เปลี่ยนไปแล้ว/);
+  assert.equal(session.closeRequested, true);
+  assert.equal(session.status, 'stopping');
+});
+
 test('each CLI is resumed with its own flags', () => {
   assert.deepEqual(resumeArgs('claude-code', 'abc'), ['--resume', 'abc']);
   assert.deepEqual(resumeArgs('codex', 'abc'), ['resume', 'abc']);

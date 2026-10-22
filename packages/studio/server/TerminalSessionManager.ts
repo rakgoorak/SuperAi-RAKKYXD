@@ -154,12 +154,7 @@ export class TerminalSessionManager {
     const handleExit = (code: number | null) => {
       session.exitObserved = true;
       if (session.sleeping) {
-        session.sleeping = false;
-        session.dormant = true;
-        session.status = "exited";
-        session.exitCode = null;
-        session.ptyProcess = undefined;
-        session.process = undefined;
+        // sleepSession also waits for process-tree termination (taskkill on Windows).
         return;
       }
       if (session.status === "exited") return;
@@ -267,16 +262,38 @@ export class TerminalSessionManager {
   }
 
   /** Stop the CLI but keep the session (its chat goes on without a terminal). */
-  public sleepSession(id: string): boolean {
+  public async sleepSession(id: string, timeoutMs = 10000): Promise<boolean> {
     const session = this.sessions.get(id);
     if (!session) return false;
+    if (session.closeRequested || (session.status === "stopping" && !session.sleeping))
+      throw new Error("session กำลังปิด กรุณารอให้ปิดเสร็จก่อน");
+    if (!session.sleeping && session.status === "running") {
+      session.sleeping = true;
+      session.status = "stopping";
+      this.terminate(session);
+    }
+    if (session.sleeping) {
+      const deadline = Date.now() + timeoutMs;
+      while (!session.exitObserved || !session.terminationConfirmed) {
+        if (this.sessions.get(id) !== session || session.closeRequested)
+          throw new Error("session เปลี่ยนไปแล้ว กรุณาลองใหม่");
+        if (Date.now() >= deadline)
+          throw new Error("Terminal ยังปิดไม่เสร็จ กรุณารอสักครู่แล้วลองสลับเป็นแชตอีกครั้ง");
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      if (this.sessions.get(id) !== session || session.closeRequested)
+        throw new Error("session เปลี่ยนไปแล้ว กรุณาลองใหม่");
+      session.sleeping = false;
+      session.status = "exited";
+      session.exitCode = null;
+      session.ptyProcess = undefined;
+      session.process = undefined;
+    }
     if (session.status !== "running") {
       session.dormant = true;
       return true;
     }
-    session.sleeping = true;
-    this.terminate(session);
-    return true;
+    return false;
   }
 
   /** The conversation a session's CLI is on (or was on), for resuming it elsewhere. */
@@ -309,7 +326,7 @@ export class TerminalSessionManager {
 
   /** Open tabs, in order, with what is needed to reopen each one on the same conversation. */
   public snapshot(): RestoredSession[] {
-    const open = [...this.sessions.values()].filter((s) => s.status === "running" && s.restart);
+    const open = [...this.sessions.values()].filter((s) => s.status === "running" && s.restart && !s.restart.authOnly);
     const taken = new Set<string>();
     const newest = new Map<string, string>();
     for (const s of open) {
@@ -333,7 +350,7 @@ export class TerminalSessionManager {
   public records(): (RestoredSession & { createdAt: number })[] {
     const taken = new Set<string>();
     return [...this.sessions.values()]
-      .filter((s) => s.restart && s.agentType !== "terminal" && !s.closeRequested && (s.status === "running" || s.dormant))
+      .filter((s) => s.restart && !s.restart.authOnly && s.agentType !== "terminal" && !s.closeRequested && (s.status === "running" || s.dormant))
       .sort((a, b) => a.createdAt - b.createdAt)
       .map((s) => ({ id: s.id, options: { ...s.restart!, name: s.name }, createdAt: s.createdAt, resume: this.resumeFor(s, taken, false) }));
   }
@@ -384,6 +401,7 @@ export class TerminalSessionManager {
       updateFailed: !!s.updateFailed,
       createdAt: s.createdAt,
       dormant: !!s.dormant,
+      authOnly: !!s.restart?.authOnly,
       bufferedOutput: s.bufferedOutput.slice(-1000),
     }));
   }
@@ -503,6 +521,12 @@ export class TerminalSessionManager {
     const session = this.sessions.get(id);
     if (!session) return false;
     try {
+      if (session.sleeping) {
+        session.sleeping = false;
+        session.closeRequested = true;
+        this.terminate(session);
+        return true;
+      }
       if (session.status === "stopping") return true;
       if (session.closeRequested && !session.terminationConfirmed) {
         session.status = "stopping";

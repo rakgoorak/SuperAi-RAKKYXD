@@ -17,7 +17,11 @@
 
 ## macOS
 
-เปิดไฟล์ `.dmg` แล้วลาก **SuperAi & RAKKYXD** ไปที่โฟลเดอร์ **Applications** (ลากไอคอนจาก Applications ไปไว้ที่ Dock ได้ถ้าต้องการเปิดเร็วๆ) รองรับ macOS 11 ขึ้นไปตาม Electron runtime ที่ใช้ รุ่นนี้ลงลายเซ็นแบบ ad-hoc เพื่อให้เปิดบน Apple Silicon ได้ ยังไม่มี Apple Developer ID / notarization หาก macOS ปฏิเสธ ให้ตรวจที่ System Settings → Privacy & Security → Open Anyway หลังตรวจว่าไฟล์มาจาก Releases ของเจ้าของ repository นี้
+เปิดไฟล์ `.dmg` แล้วลาก **SuperAi & RAKKYXD** ไปที่โฟลเดอร์ **Applications** (ลากไอคอนจาก Applications ไปไว้ที่ Dock ได้ถ้าต้องการเปิดเร็วๆ) รองรับ macOS 11 ขึ้นไปตาม Electron runtime ที่ใช้ สำหรับรุ่นที่ลงลายเซ็นแบบ ad-hoc (ยังไม่ผูกกับ Apple Developer ID / Notarization) หาก macOS Sonoma/Sequoia แจ้งเตือนว่า *"แอปพลิเคชันเสียหาย"* หรือเปิดไม่ได้เนื่องจาก Gatekeeper ให้เปิด Terminal แล้วรันคำสั่ง:
+```bash
+xattr -cr /Applications/SuperAi\ \&\ RAKKYXD.app
+```
+หรือไปที่ System Settings → Privacy & Security → เลื่อนลงมาที่ความปลอดภัย แล้วกด **Open Anyway** เพื่อยืนยันการเปิดใช้งานครั้งแรก
 
 ปุ่มพูดเพื่อพิมพ์ต้องได้รับสิทธิ์ Microphone ครั้งแรกที่ใช้
 

@@ -1,3 +1,4 @@
+import { credentialEndpoint, redactCredential } from './CredentialTransport.js';
 import { BaseProvider, LLMMessage, LLMResponse } from './BaseProvider.js';
 import { ToolDefinition } from '../tools/BaseTool.js';
 
@@ -30,24 +31,24 @@ export class GeminiProvider extends BaseProvider {
     }));
 
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
-      const res = await fetch(url, {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`;
+      const res = await fetch(credentialEndpoint(url, ['https://generativelanguage.googleapis.com']), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        redirect: 'error',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': this.apiKey },
         body: JSON.stringify({ contents }),
       });
 
       if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Gemini API error (${res.status}): ${errText}`);
+        throw new Error(`Gemini API error (${res.status}): request failed`);
       }
 
-      const data = await res.json();
+      const data = redactCredential(await res.json(), this.apiKey);
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
       return { text };
     } catch (err: any) {
       return {
-        text: `Error calling Gemini API: ${err.message}`,
+        text: 'Error calling Gemini API; check credentials and the approved endpoint.',
       };
     }
   }

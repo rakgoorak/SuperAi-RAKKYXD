@@ -1,3 +1,5 @@
+import { credentialEndpoint, redactCredential } from './CredentialTransport.js';
+import { sessionService } from './CredentialStore.js';
 import { BaseProvider, LLMMessage, LLMResponse } from './BaseProvider.js';
 import { ToolDefinition } from '../tools/BaseTool.js';
 
@@ -15,7 +17,8 @@ export class WebSessionProvider extends BaseProvider {
 
   constructor(config: WebSessionConfig) {
     super();
-    this.config = config;
+    sessionService(config.service);
+    this.config = { ...config, cookies: config.cookies ? { ...config.cookies } : undefined };
     this.model = `${config.service}-web-headless`;
   }
 
@@ -28,8 +31,15 @@ export class WebSessionProvider extends BaseProvider {
 
     if (this.config.endpointUrl && this.config.token) {
       try {
-        const res = await fetch(this.config.endpointUrl, {
+        const origins: Record<string, string[]> = {
+          chatgpt: ['https://chatgpt.com'], claude: ['https://claude.ai'],
+          gemini: ['https://gemini.google.com'], deepseek: ['https://chat.deepseek.com'],
+          copilot: ['https://copilot.microsoft.com'],
+        };
+        const endpoint = credentialEndpoint(this.config.endpointUrl, origins[this.config.service]);
+        const res = await fetch(endpoint, {
           method: 'POST',
+          redirect: 'error',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.config.token}`,
@@ -37,19 +47,16 @@ export class WebSessionProvider extends BaseProvider {
           body: JSON.stringify({ prompt: lastUserMessage, messages }),
         });
         if (res.ok) {
-          const data = await res.json();
+          const data = redactCredential(await res.json(), this.config.token);
           return { text: data.text || data.response || '' };
         }
+        return { text: '[WebSession Error]: request failed.' };
       } catch (err: any) {
-        return { text: `[WebSession Error]: ${err.message}` };
+        return { text: '[WebSession Error]: request failed or destination is not approved.' };
       }
     }
 
-    const previewToken = this.config.token ? `${this.config.token.slice(0, 10)}...` : 'Active';
-    return {
-      text: `[Headless ${this.config.service.toUpperCase()} Session (${previewToken})]\nProcessed coding instruction: "${lastUserMessage.slice(0, 120)}"`,
-      usage: { promptTokens: 40, completionTokens: 40, totalTokens: 80 },
-    };
+    return { text: `[${this.config.service.toUpperCase()} session] No supported endpoint is configured.` };
   }
 
   async stream(

@@ -1,4 +1,4 @@
-import { WebContentsView } from "electron";
+import { WebContentsView, session } from "electron";
 import { randomUUID } from "node:crypto";
 import { normalizeBrowserUrl } from "./browser-url.mjs";
 
@@ -7,6 +7,7 @@ export class BrowserController {
   activeId = "";
   bounds = { x: 0, y: 0, width: 0, height: 0 };
   visible = false;
+  forgetting = false;
   constructor(window) {
     this.window = window;
     window.on("closed", () => this.destroy());
@@ -51,6 +52,7 @@ export class BrowserController {
     }
   }
   async action(action, payload = {}) {
+    if (this.forgetting) throw new Error("กำลังล้างข้อมูล browser กรุณารอให้เสร็จ");
     if (action === "bounds") {
       this.bounds = {
         x: Number(payload.x) || 0,
@@ -177,6 +179,22 @@ export class BrowserController {
     this.layout();
     this.emit();
     return this.state();
+  }
+  async forgetSession() {
+    if (this.forgetting) throw new Error("กำลังล้างข้อมูล browser");
+    this.forgetting = true;
+    try {
+      this.destroy();
+      const preview = session.fromPartition("persist:superai-preview");
+      await preview.closeAllConnections();
+      await preview.clearStorageData();
+      await preview.clearCache();
+      preview.flushStorageData();
+      this.activeId = "";
+      this.emit();
+    } finally {
+      this.forgetting = false;
+    }
   }
   destroy() {
     for (const { view } of this.tabs.values())

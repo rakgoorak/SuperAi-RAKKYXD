@@ -8,7 +8,7 @@ test('AI CLI catalog includes official install packages and Terminal has no fake
   assert.equal(catalog.find(c=>c.id==='terminal').installPackage,undefined);
 });
 
-test('a Claude Code npm install without its native claude.exe counts as not installed', async () => {
+test('a Windows Claude Code npm install without its native claude.exe counts as not installed', async () => {
   const fs = await import('node:fs');
   const os = await import('node:os');
   const path = await import('node:path');
@@ -20,11 +20,13 @@ test('a Claude Code npm install without its native claude.exe counts as not inst
   fs.writeFileSync(shim, '');
   fs.writeFileSync(path.join(bin, '..', 'package.json'), '{}');
   fs.writeFileSync(path.join(bin, 'claude.exe.old.1'), 'old');
-  assert.equal(incompleteInstall('claude-code', shim), true, 'renamed away by a half-finished update');
+  assert.equal(incompleteInstall('claude-code', shim, 'win32'), true, 'renamed away by a half-finished update');
+  assert.equal(incompleteInstall('claude-code', shim, 'darwin'), false, 'macOS does not use the Windows payload');
+  assert.equal(incompleteInstall('claude-code', shim, 'linux'), false, 'Linux does not use the Windows payload');
   fs.writeFileSync(path.join(bin, 'claude.exe'), 'placeholder');
-  assert.equal(incompleteInstall('claude-code', shim), true, 'postinstall blocked: placeholder stub');
+  assert.equal(incompleteInstall('claude-code', shim, 'win32'), true, 'postinstall blocked: placeholder stub');
   fs.writeFileSync(path.join(bin, 'claude.exe'), Buffer.alloc(2_000_000));
-  assert.equal(incompleteInstall('claude-code', shim), false);
+  assert.equal(incompleteInstall('claude-code', shim, 'win32'), false);
   assert.equal(incompleteInstall('codex', shim), false);
   assert.equal(incompleteInstall('claude-code', path.join(os.tmpdir(), 'elsewhere', 'claude.exe')), false, 'native installs are not judged');
   fs.rmSync(prefix, { recursive: true, force: true });

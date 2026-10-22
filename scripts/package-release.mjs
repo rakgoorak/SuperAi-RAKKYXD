@@ -25,6 +25,23 @@ if (process.platform === 'win32') {
     'file-version': version, 'product-version': version,
   });
   await stageApp(path.join(destination, 'resources', 'app'));
+  const winCert = process.env.WIN_CERT_FILE || process.env.CSC_LINK;
+  const winPass = process.env.WIN_CERT_PASSWORD || process.env.CSC_KEY_PASSWORD;
+  const signtool = process.env.SIGNTOOL_PATH || 'signtool.exe';
+  if (winCert) {
+    console.log(`Signing executable ${main} with signtool...`);
+    const args = ['sign', '/fd', 'SHA256', '/tr', 'http://timestamp.digicert.com', '/td', 'SHA256', '/f', winCert];
+    if (winPass) args.push('/p', winPass);
+    args.push(main);
+    try {
+      execFileSync(signtool, args, { stdio: 'inherit' });
+      console.log('Signed Windows executable successfully.');
+    } catch (e) {
+      console.warn(`signtool signing failed: ${e.message}`);
+    }
+  } else {
+    console.log('[Security Notice] Windows executable is unsigned. To prevent SmartScreen warnings, set WIN_CERT_FILE and WIN_CERT_PASSWORD.');
+  }
 } else {
   const { packager } = await import('@electron/packager');
   const staging = path.resolve('output', `release-stage-${Date.now()}`);
@@ -48,7 +65,14 @@ if (process.platform === 'win32') {
     });
     const app = path.join(destination, `${name}.app`);
     await fs.cp(path.join(built, `${name}.app`), app, { recursive: true, verbatimSymlinks: true });
-    execFileSync('codesign', ['--force', '--deep', '--sign', '-', '--entitlements', path.resolve('scripts/entitlements.mac.plist'), app], { stdio: 'inherit' });
+    const identity = process.env.APPLE_SIGNING_IDENTITY || process.env.CSC_NAME;
+    if (identity) {
+      console.log(`Signing with Apple Developer Identity: ${identity}`);
+      execFileSync('codesign', ['--force', '--deep', '--options', 'runtime', '--sign', identity, '--entitlements', path.resolve('scripts/entitlements.mac.plist'), app], { stdio: 'inherit' });
+    } else {
+      console.warn('[Security Warning] Signing with ad-hoc identity (-). On macOS 14/15, Gatekeeper will require security bypass unless signed with Apple Developer ID and notarized.');
+      execFileSync('codesign', ['--force', '--deep', '--sign', '-', '--entitlements', path.resolve('scripts/entitlements.mac.plist'), app], { stdio: 'inherit' });
+    }
     const executable = path.join(app, 'Contents', 'MacOS', name);
     main = executable;
   }

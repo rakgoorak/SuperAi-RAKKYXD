@@ -9,6 +9,7 @@ import { CHAT_CLIS, paneView, type PaneView } from '../paneView';
 import { ChatView } from './ChatView';
 
 export interface TerminalTab {
+  authOnly?: boolean;
   id: string;
   name: string;
   type: string;
@@ -112,7 +113,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   const [readerText, setReaderText] = useState('');
   const readerRef = useRef<HTMLDivElement>(null);
   // Chat view (Codex, Antigravity): the same CLI driven through its JSON stream. The PTY keeps running underneath.
-  const chatCapable = !!tab.sessionId && CHAT_CLIS.includes(tab.type) && !!onSwitchView;
+  const chatCapable = !tab.authOnly && !!tab.sessionId && CHAT_CLIS.includes(tab.type) && !!onSwitchView;
   const chatting = chatCapable && paneView({ agentType: tab.type, view: tab.view }) === 'chat';
 
   const showNotice = (next: AttachNotice | null) => {

@@ -139,6 +139,25 @@ test('the manager streams items, resumes the next turn and rejects overlapping t
   assert.match((last as any).text, /usage limit reached/);
 });
 
+test('two chat tabs cannot resume the same Codex conversation until the writer closes', async () => {
+  const fake = fakeSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch);
+  chats.setConversation('a', 'shared-thread');
+  chats.setConversation('b', 'shared-thread');
+  const input = { agent: 'codex', cwd: process.cwd(), text: 'hello' };
+  chats.send('a', input);
+  assert.throws(() => chats.send('b', input), /อีกแท็บ/);
+  assert.equal(fake.calls.length, 1);
+  assert.equal(chats.snapshot('b').items.length, 0);
+  assert.throws(() => chats.setConversation('a', 'another-thread'), /ยังตอบ/);
+  fake.finish(fake.calls[0].proc, [], 0);
+  await settle(chats, 'a');
+  chats.send('b', input);
+  assert.equal(fake.calls.length, 2);
+  fake.finish(fake.calls[1].proc, [], 0);
+  await settle(chats, 'b');
+});
+
 test('stopping a turn marks running tools and says it stopped', async () => {
   const fake = fakeSpawner();
   const chats = new CliChatManager(fake.spawner as any, undefined, launch);
@@ -237,4 +256,37 @@ test('a CLI that is not installed is refused before the message joins the chat',
   assert.throws(() => chats.send('s9', { agent: 'codex', cwd: process.cwd(), text: 'สวัสดี' }), /ยังไม่ได้ติดตั้ง/);
   assert.deepEqual(chats.snapshot('s9'), { items: [], running: false, conversationId: undefined }, 'not stuck as running');
   assert.equal(fake.calls.length, 0);
+});
+
+test('a CLI waiting silently for login times out without releasing its turn before close', async () => {
+  const fake = fakeSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch, { startup: 10, turn: 1000 });
+  chats.send('hung', { agent: 'antigravity', cwd: process.cwd(), text: 'hello' });
+  const proc = fake.calls[0].proc;
+  let killed = 0;
+  proc.kill = () => { killed++; return true; };
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(killed, 1);
+  assert.equal(chats.isRunning('hung'), true, 'still owned until termination is confirmed');
+  proc.emit('close', 1);
+  await settle(chats, 'hung');
+  assert.equal(chats.isRunning('hung'), false);
+  assert.match((chats.snapshot('hung').items.at(-1) as any).text, /บัญชี.*Terminal/);
+});
+
+test('a selected project skill is sent to the CLI with the chosen model while the user message stays readable', async () => {
+  const fs = await import('node:fs'), os = await import('node:os'), path = await import('node:path');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-skill-'));
+  const dir = path.join(root, '.agents/skills/review');
+  fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, 'SKILL.md'), '---\nname: review\n---\nReview the project');
+  const fake = fakeSpawner(), chats = new CliChatManager(fake.spawner as any, undefined, launch);
+  try {
+    chats.send('skill', { agent: 'codex', cwd: root, text: '/skill review ตรวจไฟล์', model: 'chosen-model', effort: 'high' });
+    const call = fake.calls[0];
+    assert.equal(call.args[call.args.indexOf('--model') + 1], 'chosen-model');
+    assert.ok(call.args.includes('model_reasoning_effort="high"'));
+    assert.match(call.stdin, /SKILL\.md/); assert.match(call.stdin, /ตรวจไฟล์/);
+    assert.equal((chats.snapshot('skill').items[0] as any).text, '/skill review ตรวจไฟล์');
+    fake.finish(call.proc, [{ type: 'turn.completed' }]); await settle(chats, 'skill');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
+import { CredentialStore } from './CredentialStore.js';
+export * from './CredentialStore.js';
 
 export * from './BaseProvider.js';
 export * from './MockProvider.js';
@@ -28,7 +29,7 @@ export interface ProviderSelectionConfig {
   webService?: 'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'copilot';
 }
 
-export function loadStoredAuth(): Record<string, string> {
+export function loadStoredAuth(selectedProvider?: string): Record<string, string> {
   const credentials: Record<string, string> = {};
 
   try {
@@ -45,20 +46,9 @@ export function loadStoredAuth(): Record<string, string> {
             if (key === 'ANTHROPIC_API_KEY') credentials['anthropic'] = val;
             if (key === 'OPENAI_API_KEY') credentials['openai'] = val;
             if (key === 'GEMINI_API_KEY') credentials['gemini'] = val;
-            if (key === 'CHATGPT_SESSION_TOKEN') credentials['chatgpt'] = val;
-            if (key === 'CLAUDE_SESSION_TOKEN') credentials['claude'] = val;
           }
         }
       }
-    }
-  } catch {}
-
-  try {
-    const authPath = path.join(os.homedir(), '.opencode-multi', 'auth.json');
-    if (fs.existsSync(authPath)) {
-      const raw = fs.readFileSync(authPath, 'utf-8');
-      const parsed = JSON.parse(raw);
-      Object.assign(credentials, parsed);
     }
   } catch {}
 
@@ -66,11 +56,18 @@ export function loadStoredAuth(): Record<string, string> {
   if (process.env.OPENAI_API_KEY) credentials['openai'] = process.env.OPENAI_API_KEY;
   if (process.env.GEMINI_API_KEY) credentials['gemini'] = process.env.GEMINI_API_KEY;
 
+  const store = new CredentialStore();
+  for (const provider of selectedProvider ? [selectedProvider] : ['openai', 'anthropic', 'gemini']) {
+    if (credentials[provider]) continue;
+    const token = store.get('api', provider);
+    if (token) credentials[provider] = token;
+  }
+
   return credentials;
 }
 
 export function createProvider(config: ProviderSelectionConfig): LLMProvider {
-  const auth = loadStoredAuth();
+  const auth = ['anthropic', 'openai', 'gemini'].includes(config.provider) && !config.apiKey ? loadStoredAuth(config.provider) : {};
 
   switch (config.provider) {
     case 'anthropic':
@@ -94,7 +91,7 @@ export function createProvider(config: ProviderSelectionConfig): LLMProvider {
     case 'web_session':
       return new WebSessionProvider({
         service: config.webService || 'chatgpt',
-        token: config.webToken || auth[config.webService || 'chatgpt'] || auth['chatgpt'],
+        token: config.webToken || new CredentialStore().get('session', config.webService || 'chatgpt'),
       });
     case 'mock':
     default:

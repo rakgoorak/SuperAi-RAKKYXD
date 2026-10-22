@@ -24,13 +24,21 @@ const updater = new Updater({
   packaged: app.isPackaged || process.env.SUPERAI_UPDATE_TEST === "1",
   onState: (state) => window?.webContents.send("update:state", state),
 });
+const sanitizeLog = (str) => {
+  return String(str || "")
+    .replace(/(sk-[a-zA-Z0-9_-]{20,})/g, "sk-***[REDACTED]")
+    .replace(/(ghp_[a-zA-Z0-9]{20,})/g, "ghp_***[REDACTED]")
+    .replace(/(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, "$1***[REDACTED]")
+    .replace(/((?:password|token|secret|apiKey|api_key)["']?\s*[:=]\s*["'])([^"']{4,})(["'])/gi, "$1***[REDACTED]$3");
+};
 const log = async (text) => {
   try {
     const dir = path.join(os.homedir(), ".opencode-multi");
-    await fs.mkdir(dir, { recursive: true });
+    await fs.mkdir(dir, { recursive: true, mode: 0o700 });
     await fs.appendFile(
       path.join(dir, "desktop.log"),
-      `[${new Date().toISOString()}] ${text}\n`,
+      `[${new Date().toISOString()}] ${sanitizeLog(text)}\n`,
+      { mode: 0o600 }
     );
   } catch {}
 };
@@ -132,6 +140,18 @@ ipcMain.handle("browser:action", async (e, action, payload) => {
   )
     throw new Error("คำสั่ง browser ไม่ถูกต้อง");
   return browser.action(action, payload);
+});
+ipcMain.handle("credentials:forget", async (e, service) => {
+  trusted(e);
+  try {
+    const { BrowserLoginManager } = await import("../core/dist/providers/BrowserLogin.js");
+    await new BrowserLoginManager().logout(service);
+    // Preview tabs share one partition: close them before clearing its session data.
+    await browser.forgetSession();
+    return { success: true, previewCleared: true };
+  } catch {
+    return { success: false, error: "ลืมข้อมูลไม่สำเร็จ กรุณาตรวจคลัง credential ของระบบ" };
+  }
 });
 if (!app.requestSingleInstanceLock()) app.quit();
 else {

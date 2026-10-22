@@ -91,6 +91,8 @@ export interface Workspace {
 }
 
 export interface SpawnSessionOptions {
+  /** One-off authentication terminal; never restored as a conversation. */
+  authOnly?: boolean;
   openCodeModel?: string;
   /** Model and effort for CLI sessions opened from Code mode ("" = CLI default). */
   model?: string;

@@ -157,8 +157,10 @@ export function findExecutable(command: string): string | null {
  * Claude Code installed from npm whose postinstall never ran (or whose update stopped half way)
  * has a tiny placeholder or no bin/claude.exe at all: the command exists but cannot start.
  */
-export function incompleteInstall(id: string, executable: string | null): boolean {
-  if (id !== "claude-code" || !executable) return false;
+export function incompleteInstall(id: string, executable: string | null, platform: NodeJS.Platform = process.platform): boolean {
+  // claude.exe is the Windows npm payload. macOS/Linux installs use a different
+  // entry point; the absence of this Windows file says nothing about their health.
+  if (platform !== "win32" || id !== "claude-code" || !executable) return false;
   const dir = path.dirname(executable);
   for (const root of [path.join(dir, "node_modules"), path.join(dir, "..", "lib", "node_modules")]) {
     const pkg = path.join(root, "@anthropic-ai", "claude-code");

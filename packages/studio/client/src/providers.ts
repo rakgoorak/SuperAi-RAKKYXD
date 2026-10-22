@@ -83,17 +83,25 @@ const cache = new Map<string, Promise<ModelList>>();
 export function fetchModels(id: string, refresh = false) {
   if (refresh || !cache.has(id)) {
     const request = api<ModelList>(`/api/providers/${id}/models`);
+    if (refresh) request.then(() => window.dispatchEvent(new CustomEvent("superai:models-refreshed", { detail: id })), () => {});
     request.catch(() => cache.delete(id));
     cache.set(id, request);
   }
   return cache.get(id)!;
 }
 export function useModels(id: string) {
+  const [revision, setRevision] = useState(0);
   const [list, setList] = useState<ModelList | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
+    const refreshed = (event: Event) => { if ((event as CustomEvent<string>).detail === id) setRevision((n) => n + 1); };
+    window.addEventListener("superai:models-refreshed", refreshed);
+    return () => window.removeEventListener("superai:models-refreshed", refreshed);
+  }, [id]);
+  useEffect(() => {
     if (!id) return setList(null);
     let ignore = false;
+    setList(null);
     setError("");
     fetchModels(id)
       .then((value) => !ignore && setList(value))
@@ -101,6 +109,6 @@ export function useModels(id: string) {
     return () => {
       ignore = true;
     };
-  }, [id]);
+  }, [id, revision]);
   return { list, error };
 }

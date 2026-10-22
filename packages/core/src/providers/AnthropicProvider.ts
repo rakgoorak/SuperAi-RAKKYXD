@@ -1,3 +1,4 @@
+import { credentialEndpoint, redactCredential } from './CredentialTransport.js';
 import { BaseProvider, LLMMessage, LLMResponse } from './BaseProvider.js';
 import { ToolDefinition } from '../tools/BaseTool.js';
 
@@ -33,8 +34,9 @@ export class AnthropicProvider extends BaseProvider {
       }));
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch(credentialEndpoint('https://api.anthropic.com/v1/messages', ['https://api.anthropic.com']), {
         method: 'POST',
+        redirect: 'error',
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': this.apiKey,
@@ -49,11 +51,10 @@ export class AnthropicProvider extends BaseProvider {
       });
 
       if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Anthropic API error (${res.status}): ${errText}`);
+        throw new Error(`Anthropic API error (${res.status}): request failed`);
       }
 
-      const data = await res.json();
+      const data = redactCredential(await res.json(), this.apiKey);
       const text = data.content?.map((c: any) => c.text || '').join('') || '';
 
       return {
@@ -66,7 +67,7 @@ export class AnthropicProvider extends BaseProvider {
       };
     } catch (err: any) {
       return {
-        text: `Error calling Anthropic API: ${err.message}`,
+        text: 'Error calling Anthropic API; check credentials and the approved endpoint.',
       };
     }
   }

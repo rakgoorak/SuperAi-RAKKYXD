@@ -58,7 +58,11 @@ export function pickPortableGitAsset(release: any, arch = process.arch): GitAsse
   const suffix = arch === 'arm64' ? 'arm64' : '64-bit';
   const asset = (release?.assets || []).find((a: any) => new RegExp(`^PortableGit-[\\d.]+-${suffix}\\.7z\\.exe$`).test(a.name));
   if (!asset) throw new Error(`ไม่พบ PortableGit สำหรับ ${suffix} ใน release ล่าสุดของ Git for Windows`);
-  const digest = typeof asset.digest === 'string' && asset.digest.startsWith('sha256:') ? asset.digest.slice(7) : undefined;
+  let digest = typeof asset.digest === 'string' && asset.digest.startsWith('sha256:') ? asset.digest.slice(7) : undefined;
+  if (!digest && typeof release?.body === 'string') {
+    const match = release.body.match(new RegExp(`([a-f0-9]{64})\\s+\\*?${asset.name}`, 'i'));
+    if (match) digest = match[1];
+  }
   return { url: asset.browser_download_url, filename: asset.name, sha256: digest, version: String(release.tag_name || '').replace(/^v/, '') };
 }
 
@@ -92,6 +96,21 @@ export async function installPortableGit(options: { onLog?: (msg: string) => voi
       const actual = sha.digest('hex');
       if (actual.toLowerCase() !== asset.sha256.toLowerCase()) throw new Error('ไฟล์ Git ไม่สมบูรณ์ (SHA256 ไม่ตรง) กรุณาลองใหม่');
       onLog('ตรวจ SHA256 ถูกต้อง');
+    } else {
+      onLog('ตรวจความสมบูรณ์ของไฟล์ดาวน์โหลด...');
+      try {
+        const checkRes = await fetch(`${asset.url}.sha256`, { signal: AbortSignal.timeout(5000) });
+        if (checkRes.ok) {
+          const expected = (await checkRes.text()).trim().split(/\s+/)[0]?.toLowerCase();
+          if (expected && expected.length === 64) {
+            const actual = sha.digest('hex').toLowerCase();
+            if (actual !== expected) throw new Error('ไฟล์ Git ไม่สมบูรณ์ (SHA256 ไม่ตรง) กรุณาลองใหม่');
+            onLog('ตรวจ SHA256 จาก checksum asset ถูกต้อง');
+          }
+        }
+      } catch (err: any) {
+        if (err.message?.includes('SHA256')) throw err;
+      }
     }
     onLog('กำลังแตกไฟล์ Git...');
     const extracted = path.join(staging, 'git');

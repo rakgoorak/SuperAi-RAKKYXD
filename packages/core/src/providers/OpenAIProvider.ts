@@ -1,3 +1,4 @@
+import { credentialEndpoint, redactCredential } from './CredentialTransport.js';
 import { BaseProvider, LLMMessage, LLMResponse, ToolCall } from './BaseProvider.js';
 import { ToolDefinition } from '../tools/BaseTool.js';
 
@@ -12,16 +13,17 @@ export class OpenAIProvider extends BaseProvider {
   model: string;
   private apiKey: string;
   private baseURL: string;
+  protected allowUnauthenticated = false;
 
   constructor(options: OpenAIProviderOptions = {}) {
     super();
-    this.apiKey = options.apiKey || process.env.OPENAI_API_KEY || '';
+    this.apiKey = options.apiKey ?? process.env.OPENAI_API_KEY ?? '';
     this.baseURL = options.baseURL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
     this.model = options.model || 'gpt-4o';
   }
 
   async generate(messages: LLMMessage[], tools?: ToolDefinition[]): Promise<LLMResponse> {
-    if (!this.apiKey && !this.baseURL.includes('localhost') && !this.baseURL.includes('127.0.0.1')) {
+    if (!this.apiKey && !this.allowUnauthenticated && !this.baseURL.includes('localhost') && !this.baseURL.includes('127.0.0.1')) {
       return {
         text: `[OpenAIProvider Mock]: apiKey not set for ${this.model}. Please configure OPENAI_API_KEY.`,
       };
@@ -46,21 +48,23 @@ export class OpenAIProvider extends BaseProvider {
     }
 
     try {
-      const res = await fetch(`${this.baseURL.replace(/\/+$/, '')}/chat/completions`, {
+      const endpoint = `${this.baseURL.replace(/\/+$/, '')}/chat/completions`;
+      if (this.apiKey) credentialEndpoint(endpoint, ['https://api.openai.com']);
+      const res = await fetch(endpoint, {
         method: 'POST',
+        redirect: 'error',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
+          ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
         },
         body: JSON.stringify(body),
       });
 
       if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`OpenAI API error (${res.status}): ${errText}`);
+        throw new Error(`OpenAI API error (${res.status}): request failed`);
       }
 
-      const data = await res.json();
+      const data = redactCredential(await res.json(), this.apiKey);
       const choice = data.choices?.[0];
       const message = choice?.message;
 
@@ -71,7 +75,7 @@ export class OpenAIProvider extends BaseProvider {
             toolCalls.push({
               id: tc.id,
               name: tc.function.name,
-              arguments: JSON.parse(tc.function.arguments || '{}'),
+              arguments: redactCredential(JSON.parse(tc.function.arguments || '{}'), this.apiKey),
             });
           } catch {
             toolCalls.push({
@@ -94,7 +98,7 @@ export class OpenAIProvider extends BaseProvider {
       };
     } catch (err: any) {
       return {
-        text: `Error calling OpenAI API: ${err.message}`,
+        text: 'Error calling OpenAI API; check credentials and the approved endpoint.',
       };
     }
   }

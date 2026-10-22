@@ -39,6 +39,23 @@ if (process.platform === 'win32') {
     `/DICON=${path.resolve('packages/desktop/assets/icon.ico')}`,
     path.resolve('installer/windows/installer.nsi'),
   ], { stdio: 'inherit' });
+  const winCert = process.env.WIN_CERT_FILE || process.env.CSC_LINK;
+  const winPass = process.env.WIN_CERT_PASSWORD || process.env.CSC_KEY_PASSWORD;
+  const signtool = process.env.SIGNTOOL_PATH || 'signtool.exe';
+  if (winCert) {
+    console.log(`Signing setup installer ${output} with signtool...`);
+    const args = ['sign', '/fd', 'SHA256', '/tr', 'http://timestamp.digicert.com', '/td', 'SHA256', '/f', winCert];
+    if (winPass) args.push('/p', winPass);
+    args.push(output);
+    try {
+      execFileSync(signtool, args, { stdio: 'inherit' });
+      console.log('Signed setup installer successfully.');
+    } catch (e) {
+      console.warn(`signtool signing setup failed: ${e.message}`);
+    }
+  } else {
+    console.log('[Security Notice] SuperAi-RAKKYXD-Setup.exe is unsigned. Set WIN_CERT_FILE and WIN_CERT_PASSWORD to sign.');
+  }
 } else if (process.platform === 'darwin') {
   output = path.resolve('release-assets', `SuperAi-RAKKYXD-macos-${manifest.arch}.dmg`);
   const app = (await fs.readdir(manifest.directory)).find((name) => name.endsWith('.app'));
@@ -76,6 +93,32 @@ if (process.platform === 'win32') {
         await new Promise((resolve) => setTimeout(resolve, 5000 * attempt));
       }
     }
+  }
+
+  // Notarize and staple if Apple credentials provided
+  const appleId = process.env.APPLE_ID;
+  const applePass = process.env.APPLE_APP_SPECIFIC_PASSWORD || process.env.APPLE_PASSWORD;
+  const teamId = process.env.APPLE_TEAM_ID;
+  const keychainProfile = process.env.APPLE_KEYCHAIN_PROFILE;
+  if (keychainProfile || (appleId && applePass && teamId)) {
+    console.log('Submitting DMG to Apple for Notarization...');
+    const notaryArgs = ['notarytool', 'submit', output, '--wait'];
+    if (keychainProfile) {
+      notaryArgs.push('--keychain-profile', keychainProfile);
+    } else {
+      notaryArgs.push('--apple-id', appleId, '--password', applePass, '--team-id', teamId);
+    }
+    try {
+      execFileSync('xcrun', notaryArgs, { stdio: 'inherit' });
+      console.log('Notarization succeeded! Stapling ticket to DMG...');
+      execFileSync('xcrun', ['stapler', 'staple', output], { stdio: 'inherit' });
+      console.log('DMG stapled successfully.');
+    } catch (notaryError) {
+      console.warn(`Notarization failed: ${notaryError.message}`);
+    }
+  } else {
+    console.log('[Security Notice] DMG is not notarized. On macOS 14/15, Gatekeeper will require security bypass.');
+    console.log('To notarize, set APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID.');
   }
 } else {
   throw new Error('Build installers on Windows or macOS');
