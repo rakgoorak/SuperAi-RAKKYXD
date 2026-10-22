@@ -27,7 +27,7 @@ const app=await electron.launch({executablePath:require('electron'),args:['packa
 const passed=[],errors=[];
 try{
  steps.step('first window');page=await app.firstWindow();page.on('pageerror',e=>{errors.push(e.message);steps.log(`pageerror: ${e.message}`);});watchPage(page,steps);await page.waitForSelector('.app-shell'); // Setup guide is covered by smoke.mjs.
-  await page.waitForSelector('.app-shell'); await page.evaluate(() => localStorage.setItem('superai-setup-dismissed', '1')); await page.reload(); await page.waitForSelector('.app-shell');
+  await page.waitForSelector('.app-shell'); await page.evaluate(() => localStorage.setItem('superai-setup-dismissed', '1')); await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 }); await page.waitForSelector('.app-shell');
  await app.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows()[0];w.unmaximize();w.setContentSize(1100,760);});
  // page.evaluate has no timeout of its own; a stuck server must fail the step, not hang the job.
  const request=(route,body)=>withTimeout(page.evaluate(async({route,body})=>{const res=await fetch(route,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:undefined);if(!res.ok)throw new Error(await res.text());return res.json();},{route,body}),20000,`request ${route}`);
@@ -56,7 +56,7 @@ try{
   await page.getByLabel(`ผู้ให้บริการของ${label}`,{exact:true}).selectOption('ollama');
   await page.getByLabel(`model ของ${label}`,{exact:true}).fill(model);
  }
- await page.reload();await page.getByRole('navigation', { name: 'โหมดทำงาน' }).getByRole('button', { name: 'Agent', exact: true }).click();await page.getByLabel('model ของMain',{exact:true}).waitFor();
+ await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });await page.getByRole('navigation', { name: 'โหมดทำงาน' }).getByRole('button', { name: 'Agent', exact: true }).click();await page.getByLabel('model ของMain',{exact:true}).waitFor();
  assert.equal(await page.getByLabel('model ของSub-agent 1',{exact:true}).inputValue(),'coder-fixture');passed.push('per-project Agent team persisted');
  steps.step('Agent run');
  await page.getByLabel('คำสั่ง',{exact:true}).fill('สร้างและตรวจงานทดสอบ');await page.getByTitle('ส่งคำสั่ง (Enter)',{exact:true}).click();

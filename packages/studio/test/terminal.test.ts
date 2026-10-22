@@ -69,3 +69,19 @@ test('WorkspaceRegistry: manages workspaces and threads', () => {
     fs.unlinkSync(tempFile);
   }
 });
+
+test('closing a session whose CLI already exited removes it (taskkill finds nothing to kill)', async () => {
+  const manager = new TerminalSessionManager();
+  const isWindows = process.platform === 'win32';
+  const session = manager.spawnSession({ forcePipe: true, command: isWindows ? 'cmd.exe' : 'sh', args: isWindows ? ['/c', 'exit 1'] : ['-c', 'exit 1'] });
+  const until = Date.now() + 10000;
+  while (!session.exitObserved && Date.now() < until) await new Promise((r) => setTimeout(r, 20));
+  assert.ok(session.exitObserved);
+  // The state a failed earlier close left behind: close requested, never confirmed, marked as error.
+  session.closeRequested = true;
+  session.terminationConfirmed = false;
+  session.status = 'error';
+  assert.strictEqual(manager.killSession(session.id), true);
+  while (manager.getSession(session.id) && Date.now() < until) await new Promise((r) => setTimeout(r, 20));
+  assert.strictEqual(manager.getSession(session.id), undefined, 'the tab goes away instead of asking to close again');
+});

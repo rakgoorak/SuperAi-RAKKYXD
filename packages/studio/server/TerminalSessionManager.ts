@@ -170,7 +170,8 @@ export class TerminalSessionManager {
             : "exited";
       session.exitCode = code;
       handleData(`\r\n\x1b[90m[Process exited with code ${code}]\x1b[0m\r\n`);
-      if (session.closeRequested && session.terminationConfirmed)
+      // Closed by the user: confirmed by taskkill, or taskkill failed but the CLI is gone now anyway.
+      if (session.closeRequested && (session.terminationConfirmed || session.status === "error"))
         this.sessions.delete(session.id);
     };
 
@@ -466,7 +467,8 @@ export class TerminalSessionManager {
         ["/PID", String(pid), "/T", "/F"],
         { windowsHide: true },
         (error) => {
-          if (error) {
+          // taskkill also fails when the CLI has already exited (nothing left to find): that is closed.
+          if (error && !session.exitObserved) {
             session.status = "error";
             const message =
               "\r\n[ปิด process ลูกไม่สำเร็จ ยังไม่คืนสิทธิ์เปิด session กรุณาลองปิดอีกครั้ง]\r\n";
