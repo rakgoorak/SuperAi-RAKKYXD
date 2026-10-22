@@ -20,7 +20,7 @@ async function eventually(fn) { for (let i = 0; i < 150; i++) { if (await fn()) 
 try {
   steps.step('first window');
   page = await app.firstWindow(); page.on('pageerror', e => { errors.push(e.message); steps.log(`pageerror: ${e.message}`); }); watchPage(page, steps); // Setup guide is covered by smoke.mjs.
-  await page.waitForSelector('.app-shell'); await page.evaluate(() => localStorage.setItem('superai-setup-dismissed', '1')); await page.reload(); await page.waitForSelector('.app-shell');
+  await page.waitForSelector('.app-shell'); await page.evaluate(() => localStorage.setItem('superai-setup-dismissed', '1')); await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 }); await page.waitForSelector('.app-shell');
   await page.waitForSelector('.app-shell');
   // page.evaluate has no timeout of its own; a stuck server must fail the step, not hang the job.
   const request = (route, body) => withTimeout(page.evaluate(async ({route,body}) => {
