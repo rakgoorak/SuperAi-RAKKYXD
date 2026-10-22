@@ -43,6 +43,10 @@ export interface TerminalSession {
   cliSessionId?: string;
   /** The `resume` this tab was opened with. */
   resumedFrom?: string;
+  /** Kept without a process: a saved session after an app restart, or a chat whose terminal is closed. */
+  dormant?: boolean;
+  /** The process is being stopped to make the session dormant, not to close it. */
+  sleeping?: boolean;
 }
 
 /** A tab saved before an update, reopened on the same conversation after the restart. */

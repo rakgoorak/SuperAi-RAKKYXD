@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Maximize2, Pencil, Plus, Terminal, X } from 'luc
 import { TerminalPane } from './TerminalPane';
 import { SessionEnded } from './SessionEnded';
 import type { Session } from '../api';
+import { paneView, type PaneView } from '../paneView';
 
 export type CanvasLayout = 'auto' | 'tabs' | 'stack' | 'split' | '3' | '4';
 export function canvasColumns(layout: CanvasLayout, count: number, width: number) {
@@ -18,9 +19,14 @@ interface Props {
   zoomed: boolean; active: boolean; busy: boolean;
   select: (id: string) => void; zoom: (id: string) => void;
   close: (id: string) => void; restart: (id: string) => void; add: (type?: string) => void; refresh: () => void;
+  switchView: (id: string, view: PaneView) => void;
   onError: (message: string) => void;
 }
-export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed, active, busy, select, zoom, close, restart, add, refresh, onError }: Props) {
+export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed, active, busy, select, zoom, close, restart, add, refresh, onError, switchView }: Props) {
+  // Closing deletes the session for good (it is kept across restarts otherwise), so ask first.
+  const remove = (s: Session) => {
+    if (window.confirm(`ลบ session "${names[s.id] || s.name}"?\nประวัติแชตใน session นี้จะถูกลบด้วย`)) close(s.id);
+  };
   const area = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(1000);
   const [order, setOrder] = useState<string[]>(() => {
@@ -110,7 +116,7 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
     {!grid && <div className="session-tabs">
       {ordered.map(s => <div key={s.id} className={`session-tab ${s.id === selected ? 'active' : ''}`}>
         <button onClick={() => select(s.id)}><span className={`status-dot ${s.status === 'running' ? '' : 'offline'}`} />{names[s.id] || s.name}</button>
-        <button title={`ปิด ${s.name}`} disabled={busy} onClick={() => close(s.id)}><X size={12} /></button>
+        <button title={`ลบ ${s.name}`} disabled={busy} onClick={() => remove(s)}><X size={12} /></button>
       </div>)}
       <button className="icon-button" title="เพิ่ม session" onClick={() => add()}><Plus size={14} /></button>
     </div>}
@@ -138,13 +144,13 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
               <button className="icon-button secondary-pane-action" title={`ย้าย ${s.name} ถัดไป`} disabled={i === ordered.length - 1} onClick={() => reorder(s.id, ordered[i + 1].id)}><ArrowRight size={11} /></button>
               <button className="icon-button" title={`เพิ่ม session แบบ ${s.name}`} onClick={() => add(s.agentType)}><Plus size={13} /></button>
               <button className="icon-button" title={`ขยาย ${s.name}`} onClick={() => zoom(s.id)}><Maximize2 size={12} /></button>
-              <button className="icon-button" title={`ปิด ${s.name}`} disabled={busy} onClick={() => close(s.id)}><X size={12} /></button>
+              <button className="icon-button" title={`ลบ ${s.name}`} disabled={busy} onClick={() => remove(s)}><X size={12} /></button>
             </div>
           </div>}
-          {(s.status === 'exited' || s.status === 'error') && <SessionEnded key={`${s.id}-${s.createdAt}`} session={{ ...s, name: names[s.id] || s.name }} onRestart={restart} onClose={close} />}
-          <TerminalPane key={`${s.id}-${s.createdAt}`} tab={{ id: s.id, sessionId: s.id, name: names[s.id] || s.name, type: s.agentType, status: s.status === 'stopping' ? 'exited' : s.status }}
+          {(s.status === 'exited' || s.status === 'error') && paneView(s) !== 'chat' && <SessionEnded key={`${s.id}-${s.createdAt}`} session={{ ...s, name: names[s.id] || s.name }} onRestart={restart} onClose={close} />}
+          <TerminalPane key={`${s.id}-${s.createdAt}`} tab={{ id: s.id, sessionId: s.id, name: names[s.id] || s.name, type: s.agentType, status: s.status === 'stopping' ? 'exited' : s.status, view: paneView(s) }}
             visible={active && (grid || s.id === selected)} focused={active && s.id === selected} showHeader={false}
-            onFocus={() => select(s.id)} onClose={() => close(s.id)} onExit={refresh} registerSender={() => {}} />
+            onFocus={() => select(s.id)} onClose={() => close(s.id)} onExit={refresh} registerSender={() => {}} onSwitchView={view => switchView(s.id, view)} />
         </div>)}
       </div>
       {fitted && <div className="pane-splitters">{separator('x', cols)}{separator('y', rowSizes)}</div>}
