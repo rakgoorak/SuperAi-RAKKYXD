@@ -378,7 +378,12 @@ test('an explicit environment API key does not require opening encrypted session
   });
   process.env.GEMINI_API_KEY = token;
   CredentialStore.prototype.get = () => { throw new Error('store locked'); };
-  assert.equal(createProvider({ provider: 'gemini' }).name, 'gemini');
+  try {
+    assert.equal(createProvider({ provider: 'gemini' }).name, 'gemini');
+  } finally {
+    // Leave the folder before the fixture deletes it: Windows cannot remove the current directory.
+    process.chdir(oldCwd);
+  }
 });
 
 test('preview forgetting closes tabs and clears shared cookies/storage/cache; blocks concurrent actions', async () => {
