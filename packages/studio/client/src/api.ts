@@ -92,6 +92,7 @@ export interface Run {
   error?: string;
   createdAt: number;
   allowTools: boolean;
+  attachments?: string[];
   activity: Activity[];
   panel?: PanelAnswer[];
   summarizer?: Seat | null;

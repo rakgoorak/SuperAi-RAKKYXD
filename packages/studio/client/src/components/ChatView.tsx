@@ -1,12 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AlertTriangle, Check, ChevronRight, Copy, FilePen, FileText, Globe, ListChecks, Loader2, Paperclip, Search, Terminal as TerminalIcon, Wrench } from 'lucide-react';
 import { Markdown } from './Markdown';
+import { post } from '../api';
+import { prepareMessage, recoveryHint, showChanges } from '../recovery';
 
 // Mirrors server/CliChat.ts.
 type ToolKind = 'command' | 'read' | 'edit' | 'search' | 'web' | 'plan' | 'other';
 type ToolItem = { id: string; kind: 'tool'; tool: ToolKind; title: string; output?: string; status: 'running' | 'done' | 'failed'; at: number };
 type ChatItem =
-  | { id: string; kind: 'user'; text: string; attachments?: string[]; at: number }
+  | { id: string; kind: 'user'; text: string; attachments?: string[]; request?: { text: string; model?: string; effort?: string; skillId?: string; attachments?: string[] }; at: number }
   | { id: string; kind: 'assistant'; text: string; at: number }
   | ToolItem
   | { id: string; kind: 'error' | 'notice'; text: string; at: number };
@@ -89,6 +91,31 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
   const [now, setNow] = useState(Date.now());
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  const jumpToSaved = () => {
+    try {
+      const id = localStorage.getItem(`superai-jump:${sessionId}`);
+      const item = id && Array.from(scroller.current?.querySelectorAll<HTMLElement>('[data-message-id]') || []).find(element => element.dataset.messageId === id);
+      if (item) { item.scrollIntoView({ block: 'center' }); stick.current = false; localStorage.removeItem(`superai-jump:${sessionId}`); return true; }
+    } catch {}
+    return false;
+  };
+  useEffect(() => {
+    const jump = (event: Event) => { if ((event as CustomEvent<string>).detail === sessionId) { setSearch(''); requestAnimationFrame(jumpToSaved); } };
+    window.addEventListener('superai:jump-message', jump);
+    return () => window.removeEventListener('superai:jump-message', jump);
+  }, [sessionId]);
+  const restored = useRef(false);
+  const [pending, setPending] = useState(false);
+  const [problem, setProblem] = useState('');
+  const [search, setSearch] = useState('');
+  const lastUser = [...items].reverse().find(item => item.kind === 'user');
+  const retry = async () => {
+    if (!lastUser || lastUser.kind !== 'user') return;
+    setPending(true); setProblem('');
+    try { await post(`/api/terminals/${sessionId}/chat`, lastUser.request || { text: lastUser.text }); }
+    catch (error) { setProblem((error as Error).message); }
+    finally { setPending(false); }
+  };
 
   useEffect(() => {
     let socket: WebSocket | null = null;
@@ -133,7 +160,16 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
   // Follow new output unless the user scrolled up to read.
   useLayoutEffect(() => {
     const el = scroller.current;
-    if (el && stick.current) el.scrollTop = el.scrollHeight;
+    if (!el || !items.length) return;
+    if (jumpToSaved()) { restored.current = true; return; }
+    if (!restored.current) {
+      restored.current = true;
+      try {
+        const saved = localStorage.getItem(`superai-scroll:${sessionId}`);
+        if (saved !== null) { el.scrollTop = Number(saved) || 0; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; return; }
+      } catch {}
+    }
+    if (stick.current) el.scrollTop = el.scrollHeight;
   }, [items, running]);
 
   const started = [...items].reverse().find((i) => i.kind === 'user')?.at ?? now;
@@ -141,8 +177,10 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
 
   return (
     <div className="chat-view">
+      <label className="chat-history-search"><Search size={13} /><input aria-label={`ค้นหาในแชต ${name}`} placeholder="ค้นหาในบทสนทนานี้…" value={search} onChange={event => setSearch(event.target.value)} /></label>
       <div className="chat-scroll" ref={scroller} onScroll={(e) => {
         const el = e.currentTarget;
+        try { if (!search.trim()) localStorage.setItem(`superai-scroll:${sessionId}`, String(el.scrollTop)); } catch {}
         stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
       }}>
         <div className="chat-column">
@@ -153,12 +191,13 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
               <small>เลือก Model, Effort, /skills และเข้าสู่ระบบได้ที่ช่องคำสั่งด้านล่าง เมื่อเลือก session นี้อยู่</small>
             </div>
           )}
-          {blocks(items).map((block) => {
+          {blocks(items).filter(block => !search.trim() || (block.kind === 'tools' ? block.tools.map(t => t.title + ' ' + (t.output || '')).join(' ') : block.text).toLowerCase().includes(search.trim().toLowerCase())).map((block) => {
             if (block.kind === 'user')
               return (
-                <div key={block.id} className="chat-user">
+                <div key={block.id} data-message-id={block.id} className="chat-user">
                   <div>
                     {block.text}
+                    <button className="edit-message" disabled={running || pending} onClick={() => { prepareMessage(block.text, sessionId); if (block.attachments?.length) setProblem('กรุณาแนบไฟล์เดิมอีกครั้งก่อนส่งข้อความที่แก้ไข'); }}>แก้ข้อความแล้วส่งใหม่</button>
                     {block.attachments?.length ? <small><Paperclip size={11} /> {block.attachments.join(', ')}</small> : null}
                   </div>
                 </div>
@@ -174,6 +213,9 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
               <span>{name} กำลังทำงาน · {seconds} วิ · กดหยุดได้ที่ช่องคำสั่งด้านล่าง</span>
             </div>
           )}
+          {!running && lastUser && <div className="recovery-actions"><button disabled={pending || offline || (!lastUser.request && !!lastUser.attachments?.length)} onClick={() => void retry()}>ลองใหม่</button><button onClick={() => showChanges(sessionId)}>ไฟล์ที่เปลี่ยน / Preview</button></div>}
+          {problem && <div role="alert" className="chat-error">{recoveryHint(problem)}<br />{problem}</div>}
+          {items.at(-1)?.kind === 'error' && <p className="recovery-note">{recoveryHint((items.at(-1) as { text: string }).text)} <button onClick={() => window.dispatchEvent(new Event('superai:open-setup'))}>ตรวจบัญชีและเครื่องมือ</button></p>}
           {offline && <div className="chat-notice">ขาดการเชื่อมต่อ กำลังเชื่อมต่อใหม่…</div>}
         </div>
       </div>

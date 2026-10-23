@@ -58,11 +58,12 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
 
   return (
     <div className="session-chat-controls" aria-label={`การตั้งค่าแชท ${name}`}>
-      <div className={`chat-account ${auth?.status || ''}`}>
+      <details className={`account-menu ${auth?.status || ""}`} onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); event.stopPropagation(); } }}><summary aria-label="บัญชีของ session">{auth?.status === "authenticated" ? "เชื่อมต่อแล้ว" : "บัญชี AI"}</summary><div className={`chat-account ${auth?.status || ''}`}>
         <small>{authError || auth?.note || (agent ? 'กำลังตรวจบัญชี…' : 'กำลังโหลดการตั้งค่า…')}</small>
         <button type="button" className="text-button" disabled={checking || busy || !agent} onClick={() => void check(true)}>ตรวจบัญชีอีกครั้ง</button>
         {auth?.status !== 'authenticated' && auth?.status !== 'not-installed' && <button type="button" className="text-button" disabled={!agent || busy || disabled} onClick={() => void login()}>เข้าสู่ระบบใน Terminal</button>}
       </div>
+      </details>
       {problem && <div className="chat-composer-problem" role="alert">{problem}<button type="button" onClick={() => setProblem('')} aria-label="ปิดข้อความ"><X size={12} /></button></div>}
       <div className="chat-model-controls">
         <label>Model<ModelCombo label={`Model ในแชท ${name}`} value={model} options={list?.models || []} placeholder="ค่าเริ่มต้นของ CLI" disabled={disabled || !ready}

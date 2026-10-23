@@ -16,7 +16,7 @@ const prefs = new Map<string, ChatPrefs>();
 const choices = new Set<string>();
 const EMPTY: ChatPrefs = { model: '', effort: '', skillId: '', blocked: false, note: '' };
 
-export function hasChatPrefs(sessionId: string): boolean { return choices.has(sessionId); }
+export function hasChatPrefs(sessionId: string): boolean { chatPrefs(sessionId); return choices.has(sessionId); }
 
 const listeners = new Map<string, Set<() => void>>();
 export function subscribeChatPrefs(sessionId: string, listener: () => void): () => void {
@@ -26,12 +26,24 @@ export function subscribeChatPrefs(sessionId: string, listener: () => void): () 
 }
 
 export function chatPrefs(sessionId: string): ChatPrefs {
+  if (!prefs.has(sessionId)) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(`superai-chat-prefs:${sessionId}`) || 'null');
+      if (saved && typeof saved.model === 'string' && typeof saved.effort === 'string') {
+        prefs.set(sessionId, { ...EMPTY, model: saved.model, effort: saved.effort });
+        choices.add(sessionId);
+      }
+    } catch {}
+  }
   return prefs.get(sessionId) || EMPTY;
 }
 
 export function setChatPrefs(sessionId: string, patch: Partial<ChatPrefs>) {
   if ("model" in patch || "effort" in patch) choices.add(sessionId);
   prefs.set(sessionId, { ...chatPrefs(sessionId), ...patch });
+  if ("model" in patch || "effort" in patch) {
+    try { const value = prefs.get(sessionId)!; localStorage.setItem(`superai-chat-prefs:${sessionId}`, JSON.stringify({ model: value.model, effort: value.effort })); } catch {}
+  }
   listeners.get(sessionId)?.forEach(listener => listener());
 }
 

@@ -110,6 +110,7 @@ export interface ConversationRun {
   error?: string;
   createdAt: number;
   allowTools: boolean;
+  attachments?: string[];
   activity: Activity[];
   // Chat
   panel?: PanelAnswer[];
@@ -333,7 +334,7 @@ export class AgentRunManager {
     const prompt = this.begin(wsId, String(body.prompt || ""), attachments, summarizer ? [...panel, summarizer] : panel);
     const history = this.history(wsId, "chat");
     const run: ConversationRun = {
-      id: randomUUID(), wsId, prompt, mode: "chat", status: "running", output: "", createdAt: Date.now(), allowTools: false, activity: [],
+      id: randomUUID(), wsId, prompt, mode: "chat", status: "running", output: "", createdAt: Date.now(), allowTools: false, attachments, activity: [],
       panel: panel.map((seat) => ({ seat, status: "running", output: "" })),
       summarizer, summaryStyle: style, summaryStatus: summarizer ? "pending" : undefined,
     };
@@ -410,7 +411,7 @@ ${instructions}
     const prompt = this.begin(wsId, String(body.prompt || ""), attachments, [main, ...subagents]);
     const history = this.history(wsId, "agent");
     const run: ConversationRun = {
-      id: randomUUID(), wsId, prompt, mode: "agent", status: "running", output: "", createdAt: Date.now(), allowTools, activity: [],
+      id: randomUUID(), wsId, prompt, mode: "agent", status: "running", output: "", createdAt: Date.now(), allowTools, attachments, activity: [],
       main, subagents, stage: "planning", tasks: [],
     };
     return this.launch(run, async (controller, note) => {

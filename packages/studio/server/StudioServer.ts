@@ -1,3 +1,4 @@
+import { projectChanges, projectFile } from "./ProjectChanges.js";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -253,6 +254,18 @@ export class StudioServer {
               "ยังเชื่อมต่อ Ollama ไม่ได้ กรุณาเปิด Ollama และดาวน์โหลด model ด้วย ollama pull qwen2.5-coder:7b",
           });
       }
+    });
+    this.app.get('/api/workspaces/:wsId/changes', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      try { res.json(await projectChanges(ws.rootPath)); }
+      catch { res.status(400).json({ error: 'อ่าน Git ไม่สำเร็จ ตรวจว่าติดตั้ง Git และโปรเจกต์เป็น Git repository' }); }
+    });
+    this.app.get('/api/workspaces/:wsId/changed-file', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      try { res.json(await projectFile(ws.rootPath, String(req.query.path || ''))); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
     this.app.get("/api/conversations/:wsId", (req, res) =>
       res.json(this.agentRuns.list(String(req.params.wsId))),

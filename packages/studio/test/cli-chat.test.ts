@@ -224,7 +224,7 @@ test('chat history is saved to disk and comes back; deleting removes it', async 
   const first = new CliChatManager(fake.spawner as any, dir, launch);
   const changes: string[] = [];
   first.onChange = (id) => changes.push(id);
-  first.send('s1', { agent: 'claude-code', cwd: process.cwd(), text: 'จำคำว่า KIWI' });
+  first.send('s1', { agent: 'claude-code', cwd: process.cwd(), text: 'จำคำว่า KIWI', model: 'original-model', effort: 'high' });
   fake.finish(fake.calls[0].proc, [
     { type: 'system', subtype: 'init', session_id: 'sess-9' },
     { type: 'assistant', message: { id: 'm', content: [{ type: 'text', text: 'จำแล้ว' }] } },
@@ -236,6 +236,9 @@ test('chat history is saved to disk and comes back; deleting removes it', async 
   const second = new CliChatManager(fake.spawner as any, dir, launch);
   const back = second.snapshot('s1');
   assert.equal(back.conversationId, 'sess-9');
+  const request = back.items.find(item => item.kind === 'user');
+  assert.equal(request?.kind === 'user' && request.request?.model, 'original-model');
+  assert.equal(request?.kind === 'user' && request.request?.effort, 'high');
   assert.deepEqual(back.items.filter((i) => i.kind !== 'tool').map((i) => (i as any).text), ['จำคำว่า KIWI', 'จำแล้ว']);
   second.send('s1', { agent: 'claude-code', cwd: process.cwd(), text: 'คำว่าอะไร' });
   const resumed = fake.calls[1].args;

@@ -15,3 +15,5 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 import "./mission-control.css";
 
 import "./composer.css";
+
+import "./minimal-workspace.css";
