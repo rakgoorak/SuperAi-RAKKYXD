@@ -90,7 +90,7 @@ export function SessionChatControls({ sessionId, name, disabled, onDraft }: { se
         <label>Effort<select aria-label={`Effort ในแชท ${name}`} value={effort} disabled={disabled || !efforts.length} onChange={(e) => setEffort(e.target.value)}>
           <option value="">ค่าเริ่มต้น</option>{efforts.map((e) => <option key={e} value={e}>{EFFORT_LABEL[e] || e}</option>)}
         </select></label>
-        <button type="button" className="text-button" disabled={disabled} onClick={() => void browseSkills()}>/skills</button>
+        <button type="button" className="text-button" disabled={disabled} onClick={() => onDraft("/")}>/skills</button>
         {skillId && <button type="button" className="text-button" onClick={() => setSkillId('')}>ยกเลิก skill</button>}
       </div>
       {modelError && <small className="muted">{modelError} · พิมพ์ชื่อ Model เองได้</small>}

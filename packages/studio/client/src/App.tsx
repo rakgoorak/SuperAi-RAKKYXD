@@ -1,3 +1,4 @@
+import { SlashMenu, type SlashMenuHandle } from "./components/SlashMenu";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Folder,
@@ -95,6 +96,7 @@ function initial(key: string, fallback: string) {
 }
 
 export function App() {
+  const slashMenu = useRef<SlashMenuHandle>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWs, setActiveWs] = useState(initial("superai-workspace", ""));
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -1153,8 +1155,8 @@ export function App() {
                     )}
                   </div>
                 </div>
-                <div className="composer-box">
-                  {mode === "chat" && chatConfig && workspace && <ChatQuickControls workspaceId={workspace.id} config={chatConfig} onChange={setChatConfig} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} draft={draft} onDraft={setDraft} />}
+                <div className={`composer-box ${chatTarget ? "has-session-controls" : ""}`}>
+                  {mode === "chat" && chatConfig && workspace && <ChatQuickControls workspaceId={workspace.id} config={chatConfig} onChange={setChatConfig} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} onDraft={setDraft} />}
                   {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name.split("·")[0].trim() || chatTarget.name} disabled={busy}
                     onDraft={(text) => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />}
                   <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
@@ -1167,7 +1169,8 @@ export function App() {
                     }}
                   /></details>
                   <div className="composer-input-container">
-                    {!ghostDismissed && suggestions.ghostSuffix && (
+                    <SlashMenu ref={slashMenu} draft={draft} sessionId={chatTarget?.id} workspaceId={mode === "chat" ? workspace?.id : undefined} providers={mode === "chat" ? [...new Set((chatConfig?.panel || []).filter(seat => seat.provider.startsWith("cli:")).map(seat => seat.provider.slice(4)))] : []} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
+                    {!draft.startsWith("/") && !ghostDismissed && suggestions.ghostSuffix && (mode !== "code" || !!draft.trim()) && (
                       <div className="composer-ghost-layer" aria-hidden="true">
                         {draft ? (
                           <>
@@ -1185,10 +1188,10 @@ export function App() {
                       rows={mode === "code" && !composerExpanded ? 1 : 3}
                       aria-label="คำสั่ง"
                       placeholder={
-                        !draft && suggestions.ghostSuffix && !ghostDismissed
+                        mode !== "code" && !draft && suggestions.ghostSuffix && !ghostDismissed
                           ? ""
                           : mode === "code"
-                            ? "พิมพ์คำสั่งให้ session ที่เลือก…"
+                            ? chatTarget ? `พิมพ์ข้อความถึง ${chatTarget.name.split("·")[0].trim()}…` : "พิมพ์คำสั่งหรือเลือก session เพื่อเริ่มทำงาน…"
                             : mode === "agent"
                               ? "บอกเป้าหมายให้ทีม เช่น ทำหน้าเข้าสู่ระบบพร้อมทดสอบ…"
                               : "ถามคำถามเดียว ส่งให้ทุก AI ที่เลือก…"
@@ -1205,6 +1208,7 @@ export function App() {
                         attachToComposer(files);
                       }}
                       onKeyDown={(e) => {
+                        if (slashMenu.current?.keyDown(e)) return;
                         if (
                           e.key === "Tab" &&
                           !e.shiftKey &&
@@ -1212,6 +1216,7 @@ export function App() {
                           !e.altKey &&
                           !e.nativeEvent.isComposing &&
                           !ghostDismissed &&
+                          (mode !== "code" || !!draft.trim()) &&
                           suggestions.ghostSuffix
                         ) {
                           e.preventDefault();
@@ -1281,7 +1286,7 @@ export function App() {
                       </button>
                       <button
                         className="send-button"
-                        title="ส่งคำสั่ง (Enter)"
+                        aria-label="ส่งคำสั่ง (Enter)" title="ส่งคำสั่ง (Enter)"
                         disabled={
                           busy ||
                           (!draft.trim() && !attachments.items.length) ||
@@ -1295,6 +1300,7 @@ export function App() {
                         ) : (
                           <Send size={16} />
                         )}
+                        <span className="send-label">ส่ง</span>
                       </button>
                     </div>
                   </div>

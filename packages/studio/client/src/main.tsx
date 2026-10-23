@@ -13,3 +13,5 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 );
 
 import "./mission-control.css";
+
+import "./composer.css";
