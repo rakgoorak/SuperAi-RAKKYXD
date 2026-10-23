@@ -2,7 +2,7 @@ import { spawn, execFileSync, ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { cliEnv, cliInstallEnv, findExecutable, getCliDefinition, INSTALL_PACKAGES, INSTALL_SCRIPTS, managedCliPrefix } from './CliCatalog.js';
+import { cliEnv, cliInstallEnv, findExecutable, getCliDefinition, incompleteInstall, INSTALL_PACKAGES, INSTALL_SCRIPTS, managedCliPrefix } from './CliCatalog.js';
 import { installNode22 } from './NodeInstaller.js';
 import { installPortableGit } from './GitInstaller.js';
 
@@ -165,7 +165,9 @@ export class CliInstallManager {
     if (this.child || this.currentAbort) {
       throw new Error('กำลังติดตั้งเครื่องมืออื่น กรุณารอหรือยกเลิกก่อน');
     }
-    if (this.dependencies.find(cli.command)) {
+    // An incomplete install (e.g. Claude Code without its claude.exe) is shown as missing: let it reinstall.
+    const existing = this.dependencies.find(cli.command);
+    if (existing && !incompleteInstall(cliId, existing)) {
       throw new Error('เครื่องมือนี้ติดตั้งแล้ว กดตรวจสอบอีกครั้งได้');
     }
     if (script) {
