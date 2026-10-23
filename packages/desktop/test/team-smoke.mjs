@@ -73,6 +73,20 @@ try{
  assert.equal(await page.locator('.task-board li').count(),2);
  assert.equal(await page.locator('.agent-card').count(),3);passed.push('Main plans, Sub-agents work, Main reports through HTTP');
  await page.locator('.conversation-scroll').evaluate(el=>el.scrollTop=0);
+ const teamVisible = await page.locator('.conversation-scroll').evaluate(el => {
+   const bottom = el.getBoundingClientRect().bottom;
+   return [...el.querySelectorAll('.inspect-agent')].every(button => button.getBoundingClientRect().bottom <= bottom);
+ });
+ assert.ok(teamVisible, 'all three team detail buttons must fit above the composer at 1100x760');
+ await page.locator('.composer-suggestions > summary').click();
+ await page.getByRole('group', { name: 'ตัวเลือกแนะนำด่วน' }).waitFor();
+ await page.locator('.composer-suggestions > summary').click();
+ await page.getByRole('button', {name: 'ดูรายละเอียด Sub-agent 1', exact:true}).click();
+ await page.getByRole('complementary',{name:'รายละเอียด Sub-agent 1'}).getByText('CODER_RESULT_ACTUAL',{exact:true}).waitFor();
+ await page.keyboard.press('Escape');
+ assert.equal(await page.locator('.mission-inspector').count(),0);
+ await page.locator('.conversation-scroll').evaluate(el=>el.scrollTop=0);
+ passed.push('team details visible on laptop, expandable suggestions and inspector close');
  await page.screenshot({path:path.join(data,'agent-desktop.png')});
  steps.step('Chat run');
  // Chat: one prompt to two Mains, then a summarizer that credits both.

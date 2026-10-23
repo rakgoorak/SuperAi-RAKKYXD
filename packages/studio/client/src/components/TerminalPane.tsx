@@ -338,7 +338,8 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
     requestAnimationFrame(() => termRef.current?.focus());
   };
 
-  const hasFiles = (event: React.DragEvent) => !!tab.sessionId && Array.from(event.dataTransfer.types).includes('Files');
+  // A chat pane leaves dropped files to the bottom composer, which sends them with the message.
+  const hasFiles = (event: React.DragEvent) => !!tab.sessionId && !chatting && Array.from(event.dataTransfer.types).includes('Files');
 
   return (
     <div
@@ -444,7 +445,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
         )}
         {chatting && (
           <div className="absolute inset-0 z-[7]">
-            <ChatView sessionId={tab.sessionId!} name={tab.name.split('·')[0].trim() || tab.name} focused={visible && focused} />
+            <ChatView sessionId={tab.sessionId!} name={tab.name.split('·')[0].trim() || tab.name} />
           </div>
         )}
         {tab.sessionId && (

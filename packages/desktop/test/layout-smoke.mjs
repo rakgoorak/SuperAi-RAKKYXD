@@ -41,7 +41,6 @@ try {
       overflow: document.documentElement.scrollWidth > innerWidth };
   });
   await page.getByTitle('แบ่งสองคอลัมน์', { exact: true }).click();
-  await page.getByTitle('ช่องคำสั่งรวม', { exact: true }).click();
   const ids = [];
   for (let i = 1; i <= 12; i++) {
     ids.push((await request('/api/terminals/spawn', { wsId: workspace.id, agentType: 'terminal', name: `Terminal ${i}` })).id);
@@ -75,8 +74,6 @@ try {
       await page.getByRole('button', { name: 'Preview', exact: true }).click();
       await page.waitForSelector('.preview-panel');
       assert.equal((await measure()).columns, 1);
-      const composerToggle = page.getByTitle('ช่องคำสั่งรวม', { exact: true });
-      if (await composerToggle.getAttribute('aria-pressed') !== 'true') await composerToggle.click();
       await page.getByRole('textbox', { name: 'คำสั่ง', exact: true }).fill('echo ทดสอบแจ้งเตือนขณะเปิด Preview');
       await page.getByRole('textbox', { name: 'คำสั่ง', exact: true }).press('Enter');
       await page.waitForSelector('.message-banner:not(.error)');
@@ -94,7 +91,6 @@ try {
       assert.equal((await measure()).columns, 2);
       await page.screenshot({ path: path.join(output, 'superai-layout-wide.png') });
       checks++;
-      if (await page.getByTitle('ช่องคำสั่งรวม', { exact: true }).getAttribute('aria-pressed') === 'false') await page.getByTitle('ช่องคำสั่งรวม', { exact: true }).click();
       await page.getByTitle('ขยายช่องคำสั่ง', { exact: true }).click();
       await page.getByRole('textbox', { name: 'คำสั่ง', exact: true }).fill('บรรทัดที่หนึ่ง\nบรรทัดที่สอง');
       await page.getByTitle('ย่อช่องคำสั่ง', { exact: true }).click();

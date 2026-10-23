@@ -1,3 +1,4 @@
+import { agentCardState } from "../agentCardState";
 import { useEffect, useRef, useState } from "react";
 import { Bot, Crown, LoaderCircle, Plus, Users } from "lucide-react";
 import type { Cli, Run, Seat, StepStatus } from "../api";
@@ -75,7 +76,7 @@ export function AgentRunView({ run, onFixTools }: { run: Run; onFixTools: () => 
   const tasks = run.tasks || [];
   const seat = selected === -1 ? run.main : selected === null ? null : subs[selected];
   const assigned = selected === -1 ? tasks : tasks.filter(t => t.assignee === selected);
-  const mainState = run.stage === "planning" || run.stage === "summarizing" ? "running" : run.status === "running" ? "waiting" : run.status;
+  const mainState = run.status !== "running" ? run.status : run.stage === "planning" || run.stage === "summarizing" ? "running" : "waiting";
   return <section className="agent-run" aria-label="ความคืบหน้าทีม Agent">
     <div className="mission-view-switch" role="group" aria-label="มุมมองงาน">
       <button aria-pressed={view === "overview"} onClick={() => setView("overview")}>ภาพรวมงาน</button>
@@ -91,9 +92,9 @@ export function AgentRunView({ run, onFixTools }: { run: Run; onFixTools: () => 
             const index = run.main ? i - 1 : i;
             const mine = index === -1 ? tasks : tasks.filter(t => t.assignee === index);
             const current = mine.find(t => t.status === "running");
-            const state = index === -1 ? mainState : current ? "running" : mine.some(t => t.status === "failed") ? "failed" : mine.length && mine.every(t => t.status === "completed") ? "completed" : "pending";
+            const state = index === -1 ? mainState : agentCardState(mine);
             return <article key={index} className={"agent-card state-" + state + (index === -1 ? " main" : "")}>
-              <header>{index === -1 ? <Crown size={16} /> : <Bot size={16} />}<strong>{member.name}</strong><span className="chip">{state === "waiting" ? "รอทีม" : STEP[state as StepStatus] || "รอแผน"}</span></header>
+              <header>{index === -1 ? <Crown size={16} /> : <Bot size={16} />}<strong>{member.name}</strong><span className="chip">{state === "waiting" ? "รอทีม" : state === "idle" ? "ไม่ได้รับงาน" : STEP[state as StepStatus] || "รอแผน"}</span></header>
               <small>{seatSummary(member)}</small>
               {index === -1 && run.plan && <p className="agent-plan">{run.plan}</p>}
               <ul className="mission-task-list">{mine.slice(0, 4).map(task => <li key={task.id}><span className={"task-signal state-" + task.status} /><span>{task.title}</span><small>{STEP[task.status]}</small></li>)}</ul>

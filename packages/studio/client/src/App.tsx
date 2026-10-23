@@ -31,7 +31,6 @@ import {
   RefreshCw,
   AlertCircle,
   Code2,
-  Keyboard,
   ShieldCheck,
   Layers,
   Radio,
@@ -45,6 +44,8 @@ import {
 } from "lucide-react";
 import { api, post, loginProvider, Workspace, Cli, Session, Run, Seat } from "./api";
 import { paneView } from "./paneView";
+import { chatPrefs, sendChatCommand, setChatPrefs } from "./chatControls";
+import { SessionChatControls } from "./components/SessionChatControls";
 import { SessionCanvas, type CanvasLayout } from "./components/SessionCanvas";
 import { RightDock, type DockView } from "./components/RightDock";
 import { AgentConfigEditor, AgentRunView, type AgentConfig } from "./components/AgentPanel";
@@ -113,7 +114,6 @@ export function App() {
   });
   const [zoomed, setZoomed] = useState(false);
   const [composerExpanded, setComposerExpanded] = useState(false);
-  const [composerShown, setComposerShown] = useState(false);
   const [dockView, setDockView] = useState<DockView>("browser");
   const [launchPlan, setLaunchPlan] = useState<LaunchSeat[] | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -167,6 +167,9 @@ export function App() {
   const selectedSession = visible.find((s) => s.id === selected);
   // Chat sessions take messages without a running terminal.
   const running = visible.filter((s) => s.status === "running" || paneView(s) === "chat");
+  // The one chat session the composer sends to gets its Model/Effort/skills/account controls there.
+  const composerTarget = target === "all" ? undefined : target === "active" ? selectedSession : running.find((s) => s.id === target);
+  const chatTarget = mode === "code" && composerTarget && paneView(composerTarget) === "chat" ? composerTarget : undefined;
   const conversation = runs.filter((r) => r.mode === mode);
   const latestRun = conversation[conversation.length - 1] || null;
   const suggestions = getSuggestions({
@@ -198,7 +201,6 @@ export function App() {
   const attachments = useComposerAttachments(showError);
   const attachToComposer = useCallback((files: File[]) => {
     attachments.add(files);
-    setComposerShown(true);
     requestAnimationFrame(() => composer.current?.focus());
   }, [attachments.add]);
   const task = useCallback(async (fn: () => Promise<void>) => {
@@ -451,10 +453,25 @@ export function App() {
         for (const recipient of recipients) {
           // A pane in chat view takes the message as a chat turn; files go along as paths.
           if (paneView(recipient) === "chat") {
+            const text = draft.trim() || "ดูไฟล์แนบนี้";
+            const prefs = chatPrefs(recipient.id);
+            // Composer commands for one chat: handled by its controls, not sent to the AI.
+            if (recipients.length === 1 && /^\/(skills?|login)\s*$/.test(text)) {
+              sendChatCommand(recipient.id, text.startsWith("/login") ? "login" : "skills");
+              if (text.startsWith("/login")) setDraft("");
+              return;
+            }
+            if (recipients.length === 1 && text === "/model") throw new Error("เลือก Model จากช่องคำสั่งด้านล่าง ใช้กับข้อความถัดไป");
+            if (prefs.blocked) throw new Error(`${recipient.name}: ${prefs.note || "กรุณาเข้าสู่ระบบก่อนส่งข้อความ"}`);
+            const skillId = prefs.skillId && text.startsWith("/skill ") ? prefs.skillId : "";
             await post(`/api/terminals/${recipient.id}/chat`, {
-              text: draft.trim() || "ดูไฟล์แนบนี้",
+              text,
+              model: prefs.model,
+              effort: prefs.effort,
+              ...(skillId ? { skillId } : {}),
               attachments: saved.map((file) => file.path),
             });
+            if (prefs.skillId) setChatPrefs(recipient.id, { skillId: "" });
             continue;
           }
           // Codex gets project-relative paths: typed ":" and "\" can be lost through ConPTY.
@@ -790,7 +807,6 @@ export function App() {
             </div>
 
             <div className="toolbar-actions">
-              {mode === "code" && <button className={`toolbar-button ${composerShown ? "selected" : ""}`} title="ช่องคำสั่งรวม" aria-pressed={composerShown} onClick={() => setComposerShown(!composerShown)}><Keyboard size={14} /><span>คำสั่งรวม</span></button>}
               <UsageButton open={usageOpen} onOpenChange={setUsageOpen} />
               <button className={`toolbar-button ${preview && dockView === "dashboard" ? "selected" : ""}`} title="เปิดแผงสถานะ" onClick={() => { setDockView("dashboard"); setPreview(true); }}><Activity size={14} /><span>สถานะ</span></button>
               <button
@@ -813,7 +829,7 @@ export function App() {
             </div>
           </div>
           <div className="canvas-row">
-            <main className={`work-canvas ${mode === "code" ? "code-mode" : ""}`}>
+            <main className={`work-canvas ${mode === "code" ? "code-mode" : mode === "agent" ? "agent-mode" : ""}`}>
           {(error || notice) && (
             <div
               className={`message-banner ${error ? "error" : ""}`}
@@ -1015,7 +1031,6 @@ export function App() {
                             className="hub-prompt-chip"
                             onClick={() => {
                               setDraft(promptText);
-                              setComposerShown(true);
                               openSession();
                             }}
                           >
@@ -1082,7 +1097,7 @@ export function App() {
                   )}
                 </div>
               )}
-              <div className={`composer-area ${mode === "code" && !composerExpanded ? "compact-code" : ""} ${mode === "code" && !composerShown ? "not-visible" : ""}`}>
+              <div className={`composer-area ${mode === "code" && !composerExpanded ? "compact-code" : ""}`}>
                 <div className="composer-context">
                   <div className="inline">
                     {mode === "code" ? (
@@ -1140,15 +1155,17 @@ export function App() {
                 </div>
                 <div className="composer-box">
                   {mode === "chat" && chatConfig && workspace && <ChatQuickControls workspaceId={workspace.id} config={chatConfig} onChange={setChatConfig} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} draft={draft} onDraft={setDraft} />}
+                  {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name.split("·")[0].trim() || chatTarget.name} disabled={busy}
+                    onDraft={(text) => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />}
                   <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
-                  <SuggestedChips
+                  <details className="composer-suggestions" open={mode !== "agent"}><summary>คำแนะนำสำหรับขั้นตอนถัดไป</summary><SuggestedChips
                     items={suggestions.items}
                     disabled={busy || !!activeRun}
                     onSelect={(text) => {
                       setDraft(text);
                       requestAnimationFrame(() => composer.current?.focus());
                     }}
-                  />
+                  /></details>
                   <div className="composer-input-container">
                     {!ghostDismissed && suggestions.ghostSuffix && (
                       <div className="composer-ghost-layer" aria-hidden="true">
@@ -1291,7 +1308,7 @@ export function App() {
             <RightDock open={preview} view={dockView} setView={setDockView} close={() => setPreview(false)} suspended={!!dialog || usageOpen}
               workspace={workspace} workspaces={workspaces} sessions={sessions} runs={runs} selected={selected}
               onSelect={session => { setActiveWs(session.wsId || activeWs); setSelected(session.id); setMode("code"); }}
-              onPrompt={text => { setDraft(current => current ? `${current}\n${text}` : text); setComposerShown(true); requestAnimationFrame(() => composer.current?.focus()); }} onError={showError} />
+              onPrompt={text => { setDraft(current => current ? `${current}\n${text}` : text); requestAnimationFrame(() => composer.current?.focus()); }} onError={showError} />
           </div>
           <footer className="statusbar">
             <span className={`status-dot ${connected ? "" : "offline"}`} />
@@ -1652,7 +1669,6 @@ export function App() {
                       onClick={() => {
                         setDraft("ollama pull qwen2.5-coder:7b");
                         setMode("code");
-                        setComposerShown(true);
                         setDialog(null);
                       }}
                     >

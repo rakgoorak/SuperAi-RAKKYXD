@@ -153,7 +153,6 @@ try {
     .getByRole("button", { name: "เปิด 1 session", exact: false })
     .click();
   await page.waitForSelector(".xterm");
-  await page.getByTitle("ช่องคำสั่งรวม", { exact: true }).click();
   await page
     .getByRole("textbox", { name: "คำสั่ง", exact: true })
     .fill("echo SUPERAI_DESKTOP_OK");
