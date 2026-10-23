@@ -121,3 +121,6 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .composer-input-container textarea { position: relative; z-index: 2; background: transparent !important; }
 .composer-ghost-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; padding: 13px 14px 6px; pointer-events: none; font-family: inherit; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; overflow: hidden; color: rgba(160, 175, 189, 0.45); display: flex; align-items: baseline; gap: 6px; z-index: 1; }
 .composer-ghost-layer .tab-badge { display: inline-flex; align-items: center; font-size: 10px; padding: 1px 5px; border-radius: 4px; background: rgba(118, 190, 209, 0.2); border: 1px solid rgba(118, 190, 209, 0.35); color: #b9edf6; margin-left: 6px; user-select: none; }
+.composer-bottom, .compact-code .composer-bottom { position: relative; z-index: 10; }
+.compact-code .composer-bottom { position: absolute; }
+.compact-code .suggested-chips-bar { display: none; }
