@@ -94,7 +94,6 @@ try {
   await page.getByRole('button', { name: 'ใช้พรอมป์ต์', exact: true }).click();
   assert.ok(await page.getByRole('textbox', { name: 'คำสั่ง', exact: true }).isVisible());
   assert.equal(await page.getByRole('textbox', { name: 'คำสั่ง', exact: true }).inputValue(), 'ตรวจโค้ดและอธิบายเป็นภาษาไทย'); checks++;
-  await page.getByTitle('ช่องคำสั่งรวม', { exact: true }).click();
   await page.getByRole('button', { name: 'Browser', exact: true }).click();
   await page.getByRole('textbox', { name: 'URL เว็บไซต์', exact: true }).fill(page.url() + 'api/health');
   await page.getByTitle('เปิด URL', { exact: true }).click();

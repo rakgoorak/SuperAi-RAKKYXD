@@ -1,0 +1,51 @@
+import { _electron as electron } from 'playwright-core';
+import { createRequire } from 'node:module';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { closeApp, stepper } from './smoke-harness.mjs';
+const require = createRequire(import.meta.url), steps = stepper('session-controls');
+const data = await fs.mkdtemp(path.resolve('output/session-controls-'));
+const app = await electron.launch({executablePath:require('electron'),args:['packages/desktop'],env:{...process.env,SUPERAI_DATA_DIR:data},timeout:60000});
+try {
+ const page = await app.firstWindow(); page.setDefaultTimeout(20000); page.on('console',m=>{if(m.type()==='error')steps.log(m.text());}); page.on('pageerror', error => steps.log(error.stack)); await page.waitForSelector('.app-shell'); await page.waitForFunction(()=>document.querySelector('.statusbar')?.textContent.includes('เชื่อมต่อแล้ว'));
+ await page.evaluate(() => localStorage.setItem('superai-setup-dismissed','1'));
+ const ws = await page.evaluate(async rootPath => (await fetch('/api/workspaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Composer fixture',rootPath})})).json(), data);
+ assert.ok(ws.id, JSON.stringify(ws));
+ const sessions = ['One','Two'].map((name,i)=>({id:'fixture-'+i,wsId:ws.id,name,agentType:'codex',view:'chat',status:'running',cwd:data,createdAt:Date.now(),bufferedOutput:''}));
+ const sent=[];
+ await page.route('**/api/workspaces', r=>r.fulfill({json:[ws]}));
+ await page.route('**/api/terminals', r=>r.fulfill({json:sessions}));
+ await page.route('**/api/providers/codex/models',r=>r.fulfill({json:{models:['model-a','model-b'],efforts:['low','high']}}));
+ await page.route('**/api/clis/codex/auth*',r=>r.fulfill({json:{id:'codex',status:'authenticated',note:'พร้อม',checkedAt:Date.now(),loginCommand:'codex login'}}));
+ await page.route('**/api/terminals/fixture-*/chat/settings',r=>r.fulfill({json:{agent:'codex',model:'model-a',effort:'high',skills:[{id:'test-skill',name:'review',description:'Review files',source:'project',path:'review.md'}]}}));
+ await page.route('**/api/terminals/fixture-*/chat',r=>{sent.push({url:r.request().url(),...r.request().postDataJSON()});return r.fulfill({json:{success:true}});});
+ await page.reload({waitUntil:'domcontentloaded'});
+ await page.waitForSelector('.app-shell');
+ await page.getByRole('button',{name:/^Composer fixture/}).click();
+ await page.getByRole('navigation',{name:'โหมดทำงาน'}).getByRole('button',{name:'Code',exact:true}).click();
+ const target=page.getByLabel('เป้าหมายคำสั่ง',{exact:true});
+ steps.step('select first'); await target.selectOption('fixture-0');
+ const model=page.getByLabel('Model ในแชท One',{exact:true});await model.waitFor();
+ steps.step('model defaults'); await page.waitForFunction(()=>document.querySelector('[aria-label="Model ในแชท One"]')?.value==='model-a',null,{timeout:20000});
+ await model.fill('model-b');await page.getByLabel('Effort ในแชท One',{exact:true}).selectOption('low');
+ await page.getByRole('button',{name:'/skills',exact:true}).click();
+ await page.getByRole('button',{name:'/review',exact:false}).click();
+ await page.getByLabel('คำสั่ง',{exact:true}).fill('/skill review check');
+ await page.getByRole('button',{name:'ส่งคำสั่ง (Enter)',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('textarea[aria-label="คำสั่ง"]')?.value==='');
+ assert.equal(sent.at(-1).model,'model-b');assert.equal(sent.at(-1).effort,'low');assert.equal(sent.at(-1).skillId,'test-skill');
+ await page.getByRole('button',{name:'ยกเลิก skill',exact:true}).waitFor({state:'hidden'});
+ await target.selectOption('fixture-1');await page.getByLabel('Model ในแชท Two',{exact:true}).waitFor();
+ await target.selectOption('fixture-0');await page.getByLabel('Model ในแชท One',{exact:true}).waitFor();
+ assert.equal(await model.inputValue(),'model-b');
+ await model.fill('');await page.getByLabel('Effort ในแชท One',{exact:true}).selectOption('');
+ await target.selectOption('fixture-1');await page.getByLabel('Model ในแชท Two',{exact:true}).waitFor();
+ await target.selectOption('fixture-0');await model.waitFor();
+ await page.waitForTimeout(150);
+ assert.equal(await model.inputValue(),'');assert.equal(await page.getByLabel('Effort ในแชท One',{exact:true}).inputValue(),'');
+ await page.screenshot({path:path.join(data,'composer.png')});
+ console.log(JSON.stringify({passed:['per-message model effort skill','skill consumed','session isolation','CLI default reset survives switching'],screenshot:path.join(data,'composer.png')}));
+} finally { await closeApp(app,steps); }
+
+

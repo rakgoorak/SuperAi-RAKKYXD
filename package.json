@@ -1,6 +1,6 @@
 {
   "name": "superai-rakkyxd",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -26,7 +26,8 @@
     "test:release": "node packages/desktop/test/release-smoke.mjs",
     "test:team": "node packages/desktop/test/team-smoke.mjs",
     "test:voice": "node packages/desktop/test/voice-smoke.mjs",
-    "installer:release": "node scripts/build-installer.mjs"
+    "installer:release": "node scripts/build-installer.mjs",
+    "test:session-controls": "node packages/desktop/test/session-controls-smoke.mjs"
   },
   "devDependencies": {
     "@electron/packager": "^18.3.6",

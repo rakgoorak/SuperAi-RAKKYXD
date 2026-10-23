@@ -124,3 +124,41 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .composer-bottom, .compact-code .composer-bottom { position: relative; z-index: 10; }
 .compact-code .composer-bottom { position: absolute; }
 .compact-code .suggested-chips-bar { display: none; }
+/* Keep work visible at laptop sizes; all settings remain expandable. */
+.agent-mode .conversation-scroll { padding:12px 18px; }
+.agent-mode .mode-config:not([open]) { margin-bottom:6px; padding:6px 0; }
+.agent-mode .mode-config:not([open])>summary { align-items:center; }
+.agent-mode .mode-config:not([open])>summary>div { display:flex; align-items:center; gap:12px; min-width:0; }
+.agent-mode .mode-config:not([open])>summary h2 { white-space:nowrap; font-size:13px; }
+.agent-mode .mode-config:not([open])>summary p { white-space:nowrap; text-overflow:ellipsis; display:block; overflow:hidden; max-width:40vw; }
+.agent-mode .mission-brief { padding:4px 0!important; margin-bottom:6px!important; }
+.agent-mode .mission-view-switch { margin-bottom:4px; }
+.agent-mode .mission-view-switch button { padding:6px 12px; }
+.agent-mode .mission-stages { margin-bottom:8px; }
+.agent-mode .mission-stages li { padding:3px 6px; }
+.agent-mode .run-stage { margin:4px 0; }
+.agent-mode .agent-card { padding:12px; }
+.agent-mode .agent-card header { margin-bottom:4px; }
+.agent-mode .mission-task-list { margin:8px 0; }
+.agent-mode .mission-task-list li { padding:6px 0; }
+.agent-mode .composer-area { padding:6px 12px; }
+.agent-mode .composer-context { margin-bottom:4px; }
+.composer-suggestions>summary { display:none; }
+.agent-mode .composer-suggestions>summary { display:block; cursor:pointer; color:var(--dim); font-size:12px; padding:5px 12px; }
+.agent-mode .composer-suggestions>summary::before { content:'＋ '; }
+.agent-mode .composer-suggestions[open]>summary::before { content:'− '; }
+.agent-mode .composer-box textarea { height:48px; min-height:48px; max-height:160px; display:block; padding:8px 12px; }
+.agent-mode .composer-ghost-layer { padding:8px 12px; }
+.agent-mode .composer-bottom { padding:2px 10px 6px; }
+.state-cancelled>header .chip,.state-skipped>header .chip,.state-idle>header .chip { background:#263a4a; color:#b8c9d5; }
+.task-signal.state-cancelled,.task-signal.state-skipped { background:#9aabbb; }
+@media(max-width:760px) { .agent-mode .mode-config:not([open])>summary p { display:none; }.agent-mode .conversation-scroll { padding:10px; } }
+.work-canvas.agent-mode .composer-box textarea { height:44px; min-height:44px; }
+.agent-mode .mode-config:not([open])>summary .text-button { display:inline-flex; align-items:center; gap:6px; }
+.agent-mode .agent-card .agent-plan { margin:4px 0; }
+.agent-mode .agent-card .mission-task-list li { padding:4px 0; }
+
+/* Chat controls of the selected session, at the top of the bottom composer */
+.session-chat-controls { padding: 6px 10px 0; }
+.session-chat-controls .chat-account { margin-bottom: 6px; padding-top: 0; }
+.session-chat-controls .chat-model-controls { margin-bottom: 4px; }
