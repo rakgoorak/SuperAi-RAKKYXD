@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bot, Crown, LoaderCircle, Plus, Users } from "lucide-react";
 import type { Cli, Run, Seat, StepStatus } from "../api";
 import { HEADLESS, firstReady, seatFor, seatSummary } from "../providers";
 import { SeatPicker } from "./SeatPicker";
 import { ConfigShell } from "./ConfigShell";
+import { ProviderAccess } from "./ProviderAccess";
 import { Markdown } from "./Markdown";
 
 export interface AgentConfig { main: Seat; subagents: Seat[]; }
@@ -18,8 +19,8 @@ function defaultConfig(clis: Cli[]): AgentConfig {
   return { main: seatFor(mainCli, "Main"), subagents: [seatFor(subCli, "Sub-agent 1"), seatFor(mainCli, "Sub-agent 2")] };
 }
 
-export function AgentConfigEditor({ workspaceId, clis, ollamaModels, disabled, runCount, onChange }: {
-  workspaceId: string; clis: Cli[]; ollamaModels: string[]; disabled: boolean; runCount: number; onChange: (c: AgentConfig) => void;
+export function AgentConfigEditor({ workspaceId, clis, ollamaModels, disabled, runCount, onChange, onFixTools }: {
+  workspaceId: string; clis: Cli[]; ollamaModels: string[]; disabled: boolean; runCount: number; onChange: (c: AgentConfig) => void; onFixTools: () => void;
 }) {
   const key = `superai-agent-v1:${workspaceId}`;
   const [config, setConfig] = useState<AgentConfig>(() => {
@@ -35,6 +36,7 @@ export function AgentConfigEditor({ workspaceId, clis, ollamaModels, disabled, r
   }, [config, key, onChange]);
   const editSub = (index: number, seat: Seat) => setConfig((c) => ({ ...c, subagents: c.subagents.map((s, i) => (i === index ? seat : s)) }));
   return (
+    <>
     <ConfigShell label="ตั้งค่าทีม Agent" runCount={runCount} title={<><Users size={17} /> ทีม Agent</>}
       description="Main วางแผนและแจกงาน → Sub-agent ทำพร้อมกัน → Main ตรวจและสรุปผลให้คุณ"
       summary={`Main: ${config.main.name} (${seatSummary(config.main)}) · ${config.subagents.map((s) => `${s.name} (${seatSummary(s)})`).join(" · ")}`}>
@@ -55,74 +57,68 @@ export function AgentConfigEditor({ workspaceId, clis, ollamaModels, disabled, r
         <Plus size={13} /> เพิ่ม Sub-agent ({config.subagents.length}/{MAX_SUBAGENTS})
       </button>
     </ConfigShell>
+    <div className="team-access" aria-label="ความพร้อมของทีม">{Array.from(new Set([config.main, ...config.subagents].map(s => s.provider).filter(p => p.startsWith("cli:")).map(p => p.slice(4)))).map(provider => <ProviderAccess key={provider} provider={provider} wsId={workspaceId} compact onInstall={onFixTools} />)}</div>
+    </>
   );
 }
 
 const STEP: Record<StepStatus, string> = { pending: "รอคิว", running: "กำลังทำ", completed: "เสร็จแล้ว", failed: "ไม่สำเร็จ", cancelled: "ยกเลิก", skipped: "ข้าม" };
 const STAGE: Record<string, string> = { planning: "Main กำลังวางแผนและแบ่งงาน", working: "Sub-agent กำลังทำงาน", summarizing: "Main กำลังตรวจผลและสรุป", completed: "ทีมทำงานเสร็จแล้ว", failed: "จบโดยมีงานไม่สำเร็จ", cancelled: "ยกเลิกงานแล้ว" };
-const tail = (text: string, lines = 6) => text.trim().split("\n").slice(-lines).join("\n");
-
-export function AgentRunView({ run }: { run: Run }) {
+export function AgentRunView({ run, onFixTools }: { run: Run; onFixTools: () => void }) {
+  const [view, setView] = useState("overview");
+  const [selected, setSelected] = useState<number | null>(null);
+  const inspector = useRef<HTMLElement>(null);
+  const trigger = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => { if (selected !== null) inspector.current?.focus(); }, [selected]);
+  const close = () => { setSelected(null); trigger.current?.focus(); };
   const subs = run.subagents || [];
   const tasks = run.tasks || [];
+  const seat = selected === -1 ? run.main : selected === null ? null : subs[selected];
+  const assigned = selected === -1 ? tasks : tasks.filter(t => t.assignee === selected);
   const mainState = run.stage === "planning" || run.stage === "summarizing" ? "running" : run.status === "running" ? "waiting" : run.status;
-  return (
-    <section className="agent-run" aria-label="ความคืบหน้าทีม Agent">
-      <ol className="mission-stages" aria-label="ขั้นตอนการทำงาน">{[["planning", "วางแผน"], ["working", "ดำเนินการ"], ["summarizing", "ตรวจและสรุป"]].map(([stage, label], index) => <li key={stage} aria-current={run.stage === stage ? "step" : undefined}><span>{index + 1}</span>{label}</li>)}</ol><h3 className="run-stage">{run.status === "running" && <LoaderCircle size={13} className="spin" />}{STAGE[run.stage || run.status] || ""}</h3>
-      {run.main && (
+  return <section className="agent-run" aria-label="ความคืบหน้าทีม Agent">
+    <div className="mission-view-switch" role="group" aria-label="มุมมองงาน">
+      <button aria-pressed={view === "overview"} onClick={() => setView("overview")}>ภาพรวมงาน</button>
+      <button aria-pressed={view === "conversation"} onClick={() => { setView("conversation"); setSelected(null); }}>บทสนทนา</button>
+      <span className="mission-count">{tasks.filter(t => t.status === "completed").length}/{tasks.length} งานเสร็จ</span>
+    </div>
+    <h3 className="run-stage">{run.status === "running" && <LoaderCircle size={13} className="spin" />}{STAGE[run.stage || run.status] || ""}</h3>
+    <div hidden={view !== "overview"}>
+      <ol className="mission-stages" aria-label="ขั้นตอนการทำงาน">{[["planning", "วางแผน"], ["working", "ดำเนินการ"], ["summarizing", "ตรวจและสรุป"]].map(([stage, label], index) => <li key={stage} aria-current={run.stage === stage ? "step" : undefined} className={run.status === "completed" ? "stage-complete" : ""}><span>{run.status === "completed" ? "✓" : index + 1}</span>{label}</li>)}</ol>
+      <div className={"mission-workspace" + (selected !== null ? " has-inspector" : "")}>
         <div className="agent-cards">
-          <article className={`agent-card main state-${mainState}`}>
-            <header><Crown size={13} /><strong>{run.main.name}</strong><span className="chip">{mainState === "running" ? "กำลังคิด" : mainState === "waiting" ? "รอ Sub-agent" : STEP[mainState as StepStatus] || ""}</span></header>
-            <small>{seatSummary(run.main)}</small>
-            {run.plan && <p className="agent-plan">แนวทาง: {run.plan}</p>}
-          </article>
-          {subs.map((seat, index) => {
-            const mine = tasks.filter((t) => t.assignee === index);
-            const current = mine.find((t) => t.status === "running");
-            const state: string = current ? "running" : mine.some((t) => t.status === "failed") ? "failed" : mine.length && mine.every((t) => t.status === "completed") ? "completed" : mine.some((t) => t.status === "pending") ? "pending" : run.stage === "planning" ? "pending" : mine.length ? mine[mine.length - 1].status : "idle";
-            return (
-              <article key={index} className={`agent-card state-${state}`}>
-                <header><Bot size={13} /><strong>{seat.name}</strong><span className="chip">{state === "idle" ? "ไม่ได้รับงาน" : state === "pending" && run.stage === "planning" ? "รอแผน" : STEP[state as StepStatus]}</span></header>
-                <small>{seatSummary(seat)}</small><ul className="mission-task-list">{mine.map(task => <li key={task.id}><span className={"task-signal state-" + task.status} /><span>{task.title}</span><small>{STEP[task.status]}</small></li>)}</ul>
-                {current ? (
-                  <>
-                    <p className="agent-doing">กำลังทำ: {current.title}</p>
-                    {current.output && <pre className="agent-live">{tail(current.output)}</pre>}
-                  </>
-                ) : mine.length > 0 && <p className="agent-doing">{mine.filter((t) => t.status === "completed").length}/{mine.length} งานเสร็จ</p>}
-              </article>
-            );
+          {[...(run.main ? [run.main] : []), ...subs].map((member, i) => {
+            const index = run.main ? i - 1 : i;
+            const mine = index === -1 ? tasks : tasks.filter(t => t.assignee === index);
+            const current = mine.find(t => t.status === "running");
+            const state = index === -1 ? mainState : current ? "running" : mine.some(t => t.status === "failed") ? "failed" : mine.length && mine.every(t => t.status === "completed") ? "completed" : "pending";
+            return <article key={index} className={"agent-card state-" + state + (index === -1 ? " main" : "")}>
+              <header>{index === -1 ? <Crown size={16} /> : <Bot size={16} />}<strong>{member.name}</strong><span className="chip">{state === "waiting" ? "รอทีม" : STEP[state as StepStatus] || "รอแผน"}</span></header>
+              <small>{seatSummary(member)}</small>
+              {index === -1 && run.plan && <p className="agent-plan">{run.plan}</p>}
+              <ul className="mission-task-list">{mine.slice(0, 4).map(task => <li key={task.id}><span className={"task-signal state-" + task.status} /><span>{task.title}</span><small>{STEP[task.status]}</small></li>)}</ul>
+              {mine.length > 4 && <small>อีก {mine.length - 4} งานในรายละเอียด</small>}
+              {current && <p className="agent-doing">กำลังทำ: {current.title}</p>}
+              <button className="secondary inspect-agent" aria-expanded={selected === index} onClick={event => { trigger.current = event.currentTarget; setSelected(index); }}>ดูรายละเอียด {member.name}</button>
+            </article>;
           })}
         </div>
-      )}
-      {tasks.length > 0 && (
-        <ol className="task-board">
-          {tasks.map((t) => (
-            <li key={t.id} className={`state-${t.status}`}>
-              <details>
-                <summary>
-                  <span className="chip">{STEP[t.status]}</span>
-                  <strong>{t.title}</strong>
-                  <small>→ {subs[t.assignee]?.name}{t.dependsOn.length ? ` · รอ ${t.dependsOn.map((d) => tasks.find((x) => x.id === d)?.title || d).join(", ")}` : ""}</small>
-                </summary>
-                <p className="task-instructions">{t.instructions}</p>
-                {t.error && <div className="inline-error">{t.error}</div>}
-                {t.output ? <Markdown text={t.output} /> : <p className="muted">ยังไม่มีผลลัพธ์</p>}
-              </details>
-            </li>
-          ))}
-        </ol>
-      )}
-      {run.activity?.length > 0 && (
-        <details className="activity-log" open={run.status === "running"}>
-          <summary>ไทม์ไลน์การทำงาน ({run.activity.length})</summary>
-          <ul>
-            {run.activity.slice(-40).map((a, i) => (
-              <li key={i}><time>{new Date(a.at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time><strong>{a.who}</strong><span>{a.text}</span></li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </section>
-  );
+        {seat && <aside className="mission-inspector" ref={inspector} tabIndex={-1} aria-label={"รายละเอียด " + seat.name} onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); close(); } }}>
+          <header><h3>{seat.name}</h3><button className="secondary" onClick={close}>ปิดรายละเอียด</button></header>
+          <p className="muted">{seatSummary(seat)}</p>
+          {selected === -1 && run.plan && <p>{run.plan}</p>}
+          {assigned.map(task => <section key={task.id}><h4>{task.title}</h4><span className="chip">{STEP[task.status]}</span><p>{task.instructions}</p>{task.dependsOn.length > 0 && <small>รอ: {task.dependsOn.map(id => tasks.find(t => t.id === id)?.title || id).join(", ")}</small>}{task.error && <div role="alert" className="inline-error">{task.error}<button className="secondary" onClick={onFixTools}>ตรวจเครื่องมือและบัญชี</button></div>}{task.output ? <Markdown text={task.output} /> : <p className="muted">ยังไม่มีผลลัพธ์</p>}</section>)}
+          {!assigned.length && <p className="muted">ยังไม่มีงานที่ได้รับมอบหมาย</p>}
+          {selected === -1 && run.output && <Markdown text={run.output} />}
+        </aside>}
+      </div>
+      {view === "overview" && run.output && <details className="mission-result" open><summary>ผลลัพธ์ล่าสุดจาก Main</summary><Markdown text={run.output} /></details>}
+    </div>
+    <div hidden={view !== "conversation"} className="mission-conversation">
+      <h4>คำสั่งของคุณ</h4><p>{run.prompt}</p>
+      <ol className="task-board">{tasks.map(t => <li key={t.id} className={"state-" + t.status}><details><summary><span className="chip">{STEP[t.status]}</span><strong>{t.title}</strong><small>{subs[t.assignee]?.name}</small></summary><p>{t.instructions}</p>{t.error && <div className="inline-error">{t.error}</div>}{t.output ? <Markdown text={t.output} /> : <p className="muted">ยังไม่มีผลลัพธ์</p>}</details></li>)}</ol>
+      {view === "conversation" && (run.output ? <Markdown text={run.output} /> : <p className="muted">รอ Main สรุปผล…</p>)}
+      {!!run.activity?.length && <details className="activity-log"><summary>ไทม์ไลน์การทำงาน ({run.activity.length})</summary><ul>{run.activity.slice(-40).map((a, i) => <li key={i}><time>{new Date(a.at).toLocaleTimeString("th-TH")}</time><strong>{a.who}</strong><span>{a.text}</span></li>)}</ul></details>}
+    </div>
+  </section>;
 }
