@@ -68,7 +68,7 @@ import { ChatQuickControls } from "./components/ChatQuickControls";
 import { loadVoiceSettings, saveVoiceSettings, type VoiceSettings } from "./voice/speech";
 
 type Mode = "agent" | "code" | "chat";
-type Dialog = "session" | "settings" | "project" | "delete" | "clear" | "setup" | "skills" | "update" | null;
+type Dialog = "session-delete" | "session" | "settings" | "project" | "delete" | "clear" | "setup" | "skills" | "update" | null;
 const modeLabels: Record<Mode, string> = {
   agent: "Agent",
   code: "Code",
@@ -115,6 +115,9 @@ export function App() {
   const [dockView, setDockView] = useState<DockView>("browser");
   const [launchPlan, setLaunchPlan] = useState<LaunchSeat[] | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [deleteSession, setDeleteSession] = useState<{id: string; name: string} | null>(null);
+  useEffect(() => { const request = (event: Event) => { setDeleteSession((event as CustomEvent<{id: string; name: string}>).detail); setDialog("session-delete"); }; window.addEventListener("superai:delete-session", request); return () => window.removeEventListener("superai:delete-session", request); }, []);
+  const [settingsTab, setSettingsTab] = useState("tools");
   const [usageOpen, setUsageOpen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -292,14 +295,14 @@ export function App() {
     if (!dismissed && setupNeeded(clis, workspaces)) setDialog("setup");
   }, [connected, clis, workspaces]);
   useEffect(() => {
-    if (dialog !== "setup") return;
+    if (!dialog) return;
     const previous = document.activeElement;
     const panel = document.querySelector<HTMLElement>('[role="dialog"]');
     if (!panel) return;
     const controls = () => Array.from(panel.querySelectorAll<HTMLElement>(
       'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]',
     )).filter((element) => element.getClientRects().length > 0);
-    controls()[0]?.focus();
+    (dialog === "session-delete" ? panel.querySelector<HTMLElement>(".dialog-footer .secondary") : controls()[0])?.focus();
     const keepFocus = (event: KeyboardEvent) => {
       if (event.key !== "Tab") return;
       const items = controls();
@@ -567,7 +570,7 @@ export function App() {
                 <button
                   key={m}
                   className={mode === m ? "active" : ""}
-                  onClick={() => setMode(m)}
+                  onClick={() => { setMode(m); if (m === "agent") setPreview(false); }}
                 >
                   {m === "code" ? (
                     <Code2 size={15} />
@@ -691,7 +694,7 @@ export function App() {
                                 aria-label={`ลบ ${s.name}`}
                                 disabled={busy}
                                 onClick={() => {
-                                  if (window.confirm(`ลบ session "${s.name}"?\nประวัติแชตใน session นี้จะถูกลบด้วย`)) closeSession(s.id);
+                                  setDeleteSession({id: s.id, name: s.name}); setDialog("session-delete");
                                 }}
                               >
                                 <Trash2 size={12} />
@@ -1265,7 +1268,7 @@ export function App() {
             <div className="dialog-heading">
               <div>
                 <h2 id="dialog-title">
-                  {dialog === "session"
+                  {dialog === "session-delete" ? "ลบ session นี้?" : dialog === "session"
                     ? "เปิด session ใหม่"
                     : dialog === "settings"
                       ? "การตั้งค่าพื้นที่ทำงาน"
@@ -1315,6 +1318,7 @@ export function App() {
                 {dialog === "setup" ? "ดำเนินการไม่สำเร็จ กรุณาตรวจเครื่องมือหรือลองใหม่" : error}
               </div>
             )}
+            {dialog === "session-delete" && deleteSession && <><p className="confirm-description"><strong>{deleteSession.name}</strong><br />ประวัติแชตใน session นี้จะถูกลบด้วย</p><div className="dialog-footer"><button className="secondary" autoFocus onClick={closeDialog}>ยกเลิก</button><button className="danger-button" disabled={busy} onClick={() => { closeSession(deleteSession.id); setDialog(null); }}>ลบ session</button></div></>}
             {dialog === "session" && (
               <>
                 <CliInstaller clis={clis} onRefresh={checkClis} onError={showError}/>
@@ -1519,7 +1523,9 @@ export function App() {
             )}
             {dialog === "settings" && (
               <>
-                <div className="settings-content">
+                <div className="mission-settings">
+<nav className="settings-nav" aria-label="หมวดการตั้งค่า">{[["tools", "เครื่องมือ AI"], ["models", "Model และ Effort"], ["folders", "โฟลเดอร์"], ["voice", "เสียง"]].map(([id, label]) => <button key={id} aria-current={settingsTab === id ? "page" : undefined} onClick={() => setSettingsTab(id)}>{label}</button>)}</nav>
+<div className="settings-content"><section hidden={settingsTab !== "tools"}>
                   <div className="settings-section-title">
                     <h3>เครื่องมือ CLI</h3>
                     <button
@@ -1550,7 +1556,7 @@ export function App() {
                       </div>
                     ))}
                   </div>
-                  <CliVersionsPanel onError={showError} />
+                  <CliVersionsPanel onError={showError} /></section><section hidden={settingsTab !== "folders"}>
                   <div className="settings-section-title">
                     <h3>โฟลเดอร์โปรเจกต์</h3>
                   </div>
@@ -1562,7 +1568,7 @@ export function App() {
                     ใช้กับ Claude Code, Codex และ Antigravity เฉพาะโฟลเดอร์ที่คุณเพิ่มเป็นโปรเจกต์ เทียบเท่ากับการกด “Yes, I trust this folder” เอง
                     ปิดไว้ถ้าต้องการให้ CLI ถามก่อนทุกครั้ง
                   </p>
-                  <div className="settings-section-title">
+                  </section><section hidden={settingsTab !== "models"}><div className="settings-section-title">
                     <h3>model และ effort เริ่มต้น</h3>
                   </div>
                   <p className="muted">
@@ -1594,7 +1600,7 @@ export function App() {
                       ใส่ในช่องคำสั่ง
                     </button>
                   </div>
-                  <VoiceSettingsPanel settings={voiceSettings} onChange={setVoiceSettings} />
+                  </section><section hidden={settingsTab !== "voice"}><VoiceSettingsPanel settings={voiceSettings} onChange={setVoiceSettings} /></section></div>
                 </div>
                 <div className="dialog-footer">
                   <span className="muted">บันทึกการตั้งค่าอัตโนมัติ</span>

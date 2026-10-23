@@ -48,7 +48,7 @@ export function SessionEnded({ session, onRestart, onClose }: { session: Session
         </div>
         <div className="session-ended-actions">
           <button className="secondary" onClick={() => onRestart(session.id)}><RotateCw size={13} /> เปิดต่อ</button>
-          <button className="secondary" onClick={() => { if (window.confirm(`ลบ session "${session.name}"?`)) onClose(session.id); }}><X size={13} /> ลบ</button>
+          <button className="secondary" onClick={() => { window.dispatchEvent(new CustomEvent("superai:delete-session", { detail: { id: session.id, name: session.name } })); }}><X size={13} /> ลบ</button>
         </div>
       </div>
     );

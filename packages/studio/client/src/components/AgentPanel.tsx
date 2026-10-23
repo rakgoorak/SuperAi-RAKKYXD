@@ -68,7 +68,7 @@ export function AgentRunView({ run }: { run: Run }) {
   const mainState = run.stage === "planning" || run.stage === "summarizing" ? "running" : run.status === "running" ? "waiting" : run.status;
   return (
     <section className="agent-run" aria-label="ความคืบหน้าทีม Agent">
-      <h3 className="run-stage">{run.status === "running" && <LoaderCircle size={13} className="spin" />}{STAGE[run.stage || run.status] || ""}</h3>
+      <ol className="mission-stages" aria-label="ขั้นตอนการทำงาน">{[["planning", "วางแผน"], ["working", "ดำเนินการ"], ["summarizing", "ตรวจและสรุป"]].map(([stage, label], index) => <li key={stage} aria-current={run.stage === stage ? "step" : undefined}><span>{index + 1}</span>{label}</li>)}</ol><h3 className="run-stage">{run.status === "running" && <LoaderCircle size={13} className="spin" />}{STAGE[run.stage || run.status] || ""}</h3>
       {run.main && (
         <div className="agent-cards">
           <article className={`agent-card main state-${mainState}`}>
@@ -83,7 +83,7 @@ export function AgentRunView({ run }: { run: Run }) {
             return (
               <article key={index} className={`agent-card state-${state}`}>
                 <header><Bot size={13} /><strong>{seat.name}</strong><span className="chip">{state === "idle" ? "ไม่ได้รับงาน" : state === "pending" && run.stage === "planning" ? "รอแผน" : STEP[state as StepStatus]}</span></header>
-                <small>{seatSummary(seat)}</small>
+                <small>{seatSummary(seat)}</small><ul className="mission-task-list">{mine.map(task => <li key={task.id}><span className={"task-signal state-" + task.status} /><span>{task.title}</span><small>{STEP[task.status]}</small></li>)}</ul>
                 {current ? (
                   <>
                     <p className="agent-doing">กำลังทำ: {current.title}</p>

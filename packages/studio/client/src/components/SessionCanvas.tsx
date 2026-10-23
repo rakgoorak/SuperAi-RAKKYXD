@@ -25,7 +25,7 @@ interface Props {
 export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed, active, busy, select, zoom, close, restart, add, refresh, onError, switchView }: Props) {
   // Closing deletes the session for good (it is kept across restarts otherwise), so ask first.
   const remove = (s: Session) => {
-    if (window.confirm(`ลบ session "${names[s.id] || s.name}"?\nประวัติแชตใน session นี้จะถูกลบด้วย`)) close(s.id);
+    window.dispatchEvent(new CustomEvent("superai:delete-session", { detail: { id: s.id, name: names[s.id] || s.name } }));
   };
   const area = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(1000);
