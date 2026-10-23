@@ -20,7 +20,8 @@ test('skill discovery follows the provider and includes project, linked and glob
     write(path.join(home, '.claude/skills'), 'personal');
     write(path.join(root, '.claude/skills'), 'hidden', 'user-invocable: false\n');
     const shared = write(path.join(home, 'linked'), 'linked');
-    fs.symlinkSync(shared, path.join(root, '.agents/skills/linked'));
+    // A junction on Windows: a real symlink needs admin rights or Developer Mode there.
+    fs.symlinkSync(shared, path.join(root, '.agents/skills/linked'), process.platform === 'win32' ? 'junction' : 'dir');
     assert.ok(chatSkills(root, 'antigravity', home).some((s) => s.name === 'google-only'));
     assert.ok(!chatSkills(root, 'antigravity', home).some((s) => s.name === 'claude-only'));
     const claude = chatSkills(root, 'claude-code', home);
