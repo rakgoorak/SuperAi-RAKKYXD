@@ -1,0 +1,95 @@
+/* Mission Control: navy instruments, cyan actions, amber active work. */
+:root { color-scheme: dark; --base:#102131; --surface:#142638; --raised:#20384b; --border:#314c60; --dim:#a6bacb; --accent:#76bed1; --green:#80d4b0; --brand-green:#76bed1; --brand-teal:#76bed1; --brand-blue:#76bed1; --brand-gradient:linear-gradient(#76bed1,#76bed1); --on-brand:#102131; color:#eaf2f7; background:var(--base); }
+.titlebar { background:#102131; border-color:var(--border); height:58px; min-height:58px; }
+.titlebar::after { background:var(--border); opacity:1; }
+.brand-logo { filter:none; }
+.sidebar { background:#142638; border-color:var(--border); }
+.sidebar-bottom { background:#142638; }
+.primary,.send-button,.setup-btn-primary,.setup-quickstart-btn { background:#76bed1; color:#102131; box-shadow:none; border:1px solid #8ed3e4; border-radius:8px; }
+.primary:hover,.send-button:hover,.setup-btn-primary:hover { background:#99d5e4; filter:none; box-shadow:none; transform:none; }
+.secondary { background:#20384b; border:1px solid #3a566a; border-radius:8px; }
+.secondary:hover { background:#2b465b; }
+.mode-tabs button.active { background:#203e51; color:#9ee6f4; box-shadow:inset 0 -2px #76bed1; }
+.workspace-header,.toolbar,.statusbar { background:#142638; border-color:var(--border); }
+.composer-box { background:#182e40; border-color:#3c5c71; border-radius:12px; box-shadow:0 8px 24px #07121b26; }
+.composer-box textarea { background:transparent; font-size:14px; line-height:1.8; }
+.composer-box:focus-within { border-color:var(--accent); }
+.mode-config { background:#162b3d; border:1px solid var(--border); border-radius:12px; padding:16px; }
+.mode-config h2 { font-size:17px; font-weight:600; }
+.seat-row { background:#1a3143; border:1px solid var(--border); border-radius:8px; padding:12px; margin-top:8px; }
+.seat-badge { color:#b9d5e3; }
+.agent-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr)); gap:14px; align-items:stretch; }
+.agent-card { background:#142a3b; border:1px solid #36576b; border-top:3px solid #76bed1; border-radius:9px; padding:16px; min-width:0; }
+.agent-card.main { border-top-color:#e2ae68; background:#192e3e; }
+.agent-card header { gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+.agent-card header strong { font-size:16px; }
+.agent-card.state-running .chip { color:#e2ae68; background:#3b342b; }
+.agent-live { background:#102131; border-radius:6px; padding:12px; }
+.mission-stages { display:flex; padding:0; margin:4px 0 18px; list-style:none; gap:16px; }
+.mission-stages li { flex:1; display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:2px solid var(--border); color:var(--dim); font-size:13px; }
+.mission-stages li[aria-current] { color:#e2ae68; border-color:#e2ae68; background:#e2ae680a; }
+.mission-stages li>span { display:grid; place-items:center; border:1px solid currentColor; border-radius:50%; width:24px; height:24px; flex-shrink:0; font-family:Consolas,monospace; }
+.mission-task-list { margin:14px 0; padding:0; list-style:none; }
+.mission-task-list li { display:flex; gap:8px; align-items:baseline; padding:9px 0; border-bottom:1px solid #314c6066; font-size:12px; }
+.mission-task-list li>span:nth-child(2) { flex:1; overflow-wrap:anywhere; }
+.mission-task-list small { color:var(--dim); white-space:nowrap; }
+.task-signal { width:7px; height:7px; border-radius:50%; background:#8499aa; flex-shrink:0; }
+.task-signal.state-completed { background:#80d4b0; }.task-signal.state-running { background:#e2ae68; }.task-signal.state-failed { background:#e899a0; }
+.task-board>li,.answer-card,.activity-log { background:#162b3d; border-color:var(--border); border-radius:8px; }
+.studio-hub-container { background:transparent; padding:32px; }
+.studio-hub-hero { text-align:left; align-items:flex-start; }
+.studio-hub-hero h2 { font-size:30px; color:#eaf2f7; background:none; -webkit-text-fill-color:currentColor; }
+.studio-hub-badge { background:#20384b; color:#9dd7e6; border-color:#36576b; }
+.hub-workflow-card { background:#162c3e; border-color:#36576b; box-shadow:none; border-radius:12px; }
+.hub-workflow-card:hover { background:#20384b; border-color:#76bed1; transform:translateY(-2px); box-shadow:none; }
+.hub-agent-pill,.hub-prompt-chip { background:#162c3e; border-color:#314c60; }
+.modal-backdrop { background:#06111dc9; backdrop-filter:blur(5px); padding:24px; }
+.dialog { background:#162c3e; border:1px solid #476477; border-radius:14px; box-shadow:0 28px 90px #0008; padding:24px; max-height:calc(100dvh - 48px); overflow-y:auto; }
+.dialog-heading { border-bottom:1px solid var(--border); padding-bottom:18px; margin-bottom:20px; align-items:flex-start; }
+.dialog-heading h2 { font-size:21px; font-weight:600; }
+.dialog-heading p { color:var(--dim); line-height:1.7; margin-top:6px; }
+.dialog-footer { border-top:1px solid var(--border); padding-top:18px; margin-top:20px; }
+.dialog-footer button { min-height:40px; padding:8px 18px; }
+.dialog input:not([type=checkbox]):not([type=radio]),.dialog select,.dialog textarea { background:#102334; border:1px solid #496679; border-radius:7px; padding:9px 11px; color:#eaf2f7; }
+.dialog label { line-height:1.7; }
+.dialog [hidden] { display:none; }
+.settings-dialog { width:min(960px,96vw); }
+.mission-settings { display:grid; grid-template-columns:180px minmax(0,1fr); gap:24px; min-height:340px; }
+.settings-nav { border-right:1px solid var(--border); padding-right:16px; display:flex; flex-direction:column; gap:6px; align-items:stretch; }
+.settings-nav button { justify-content:flex-start; padding:12px; border-radius:7px; color:var(--dim); }
+.settings-nav button[aria-current] { color:#a2e2f1; background:#25495f; box-shadow:inset 3px 0 #76bed1; }
+.settings-content { max-height:55vh; overflow-y:auto; padding-right:10px; }
+.settings-content section>p { margin:10px 0; }
+.dialog-error,.inline-error { background:#482d36; color:#ffd8de; border-color:#a65f70; }
+.danger-button { background:#b84e64; color:white; border-radius:8px; }
+.cli-option { border-radius:9px; background:#1b3447; border-color:#36576b; }
+.cli-option.selected,.cli-option.active { border-color:#76bed1; background:#24475b; }
+.setup-hero-banner { background:#20384b; border-color:#36576b; box-shadow:none; }
+.setup-step-card,.provider-access { background:#162c3e; border-color:#36576b; }
+.setup-card-title-group p,.setup-notice-text { color:#a6bacb; }
+.setup-progress-fill { background:#76bed1; }
+.usage-popover,.dictation-confirm,.update-gate { background:#162c3e; color:#eaf2f7; border:1px solid #476477; border-radius:12px; box-shadow:0 18px 60px #0006; }
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible { outline:2px solid #9ee6f4; outline-offset:3px; }
+@media(max-width:900px) { .mission-settings { grid-template-columns:1fr; gap:12px; }.settings-nav { flex-direction:row; border-right:0; border-bottom:1px solid var(--border); padding:0 0 10px; overflow-x:auto; }.settings-nav button { white-space:nowrap; }.mission-stages { gap:6px; }.mission-stages li { padding:8px 4px; gap:5px; font-size:11px; } }
+@media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
+.project-sidebar { background:#142638; border-color:#314c60; }
+.workspace-toolbar,.canvas-heading { background:#162b3c; border-color:#314c60; }
+.main-column,.conversation-scroll { background:#102131; }
+.mode-switch { background:#102131; border:1px solid #36576b; border-radius:8px; padding:4px; }
+.mode-switch button { min-width:90px; padding:8px 16px; font-size:13px; }
+.mode-switch button.active { background:#25495f; color:#a2e2f1; box-shadow:inset 0 -2px #76bed1; }
+.project-group.active,.project-select:hover { background:#20384b; }
+.conversation-scroll { padding:24px; }
+.conversation-run { max-width:none; }
+.agent-card>header strong { font-size:16px; }
+.agent-card>small { font-size:12px; }
+.dialog-heading { padding:0 0 18px; }
+.dialog-footer { padding:18px 0 0; }
+.dialog-fields { padding:0; }
+/* Reserve vertical space for the team lanes on laptop screens. */
+.work-canvas:not(.code-mode) .composer-box textarea { height:64px; min-height:64px; }
+.work-canvas:not(.code-mode) .composer-area { background:#142638; }
+.mode-config:not([open]) { padding:12px 16px; }
+.mode-config:not([open])>summary p { display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; }
+.work-canvas:not(.code-mode) .user-message { margin-bottom:16px; padding:10px 16px; }
+.mission-stages { margin-bottom:12px; }

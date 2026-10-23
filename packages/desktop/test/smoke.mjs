@@ -41,8 +41,8 @@ try {
   // A fresh profile opens the first-run setup guide with real machine checks.
   const setup = page.getByRole("dialog", { name: "เริ่มต้นใช้งาน SuperAi" });
   await setup.waitFor();
-  await setup.getByText("Node.js 22", { exact: true }).waitFor();
-  await setup.getByText("เข้าสู่ระบบบัญชี AI", { exact: true }).waitFor();
+  await setup.getByText("Node.js 22 LTS (เอนจินระบบ)", { exact: true }).waitFor();
+  await setup.getByText("บัญชีและสิทธิ์เข้าถึง (Authentication)", { exact: true }).waitFor();
   await setup.getByRole("button", { name: "เสร็จแล้ว" }).click();
   await setup.waitFor({ state: "hidden" });
   checks++;
@@ -112,6 +112,12 @@ try {
       window.superai.browser("state").then((s) => !s.visible),
     ),
   );
+  const settingsNav = page.getByRole("navigation", { name: "หมวดการตั้งค่า" });
+  for (const label of ["Model และ Effort", "โฟลเดอร์", "เสียง", "เครื่องมือ AI"]) {
+    await settingsNav.getByRole("button", { name: label, exact: true }).click();
+    assert.equal(await settingsNav.getByRole("button", { name: label, exact: true }).getAttribute("aria-current"), "page");
+  }
+  await page.screenshot({ path: path.join(output, "mission-settings.png") });
   await page.getByRole("button", { name: "เสร็จแล้ว", exact: false }).click();
   checks++;
   const browserImage=await app.evaluate(async ({webContents},url)=>{
@@ -294,9 +300,14 @@ try {
   checks++;
   await page.getByRole("navigation", { name: "โหมดทำงาน" }).getByRole("button", { name: "Code", exact: true }).click();
   await page
-    .getByRole("button", { name: "ปิด Terminal", exact: true })
+    .getByRole("button", { name: /^ลบ Terminal/ })
     .first()
     .click();
+  const deletion = page.getByRole("dialog", { name: "ลบ session นี้?" });
+  await deletion.getByRole("button", { name: "ยกเลิก", exact: true }).click();
+  assert.equal((await request("/api/terminals")).body.length, 1);
+  await page.getByRole("button", { name: /^ลบ Terminal/ }).first().click();
+  await deletion.getByRole("button", { name: "ลบ session", exact: true }).click();
   await eventually(() =>
     page.evaluate(() =>
       fetch("/api/terminals")
