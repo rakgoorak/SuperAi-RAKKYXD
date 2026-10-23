@@ -66,6 +66,8 @@ import { attachMode, formatPath, pastedFiles, uploadAttachment, type SavedAttach
 import { SetupGuide, setupNeeded } from "./components/SetupGuide";
 import { ChatQuickControls } from "./components/ChatQuickControls";
 import { loadVoiceSettings, saveVoiceSettings, type VoiceSettings } from "./voice/speech";
+import { getSuggestions } from "./suggestions";
+import { SuggestedChips } from "./components/SuggestedChips";
 
 type Mode = "agent" | "code" | "chat";
 type Dialog = "session-delete" | "session" | "settings" | "project" | "delete" | "clear" | "setup" | "skills" | "update" | null;
@@ -130,6 +132,7 @@ export function App() {
   useEffect(() => {
     try { if (draft) localStorage.setItem("superai-draft", draft); else localStorage.removeItem("superai-draft"); } catch {}
   }, [draft]);
+  const [ghostDismissed, setGhostDismissed] = useState(false);
   const [target, setTarget] = useState("active");
   const [launchType, setLaunchType] = useState("claude-code");
   const [count, setCount] = useState(1);
@@ -165,6 +168,13 @@ export function App() {
   // Chat sessions take messages without a running terminal.
   const running = visible.filter((s) => s.status === "running" || paneView(s) === "chat");
   const conversation = runs.filter((r) => r.mode === mode);
+  const latestRun = conversation[conversation.length - 1] || null;
+  const suggestions = getSuggestions({
+    mode,
+    lastRun: latestRun,
+    activeSessionName: selectedSession?.name,
+    draft,
+  });
   const activeRun = runs.find((r) => r.status === "running");
   const launchCli = clis.find((c) => c.id === launchType);
   const showError = useCallback((text: string) => {
@@ -1131,36 +1141,85 @@ export function App() {
                 <div className="composer-box">
                   {mode === "chat" && chatConfig && workspace && <ChatQuickControls workspaceId={workspace.id} config={chatConfig} onChange={setChatConfig} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} draft={draft} onDraft={setDraft} />}
                   <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
-                  <textarea
-                    ref={composer}
-                    rows={mode === "code" && !composerExpanded ? 1 : 3}
-                    aria-label="คำสั่ง"
-                    placeholder={
-                      mode === "code"
-                        ? "พิมพ์คำสั่งให้ session ที่เลือก…"
-                        : mode === "agent"
-                          ? "บอกเป้าหมายให้ทีม เช่น ทำหน้าเข้าสู่ระบบพร้อมทดสอบ…"
-                          : "ถามคำถามเดียว ส่งให้ทุก AI ที่เลือก…"
-                    }
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onPaste={(e) => {
-                      const files = pastedFiles(e.clipboardData);
-                      if (!files.length) return;
-                      e.preventDefault();
-                      attachToComposer(files);
-                    }}
-                    onKeyDown={(e) => {
-                      if (
-                        e.key === "Enter" &&
-                        !e.shiftKey &&
-                        !e.nativeEvent.isComposing
-                      ) {
-                        e.preventDefault();
-                        void send();
-                      }
+                  <SuggestedChips
+                    items={suggestions.items}
+                    disabled={busy || !!activeRun}
+                    onSelect={(text) => {
+                      setDraft(text);
+                      requestAnimationFrame(() => composer.current?.focus());
                     }}
                   />
+                  <div className="composer-input-container">
+                    {!ghostDismissed && suggestions.ghostSuffix && (
+                      <div className="composer-ghost-layer" aria-hidden="true">
+                        {draft ? (
+                          <>
+                            <span style={{ opacity: 0 }}>{draft}</span>
+                            <span>{suggestions.ghostSuffix}</span>
+                          </>
+                        ) : (
+                          <span>{suggestions.topChoice?.promptText || suggestions.ghostSuffix}</span>
+                        )}
+                        <span className="tab-badge">Tab ⇥</span>
+                      </div>
+                    )}
+                    <textarea
+                      ref={composer}
+                      rows={mode === "code" && !composerExpanded ? 1 : 3}
+                      aria-label="คำสั่ง"
+                      placeholder={
+                        !draft && suggestions.ghostSuffix && !ghostDismissed
+                          ? ""
+                          : mode === "code"
+                            ? "พิมพ์คำสั่งให้ session ที่เลือก…"
+                            : mode === "agent"
+                              ? "บอกเป้าหมายให้ทีม เช่น ทำหน้าเข้าสู่ระบบพร้อมทดสอบ…"
+                              : "ถามคำถามเดียว ส่งให้ทุก AI ที่เลือก…"
+                      }
+                      value={draft}
+                      onChange={(e) => {
+                        setDraft(e.target.value);
+                        if (ghostDismissed) setGhostDismissed(false);
+                      }}
+                      onPaste={(e) => {
+                        const files = pastedFiles(e.clipboardData);
+                        if (!files.length) return;
+                        e.preventDefault();
+                        attachToComposer(files);
+                      }}
+                      onKeyDown={(e) => {
+                        if (
+                          e.key === "Tab" &&
+                          !e.shiftKey &&
+                          !e.ctrlKey &&
+                          !e.altKey &&
+                          !e.nativeEvent.isComposing &&
+                          !ghostDismissed &&
+                          suggestions.ghostSuffix
+                        ) {
+                          e.preventDefault();
+                          const completed = draft
+                            ? draft + suggestions.ghostSuffix
+                            : (suggestions.topChoice?.promptText || suggestions.ghostSuffix);
+                          setDraft(completed);
+                          return;
+                        }
+                        if (e.key === "Escape" && suggestions.ghostSuffix && !ghostDismissed) {
+                          e.preventDefault();
+                          setGhostDismissed(true);
+                          return;
+                        }
+                        if (
+                          e.key === "Enter" &&
+                          !e.shiftKey &&
+                          !e.nativeEvent.isComposing
+                        ) {
+                          e.preventDefault();
+                          void send();
+                        }
+                      }}
+                    />
+                  </div>
                   <div className="composer-bottom">
                     <div className="composer-tools">
                     <AttachMenu onFiles={attachToComposer} disabled={!workspace} />
