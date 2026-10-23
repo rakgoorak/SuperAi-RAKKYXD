@@ -21,7 +21,7 @@ export function ConfigShell({ label, title, description, summary, runCount, chil
           <h2>{title}</h2>
           <p>{open ? description : summary}</p>
         </div>
-        <span className="text-button">{open ? "ย่อ" : "แก้ไข"} <ChevronDown size={13} className={open ? "flip" : ""} /></span>
+        <span className="text-button">{open ? "ย่อการตั้งค่า" : "ตั้งค่าทีม"} <ChevronDown size={13} className={open ? "flip" : ""} /></span>
       </summary>
       {children}
     </details>

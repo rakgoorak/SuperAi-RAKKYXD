@@ -27,13 +27,14 @@ export function useProviderAccess(provider: string) {
   return { auth, checking, error, check };
 }
 
-export function ProviderAccess({ provider, wsId, sessionId, onStatus }: {
-  provider: string; wsId?: string; sessionId?: string; onStatus?: (status: CliAuthStatus) => void;
+export function ProviderAccess({ provider, wsId, sessionId, onStatus, compact = false, onInstall }: {
+  provider: string; wsId?: string; sessionId?: string; onStatus?: (status: CliAuthStatus) => void; compact?: boolean; onInstall?: () => void;
 }) {
   const { auth, checking, error, check } = useProviderAccess(provider);
   const [opening, setOpening] = useState(false);
   const [problem, setProblem] = useState("");
   useEffect(() => { if (auth) onStatus?.(auth); }, [auth, onStatus]);
+  if (compact && !error && !problem && (!auth || auth.status === "authenticated")) return null;
   return <div className={`provider-access ${auth?.status || "checking"}`}>
     <div><strong>{PROVIDER_LABEL[provider] || provider}</strong><small>{error || auth?.note || "กำลังตรวจบัญชี…"}</small></div>
     <button type="button" className="text-button" disabled={checking || opening} onClick={() => void check(true)}><RefreshCw size={12} className={checking ? "spin" : ""} /> ตรวจอีกครั้ง</button>
@@ -43,6 +44,7 @@ export function ProviderAccess({ provider, wsId, sessionId, onStatus }: {
       catch { setProblem("เปิดขั้นตอนเข้าสู่ระบบไม่สำเร็จ กรุณาตรวจโปรเจกต์และ CLI แล้วลองใหม่"); }
       finally { setOpening(false); }
     }}><LogIn size={13} /> {auth?.status === "authenticated" ? "จัดการบัญชี" : "เข้าสู่ระบบใน Terminal"}</button>}
+    {auth?.status === "not-installed" && onInstall && <button className="secondary" onClick={onInstall}>ตรวจและติดตั้งเครื่องมือ</button>}
     {problem && <small role="alert">{problem}</small>}
   </div>;
 }

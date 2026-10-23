@@ -784,11 +784,11 @@ export function App() {
               <UsageButton open={usageOpen} onOpenChange={setUsageOpen} />
               <button className={`toolbar-button ${preview && dockView === "dashboard" ? "selected" : ""}`} title="เปิดแผงสถานะ" onClick={() => { setDockView("dashboard"); setPreview(true); }}><Activity size={14} /><span>สถานะ</span></button>
               <button
-                className={`toolbar-button ${preview ? "selected" : ""}`}
+                aria-label="Preview" className={`toolbar-button ${preview ? "selected" : ""}`}
                 onClick={() => { setDockView("browser"); setPreview(dockView === "browser" ? !preview : true); }}
               >
                 <Globe size={15} />
-                <span>Preview</span>
+                <span>เปิด Preview</span>
               </button>
               <button
                 className="primary compact"
@@ -798,7 +798,7 @@ export function App() {
                 onClick={() => openSession()}
               >
                 <Plus size={15} />
-                <span>สร้าง session</span>
+                <span>เพิ่ม session</span>
               </button>
             </div>
           </div>
@@ -1020,7 +1020,7 @@ export function App() {
               {mode !== "code" && (
                 <div className="conversation-scroll">
                   {mode === "agent" ? (
-                    <AgentConfigEditor key={`agent-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun} runCount={conversation.length} onChange={setAgentConfig} />
+                    <AgentConfigEditor key={`agent-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun} runCount={conversation.length} onChange={setAgentConfig} onFixTools={() => openSession()} />
                   ) : (
                     <ChatConfigEditor key={`chat-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun} runCount={conversation.length} onChange={setChatConfig} value={chatConfig} />
                   )}
@@ -1039,7 +1039,7 @@ export function App() {
                   ) : (
                     conversation.map((run) => (
                       <article className="conversation-run" key={run.id}>
-                        <div className="user-message">
+                        <div className={`user-message ${run.mode === "agent" ? "mission-brief" : ""}`}>
                           <span className="message-author">
                             คุณ{" "}
                             <time>
@@ -1048,12 +1048,12 @@ export function App() {
                           </span>
                           <p>{run.prompt}</p>
                         </div>
-                        {run.mode === "chat" && run.panel ? <ChatRunView run={run} /> : run.main ? <AgentRunView run={run} /> : null}
-                        {(run.mode === "agent" || !run.panel) && (
+                        {run.mode === "chat" && run.panel ? <ChatRunView run={run} /> : run.main ? <AgentRunView run={run} onFixTools={() => setDialog("setup")} /> : null}
+                        {(!run.main && (run.mode === "agent" || !run.panel)) && (
                           <div className="assistant-message">
                             <div className="message-author">
                               <img className="small-brand" src="/brand/mark.png" alt="" />{" "}
-                              {run.main ? `รายงานจาก ${run.main.name}` : "SuperAi"}{" "}
+                              SuperAi{" "}
                               <span className={`run-state ${run.status === "failed" ? "danger-text" : ""}`}>
                                 {run.status === "running" && <LoaderCircle size={12} className="spin" />}
                                 {statusText[run.status]}
@@ -1066,7 +1066,7 @@ export function App() {
                             ) : null}
                           </div>
                         )}
-                        {run.error && <div className="inline-error">{run.error}</div>}
+                        {run.error && <div className="inline-error" role="alert">{run.error}<button className="secondary" onClick={() => setDialog("setup")}>ตรวจเครื่องมือและบัญชี</button></div>}
                       </article>
                     ))
                   )}
