@@ -78,7 +78,11 @@ export function ModelCombo({ value, options, onChange, label, placeholder, maxLe
       />
       <button type="button" className="model-combo-toggle" tabIndex={-1} aria-label={`ดูรายชื่อ ${label} ทั้งหมด`} disabled={disabled || !options.length}
         onMouseDown={(e) => e.preventDefault()}
-        onClick={() => (open ? setOpen(false) : show())}>
+        onClick={() => {
+          root.current?.querySelector('input')?.focus({ preventScroll: true });
+          if (open) setOpen(false);
+          else show();
+        }}>
         <ChevronDown size={14} />
       </button>
       {open && shown.length > 0 && (

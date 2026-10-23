@@ -29,8 +29,22 @@ try {
  const model=page.getByLabel('Model ในแชท One',{exact:true});await model.waitFor();
  steps.step('model defaults'); await page.waitForFunction(()=>document.querySelector('[aria-label="Model ในแชท One"]')?.value==='model-a',null,{timeout:20000});
  await model.fill('model-b');await page.getByLabel('Effort ในแชท One',{exact:true}).selectOption('low');
+ const composer = page.getByLabel('คำสั่ง',{exact:true});
+ await composer.fill('/');
+ const slashList=page.getByRole('listbox',{name:'เลือก skill หรือคำสั่ง'});
+ await slashList.getByRole('option').filter({hasText:'review'}).waitFor();
+ await page.locator('.slash-menu').screenshot({path:path.join(data,'slash-menu.png')});
+ await composer.fill('/rev');
+ await slashList.getByRole('option').filter({hasText:'review'}).waitFor();
+ await composer.press('Enter');
+ assert.equal(await composer.inputValue(),'/skill review ');
+ assert.equal(sent.length,0,'selecting a slash suggestion must not send');
+ await composer.fill('/not-a-real-skill');
+ await page.getByText('ไม่พบ skill ที่ตรงกัน · ติดตั้งเพิ่มได้จากหน้า Skills',{exact:true}).waitFor();
+ await composer.press('Escape');
+ await slashList.waitFor({state:'hidden'});
  await page.getByRole('button',{name:'/skills',exact:true}).click();
- await page.getByRole('button',{name:'/review',exact:false}).click();
+ await slashList.getByRole('option').filter({hasText:'review'}).click();
  await page.getByLabel('คำสั่ง',{exact:true}).fill('/skill review check');
  await page.getByRole('button',{name:'ส่งคำสั่ง (Enter)',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('textarea[aria-label="คำสั่ง"]')?.value==='');
@@ -45,6 +59,18 @@ try {
  await page.waitForTimeout(150);
  assert.equal(await model.inputValue(),'');assert.equal(await page.getByLabel('Effort ในแชท One',{exact:true}).inputValue(),'');
  await page.screenshot({path:path.join(data,'composer.png')});
+ await page.locator('.composer-area').screenshot({path:path.join(data,'composer-detail.png')});
+ await page.getByRole('button',{name:'ดูรายชื่อ Model ในแชท One ทั้งหมด',exact:true}).click();
+ const modelList=page.getByRole('listbox',{name:'Model ในแชท One',exact:true});
+ await modelList.waitFor();
+ const listBox=await modelList.boundingBox(); const fieldBox=await page.getByRole('combobox',{name:'Model ในแชท One',exact:true}).boundingBox();
+ assert.ok(listBox.y+listBox.height<=fieldBox.y+1, 'model menu opens above composer');
+ await page.keyboard.press('Escape'); await modelList.waitFor({state:'hidden'});
+ await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setContentSize(1000,760));
+ await page.waitForTimeout(300);
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ await page.locator('.composer-area').screenshot({path:path.join(data,'composer-narrow.png')});
+
  console.log(JSON.stringify({passed:['per-message model effort skill','skill consumed','session isolation','CLI default reset survives switching'],screenshot:path.join(data,'composer.png')}));
 } finally { await closeApp(app,steps); }
 
