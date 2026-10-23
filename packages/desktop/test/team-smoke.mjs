@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { _electron as electron } from 'playwright-core';
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
@@ -8,6 +9,9 @@ import { stepper, withTimeout, watchPage, closeApp, watchdog, snapshot } from '.
 const require=createRequire(import.meta.url);
 await fs.mkdir('output',{recursive:true});
 const data=await fs.mkdtemp(path.resolve('output','team-check-'));
+const git=(...args)=>execFileSync('git',args,{cwd:data,windowsHide:true});
+await fs.writeFile(path.join(data,'.gitignore'),'*\n!sample.txt\n!.gitignore\n');
+await fs.writeFile(path.join(data,'sample.txt'),'before\n');git('init');git('add','.');git('-c','user.name=Fixture','-c','user.email=fixture@example.com','commit','-m','fixture');await fs.writeFile(path.join(data,'sample.txt'),'after\n');
 const calls=[];
 const service=http.createServer(async(req,res)=>{
  if(req.url==='/api/tags'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({models:['leader-fixture','coder-fixture','reviewer-fixture'].map(name=>({name}))}));return;}
@@ -88,6 +92,29 @@ try{
  await page.locator('.conversation-scroll').evaluate(el=>el.scrollTop=0);
  passed.push('team details visible on laptop, expandable suggestions and inspector close');
  await page.screenshot({path:path.join(data,'agent-desktop.png')});
+ const firstRun=page.locator('.conversation-run').first();
+ await firstRun.getByRole('button',{name:'ลองใหม่',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelectorAll('.conversation-run').length===2);
+ await page.waitForFunction(()=>[...document.querySelectorAll('.run-stage')].filter(el=>el.textContent.includes('ทีมทำงานเสร็จแล้ว')).length===2);
+ await page.locator('.conversation-run').last().getByRole('button',{name:'แก้ข้อความแล้วส่งใหม่',exact:true}).click();
+ assert.equal(await page.getByLabel('คำสั่ง',{exact:true}).inputValue(),'สร้างและตรวจงานทดสอบ');
+ await page.getByRole('button',{name:'ค้นหาประวัติ',exact:true}).click();
+ const history=page.getByRole('dialog',{name:'ค้นหาประวัติบทสนทนา'});
+ await history.getByLabel('ค้นหาประวัติบทสนทนา').fill('TEAM_COMPLETE');
+ await history.locator('.history-results button').first().waitFor();
+ await page.screenshot({path:path.join(data,'history.png')});
+ await history.locator('.history-results button').first().click();
+ await history.waitFor({state:'hidden'});
+ await page.locator('.conversation-run').last().getByRole('button',{name:'ไฟล์ที่เปลี่ยน / Preview',exact:true}).click();
+ const changes=page.getByRole('dialog',{name:'ไฟล์ที่เปลี่ยนและผลงาน'});
+ await changes.getByRole('button',{name:'sample.txt',exact:true}).click();
+ await changes.getByText('+after',{exact:false}).waitFor();
+ await page.screenshot({path:path.join(data,'changes.png')});
+ await changes.getByRole('button',{name:'เปิดไฟล์',exact:true}).click();
+ assert.equal(await changes.locator('pre').textContent(),'after\n');
+ await changes.getByRole('button',{name:'เปิด Preview',exact:true}).click();
+ await changes.waitFor({state:'hidden'});
+ passed.push('retry original run, edit draft, search saved history, actual Git diff/file and Preview');
  steps.step('Chat run');
  // Chat: one prompt to two Mains, then a summarizer that credits both.
  await page.getByRole('navigation', { name: 'โหมดทำงาน' }).getByRole('button', { name: 'Chat', exact: true }).click();

@@ -13,13 +13,15 @@ try {
  const ws = await page.evaluate(async rootPath => (await fetch('/api/workspaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Composer fixture',rootPath})})).json(), data);
  assert.ok(ws.id, JSON.stringify(ws));
  const sessions = ['One','Two'].map((name,i)=>({id:'fixture-'+i,wsId:ws.id,name,agentType:'codex',view:'chat',status:'running',cwd:data,createdAt:Date.now(),bufferedOutput:''}));
+ const chatItems=id=>[{id:'old-user',kind:'user',text:'previous '+id,at:1,request:{text:'previous '+id,model:'original-model',effort:'high',attachments:[]}}, {id:'old-answer',kind:'assistant',text:'saved response '+id,at:2}, ...Array.from({length:40},(_,index)=>({id:'note-'+index,kind:'notice',text:'บันทึกงาน '+index,at:index+3}))];
+ await page.routeWebSocket('**/ws/chat/fixture-*',socket=>socket.send(JSON.stringify({type:'snapshot',chat:{items:chatItems(socket.url().split('/').at(-1)),running:false}})));
  const sent=[];
  await page.route('**/api/workspaces', r=>r.fulfill({json:[ws]}));
  await page.route('**/api/terminals', r=>r.fulfill({json:sessions}));
  await page.route('**/api/providers/codex/models',r=>r.fulfill({json:{models:['model-a','model-b'],efforts:['low','high']}}));
  await page.route('**/api/clis/codex/auth*',r=>r.fulfill({json:{id:'codex',status:'authenticated',note:'พร้อม',checkedAt:Date.now(),loginCommand:'codex login'}}));
  await page.route('**/api/terminals/fixture-*/chat/settings',r=>r.fulfill({json:{agent:'codex',model:'model-a',effort:'high',skills:[{id:'test-skill',name:'review',description:'Review files',source:'project',path:'review.md'}]}}));
- await page.route('**/api/terminals/fixture-*/chat',r=>{sent.push({url:r.request().url(),...r.request().postDataJSON()});return r.fulfill({json:{success:true}});});
+ await page.route('**/api/terminals/fixture-*/chat',r=>{if(r.request().method()==='GET')return r.fulfill({json:{items:chatItems('fixture-0'),running:false}});sent.push({url:r.request().url(),...r.request().postDataJSON()});return r.fulfill({json:{success:true}});});
  await page.reload({waitUntil:'domcontentloaded'});
  await page.waitForSelector('.app-shell');
  await page.getByRole('button',{name:/^Composer fixture/}).click();
@@ -27,6 +29,11 @@ try {
  const target=page.getByLabel('เป้าหมายคำสั่ง',{exact:true});
  steps.step('select first'); await target.selectOption('fixture-0');
  const model=page.getByLabel('Model ในแชท One',{exact:true});await model.waitFor();
+ await page.getByLabel('บัญชีของ session',{exact:true}).click();
+ await page.getByRole('button',{name:'ตรวจบัญชีอีกครั้ง',exact:true}).waitFor();
+ await page.getByRole('button',{name:'ตรวจบัญชีอีกครั้ง',exact:true}).focus();
+ await page.keyboard.press('Escape');
+ await page.getByRole('button',{name:'ตรวจบัญชีอีกครั้ง',exact:true}).waitFor({state:'hidden'});
  steps.step('model defaults'); await page.waitForFunction(()=>document.querySelector('[aria-label="Model ในแชท One"]')?.value==='model-a',null,{timeout:20000});
  await model.fill('model-b');await page.getByLabel('Effort ในแชท One',{exact:true}).selectOption('low');
  const composer = page.getByLabel('คำสั่ง',{exact:true});
@@ -62,6 +69,22 @@ try {
  await target.selectOption('fixture-0');await model.waitFor();
  await page.waitForTimeout(150);
  assert.equal(await model.inputValue(),'');assert.equal(await page.getByLabel('Effort ในแชท One',{exact:true}).inputValue(),'');
+ const firstChat=page.locator('[data-session-id="fixture-0"] .chat-view');
+ await firstChat.getByRole('button',{name:'แก้ข้อความแล้วส่งใหม่',exact:true}).click();
+ assert.equal(await page.getByLabel('คำสั่ง',{exact:true}).inputValue(),'previous fixture-0');
+ const beforeRetry=sent.length;
+ await firstChat.getByRole('button',{name:'ลองใหม่',exact:true}).click();
+ for(let i=0;i<30&&sent.length===beforeRetry;i++)await page.waitForTimeout(100);
+ assert.equal(sent.at(-1).model,'original-model');assert.equal(sent.at(-1).text,'previous fixture-0');
+ await target.selectOption('fixture-1');
+ await page.getByLabel('Model ในแชท Two',{exact:true}).fill('model-b');
+ const secondChat=page.locator('[data-session-id="fixture-1"] .chat-view');
+ await secondChat.locator('.chat-scroll').evaluate(el=>{el.scrollTop=160;el.dispatchEvent(new Event('scroll'));});
+ await page.reload({waitUntil:'domcontentloaded'});
+ await page.getByLabel('Model ในแชท Two',{exact:true}).waitFor();
+ await page.waitForFunction(()=>document.querySelector('[aria-label="Model ในแชท Two"]')?.value==='model-b');
+ await page.waitForFunction(()=>document.querySelector('[data-session-id="fixture-1"] .chat-scroll')?.scrollTop>50);
+ await target.selectOption('fixture-0');await model.waitFor();
  await page.screenshot({path:path.join(data,'composer.png')});
  await page.locator('.composer-area').screenshot({path:path.join(data,'composer-detail.png')});
  await page.getByRole('button',{name:'ดูรายชื่อ Model ในแชท One ทั้งหมด',exact:true}).click();
@@ -75,5 +98,5 @@ try {
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await page.locator('.composer-area').screenshot({path:path.join(data,'composer-narrow.png')});
 
- console.log(JSON.stringify({passed:['per-message model effort skill','slash after text','slash without /skill prefix','session isolation','CLI default reset survives switching'],screenshot:path.join(data,'composer.png')}));
+ console.log(JSON.stringify({passed:['per-message model effort skill','slash after text','slash without /skill prefix','session isolation','CLI default reset survives switching','retry original message settings','edit message to draft','selected session, model and scroll restored after reload'],screenshot:path.join(data,'composer.png')}));
 } finally { await closeApp(app,steps); }

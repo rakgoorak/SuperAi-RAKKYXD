@@ -20,7 +20,7 @@ const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 
 export type ToolKind = "command" | "read" | "edit" | "search" | "web" | "plan" | "other";
 export type ChatItem =
-  | { id: string; kind: "user"; text: string; attachments?: string[]; at: number }
+  | { id: string; kind: "user"; text: string; attachments?: string[]; request?: { text: string; model?: string; effort?: string; skillId?: string; attachments?: string[] }; at: number }
   | { id: string; kind: "assistant"; text: string; at: number }
   | { id: string; kind: "tool"; tool: ToolKind; title: string; output?: string; status: "running" | "done" | "failed"; at: number }
   | { id: string; kind: "error" | "notice"; text: string; at: number };
@@ -362,7 +362,7 @@ export class CliChatManager {
     // Resolved first: a CLI that is not installed is refused before the message joins the chat.
     const launch = this.launcher(agent, args);
     const prefix = `t${++chat.turns}`;
-    this.put(id, chat, { id: `${prefix}-user`, kind: "user", text, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}) });
+    this.put(id, chat, { id: `${prefix}-user`, kind: "user", text, request: { text, model: request.model, effort: request.effort, skillId: request.skillId, attachments: files }, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}) });
     chat.running = true;
     chat.cancelled = false;
     this.emit(chat, { type: "state", running: true });

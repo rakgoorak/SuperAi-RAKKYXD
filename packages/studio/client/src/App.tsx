@@ -1,3 +1,7 @@
+import { recoveryHint } from "./recovery";
+import { ChangesPanel } from "./components/ChangesPanel";
+import { HistoryPanel, type HistoryEntry } from "./components/HistoryPanel";
+import { RunActions } from "./components/RunActions";
 import { SlashMenu, type SlashMenuHandle } from "./components/SlashMenu";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -72,7 +76,7 @@ import { getSuggestions } from "./suggestions";
 import { SuggestedChips } from "./components/SuggestedChips";
 
 type Mode = "agent" | "code" | "chat";
-type Dialog = "session-delete" | "session" | "settings" | "project" | "delete" | "clear" | "setup" | "skills" | "update" | null;
+type Dialog = "history" | "changes" | "session-delete" | "session" | "settings" | "project" | "delete" | "clear" | "setup" | "skills" | "update" | null;
 const modeLabels: Record<Mode, string> = {
   agent: "Agent",
   code: "Code",
@@ -101,7 +105,9 @@ export function App() {
   const [activeWs, setActiveWs] = useState(initial("superai-workspace", ""));
   const [sessions, setSessions] = useState<Session[]>([]);
   const [clis, setClis] = useState<Cli[]>([]);
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState(() => initial("superai-selected", ""));
+  useEffect(() => { try { localStorage.setItem("superai-selected", selected); } catch {} }, [selected]);
+  const [historyRun, setHistoryRun] = useState("");
   const [mode, setMode] = useState<Mode>(() => {
     const saved = initial("superai-mode", "code");
     return saved === "agent" || saved === "chat" ? saved : "code";
@@ -255,7 +261,7 @@ export function App() {
   }, [refresh, checkClis, task]);
   useEffect(() => {
     localStorage.setItem("superai-workspace", activeWs);
-    setSelected(current => sessions.some(session => session.id === current && session.wsId === activeWs) ? current : "");
+    if (connected) setSelected(current => sessions.some(session => session.id === current && session.wsId === activeWs) ? current : "");
     setTarget("active");
     setRuns([]);
   }, [activeWs]);
@@ -509,6 +515,42 @@ export function App() {
       setDraft("");
       attachments.clear();
     });
+  useEffect(() => {
+    const prepare = (event: Event) => {
+      const detail = (event as CustomEvent<{text: string; sessionId?: string}>).detail;
+      if (detail.sessionId) {
+        const session = sessions.find(s => s.id === detail.sessionId);
+        if (session?.wsId) setActiveWs(session.wsId);
+        setMode("code"); setSelected(detail.sessionId); setTarget(detail.sessionId);
+      }
+      setDraft(detail.text); setComposerExpanded(true);
+      requestAnimationFrame(() => composer.current?.focus());
+    };
+    const changes = (event: Event) => {
+      const id = (event as CustomEvent<{sessionId?: string}>).detail?.sessionId;
+      const session = sessions.find(s => s.id === id);
+      if (session?.wsId) setActiveWs(session.wsId);
+      setDialog("changes");
+    };
+    const setup = () => setDialog("setup");
+    const reload = () => { if (activeWs) void api<Run[]>(`/api/conversations/${activeWs}`).then(setRuns, error => showError(error.message)); };
+    window.addEventListener("superai:prepare-message", prepare);
+    window.addEventListener("superai:show-changes", changes);
+    window.addEventListener("superai:open-setup", setup);
+    window.addEventListener("superai:refresh-runs", reload);
+    return () => {
+      window.removeEventListener("superai:prepare-message", prepare);
+      window.removeEventListener("superai:show-changes", changes);
+      window.removeEventListener("superai:open-setup", setup);
+      window.removeEventListener("superai:refresh-runs", reload);
+    };
+  }, [sessions, activeWs, showError]);
+  useEffect(() => { if (historyRun && runs.some(run => run.id === historyRun)) { document.getElementById('run-' + historyRun)?.scrollIntoView({ block: 'start' }); setHistoryRun(''); } }, [historyRun, runs]);
+  const openHistoryEntry = (entry: HistoryEntry) => {
+    setActiveWs(entry.wsId); setMode(entry.mode); setDialog(null);
+    if (entry.sessionId) { setSelected(entry.sessionId); setTarget(entry.sessionId); try { localStorage.setItem('superai-jump:' + entry.sessionId, entry.id); window.dispatchEvent(new CustomEvent('superai:jump-message', {detail:entry.sessionId})); } catch {} }
+    else setHistoryRun(entry.id);
+  };
   const dropTarget = useWindowDrop(attachToComposer, connected && !dialog);
   const interrupt = () =>
     task(async () => {
@@ -749,7 +791,7 @@ export function App() {
                 </p>
               )}
             </div>
-            <div className="sidebar-bottom">
+            <div className="sidebar-bottom"><button onClick={() => setDialog("history")}><Search size={17} /> ค้นหาประวัติ</button>
               <button onClick={() => setDialog("setup")} title="ตรวจความพร้อมและตั้งค่าเริ่มต้น">
                 <Rocket size={17} />
                 <span>
@@ -840,7 +882,7 @@ export function App() {
               role={error ? "alert" : "status"}
             >
               {error ? <AlertCircle size={16} /> : <Check size={16} />}
-              <span>{error || notice}</span>
+              <span>{error || notice}{error && <small className="banner-guidance">{recoveryHint(error)}<button onClick={() => {setComposerExpanded(true);requestAnimationFrame(() => composer.current?.focus());}}>กลับไปแก้ข้อความ</button><button onClick={() => setDialog("setup")}>ตรวจบัญชีและเครื่องมือ</button></small>}</span>
               <button
                 className="icon-button"
                 title="ปิดข้อความแจ้งเตือน"
@@ -1067,7 +1109,7 @@ export function App() {
                     </div>
                   ) : (
                     conversation.map((run) => (
-                      <article className="conversation-run" key={run.id}>
+                      <article className="conversation-run" id={`run-${run.id}`} key={run.id}>
                         <div className={`user-message ${run.mode === "agent" ? "mission-brief" : ""}`}>
                           <span className="message-author">
                             คุณ{" "}
@@ -1095,6 +1137,7 @@ export function App() {
                             ) : null}
                           </div>
                         )}
+                        <RunActions run={run} blocked={!!activeRun || busy} />
                         {run.error && <div className="inline-error" role="alert">{run.error}<button className="secondary" onClick={() => setDialog("setup")}>ตรวจเครื่องมือและบัญชี</button></div>}
                       </article>
                     ))
@@ -1110,7 +1153,10 @@ export function App() {
                         <select
                           aria-label="เป้าหมายคำสั่ง"
                           value={target}
-                          onChange={(e) => setTarget(e.target.value)}
+                          onChange={(e) => {
+                            setTarget(e.target.value);
+                            if (e.target.value !== "active" && e.target.value !== "all") setSelected(e.target.value);
+                          }}
                         >
                           <option value="active">
                             {selectedSession?.name || "เลือก session"} ·
@@ -1340,7 +1386,7 @@ export function App() {
           }}
         >
           <section
-            className={`dialog ${dialog === "settings" || dialog === "skills" ? "settings-dialog" : ""}`}
+            className={`dialog ${dialog === "settings" || dialog === "skills" || dialog === "history" || dialog === "changes" ? "settings-dialog" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="dialog-title"
@@ -1351,7 +1397,7 @@ export function App() {
             <div className="dialog-heading">
               <div>
                 <h2 id="dialog-title">
-                  {dialog === "session-delete" ? "ลบ session นี้?" : dialog === "session"
+                  {dialog === "history" ? "ค้นหาประวัติบทสนทนา" : dialog === "changes" ? "ไฟล์ที่เปลี่ยนและผลงาน" : dialog === "session-delete" ? "ลบ session นี้?" : dialog === "session"
                     ? "เปิด session ใหม่"
                     : dialog === "settings"
                       ? "การตั้งค่าพื้นที่ทำงาน"
@@ -1382,7 +1428,7 @@ export function App() {
                             ? `${workspace?.name || ""} · AI เสนอ คุณเป็นคนกดติดตั้ง`
                             : dialog === "update"
                               ? "ดาวน์โหลดเวอร์ชันใหม่จาก GitHub Releases แล้วติดตั้งทับให้เอง"
-                            : "กรุณาตรวจสอบก่อนดำเนินการ"}
+                            : dialog === "history" ? "ค้นหาข้อความและคำตอบที่บันทึกไว้ แล้วเปิดกลับไปทำงานต่อ" : dialog === "changes" ? "ตรวจไฟล์และ diff ของโปรเจกต์ หรือเปิดตัวอย่างผลงาน" : "กรุณาตรวจสอบก่อนดำเนินการ"}
                 </p>
               </div>
               <button
@@ -1401,6 +1447,8 @@ export function App() {
                 {dialog === "setup" ? "ดำเนินการไม่สำเร็จ กรุณาตรวจเครื่องมือหรือลองใหม่" : error}
               </div>
             )}
+            {dialog === "history" && <HistoryPanel workspaces={workspaces} sessions={sessions} onSelect={openHistoryEntry} />}
+            {dialog === "changes" && workspace && <ChangesPanel workspaceId={workspace.id} onPreview={() => { setDialog(null); setDockView("browser"); setPreview(true); }} />}
             {dialog === "session-delete" && deleteSession && <><p className="confirm-description"><strong>{deleteSession.name}</strong><br />ประวัติแชตใน session นี้จะถูกลบด้วย</p><div className="dialog-footer"><button className="secondary" autoFocus onClick={closeDialog}>ยกเลิก</button><button className="danger-button" disabled={busy} onClick={() => { closeSession(deleteSession.id); setDialog(null); }}>ลบ session</button></div></>}
             {dialog === "session" && (
               <>
