@@ -107,3 +107,17 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .toolbar-actions .toolbar-button span,.toolbar-actions .compact span { display:inline; }.toolbar-actions { flex-wrap:wrap; }.toolbar-button { font-size:12px; }.workspace-toolbar { min-height:44px; height:auto; }.project-sidebar .sidebar-bottom small { font-size:11px; }.agent-card>small { line-height:1.7; }.chip { font-size:11px; }.mission-task-list small { font-size:11px; }.agent-card { border-color:#314c60; }.mission-task-list li { border-bottom-color:#314c6040; }
 @media(max-width:1000px) { .mission-workspace.has-inspector { grid-template-columns:1fr; }.mission-inspector { max-height:55vh; }.mission-view-switch { flex-wrap:wrap; } }
 @media(max-width:760px) { .workspace-toolbar { align-items:flex-start; gap:8px; }.toolbar-actions { gap:4px; }.toolbar-actions .toolbar-button { padding:5px; }.mission-count { margin-left:0; } }
+
+/* Suggested Action Chips bar */
+.suggested-chips-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin-bottom: 6px; background: rgba(22, 43, 61, 0.6); border: 1px solid rgba(118, 190, 209, 0.2); border-radius: 8px; font-size: 12px; }
+.suggested-chips-bar .chips-label { display: flex; align-items: center; gap: 4px; color: var(--dim, #a0afbd); font-weight: 500; white-space: nowrap; }
+.chips-scroll { display: flex; gap: 6px; overflow-x: auto; white-space: nowrap; padding: 2px 0; scrollbar-width: thin; }
+.chip-action-btn { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; background: #192f41; border: 1px solid #314c60; color: #b9edf6; border-radius: 9999px; font-size: 12px; cursor: pointer; transition: all 0.15s ease; user-select: none; }
+.chip-action-btn:hover:not(:disabled) { background: #25495f; border-color: #76bed1; color: #ffffff; transform: translateY(-1px); }
+.chip-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Dual-layer Ghost Text Composer */
+.composer-input-container { position: relative; width: 100%; }
+.composer-input-container textarea { position: relative; z-index: 2; background: transparent !important; }
+.composer-ghost-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; padding: 8px 12px; pointer-events: none; font-family: inherit; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; overflow: hidden; color: rgba(160, 175, 189, 0.45); display: flex; align-items: baseline; gap: 6px; z-index: 1; }
+.composer-ghost-layer .tab-badge { display: inline-flex; align-items: center; font-size: 10px; padding: 1px 5px; border-radius: 4px; background: rgba(118, 190, 209, 0.2); border: 1px solid rgba(118, 190, 209, 0.35); color: #b9edf6; margin-left: 6px; user-select: none; }
