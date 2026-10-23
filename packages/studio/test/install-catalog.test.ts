@@ -32,4 +32,6 @@ test('a Windows Claude Code npm install without its native claude.exe counts as 
   fs.rmSync(prefix, { recursive: true, force: true });
   assert.match(cliInstallEnv().npm_config_allow_scripts, /@anthropic-ai\/claude-code/, 'npm may run Claude Code\'s postinstall');
   assert.equal(cliEnv().npm_config_allow_scripts, undefined, 'sessions never get it: npm 12 then refuses every project install');
+  assert.equal(cliEnv().DISABLE_AUTOUPDATER, '1', 'Claude Code must not reinstall itself inside a session');
+  assert.equal({ ...cliEnv(), ...cliInstallEnv() }.DISABLE_AUTOUPDATER, '0', 'our own update still runs');
 });

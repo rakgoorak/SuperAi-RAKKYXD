@@ -57,12 +57,18 @@ export const cliPath = () => [
  */
 export const cliInstallEnv = (): Record<string, string> => ({
   npm_config_allow_scripts: Object.values(INSTALL_PACKAGES).join(","),
+  // Our own update (`claude update`) must run even though sessions turn auto-updates off.
+  DISABLE_AUTOUPDATER: "0",
 });
 
 // Environment for spawned CLIs: managed PATH plus Git Bash for Claude Code on Windows.
 export function cliEnv(): Record<string, string> {
   const env: Record<string, string> = {
     PATH: cliPath(),
+    // Claude Code updating itself inside a session moves claude.exe aside and reinstalls with
+    // npm, which (npm 12, no allowed install scripts here) never puts the binary back. The app
+    // updates CLIs itself with cliInstallEnv, so sessions leave it to that.
+    DISABLE_AUTOUPDATER: "1",
   };
   if (process.platform === 'win32' && !process.env.CLAUDE_CODE_GIT_BASH_PATH) {
     const git = findExecutable('git');

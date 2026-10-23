@@ -142,3 +142,26 @@ test('Antigravity CLI installs with the fixed official Google script, never an n
     f.children[0].emit('close',0);assert.equal(job.status,'failed','exit 0 without agy on PATH is not success');
   }finally{f.dispose();}
 });
+
+test('a Claude Code install without its claude.exe can be installed again; a working one cannot', { skip: process.platform !== 'win32' && 'claude.exe is the Windows payload' }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'superai-broken-claude-'));
+  const pkg = path.join(dir, 'node_modules', '@anthropic-ai', 'claude-code');
+  fs.mkdirSync(path.join(pkg, 'bin'), { recursive: true });
+  fs.writeFileSync(path.join(pkg, 'package.json'), '{}');
+  fs.writeFileSync(path.join(dir, 'claude.cmd'), '');
+  fs.writeFileSync(path.join(pkg, 'bin', 'claude.exe.old.1'), 'moved aside by a half-finished self-update');
+  const children: any[] = [];
+  const manager = () => new CliInstallManager({ prefix: path.join(dir, 'tools'), timeout: 10000, version: () => '22.0.0',
+    find: (name: string) => name === 'node' ? process.execPath : name === 'npm' ? path.join(dir, 'npm.cmd') : name === 'claude' ? path.join(dir, 'claude.cmd') : null,
+    spawn: (() => { const c: any = new EventEmitter(); c.stdout = new PassThrough(); c.stderr = new PassThrough(); c.kill = () => true; children.push(c); return c; }) as any });
+  fs.mkdirSync(path.join(dir, 'node_modules/npm/bin'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'npm.cmd'), ''); fs.writeFileSync(path.join(dir, 'node_modules/npm/bin/npm-cli.js'), '');
+  try {
+    assert.equal(manager().start('claude-code').status, 'running', 'the reinstall button must not say "already installed"');
+    fs.writeFileSync(path.join(pkg, 'bin', 'claude.exe'), Buffer.alloc(2_000_000));
+    assert.throws(() => manager().start('claude-code'), /ติดตั้งแล้ว/);
+  } finally {
+    children.forEach((c) => c.emit('close', 1));
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
