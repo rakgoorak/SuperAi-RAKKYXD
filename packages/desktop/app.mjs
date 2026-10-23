@@ -241,7 +241,12 @@ else {
         window = null;
         app.quit();
       });
-      await window.loadURL(appUrl);
+      await window.loadURL(appUrl).catch((error) => {
+        // A reload (Ctrl+R, the error screen's reload button) before the first load finished
+        // replaces it and rejects this promise with ERR_ABORTED. The page is fine: never show
+        // "could not open" and quit for that.
+        if (error?.code !== "ERR_ABORTED" && error?.errno !== -3) throw error;
+      });
       await log(`SuperAi & RAKKYXD ${app.getVersion()} started at ${appUrl}`);
       if (updater.packaged && !process.env.SUPERAI_TEST_MODE) {
         setTimeout(() => void checkForUpdate(), 4000);
