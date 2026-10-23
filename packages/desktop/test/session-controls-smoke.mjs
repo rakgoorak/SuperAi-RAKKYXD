@@ -37,19 +37,23 @@ try {
  await composer.fill('/rev');
  await slashList.getByRole('option').filter({hasText:'review'}).waitFor();
  await composer.press('Enter');
- assert.equal(await composer.inputValue(),'/skill review ');
+ assert.equal(await composer.inputValue(),'/review ');
  assert.equal(sent.length,0,'selecting a slash suggestion must not send');
  await composer.fill('/not-a-real-skill');
  await page.getByText('ไม่พบ skill ที่ตรงกัน · ติดตั้งเพิ่มได้จากหน้า Skills',{exact:true}).waitFor();
  await composer.press('Escape');
  await slashList.waitFor({state:'hidden'});
- await page.getByRole('button',{name:'/skills',exact:true}).click();
+ // Test typing after text: 'ทำงานดีมาก /'
+ await composer.fill('ทำงานดีมาก /');
+ await slashList.getByRole('option').filter({hasText:'review'}).waitFor();
  await slashList.getByRole('option').filter({hasText:'review'}).click();
- await page.getByLabel('คำสั่ง',{exact:true}).fill('/skill review check');
+ assert.equal(await composer.inputValue(),'ทำงานดีมาก /review ');
+ await page.getByLabel('คำสั่ง',{exact:true}).fill('/review check');
  await page.getByRole('button',{name:'ส่งคำสั่ง (Enter)',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('textarea[aria-label="คำสั่ง"]')?.value==='');
  assert.equal(sent.at(-1).model,'model-b');assert.equal(sent.at(-1).effort,'low');assert.equal(sent.at(-1).skillId,'test-skill');
- await page.getByRole('button',{name:'ยกเลิก skill',exact:true}).waitFor({state:'hidden'});
+ assert.equal(await page.getByRole('button',{name:'/skills',exact:true}).count(),0);
+ assert.equal(await page.getByRole('button',{name:'ยกเลิก skill',exact:true}).count(),0);
  await target.selectOption('fixture-1');await page.getByLabel('Model ในแชท Two',{exact:true}).waitFor();
  await target.selectOption('fixture-0');await page.getByLabel('Model ในแชท One',{exact:true}).waitFor();
  assert.equal(await model.inputValue(),'model-b');
@@ -71,7 +75,5 @@ try {
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await page.locator('.composer-area').screenshot({path:path.join(data,'composer-narrow.png')});
 
- console.log(JSON.stringify({passed:['per-message model effort skill','skill consumed','session isolation','CLI default reset survives switching'],screenshot:path.join(data,'composer.png')}));
+ console.log(JSON.stringify({passed:['per-message model effort skill','slash after text','slash without /skill prefix','session isolation','CLI default reset survives switching'],screenshot:path.join(data,'composer.png')}));
 } finally { await closeApp(app,steps); }
-
-

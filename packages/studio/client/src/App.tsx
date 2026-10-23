@@ -465,7 +465,9 @@ export function App() {
             }
             if (recipients.length === 1 && text === "/model") throw new Error("เลือก Model จากช่องคำสั่งด้านล่าง ใช้กับข้อความถัดไป");
             if (prefs.blocked) throw new Error(`${recipient.name}: ${prefs.note || "กรุณาเข้าสู่ระบบก่อนส่งข้อความ"}`);
-            const skillId = prefs.skillId && text.startsWith("/skill ") ? prefs.skillId : "";
+            if (recipients.length === 1 && /^\/skills?\s*$/.test(text)) { setDialog("skills"); setDraft(""); return; }
+            const hasSkill = /(?:^|\s)\/(?:skill\s+)?([\w.:-]+)/.test(text);
+            const skillId = prefs.skillId && hasSkill ? prefs.skillId : "";
             await post(`/api/terminals/${recipient.id}/chat`, {
               text,
               model: prefs.model,
@@ -1157,8 +1159,7 @@ export function App() {
                 </div>
                 <div className={`composer-box ${chatTarget ? "has-session-controls" : ""}`}>
                   {mode === "chat" && chatConfig && workspace && <ChatQuickControls workspaceId={workspace.id} config={chatConfig} onChange={setChatConfig} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} onDraft={setDraft} />}
-                  {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name.split("·")[0].trim() || chatTarget.name} disabled={busy}
-                    onDraft={(text) => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />}
+                  {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name.split("·")[0].trim() || chatTarget.name} disabled={busy} />}
                   <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
                   <details className="composer-suggestions" open={mode !== "agent"}><summary>คำแนะนำสำหรับขั้นตอนถัดไป</summary><SuggestedChips
                     items={suggestions.items}
@@ -1170,7 +1171,7 @@ export function App() {
                   /></details>
                   <div className="composer-input-container">
                     <SlashMenu ref={slashMenu} draft={draft} sessionId={chatTarget?.id} workspaceId={mode === "chat" ? workspace?.id : undefined} providers={mode === "chat" ? [...new Set((chatConfig?.panel || []).filter(seat => seat.provider.startsWith("cli:")).map(seat => seat.provider.slice(4)))] : []} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
-                    {!draft.startsWith("/") && !ghostDismissed && suggestions.ghostSuffix && (mode !== "code" || !!draft.trim()) && (
+                    {!/(?:^|\s)\/[^\s]*$/.test(draft) && !ghostDismissed && suggestions.ghostSuffix && (mode !== "code" || !!draft.trim()) && (
                       <div className="composer-ghost-layer" aria-hidden="true">
                         {draft ? (
                           <>

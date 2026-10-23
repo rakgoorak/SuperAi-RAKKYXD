@@ -71,14 +71,20 @@ export function chatSkills(root: string, provider: string, home = os.homedir()):
 
 /** Explicit manual invocation; never treat arbitrary input as a skill file path. */
 export function skillPrompt(text: string, root: string, provider: string, skillId?: string, home?: string): string {
-  const command = /^\/(skill|skills)(?:\s|$)/.exec(text.trim());
-  const direct = /^\/([\w.:-]+)(?:\s+([\s\S]*))?$/.exec(text.trim());
-  if (!skillId && !command && !direct) return text;
+  const trimmed = text.trim();
+  const command = /^\/(skill|skills)(?:\s|$)/.exec(trimmed);
+  const direct = /^\/([\w.:-]+)(?:\s+([\s\S]*))?$/.exec(trimmed);
+  const inline = /(?:^|\s)\/(?:skill\s+)?([\w.:-]+)(?:\s+([\s\S]*))?$/.exec(trimmed);
+  if (!skillId && !command && !direct && !inline) return text;
   const skills = chatSkills(root, provider, home);
-  const parts = /^\/skill\s+(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim());
+  const parts = /^\/skill\s+(\S+)(?:\s+([\s\S]*))?$/.exec(trimmed);
   const skill = skillId ? skills.find((s) => s.id === skillId)
-    : skills.find((s) => s.name === (parts?.[1] || (!command ? direct?.[1] : "")));
-  if (!skill) throw new Error(command ? "ไม่พบ skill ที่เลือก กรุณาเลือก skill จาก /skills แล้วพิมพ์ /skill ชื่อ งานที่ต้องการ" : "ไม่พบ skill นี้สำหรับผู้ให้บริการ กรุณาเปิด /skills เพื่อดูรายการ · คำสั่งของ Terminal ใช้ในหน้า Terminal");
+    : skills.find((s) => s.name === (parts?.[1] || (!command ? direct?.[1] : inline ? inline[1] : "")));
+  if (!skill) {
+    if (command) throw new Error("ไม่พบ skill ที่เลือก กรุณาเลือก skill จาก /skills แล้วพิมพ์ /skill ชื่อ งานที่ต้องการ");
+    if (direct || skillId) throw new Error("ไม่พบ skill นี้สำหรับผู้ให้บริการ กรุณาเปิด /skills เพื่อดูรายการ · คำสั่งของ Terminal ใช้ในหน้า Terminal");
+    return text;
+  }
   const request = parts ? parts[2] || "" : direct && !command ? direct[2] || "" : text;
   // Paths go in as written: JSON.stringify would double every Windows backslash (C:\\Users\\...).
   return `The user explicitly selected the skill ${JSON.stringify(skill.name)}. Read and follow its SKILL.md at "${skill.path}". Resolve its relative resources from "${path.dirname(skill.path)}". Use the provider's native skill mechanism where available and honor its tool permissions. Do not execute any action outside the user's request or bypass approval requirements.\n\nUser request / skill arguments:\n${request || "ใช้ skill นี้กับโปรเจกต์ปัจจุบัน"}`;
