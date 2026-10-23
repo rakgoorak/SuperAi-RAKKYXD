@@ -1,43 +1,400 @@
-/* Composer: a writing surface with a compact instrument rail. */
-.code-mode .composer-area:has(.session-chat-controls) { padding:10px 16px 12px; background:#102131; border-top:1px solid #2b4355; container-type:inline-size; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-context { margin:0 2px 8px; font-size:12px; color:#b7cbd9; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-context select { background:transparent; font-size:12px; padding:4px 8px; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-box { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:0; overflow:visible; border:1px solid #3b596e; border-radius:14px; background:#182d3e; box-shadow:0 5px 20px #060f1926; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-box:focus-within { border-color:#76bed1; box-shadow:0 0 0 3px #76bed112; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-input-container { grid-column:1/-1; grid-row:2; min-width:0; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-box textarea { display:block; height:68px; min-height:68px; max-height:180px; width:100%; padding:16px 18px 10px; resize:vertical; color:#eaf2f7; font-size:14px; line-height:1.75; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-box textarea::placeholder { color:#8da7b9; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-ghost-layer { padding:16px 18px 10px; color:#819dad; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-box>.composer-suggestions { grid-column:1/-1; grid-row:1; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-box>.composer-suggestions .suggested-chips-bar { display:none; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-box>.attachment-cards { grid-column:1/-1; }
-.code-mode .session-chat-controls { grid-column:1; grid-row:3; padding:8px 12px 10px; min-width:0; border-top:1px solid #2b4558; display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; }
-.code-mode .session-chat-controls .chat-account { border:0; margin:0; padding:0; flex:0 1 auto; gap:6px; }
-.code-mode .session-chat-controls .chat-account>small { flex:0 1 auto; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; color:#a5bbca; }
-.code-mode .session-chat-controls .chat-account.authenticated>small { color:#96d1b9; }
-.code-mode .session-chat-controls .chat-account.authenticated>small::before { content:'●'; font-size:8px; margin-right:6px; }
-.code-mode .session-chat-controls .chat-account .text-button { font-size:11px; padding:4px; color:#91afc2; }
-.code-mode .session-chat-controls .chat-model-controls { display:flex; flex-wrap:wrap; align-items:center; margin:0; gap:6px; flex:1; }
-.code-mode .chat-model-controls label { display:flex; flex-direction:row; align-items:center; gap:7px; font-size:11px; color:#91afc2; flex:none; }
-.code-mode .chat-model-controls label:first-child { flex:0 1 270px; }
-.code-mode .chat-model-controls .model-combo { min-width:100px; flex:1; }
-.code-mode .chat-model-controls input,.code-mode .chat-model-controls select { min-height:32px; height:32px; border:1px solid #36556b; border-radius:7px; padding:5px 9px; background:#203a4e; color:#e1eef6; font-size:12px; }
-.code-mode .chat-model-controls select { width:auto; max-width:110px; }
-.code-mode .model-combo-toggle { background:transparent; color:#a8c4d5; border:0; }
-.code-mode .model-combo input { padding-right:30px; }
-.code-mode .model-combo-list { top:auto; bottom:calc(100% + 8px); max-height:220px; background:#20384b; border:1px solid #45667c; border-radius:10px; box-shadow:0 10px 40px #0006; }
-.code-mode .chat-model-controls>button { padding:6px 9px; border:1px solid #36556b; border-radius:7px; color:#b6d6e4; font-size:12px; }
-.code-mode .session-chat-controls .chat-skill-menu,.code-mode .session-chat-controls .chat-composer-problem { flex:1 0 100%; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-bottom { position:relative; right:auto; bottom:auto; grid-column:2; grid-row:3; display:flex; gap:10px; padding:8px 12px 10px; align-self:end; border-top:1px solid #2b4558; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-bottom .composer-tools>span { display:none; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-bottom .icon-button { width:32px; height:32px; border-radius:8px; color:#a8c4d5; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-bottom .send-button { min-width:66px; width:auto; height:34px; padding:0 12px; border-radius:9px; background:#83ccdc; color:#102638; box-shadow:none; }
-.send-label { display:none; }.code-mode .composer-area:has(.session-chat-controls) .send-label { display:inline; font-size:12px; font-weight:600; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-bottom .send-button:disabled { opacity:1; background:#2b485b; color:#8da7b9; border-color:#3b596e; }
-.code-mode .composer-area:has(.session-chat-controls) .composer-hint { display:none; }
-@container(max-width:850px) { .code-mode .session-chat-controls { grid-column:1/-1; }.code-mode .composer-area:has(.session-chat-controls) .composer-bottom { grid-column:1/-1; grid-row:4; justify-content:space-between; }.code-mode .session-chat-controls .chat-account { flex-basis:100%; }.code-mode .composer-area:has(.session-chat-controls) .composer-box textarea { min-height:60px; height:60px; } }
-.slash-menu { position:absolute; bottom:calc(100% + 10px); left:0; width:min(620px,100%); max-height:min(360px,45vh); overflow:auto; z-index:60; padding:8px; border:1px solid #446478; border-radius:12px; background:#1b3041; box-shadow:0 16px 48px #0007; }
-.slash-menu header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:7px 10px 10px; color:#d8e8f1; font-size:12px; }.slash-menu header span { font-size:10px; color:#9cb4c5; }
-.slash-menu [role=option] { display:grid; grid-template-columns:16px minmax(90px,auto) 1fr; width:100%; gap:10px; padding:10px; border-radius:7px; text-align:left; justify-content:start; align-items:center; }.slash-menu [role=option].active { background:#315066; color:#ecf7fb; }.slash-menu [role=option] strong { font-size:13px; font-weight:500; }.slash-menu [role=option] small { color:#abc1cf; font-size:12px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }.slash-symbol { color:#8dcedd; font-family:Consolas,monospace; }.slash-menu footer { padding:9px 10px 2px; font-size:10px; color:#91aabb; border-top:1px solid #365064; margin-top:6px; }.slash-menu p { padding:10px; font-size:12px; color:#a8bfce; }
-.composer-box:has(.slash-menu) { overflow:visible; }
-.code-mode .composer-box textarea:focus-visible { outline:none; }
+/* Claude Desktop Minimal: Floating Capsule Composer & Warm Matte Controls */
+.code-mode .composer-area:has(.session-chat-controls) {
+  padding: 12px 20px 16px;
+  background: #181816;
+  border-top: 1px solid #282824;
+  container-type: inline-size;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-context {
+  max-width: 800px;
+  margin: 0 auto 8px;
+  font-size: 12px;
+  color: #9e9c96;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-context select {
+  background: #242421;
+  border: 1px solid #353531;
+  border-radius: 6px;
+  font-size: 12px;
+  padding: 4px 8px;
+  color: #ecebec;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-box {
+  max-width: 800px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0;
+  overflow: visible;
+  border: 1px solid #383834;
+  border-radius: 18px;
+  background: #21211e;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.32);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-box:focus-within {
+  border-color: #55554f;
+  box-shadow: 0 0 0 1px #55554f, 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-input-container {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-box textarea {
+  display: block;
+  height: 68px;
+  min-height: 68px;
+  max-height: 200px;
+  width: 100%;
+  padding: 16px 18px 10px;
+  resize: vertical;
+  color: #f3f2ee;
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-box textarea::placeholder {
+  color: #797772;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-ghost-layer {
+  padding: 16px 18px 10px;
+  color: rgba(180, 178, 172, 0.45);
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-box > .composer-suggestions {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-box > .composer-suggestions .suggested-chips-bar {
+  display: none;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-box > .attachment-cards {
+  grid-column: 1 / -1;
+}
+
+.code-mode .session-chat-controls {
+  grid-column: 1;
+  grid-row: 3;
+  padding: 8px 14px 10px;
+  min-width: 0;
+  border-top: 1px solid #2c2c28;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.code-mode .session-chat-controls .chat-account {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  flex: 0 1 auto;
+  gap: 6px;
+}
+
+.code-mode .session-chat-controls .chat-account > small {
+  flex: 0 1 auto;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: #9e9c96;
+}
+
+.code-mode .session-chat-controls .chat-account.authenticated > small {
+  color: #7bb38e;
+}
+
+.code-mode .session-chat-controls .chat-account.authenticated > small::before {
+  content: '●';
+  font-size: 8px;
+  margin-right: 6px;
+}
+
+.code-mode .session-chat-controls .chat-account .text-button {
+  font-size: 11.5px;
+  padding: 4px;
+  color: #9e9c96;
+}
+
+.code-mode .session-chat-controls .chat-model-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  gap: 6px;
+  flex: 1;
+}
+
+.code-mode .chat-model-controls label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: #9e9c96;
+  flex: none;
+}
+
+.code-mode .chat-model-controls label:first-child {
+  flex: 0 1 270px;
+}
+
+.code-mode .chat-model-controls .model-combo {
+  min-width: 100px;
+  flex: 1;
+}
+
+.code-mode .chat-model-controls input,
+.code-mode .chat-model-controls select {
+  min-height: 30px;
+  height: 30px;
+  border: 1px solid #383834;
+  border-radius: 8px;
+  padding: 4px 9px;
+  background: #2a2a26;
+  color: #f3f2ee;
+  font-size: 12px;
+}
+
+.code-mode .chat-model-controls select {
+  width: auto;
+  max-width: 110px;
+}
+
+.code-mode .model-combo-toggle {
+  background: transparent;
+  color: #9e9c96;
+  border: 0;
+}
+
+.code-mode .model-combo input {
+  padding-right: 30px;
+}
+
+.code-mode .model-combo-list {
+  top: auto;
+  bottom: calc(100% + 8px);
+  max-height: 220px;
+  background: #21211e;
+  border: 1px solid #3c3c38;
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+}
+
+.code-mode .model-combo-list li {
+  padding: 7px 12px;
+  font-size: 12.5px;
+  color: #dcdad5;
+}
+
+.code-mode .model-combo-list li.active {
+  background: #2d2d29;
+  color: #ffffff;
+}
+
+.code-mode .model-combo-list li[aria-selected="true"] {
+  color: #d97757;
+}
+
+.code-mode .chat-model-controls > button {
+  padding: 5px 9px;
+  border: 1px solid #383834;
+  border-radius: 8px;
+  color: #dcdad5;
+  background: #262623;
+  font-size: 12px;
+}
+
+.code-mode .session-chat-controls .chat-skill-menu,
+.code-mode .session-chat-controls .chat-composer-problem {
+  flex: 1 0 100%;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-bottom {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  grid-column: 2;
+  grid-row: 3;
+  display: flex;
+  gap: 8px;
+  padding: 8px 14px 10px;
+  align-self: end;
+  border-top: 1px solid #2c2c28;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-bottom .composer-tools > span {
+  display: none;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-bottom .icon-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: #9e9c96;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-bottom .icon-button:hover {
+  background: #2a2a26;
+  color: #f3f2ee;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-bottom .send-button {
+  min-width: 62px;
+  width: auto;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: #d97757;
+  color: #ffffff;
+  border: none;
+  box-shadow: none;
+  font-weight: 500;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-bottom .send-button:hover:not(:disabled) {
+  background: #e28a6c;
+}
+
+.send-label {
+  display: none;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .send-label {
+  display: inline;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-bottom .send-button:disabled {
+  opacity: 1;
+  background: #2a2a27;
+  color: #6d6b66;
+  border: 1px solid #353531;
+}
+
+.code-mode .composer-area:has(.session-chat-controls) .composer-hint {
+  display: none;
+}
+
+@container(max-width:850px) {
+  .code-mode .session-chat-controls {
+    grid-column: 1 / -1;
+  }
+  .code-mode .composer-area:has(.session-chat-controls) .composer-bottom {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    justify-content: space-between;
+  }
+  .code-mode .session-chat-controls .chat-account {
+    flex-basis: 100%;
+  }
+  .code-mode .composer-area:has(.session-chat-controls) .composer-box textarea {
+    min-height: 60px;
+    height: 60px;
+  }
+}
+
+.slash-menu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  width: min(620px, 100%);
+  max-height: min(360px, 45vh);
+  overflow: auto;
+  z-index: 60;
+  padding: 8px;
+  border: 1px solid #3c3c38;
+  border-radius: 14px;
+  background: #21211e;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+}
+
+.slash-menu header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px 10px;
+  color: #ecebec;
+  font-size: 12px;
+}
+
+.slash-menu header span {
+  font-size: 10.5px;
+  color: #9e9c96;
+}
+
+.slash-menu [role=option] {
+  display: grid;
+  grid-template-columns: 16px minmax(90px, auto) 1fr;
+  width: 100%;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  text-align: left;
+  justify-content: start;
+  align-items: center;
+  transition: background 0.12s ease;
+}
+
+.slash-menu [role=option].active {
+  background: #2c2c28;
+  color: #ffffff;
+}
+
+.slash-menu [role=option] strong {
+  font-size: 13px;
+  font-weight: 500;
+  color: #f3f2ee;
+}
+
+.slash-menu [role=option] small {
+  color: #9e9c96;
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.slash-symbol {
+  color: #d97757;
+  font-family: Consolas, monospace;
+  font-weight: 600;
+}
+
+.slash-menu footer {
+  padding: 8px 10px 2px;
+  font-size: 10.5px;
+  color: #797772;
+  border-top: 1px solid #2e2e2a;
+  margin-top: 6px;
+}
+
+.slash-menu p {
+  padding: 12px;
+  font-size: 12px;
+  color: #9e9c96;
+}
+
+.composer-box:has(.slash-menu) {
+  overflow: visible;
+}
+
+.code-mode .composer-box textarea:focus-visible {
+  outline: none;
+}
