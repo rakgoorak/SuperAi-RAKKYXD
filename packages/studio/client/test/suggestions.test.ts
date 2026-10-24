@@ -41,7 +41,35 @@ test('uses an explicit conversational offer and strips Markdown formatting', () 
   assert.equal(markdown[0].label, 'ตรวจ ความถูกต้อง ของ แบบฟอร์ม');
 });
 
-test('fallback follows the answer subject rather than a mode-specific default', () => {
-  assert.equal(completed('แก้ไฟล์ Login.tsx เรียบร้อยแล้ว')[0].id, 'review-changes');
-  assert.equal(getSuggestions({ mode: 'agent', lastRun: { status: 'completed', allowTools: false, output: 'แผนงานสำหรับระบบสมาชิก' } })[0].id, 'follow-plan');
+test('does not invent actions from change reports or plans in any mode', () => {
+  for (const mode of ['code', 'agent', 'chat'] as const) {
+    for (const allowTools of [true, false]) {
+      for (const output of ['แก้ไฟล์ Login.tsx เรียบร้อยแล้ว', 'แผนงานสำหรับระบบสมาชิก', 'Files changed: Login.tsx. Build passed.', 'ตรวจการแก้โค้ดแล้ว พบปัญหา 3 ข้อ']) {
+        assert.deepEqual(getSuggestions({ mode, lastRun: { status: 'completed', allowTools, output } }), []);
+      }
+    }
+  }
+});
+
+test('extracts up to three explicit options in Thai and English', () => {
+  for (const heading of ['ตัวเลือก', '**ทางเลือกที่แนะนำ:**', '## Options', 'Suggested actions:']) {
+    const result = completed(`${heading}\n1. แก้ปัญหาพรีวิวไฟล์\n2. เพิ่มการทดสอบระบบ\n3. ปรับหน้าจอแชต\n4. เขียนเอกสารประกอบ`);
+    assert.deepEqual(result.map(item => item.label), ['แก้ปัญหาพรีวิวไฟล์', 'เพิ่มการทดสอบระบบ', 'ปรับหน้าจอแชต']);
+  }
+});
+
+test('shows only the offered number of choices', () => {
+  assert.equal(completed('## ตัวเลือก\n- ทดสอบหน้าเข้าสู่ระบบ').length, 1);
+  assert.equal(completed('## ตัวเลือก\n- ทดสอบหน้าเข้าสู่ระบบ\n- เพิ่มกรณีรหัสผ่านผิด').length, 2);
+});
+
+test('keeps three conversational offers instead of discarding the first', () => {
+  const result = completed('ผมสามารถเพิ่มการทดสอบระบบ\nผมสามารถตรวจการเข้าถึงหน้าเว็บ\nผมสามารถเขียนเอกสารประกอบ');
+  assert.deepEqual(result.map(item => item.label), ['เพิ่มการทดสอบระบบ', 'ตรวจการเข้าถึงหน้าเว็บ', 'เขียนเอกสารประกอบ']);
+});
+
+test('stops options before another bold section and ignores ordinary lists', () => {
+  assert.deepEqual(completed('## ผลทดสอบ\n- Build ผ่าน\n- พบปัญหาพรีวิวไฟล์'), []);
+  const result = completed('**ตัวเลือก**\n- เพิ่มการทดสอบระบบ\n\n**ผลทดสอบ**\n- Build ผ่าน');
+  assert.deepEqual(result.map(item => item.label), ['เพิ่มการทดสอบระบบ']);
 });

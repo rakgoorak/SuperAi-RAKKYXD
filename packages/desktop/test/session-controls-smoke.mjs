@@ -28,7 +28,13 @@ try {
  await page.getByRole('button',{name:/^Composer fixture/}).click();
  await page.getByRole('navigation',{name:'โหมดทำงาน'}).getByRole('button',{name:'Code',exact:true}).click();
  const target=page.getByLabel('เป้าหมายคำสั่ง',{exact:true});
- steps.step('select first'); await target.selectOption('fixture-0');
+ const selectSession=async id=>{
+  await target.selectOption('active');
+  const paneTitle=page.locator(`[data-session-id="${id}"] .pane-title`);
+  if(await paneTitle.isVisible()) await paneTitle.click();
+  else await page.locator('.session-tabs .session-tab').filter({hasText:id==='fixture-0'?'One':'Two'}).locator('button').first().click();
+ };
+ steps.step('select first'); await selectSession('fixture-0');
  const model=page.getByLabel('Model ในแชท One',{exact:true});await model.waitFor();
  await page.getByLabel('บัญชีของ session',{exact:true}).click();
  await page.getByRole('button',{name:'ตรวจบัญชีอีกครั้ง',exact:true}).waitFor();
@@ -65,12 +71,12 @@ try {
  assert.equal(sent.at(-1).model,'model-b');assert.equal(sent.at(-1).effort,'low');assert.equal(sent.at(-1).skillId,'test-skill');
  assert.equal(await page.getByRole('button',{name:'/skills',exact:true}).count(),0);
  assert.equal(await page.getByRole('button',{name:'ยกเลิก skill',exact:true}).count(),0);
- await target.selectOption('fixture-1');await page.getByLabel('Model ในแชท Two',{exact:true}).waitFor();
- await target.selectOption('fixture-0');await page.getByLabel('Model ในแชท One',{exact:true}).waitFor();
+ await selectSession('fixture-1');await page.getByLabel('Model ในแชท Two',{exact:true}).waitFor();
+ await selectSession('fixture-0');await page.getByLabel('Model ในแชท One',{exact:true}).waitFor();
  assert.equal(await model.inputValue(),'model-b');
  await model.fill('');await page.getByLabel('Effort ในแชท One',{exact:true}).selectOption('');
- await target.selectOption('fixture-1');await page.getByLabel('Model ในแชท Two',{exact:true}).waitFor();
- await target.selectOption('fixture-0');await model.waitFor();
+ await selectSession('fixture-1');await page.getByLabel('Model ในแชท Two',{exact:true}).waitFor();
+ await selectSession('fixture-0');await model.waitFor();
  await page.waitForTimeout(150);
  assert.equal(await model.inputValue(),'');assert.equal(await page.getByLabel('Effort ในแชท One',{exact:true}).inputValue(),'');
  const firstChat=page.locator('[data-session-id="fixture-0"] .chat-view');
@@ -80,7 +86,7 @@ try {
  await firstChat.getByRole('button',{name:'สร้างคำตอบใหม่',exact:true}).click();
  for(let i=0;i<30&&sent.length===beforeRetry;i++)await page.waitForTimeout(100);
  assert.equal(sent.at(-1).model,'original-model');assert.equal(sent.at(-1).text,'previous fixture-0');
- await target.selectOption('fixture-1');
+ await selectSession('fixture-1');
  await page.getByLabel('Model ในแชท Two',{exact:true}).fill('model-b');
  const secondChat=page.locator('[data-session-id="fixture-1"] .chat-view');
  await secondChat.locator('.chat-scroll').evaluate(el=>{el.scrollTop=160;el.dispatchEvent(new Event('scroll'));});
@@ -88,7 +94,7 @@ try {
  await page.getByLabel('Model ในแชท Two',{exact:true}).waitFor();
  await page.waitForFunction(()=>document.querySelector('[aria-label="Model ในแชท Two"]')?.value==='model-b');
  await page.waitForFunction(()=>document.querySelector('[data-session-id="fixture-1"] .chat-scroll')?.scrollTop>50);
- await target.selectOption('fixture-0');await model.waitFor();
+ await selectSession('fixture-0');await model.waitFor();
  await page.screenshot({path:path.join(data,'composer.png')});
  await page.locator('.composer-area').screenshot({path:path.join(data,'composer-detail.png')});
  await page.getByRole('button',{name:'ดูรายชื่อ Model ในแชท One ทั้งหมด',exact:true}).click();

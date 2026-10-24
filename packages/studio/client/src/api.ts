@@ -20,10 +20,26 @@ export async function api<T = any>(
 }
 export const post = <T = any>(url: string, body: unknown = {}) =>
   api<T>(url, { method: "POST", body: JSON.stringify(body) });
+
+export interface PinnedFileItem {
+  path: string;
+  name: string;
+  content: string;
+  size: number;
+}
+export async function getPinnedContent(wsId: string): Promise<{ files: PinnedFileItem[] }> {
+  return api(`/api/workspaces/${wsId}/pinned-content`);
+}
+export async function togglePinnedFile(wsId: string, filePath: string): Promise<Workspace> {
+  return post(`/api/workspaces/${wsId}/pinned-files/toggle`, { filePath });
+}
+
 export interface Workspace {
   id: string;
   name: string;
   rootPath: string;
+  instructions?: string;
+  pinnedFiles?: string[];
   threads: any[];
 }
 export interface NodeStatus {

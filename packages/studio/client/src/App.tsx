@@ -3,6 +3,8 @@ import { ChangesPanel } from "./components/ChangesPanel";
 import { HistoryPanel, type HistoryEntry } from "./components/HistoryPanel";
 import { RunActions } from "./components/RunActions";
 import { SlashMenu, type SlashMenuHandle } from "./components/SlashMenu";
+import { MentionMenu, type MentionMenuHandle } from "./components/MentionMenu";
+import { CommandPalette } from "./components/CommandPalette";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Folder,
@@ -26,6 +28,8 @@ import {
   PanelLeftOpen,
   Send,
   Square,
+  Sparkles,
+  Pin,
   X,
   Check,
   Search,
@@ -43,7 +47,7 @@ import {
   Download,
   Users,
 } from "lucide-react";
-import { api, post, loginProvider, Workspace, Cli, Session, Run, Seat } from "./api";
+import { api, post, loginProvider, Workspace, Cli, Session, Run, Seat, togglePinnedFile } from "./api";
 import { paneView } from "./paneView";
 import { chatPrefs, sendChatCommand, setChatPrefs } from "./chatControls";
 import { SessionChatControls } from "./components/SessionChatControls";
@@ -71,7 +75,9 @@ import { ChatQuickControls } from "./components/ChatQuickControls";
 import { loadVoiceSettings, saveVoiceSettings, type VoiceSettings } from "./voice/speech";
 import { getSuggestions } from "./suggestions";
 import { NextSteps } from "./components/NextSteps";
+import { MessageAttachments } from "./components/MessageAttachments";
 import { WorkspaceWelcome } from "./components/WorkspaceWelcome";
+import { composerDraftKey, useComposerDrafts } from "./composerDrafts";
 
 type Mode = "agent" | "code" | "chat";
 type Dialog = "history" | "changes" | "session-delete" | "session" | "settings" | "project" | "delete" | "clear" | "setup" | "skills" | "update" | null;
@@ -99,6 +105,7 @@ function initial(key: string, fallback: string) {
 
 export function App() {
   const slashMenu = useRef<SlashMenuHandle>(null);
+  const mentionMenu = useRef<MentionMenuHandle>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWs, setActiveWs] = useState(initial("superai-workspace", ""));
   const activeWsRef = useRef(activeWs);
@@ -130,23 +137,22 @@ export function App() {
   useEffect(() => { const request = (event: Event) => { setDeleteSession((event as CustomEvent<{id: string; name: string}>).detail); setDialog("session-delete"); }; window.addEventListener("superai:delete-session", request); return () => window.removeEventListener("superai:delete-session", request); }, []);
   const [settingsTab, setSettingsTab] = useState("tools");
   const [usageOpen, setUsageOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [connected, setConnected] = useState(false);
   const [pty, setPty] = useState(false);
   const [search, setSearch] = useState("");
-  // Kept across restarts (an update reopens the app), so unsent text is not lost.
-  const [draft, setDraft] = useState(() => { try { return localStorage.getItem("superai-draft") || ""; } catch { return ""; } });
-  useEffect(() => {
-    try { if (draft) localStorage.setItem("superai-draft", draft); else localStorage.removeItem("superai-draft"); } catch {}
-  }, [draft]);
-  const [target, setTarget] = useState("active");
+  const [target, setTarget] = useState<"active" | "all">("active");
+  const draftScope = composerDraftKey(activeWs, mode, selected, target);
+  const { draft, setDraft, setDraftFor } = useComposerDrafts(draftScope);
   const [launchType, setLaunchType] = useState("claude-code");
   const [count, setCount] = useState(1);
   const launchTotal = launchPlan?.reduce((n, seat) => n + seat.count, 0) || count;
   const [projectName, setProjectName] = useState("");
   const [projectPath, setProjectPath] = useState("");
+  const [projectInstructions, setProjectInstructions] = useState("");
   const [editing, setEditing] = useState("");
   const [models, setModels] = useState<string[]>([]);
   const [modelError, setModelError] = useState("");
@@ -171,12 +177,34 @@ export function App() {
     initial("superai-opencode-model", "auto"),
   );
   const workspace = workspaces.find((w) => w.id === activeWs);
+  const [pinnedPickerOpen, setPinnedPickerOpen] = useState(false);
+  const [pinnedSearch, setPinnedSearch] = useState("");
+  const [projectFileList, setProjectFileList] = useState<Array<{ path: string; name: string }>>([]);
+
+  const loadProjectFiles = useCallback(async () => {
+    if (!workspace) return;
+    try {
+      const res = await api<{ files: Array<{ path: string; name: string }> }>(`/api/workspaces/${workspace.id}/files`);
+      setProjectFileList(res.files || []);
+    } catch {}
+  }, [workspace]);
+
+  const handleTogglePin = async (filePath: string) => {
+    if (!workspace) return;
+    try {
+      const updated = await togglePinnedFile(workspace.id, filePath);
+      setWorkspaces((prev) => prev.map((w) => (w.id === updated.id ? updated : w)));
+      setNotice("อัปเดตไฟล์ปักหมุดแล้ว");
+    } catch (err: any) {
+      showError(err.message);
+    }
+  };
   const visible = sessions.filter((s) => s.wsId === activeWs);
   const selectedSession = visible.find((s) => s.id === selected);
   // Chat sessions take messages without a running terminal.
   const running = visible.filter((s) => s.status === "running" || paneView(s) === "chat");
   // The one chat session the composer sends to gets its Model/Effort/skills/account controls there.
-  const composerTarget = target === "all" ? undefined : target === "active" ? selectedSession : running.find((s) => s.id === target);
+  const composerTarget = target === "all" ? undefined : selectedSession;
   const chatTarget = mode === "code" && composerTarget && paneView(composerTarget) === "chat" ? composerTarget : undefined;
   const conversation = runs.filter((r) => r.mode === mode);
   const latestRun = conversation[conversation.length - 1] || null;
@@ -204,7 +232,7 @@ export function App() {
   const checkClis = useCallback(async () => {
     setClis(await api<Cli[]>("/api/clis"));
   }, []);
-  const attachments = useComposerAttachments(showError);
+  const attachments = useComposerAttachments(showError, draftScope);
   const attachToComposer = useCallback((files: File[]) => {
     attachments.add(files);
     requestAnimationFrame(() => composer.current?.focus());
@@ -463,7 +491,7 @@ export function App() {
           target === "all"
             ? running
             : running.filter(
-                (s) => s.id === (target === "active" ? selected : target),
+                (s) => s.id === selected,
               );
         if (!recipients.length)
           throw new Error(
@@ -538,9 +566,12 @@ export function App() {
       if (detail.sessionId) {
         const session = sessions.find(s => s.id === detail.sessionId);
         if (session?.wsId) setActiveWs(session.wsId);
-        setMode("code"); setSelected(detail.sessionId); setTarget(detail.sessionId);
+        setMode("code"); setSelected(detail.sessionId); setTarget("active");
+        setDraftFor(composerDraftKey(session?.wsId || activeWs, "code", detail.sessionId, "active"), detail.text);
+      } else {
+        setDraft(detail.text);
       }
-      setDraft(detail.text); setComposerExpanded(detail.expand !== false);
+      setComposerExpanded(detail.expand !== false);
       requestAnimationFrame(() => composer.current?.focus());
     };
     const changes = (event: Event) => {
@@ -558,24 +589,45 @@ export function App() {
         setDockView('browser'); setPreview(true);
       } catch (error) { showError((error as Error).message); }
     };
+    const openArtifactEvent = (event: Event) => {
+      const detail = (event as CustomEvent<{ title: string; language: string; content: string }>).detail;
+      setPreviewRequest({
+        id: crypto.randomUUID(),
+        workspaceId: activeWs || undefined,
+        target: { kind: 'artifact', title: detail.title, language: detail.language, content: detail.content },
+      });
+      setDockView('browser'); setPreview(true);
+    };
     const reload = () => { if (activeWs) void api<Run[]>(`/api/conversations/${activeWs}`).then(setRuns, error => showError(error.message)); };
     window.addEventListener("superai:prepare-message", prepare);
     window.addEventListener("superai:show-changes", changes);
     window.addEventListener("superai:open-setup", setup);
     window.addEventListener('superai:open-preview-link', openLink);
+    window.addEventListener('superai:open-artifact', openArtifactEvent);
     window.addEventListener("superai:refresh-runs", reload);
     return () => {
       window.removeEventListener("superai:prepare-message", prepare);
       window.removeEventListener("superai:show-changes", changes);
       window.removeEventListener("superai:open-setup", setup);
       window.removeEventListener('superai:open-preview-link', openLink);
+      window.removeEventListener('superai:open-artifact', openArtifactEvent);
       window.removeEventListener("superai:refresh-runs", reload);
     };
-  }, [sessions, activeWs, showError]);
+  }, [sessions, activeWs, showError, setDraft, setDraftFor]);
+  useEffect(() => {
+    const handlePaletteKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handlePaletteKey);
+    return () => window.removeEventListener('keydown', handlePaletteKey);
+  }, []);
   useEffect(() => { if (historyRun && runs.some(run => run.id === historyRun)) { document.getElementById('run-' + historyRun)?.scrollIntoView({ block: 'start' }); setHistoryRun(''); } }, [historyRun, runs]);
   const openHistoryEntry = (entry: HistoryEntry) => {
     setActiveWs(entry.wsId); setMode(entry.mode); setDialog(null);
-    if (entry.sessionId) { setSelected(entry.sessionId); setTarget(entry.sessionId); try { localStorage.setItem('superai-jump:' + entry.sessionId, entry.id); window.dispatchEvent(new CustomEvent('superai:jump-message', {detail:entry.sessionId})); } catch {} }
+    if (entry.sessionId) { setSelected(entry.sessionId); setTarget("active"); try { localStorage.setItem('superai-jump:' + entry.sessionId, entry.id); window.dispatchEvent(new CustomEvent('superai:jump-message', {detail:entry.sessionId})); } catch {} }
     else setHistoryRun(entry.id);
   };
   const dropTarget = useWindowDrop(attachToComposer, connected && !dialog);
@@ -589,7 +641,7 @@ export function App() {
           target === "all"
             ? running
             : running.filter(
-                (s) => s.id === (target === "active" ? selected : target),
+                (s) => s.id === selected,
               );
         if (!recipients.length) throw new Error("ไม่มี session ที่กำลังทำงาน");
         for (const s of recipients) {
@@ -627,6 +679,7 @@ export function App() {
           body: JSON.stringify({
             name: projectName.trim(),
             rootPath: projectPath.trim(),
+            instructions: projectInstructions.trim(),
           }),
         },
       );
@@ -639,6 +692,7 @@ export function App() {
     setEditing(ws?.id || "");
     setProjectName(ws?.name || "");
     setProjectPath(ws?.rootPath || "");
+    setProjectInstructions(ws?.instructions || "");
     setMenu("");
     setDialog("project");
   };
@@ -757,7 +811,7 @@ export function App() {
                       {menu === ws.id && (
                         <div className="project-menu">
                           <button onClick={() => openProject(ws)}>
-                            <Pencil size={13} /> เปลี่ยนชื่อ / โฟลเดอร์
+                            <Pencil size={13} /> แก้ไขชื่อ / คำสั่งประจำโปรเจกต์
                           </button>
                           <button
                             className="danger-text"
@@ -1038,6 +1092,7 @@ export function App() {
                             </time>
                           </span>
                           <p>{run.prompt}</p>
+                          <MessageAttachments paths={run.attachments} endpoint={`/api/workspaces/${encodeURIComponent(run.wsId)}/preview-file`} />
                         </div>
                         {run.mode === "chat" && run.panel ? <ChatRunView run={run} /> : run.main ? <AgentRunView run={run} onFixTools={() => setDialog("setup")} /> : null}
                         {(!run.main && (run.mode === "agent" || !run.panel)) && (
@@ -1066,6 +1121,128 @@ export function App() {
                 </div>
               )}
               <div className={`composer-area ${mode === "code" && !composerExpanded ? "compact-code" : ""}`}>
+                <div className="composer-context-tags">
+                  {workspace?.instructions && (
+                    <button
+                      type="button"
+                      className="composer-instructions-pill"
+                      title={`คำสั่งประจำโปรเจกต์: ${workspace.instructions} (คลิกเพื่อแก้ไข)`}
+                      onClick={() => openProject(workspace)}
+                    >
+                      <Sparkles size={12} />
+                      <span>กฎโปรเจกต์: {workspace.instructions}</span>
+                    </button>
+                  )}
+                  {workspace?.pinnedFiles && workspace.pinnedFiles.length > 0 && (
+                    <div className="composer-pinned-group">
+                      <span className="pinned-label">
+                        <Pin size={11} /> ปักหมุด ({workspace.pinnedFiles.length}):
+                      </span>
+                      {workspace.pinnedFiles.map((file) => {
+                        const fileName = file.split(/[\\/]/).pop() || file;
+                        return (
+                          <span
+                            key={file}
+                            className="composer-pinned-chip"
+                            title={`${file} (คลิกเพื่อเปิดดูใน Preview)`}
+                          >
+                            <span
+                              className="pinned-chip-name"
+                              onClick={() => {
+                                setPreviewRequest({
+                                  id: crypto.randomUUID(),
+                                  workspaceId: workspace.id,
+                                  target: { kind: "file", path: file },
+                                });
+                                setDockView("browser");
+                                setPreview(true);
+                              }}
+                            >
+                              {fileName}
+                            </span>
+                            <button
+                              type="button"
+                              className="pinned-chip-remove"
+                              title={`เลิกปักหมุด ${file}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleTogglePin(file);
+                              }}
+                            >
+                              <X size={10} />
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="composer-pin-picker-wrap">
+                    <button
+                      type="button"
+                      className="composer-add-pin-btn"
+                      title="ปักหมุดไฟล์เป็น Context ให้ AI อัตโนมัติ"
+                      onClick={() => {
+                        setPinnedPickerOpen((v) => {
+                          const next = !v;
+                          if (next) void loadProjectFiles();
+                          return next;
+                        });
+                      }}
+                    >
+                      <Pin size={11} />
+                      <span>+ ปักหมุดไฟล์</span>
+                    </button>
+                    {pinnedPickerOpen && (
+                      <div className="composer-pin-dropdown">
+                        <div className="pin-dropdown-header">
+                          <input
+                            type="text"
+                            placeholder="ค้นหาไฟล์ในโปรเจกต์..."
+                            value={pinnedSearch}
+                            onChange={(e) => setPinnedSearch(e.target.value)}
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            className="pin-close-btn"
+                            onClick={() => setPinnedPickerOpen(false)}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                        <div className="pin-dropdown-list">
+                          {projectFileList
+                            .filter((f) =>
+                              f.path.toLowerCase().includes(pinnedSearch.toLowerCase())
+                            )
+                            .slice(0, 30)
+                            .map((f) => {
+                              const isPinned = workspace?.pinnedFiles?.includes(f.path);
+                              return (
+                                <button
+                                  key={f.path}
+                                  type="button"
+                                  className={`pin-dropdown-item ${isPinned ? "is-pinned" : ""}`}
+                                  onClick={() => {
+                                    void handleTogglePin(f.path);
+                                  }}
+                                >
+                                  <span className="item-name">{f.name}</span>
+                                  <span className="item-path">{f.path}</span>
+                                  <span className="item-status">
+                                    {isPinned ? "✓ ปักหมุดแล้ว" : "+ ปักหมุด"}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          {projectFileList.length === 0 && (
+                            <div className="pin-dropdown-empty">กำลังโหลดไฟล์หรือไม่มีไฟล์ในโปรเจกต์...</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
                 {/* Code mode has no row above the box: its target and size controls sit in the bottom row, like Claude's. */}
                 {mode !== "code" && <div className="composer-context">
                   <div className="inline">
@@ -1098,13 +1275,14 @@ export function App() {
                   <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
                   <div className="composer-input-container">
                     <SlashMenu ref={slashMenu} draft={draft} sessionId={chatTarget?.id} workspaceId={mode === "chat" ? workspace?.id : undefined} providers={mode === "chat" ? [...new Set((chatConfig?.panel || []).filter(seat => seat.provider.startsWith("cli:")).map(seat => seat.provider.slice(4)))] : []} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
+                    <MentionMenu ref={mentionMenu} draft={draft} workspaceId={workspace?.id} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
                     <textarea
                       ref={composer}
                       rows={mode === "code" && !composerExpanded ? 1 : 3}
                       aria-label="คำสั่ง"
                       placeholder={
                         mode === "code"
-                            ? chatTarget ? `พิมพ์ข้อความถึง ${chatTarget.name.split("·")[0].trim()}…` : "พิมพ์คำสั่งหรือเลือก session เพื่อเริ่มทำงาน…"
+                            ? target === "all" ? `พิมพ์ข้อความถึงทุก session (${running.length})…` : composerTarget ? `พิมพ์ข้อความถึง ${composerTarget.name.split("·")[0].trim()}…` : "คลิกเลือก session ก่อนพิมพ์…"
                             : mode === "agent"
                               ? "บอกเป้าหมายให้ทีม เช่น ทำหน้าเข้าสู่ระบบพร้อมทดสอบ…"
                               : "ถามคำถามเดียว ส่งให้ทุก AI ที่เลือก…"
@@ -1121,6 +1299,7 @@ export function App() {
                       }}
                       onKeyDown={(e) => {
                         if (slashMenu.current?.keyDown(e)) return;
+                        if (mentionMenu.current?.keyDown(e)) return;
                         if (
                           e.key === "Enter" &&
                           !e.shiftKey &&
@@ -1147,22 +1326,15 @@ export function App() {
                         className="composer-target"
                         aria-label="เป้าหมายคำสั่ง"
                         value={target}
-                        onChange={(e) => {
-                          setTarget(e.target.value);
-                          if (e.target.value !== "active" && e.target.value !== "all") setSelected(e.target.value);
-                        }}
+                        title={target === "all" ? `ส่งถึงทุก session ในโปรเจกต์นี้ (${running.length})` : `ส่งถึง ${selectedSession?.name || "session ที่เลือก"}`}
+                        onChange={(e) => setTarget(e.target.value === "all" ? "all" : "active")}
                       >
                         <option value="active">
-                          {selectedSession?.name || "เลือก session"} · ที่เลือก
+                          ที่เลือก
                         </option>
                         <option value="all">
-                          ทุก session ในโปรเจกต์ ({running.length})
+                          ทุก session
                         </option>
-                        {running.map((s) => (
-                          <option value={s.id} key={s.id}>
-                            {s.name} · {s.id.slice(0, 5)}
-                          </option>
-                        ))}
                       </select>
                     )}
                     <span>
@@ -1251,6 +1423,33 @@ export function App() {
           </footer>
         </div>
       </div>
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        workspaces={workspaces}
+        activeWs={activeWs}
+        onSelectWorkspace={(wsId) => {
+          setActiveWs(wsId);
+        }}
+        sessions={sessions}
+        selectedSession={selected}
+        onSelectSession={(sessId) => {
+          setSelected(sessId);
+          setMode("code");
+        }}
+        onAction={(actionName) => {
+          if (actionName === "session") setDialog("session");
+          else if (actionName === "project") openProject();
+          else if (actionName === "settings") openSettings();
+          else if (actionName === "history") setDialog("history");
+          else if (actionName === "changes") setDialog("changes");
+          else if (actionName === "setup") setDialog("setup");
+          else if (actionName === "preview") {
+            setDockView("browser");
+            setPreview(true);
+          }
+        }}
+      />
       {dialog && (
         <div
           className="modal-backdrop"
@@ -1499,6 +1698,15 @@ export function App() {
                       )}
                     </div>
                   </label>
+                  <label>
+                    คำสั่งประจำโปรเจกต์ (Custom Instructions)
+                    <textarea
+                      rows={3}
+                      value={projectInstructions}
+                      onChange={(e) => setProjectInstructions(e.target.value)}
+                      placeholder="เช่น ตอบเป็นภาษาไทยเสมอ, เน้นเขียน TypeScript + React, ห้ามใช้ any..."
+                    />
+                  </label>
                   {editing && (
                     <p className="muted">
                       session ที่เปิดอยู่จะใช้โฟลเดอร์เดิมจนกว่าจะเปิด session
@@ -1595,7 +1803,7 @@ export function App() {
                     <button
                       className="text-button"
                       onClick={() => {
-                        setDraft("ollama pull qwen2.5-coder:7b");
+                        setDraftFor(composerDraftKey(activeWs, "code", selected, target), "ollama pull qwen2.5-coder:7b");
                         setMode("code");
                         setDialog(null);
                       }}

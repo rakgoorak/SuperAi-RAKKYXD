@@ -11,16 +11,20 @@ export interface ComposerAttachment {
 }
 
 /** Attachments waiting in the main composer until the message is sent. */
-export function useComposerAttachments(onError: (message: string) => void) {
-  const [items, setItems] = useState<ComposerAttachment[]>([]);
-  const itemsRef = useRef(items);
-  itemsRef.current = items;
+export function useComposerAttachments(onError: (message: string) => void, scopeKey: string) {
+  const [scopes, setScopes] = useState<Record<string, ComposerAttachment[]>>({});
+  const scopesRef = useRef(scopes);
+  scopesRef.current = scopes;
+  const items = scopes[scopeKey] || [];
+  const update = useCallback((key: string, change: (items: ComposerAttachment[]) => ComposerAttachment[]) => {
+    setScopes(current => ({ ...current, [key]: change(current[key] || []) }));
+  }, []);
 
   const add = useCallback(
     (files: File[]) => {
       const supported = files.filter(isSupportedAttachment);
       if (supported.length < files.length) onError(UNSUPPORTED_ATTACHMENT);
-      const room = 20 - itemsRef.current.length;
+      const room = 20 - (scopesRef.current[scopeKey]?.length || 0);
       if (supported.length > room) onError('แนบได้ครั้งละไม่เกิน 20 ไฟล์ ส่งชุดนี้ก่อนแล้วค่อยแนบเพิ่ม');
       const added = supported.slice(0, Math.max(0, room)).map((file) => ({
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -29,27 +33,27 @@ export function useComposerAttachments(onError: (message: string) => void) {
         thumb: isPdf(file) ? undefined : URL.createObjectURL(file),
       }));
       if (!added.length) return;
-      setItems((current) => [...current, ...added]);
+      update(scopeKey, (current) => [...current, ...added]);
       for (const item of added)
         if (item.kind === 'pdf')
           void pdfPageCount(item.file)
-            .then((pages) => pages && setItems((current) => current.map((c) => (c.id === item.id ? { ...c, pages } : c))))
+            .then((pages) => pages && update(scopeKey, (current) => current.map((c) => (c.id === item.id ? { ...c, pages } : c))))
             .catch(() => {});
     },
-    [onError],
+    [onError, scopeKey, update],
   );
   const remove = (id: string) =>
-    setItems((current) => {
+    update(scopeKey, (current) => {
       const gone = current.find((c) => c.id === id);
       if (gone?.thumb) URL.revokeObjectURL(gone.thumb);
       return current.filter((c) => c.id !== id);
     });
   const clear = () =>
-    setItems((current) => {
+    update(scopeKey, (current) => {
       for (const c of current) if (c.thumb) URL.revokeObjectURL(c.thumb);
       return [];
     });
-  useEffect(() => () => itemsRef.current.forEach((c) => c.thumb && URL.revokeObjectURL(c.thumb)), []);
+  useEffect(() => () => Object.values(scopesRef.current).flat().forEach((c) => c.thumb && URL.revokeObjectURL(c.thumb)), []);
   return { items, add, remove, clear };
 }
 

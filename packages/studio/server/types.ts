@@ -86,6 +86,8 @@ export interface Workspace {
   id: string;
   name: string;
   rootPath: string;
+  instructions?: string;
+  pinnedFiles?: string[];
   threads: AgentThread[];
   activeThreadId?: string;
 }

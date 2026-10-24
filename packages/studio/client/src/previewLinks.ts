@@ -1,5 +1,9 @@
-export type PreviewTarget = { kind: 'web'; url: string } | { kind: 'file'; path: string; line?: number };
+export type PreviewTarget = { kind: 'web'; url: string } | { kind: 'file'; path: string; line?: number } | { kind: 'artifact'; title: string; language: string; content: string };
 export interface PreviewRequest { id: string; workspaceId?: string; target: PreviewTarget; }
+
+export function openArtifact(title: string, language: string, content: string) {
+  window.dispatchEvent(new CustomEvent('superai:open-artifact', { detail: { title, language, content } }));
+}
 
 /** Classify links before they reach either Chromium or the project file endpoint. */
 export function parsePreviewTarget(input: string): PreviewTarget {

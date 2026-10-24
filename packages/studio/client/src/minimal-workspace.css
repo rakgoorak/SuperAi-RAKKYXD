@@ -202,3 +202,647 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 @media (max-width: 760px) { #root .mission-settings { grid-template-columns: 1fr; }#root .settings-nav { border-right: 0; padding-right: 0; }#root .dialog { padding: 18px; }#root .chat-column { padding: 20px 16px 32px; }#root .workspace-toolbar { padding: 0 12px; min-height: 48px; }#root .toolbar-button span, #root .toolbar-actions .primary span { display: none; }#root .toolbar-actions { gap: 2px; }#root .breadcrumb { font-size: 11px; gap: 5px; }#root .workspace-welcome { padding: 24px 20px; }#root .welcome-workflows { grid-template-columns: 1fr; gap: 8px; }#root .canvas-heading { padding: 8px 14px; }#root .mode-config { padding: 14px; }#root .conversation-scroll { padding: 14px; } }
 @media (max-width: 650px) { #root .changes-grid { grid-template-columns: 1fr; }#root .changes-grid nav { max-height: 150px; }#root .project-sidebar { width: 160px; min-width: 160px; }#root .titlebar { gap: 12px; padding-left: 12px; }#root .brand-wordmark { display: none; }#root .mode-switch button { min-width: 44px; padding: 6px 8px; }#root .mode-switch button svg { display: none; }#root .workspace-welcome h2 { font-size: 22px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+
+/* Code blocks & Artifact action in Markdown */
+#root .md-code-block {
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #1c1c19;
+  overflow: hidden;
+}
+#root .md-code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+#root .md-code-lang {
+  font-family: var(--font-mono, Consolas, monospace);
+  font-weight: 600;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+#root .md-code-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#root .md-copy-btn,
+#root .md-artifact-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--control-border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+#root .md-copy-btn:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+#root .md-artifact-btn {
+  background: #d9a08018;
+  border-color: #d9a08044;
+  color: var(--accent);
+  font-weight: 500;
+}
+#root .md-artifact-btn:hover {
+  background: #d9a0802e;
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+#root .md-code-block pre {
+  margin: 0;
+  padding: 14px 16px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  overflow-x: auto;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Artifact Live Canvas & Preview Panel */
+#root .artifact-preview-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--base);
+  overflow: hidden;
+}
+#root .artifact-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#root .artifact-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+#root .artifact-sparkle-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+#root .artifact-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#root .artifact-lang-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  background: var(--raised);
+  border: 1px solid var(--control-border);
+  border-radius: 5px;
+  color: var(--dim);
+}
+#root .artifact-tab-switch {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  background: var(--raised);
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  gap: 2px;
+}
+#root .artifact-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+#root .artifact-tab-btn.active {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 500;
+}
+#root .artifact-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+#root .artifact-actions .icon-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+#root .artifact-actions .icon-button:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+#root .artifact-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: #181815;
+}
+#root .artifact-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #181816;
+}
+#root .artifact-canvas.svg-canvas {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 24px;
+  background: #181815;
+}
+#root .artifact-svg-container {
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#root .artifact-code-view {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  padding: 16px;
+}
+#root .artifact-code-view pre {
+  margin: 0;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+/* Mention popup polish */
+#root .mention-menu {
+  width: min(520px, 90vw);
+}
+#root .mention-menu [role='option'] .slash-symbol {
+  color: var(--accent);
+}
+
+/* Thinking Accordion (Claude-like Thought Process) */
+#root .thinking-accordion {
+  margin: 10px 0 16px;
+  border: 1px solid var(--control-border);
+  border-radius: 9px;
+  background: var(--surface);
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+#root .thinking-accordion.is-open {
+  border-color: var(--focus);
+}
+#root .thinking-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+#root .thinking-header:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+#root .thinking-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+#root .thinking-brain-icon {
+  color: var(--accent);
+}
+#root .thinking-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dim);
+}
+#root .thinking-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--raised);
+  color: var(--dim);
+}
+#root .thinking-content {
+  border-top: 1px solid var(--border);
+  padding: 12px 14px;
+  background: #1a1a18;
+}
+#root .thinking-body pre {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--dim);
+}
+
+/* Command Palette (Spotlight Ctrl+K) */
+#root .command-palette-backdrop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+  z-index: 150;
+}
+#root .command-palette-dialog {
+  width: min(600px, 94vw);
+  background: var(--surface);
+  border: 1px solid var(--control-border);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#root .command-palette-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--raised);
+}
+#root .command-search-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+#root .command-palette-search input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  font-size: 14px;
+}
+#root .command-palette-search input::placeholder {
+  color: var(--dim);
+}
+#root .command-palette-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+#root .command-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+#root .command-item.active,
+#root .command-item:hover {
+  background: var(--selected);
+}
+#root .command-item-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+#root .command-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+#root .command-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#root .command-item-subtitle {
+  font-size: 11px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#root .command-item-cat {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  flex-shrink: 0;
+}
+#root .command-palette-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 13px;
+}
+#root .command-palette-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  color: var(--dim);
+  font-size: 11px;
+  background: var(--raised);
+}
+#root .command-palette-footer kbd {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--control-border);
+  font-size: 10px;
+  font-family: inherit;
+}
+
+#root .composer-instructions-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  margin-bottom: 6px;
+  border-radius: 7px;
+  background: #d9a08014;
+  border: 1px solid #d9a0803a;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+#root .composer-instructions-pill:hover {
+  background: #d9a08028;
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+
+/* Pinned Files & Context Tags */
+#root .composer-context-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+#root .composer-pinned-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+#root .pinned-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-right: 2px;
+}
+
+#root .composer-pinned-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #282824;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--text);
+  transition: all 0.15s ease;
+}
+
+#root .composer-pinned-chip:hover {
+  border-color: var(--accent);
+  background: #2e2e2a;
+}
+
+#root .pinned-chip-name {
+  cursor: pointer;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#root .pinned-chip-name:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+#root .pinned-chip-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+}
+
+#root .pinned-chip-remove:hover {
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.1);
+}
+
+#root .composer-pin-picker-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+#root .composer-add-pin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+#root .composer-add-pin-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #d9a08010;
+}
+
+#root .composer-pin-dropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: 320px;
+  max-height: 280px;
+  background: #1c1c1a;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+#root .pin-dropdown-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: #222220;
+}
+
+#root .pin-dropdown-header input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 12px;
+  color: var(--text);
+}
+
+#root .pin-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 2px;
+}
+
+#root .pin-dropdown-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#root .pin-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+
+#root .pin-dropdown-item:hover {
+  background: #2b2b27;
+}
+
+#root .pin-dropdown-item.is-pinned {
+  background: #d9a08015;
+}
+
+#root .pin-dropdown-item .item-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+#root .pin-dropdown-item .item-path {
+  flex: 1;
+  font-size: 10px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#root .pin-dropdown-item .item-status {
+  font-size: 10px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+#root .pin-dropdown-empty {
+  padding: 12px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-dim);
+}

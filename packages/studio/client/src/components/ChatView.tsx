@@ -6,6 +6,7 @@ import { prepareMessage, recoveryHint, showChanges } from '../recovery';
 import { getSuggestions } from '../suggestions';
 import { NextSteps } from './NextSteps';
 import { ResponseActions } from './ResponseActions';
+import { MessageAttachments } from './MessageAttachments';
 import { timeLabel, tokenLabel } from '../chatFormat';
 
 // Mirrors server/CliChat.ts.
@@ -251,7 +252,7 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
                   <div>
                     {block.text}
                     <button className="edit-message" disabled={running || pending} onClick={() => { prepareMessage(block.text, sessionId); if (block.attachments?.length) setProblem('กรุณาแนบไฟล์เดิมอีกครั้งก่อนส่งข้อความที่แก้ไข'); }}>แก้ข้อความแล้วส่งใหม่</button>
-                    {block.attachments?.length ? <small><Paperclip size={11} /> {block.attachments.join(', ')}</small> : null}
+                    <MessageAttachments paths={block.attachments} endpoint={`/api/terminals/${encodeURIComponent(sessionId)}/preview-file`} />
                     <time className="chat-time" dateTime={new Date(block.at).toISOString()} title={new Date(block.at).toLocaleString('th-TH')}>{timeLabel(block.at, now)}</time>
                   </div>
                 </div>

@@ -81,11 +81,13 @@ export class WorkspaceRegistry {
     return this.workspaces.get(id);
   }
 
-  public createWorkspace(name: string, rootPath: string): Workspace {
+  public createWorkspace(name: string, rootPath: string, instructions?: string, pinnedFiles?: string[]): Workspace {
     const ws: Workspace = {
       id: `ws-${Date.now()}-${randomUUID().slice(0, 4)}`,
       name,
       rootPath,
+      instructions: instructions?.trim(),
+      pinnedFiles: Array.isArray(pinnedFiles) ? pinnedFiles : [],
       threads: [],
     };
     this.workspaces.set(ws.id, ws);
@@ -95,7 +97,7 @@ export class WorkspaceRegistry {
 
   public updateWorkspace(
     id: string,
-    updates: { name?: string; rootPath?: string },
+    updates: { name?: string; rootPath?: string; instructions?: string; pinnedFiles?: string[] },
   ): Workspace | undefined {
     const ws = this.workspaces.get(id);
     if (!ws) return undefined;
@@ -110,6 +112,12 @@ export class WorkspaceRegistry {
       )
         throw new Error("ไม่พบโฟลเดอร์โปรเจกต์");
       ws.rootPath = path.resolve(updates.rootPath);
+    }
+    if (updates.instructions !== undefined) {
+      ws.instructions = updates.instructions.trim();
+    }
+    if (updates.pinnedFiles !== undefined) {
+      ws.pinnedFiles = Array.isArray(updates.pinnedFiles) ? [...new Set(updates.pinnedFiles)] : [];
     }
     this.save();
     return ws;
