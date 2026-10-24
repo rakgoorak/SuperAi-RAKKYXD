@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog, clipboard, nativeImage } from "electron";
+import { app, BrowserWindow, ipcMain, shell, dialog, clipboard, nativeImage, nativeTheme } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -163,6 +163,8 @@ else {
     }
   });
   app.whenReady().then(async () => {
+    // The UI is dark-only; without this Windows draws <select> popups and scrollbars in the light OS theme.
+    nativeTheme.themeSource = "dark";
     try {
       const { StudioServer } = await import(
         pathToFileURL(path.resolve(directory, "../studio/dist/StudioServer.js"))

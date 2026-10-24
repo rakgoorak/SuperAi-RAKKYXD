@@ -29,7 +29,7 @@
 #root .work-canvas .composer-box textarea,
 #root .work-canvas.code-mode .composer-box textarea {
   position: relative; display: block; width: 100%; height: 76px; min-height: 76px; max-height: min(240px, 32vh);
-  padding: 17px 18px 9px; background: transparent; border: 0; outline: 0; resize: vertical;
+  padding: 17px 18px 9px; background: transparent; border: 0; outline: 0; resize: none;
   font-size: 15px; line-height: 1.8; color: var(--text);
 }
 #root .work-canvas .composer-box textarea::placeholder { color: var(--dim); }
@@ -228,3 +228,13 @@
 
 /* Keep the three team seats on one row inside the reading column. */
 #root .agent-cards { grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 10px; }
+
+/* Native pieces: dark option lists where the OS ignores color-scheme, and no drag-resize grip on the
+   composers (Code has its own expand button; the grip looked like a stray mark in the corner). */
+#root select option { background: #2b2b28; color: var(--text); }
+#root .composer-area textarea { resize: none; }
+
+/* Settings: give "เวอร์ชัน CLI" its own section instead of touching the CLI table above it. */
+#root .cli-versions { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--border); }
+#root .cli-version-job pre { background: var(--base); color: var(--text-secondary); border: 1px solid var(--border); }
+#root .cli-version-badge { white-space: nowrap; }

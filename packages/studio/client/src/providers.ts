@@ -18,7 +18,7 @@ export const EFFORT_LABEL: Record<string, string> = {
   high: "สูง",
   xhigh: "สูงมาก",
   max: "สูงสุด",
-  ultra: "ultra",
+  ultra: "อัลตรา",
 };
 
 /** Effort levels each CLI accepts; shown while the live model list is still loading. */

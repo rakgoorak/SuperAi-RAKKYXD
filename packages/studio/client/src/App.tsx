@@ -1259,7 +1259,7 @@ export function App() {
           }}
         >
           <section
-            className={`dialog ${dialog === "settings" || dialog === "skills" || dialog === "history" || dialog === "changes" ? "settings-dialog" : ""}`}
+            className={`dialog ${dialog === "setup" ? "setup-dialog" : ""} ${dialog === "settings" || dialog === "skills" || dialog === "history" || dialog === "changes" ? "settings-dialog" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="dialog-title"
@@ -1296,7 +1296,7 @@ export function App() {
                       : dialog === "project"
                         ? "เลือกโฟลเดอร์ที่ใช้ทำงานจริงบนเครื่อง"
                         : dialog === "setup"
-                          ? "ตรวจเครื่องมือและบัญชีแยกตามผู้ให้บริการ · บาง CLI ต้องตรวจบัญชีใน Terminal"
+                          ? "ตรวจเครื่องมือ บัญชี และค่าเริ่มต้นก่อนเริ่มงาน"
                           : dialog === "skills"
                             ? `${workspace?.name || ""} · AI เสนอ คุณเป็นคนกดติดตั้ง`
                             : dialog === "update"
