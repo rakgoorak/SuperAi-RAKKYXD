@@ -23,7 +23,7 @@ function ImagePreview({ image, onClose }: { image: Image; onClose: () => void })
     <dialog ref={dialog} className="message-image-preview" aria-label={`ดูรูป ${image.name}`}
       onCancel={event => { event.preventDefault(); onClose(); }}
       onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
-      <header><span className="message-image-title" title={image.name}>{image.name}</span><button type="button" aria-label="ปิดรูปภาพ" title="ปิดรูปภาพ (Esc)" onClick={onClose} autoFocus><X size={22} /><span>ปิดรูปภาพ</span><kbd>Esc</kbd></button></header>
+      <header><button type="button" aria-label="ปิดรูปภาพ" title="ปิดรูปภาพ (Esc)" onClick={onClose} autoFocus><X size={22} /><span>ปิดรูปภาพ</span><kbd>Esc</kbd></button><span className="message-image-title" title={image.name}>{image.name}</span></header>
       {failed ? <p role="alert"><ImageOff size={24} />เปิดรูปไม่ได้ ไฟล์อาจถูกย้ายหรือลบ กรุณาแนบรูปอีกครั้ง</p>
         : <img src={image.src} alt={image.name} onError={() => setFailed(true)} />}
     </dialog>, document.body,

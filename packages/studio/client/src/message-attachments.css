@@ -6,10 +6,10 @@
 .message-image-name { display: block; width: 100%; padding: 7px 9px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .message-image-missing { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; width: 100%; height: 130px; font-size: 12px; }
 .message-file { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; overflow-wrap: anywhere; font-size: 12px; color: var(--muted); }
-dialog.message-image-preview { --image-preview-top: calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 53px) + 12px); position: fixed; inset: 0; box-sizing: border-box; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: calc(var(--image-preview-top) + 60px) 24px 24px; border: 0; border-radius: 0; background: rgb(0 0 0 / 90%); color: #eeede7; overflow: hidden; -webkit-app-region: no-drag; }
+dialog.message-image-preview { --image-preview-top: calc(max(53px, calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 0px))) + 12px); position: fixed; inset: 0; box-sizing: border-box; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: calc(var(--image-preview-top) + 60px) 24px 24px; border: 0; border-radius: 0; background: rgb(0 0 0 / 90%); color: #eeede7; overflow: hidden; -webkit-app-region: no-drag; }
 dialog.message-image-preview[open] { display: grid; place-items: center; }
 .message-image-preview::backdrop { background: transparent; }
-.message-image-preview header { position: absolute; top: var(--image-preview-top); left: 24px; right: 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.message-image-preview header { position: absolute; top: var(--image-preview-top); left: 24px; right: 24px; display: flex; align-items: center; justify-content: flex-start; gap: 16px; }
 .message-image-preview .message-image-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .message-image-preview header button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0; min-height: 44px; padding: 10px 14px; border: 0; border-radius: 8px; color: #181816; background: #eeede7; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 .message-image-preview header button kbd { padding: 1px 4px; border: 1px solid #6b6b62; border-radius: 4px; font: inherit; font-size: 11px; }

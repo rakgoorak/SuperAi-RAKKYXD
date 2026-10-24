@@ -39,6 +39,13 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
   const [fileRequest, setFileRequest] = useState<FilePreviewRequest>();
   const [artifact, setArtifact] = useState<ArtifactState | null>(null);
   const [imageOverlay, setImageOverlay] = useState(false);
+  const [teamOverlay, setTeamOverlay] = useState(false);
+  useEffect(() => {
+    const update = (event: Event) => setTeamOverlay((event as CustomEvent<boolean>).detail);
+    setTeamOverlay(!!document.querySelector('dialog.team-settings[open]'));
+    window.addEventListener('superai:team-overlay', update);
+    return () => window.removeEventListener('superai:team-overlay', update);
+  }, []);
   useEffect(() => {
     const update = (event: Event) => setImageOverlay((event as CustomEvent<boolean>).detail);
     setImageOverlay(!!document.querySelector('dialog.message-image-preview[open]'));
@@ -102,7 +109,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
             y: r.y,
             width: r.width,
             height: r.height,
-            visible: !suspended && !imageOverlay && !fileRequest && !artifact && !!tab && !tab.error,
+            visible: !suspended && !imageOverlay && !teamOverlay && !fileRequest && !artifact && !!tab && !tab.error,
           })
           .catch(() => {});
     };
@@ -115,7 +122,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
       window.removeEventListener("resize", update);
       void native.browser("bounds", { visible: false }).catch(() => {});
     };
-  }, [native, suspended, imageOverlay, tab?.id, tab?.error, width, fileRequest, artifact]);
+  }, [native, suspended, imageOverlay, teamOverlay, tab?.id, tab?.error, width, fileRequest, artifact]);
   const navigate = (event?: React.FormEvent) => {
     event?.preventDefault();
     if (/^(?:file:|\/|[a-z]:[\\/]|\.{1,2}[\\/])/i.test(url.trim()) || fileRequest?.target.path === url.trim()) {

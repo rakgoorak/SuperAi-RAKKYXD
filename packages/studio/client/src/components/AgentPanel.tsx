@@ -5,6 +5,7 @@ import type { Cli, Run, Seat, StepStatus } from "../api";
 import { HEADLESS, firstReady, seatFor, seatSummary } from "../providers";
 import { SeatPicker } from "./SeatPicker";
 import { ConfigShell } from "./ConfigShell";
+import { useTeamDraft } from "./useTeamDraft";
 import { ProviderAccess } from "./ProviderAccess";
 import { Markdown } from "./Markdown";
 
@@ -20,31 +21,34 @@ function defaultConfig(clis: Cli[]): AgentConfig {
   return { main: seatFor(mainCli, "Main"), subagents: [seatFor(subCli, "Sub-agent 1"), seatFor(mainCli, "Sub-agent 2")] };
 }
 
-export function AgentConfigEditor({ workspaceId, clis, ollamaModels, disabled, runCount, onChange, onFixTools }: {
-  workspaceId: string; clis: Cli[]; ollamaModels: string[]; disabled: boolean; runCount: number; onChange: (c: AgentConfig) => void; onFixTools: () => void;
+export function AgentConfigEditor({ workspaceId, clis, ollamaModels, disabled, onChange, onFixTools }: {
+  workspaceId: string; clis: Cli[]; ollamaModels: string[]; disabled: boolean; onChange: (c: AgentConfig) => void; onFixTools: () => void;
 }) {
   const key = `superai-agent-v1:${workspaceId}`;
-  const [config, setConfig] = useState<AgentConfig>(() => {
+  const team = useTeamDraft<AgentConfig>(key, () => {
     try {
       const saved = JSON.parse(localStorage.getItem(key) || "null");
       if (saved && validSeat(saved.main) && Array.isArray(saved.subagents) && saved.subagents.length && saved.subagents.every(validSeat)) return saved;
     } catch {}
     return defaultConfig(clis);
-  });
-  useEffect(() => {
-    onChange(config);
-    try { localStorage.setItem(key, JSON.stringify(config)); } catch {}
-  }, [config, key, onChange]);
+  }, onChange);
+  const { config, saved, edit: setConfig } = team;
   const editSub = (index: number, seat: Seat) => setConfig((c) => ({ ...c, subagents: c.subagents.map((s, i) => (i === index ? seat : s)) }));
   return (
-    <>
-    <ConfigShell label="ตั้งค่าทีม Agent" runCount={runCount} title={<><Users size={17} /> ทีม Agent</>}
+    <ConfigShell label="ตั้งค่าทีม Agent" title={<><Users size={19} /> ทีม Agent</>}
       description="Main วางแผนและแจกงาน → Sub-agent ทำพร้อมกัน → Main ตรวจและสรุปผลให้คุณ"
-      summary={`Main: ${config.main.name} (${seatSummary(config.main)}) · ${config.subagents.map((s) => `${s.name} (${seatSummary(s)})`).join(" · ")}`}>
+      summary={`${saved.main.name} · ${saved.subagents.length} Sub-agent`}
+      disabled={disabled} onOpen={team.begin} onSave={team.save} onCancel={team.cancel}>
+      {close => <>
+      <section aria-label="ผู้วางแผนและตรวจงาน"><h3>ผู้วางแผนและตรวจงาน</h3>
+      <p className="team-section-description">Main รับเป้าหมาย แบ่งงาน และตรวจผลให้คุณ</p>
       <div className="seat-row main-seat">
         <span className="seat-badge"><Crown size={13} /> Main</span>
         <SeatPicker seat={config.main} label="Main" clis={clis} ollamaModels={ollamaModels} disabled={disabled} onChange={(main) => setConfig((c) => ({ ...c, main }))} />
       </div>
+      </section>
+      <section aria-label="ผู้ร่วมทีม"><h3>ผู้ร่วมทีม</h3>
+      <p className="team-section-description">Sub-agent ทำงานที่ Main มอบหมาย เพิ่มได้สูงสุด {MAX_SUBAGENTS} ตัว</p>
       {config.subagents.map((seat, index) => (
         <div className="seat-row" key={index}>
           <span className="seat-badge"><Bot size={13} /> Sub {index + 1}</span>
@@ -57,9 +61,10 @@ export function AgentConfigEditor({ workspaceId, clis, ollamaModels, disabled, r
         onClick={() => setConfig((c) => ({ ...c, subagents: [...c.subagents, seatFor(firstReady(clis) || HEADLESS[0], `Sub-agent ${c.subagents.length + 1}`)] }))}>
         <Plus size={13} /> เพิ่ม Sub-agent ({config.subagents.length}/{MAX_SUBAGENTS})
       </button>
+      </section>
+    <div className="team-access" aria-label="ความพร้อมของทีม">{Array.from(new Set([config.main, ...config.subagents].map(s => s.provider).filter(p => p.startsWith("cli:")).map(p => p.slice(4)))).map(provider => <ProviderAccess key={provider} provider={provider} wsId={workspaceId} compact onInstall={() => { close(); onFixTools(); }} />)}</div>
+      </>}
     </ConfigShell>
-    <div className="team-access" aria-label="ความพร้อมของทีม">{Array.from(new Set([config.main, ...config.subagents].map(s => s.provider).filter(p => p.startsWith("cli:")).map(p => p.slice(4)))).map(provider => <ProviderAccess key={provider} provider={provider} wsId={workspaceId} compact onInstall={onFixTools} />)}</div>
-    </>
   );
 }
 

@@ -71,7 +71,6 @@ import { DictationButton } from "./components/DictationButton";
 import { AttachMenu, AttachmentCards, ComposerDropOverlay, useComposerAttachments, useWindowDrop } from "./components/ComposerAttachments";
 import { attachMode, formatPath, pastedFiles, uploadAttachment, type SavedAttachment } from "./attachments";
 import { SetupGuide, setupNeeded } from "./components/SetupGuide";
-import { ChatQuickControls } from "./components/ChatQuickControls";
 import { loadVoiceSettings, saveVoiceSettings, type VoiceSettings } from "./voice/speech";
 import { getSuggestions } from "./suggestions";
 import { NextSteps } from "./components/NextSteps";
@@ -1032,12 +1031,13 @@ export function App() {
                     </>
                   ) : (
                     <>
+                      {mode === "agent" ? (
+                        <AgentConfigEditor key={`agent-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} onChange={setAgentConfig} onFixTools={() => openSession()} />
+                      ) : (
+                        <ChatConfigEditor key={`chat-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} onChange={setChatConfig} />
+                      )}
                       <button className="text-button" onClick={() => setDialog("skills")} disabled={!workspace} title="ให้ AI เลือก skill ที่จำเป็นต่อโปรเจกต์">
                         <Puzzle size={13} /> Skills
-                      </button>
-                      <button className="text-button" onClick={openSettings}>
-                        model และ effort เริ่มต้น
-                        <ChevronDown size={13} />
                       </button>
                       <button
                         className="icon-button"
@@ -1064,11 +1064,6 @@ export function App() {
               </div>
               {mode !== "code" && (
                 <div className="conversation-scroll">
-                  {mode === "agent" ? (
-                    <AgentConfigEditor key={`agent-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun} runCount={conversation.length} onChange={setAgentConfig} onFixTools={() => openSession()} />
-                  ) : (
-                    <ChatConfigEditor key={`chat-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun} runCount={conversation.length} onChange={setChatConfig} value={chatConfig} />
-                  )}
                   {!conversation.length ? (
                     <div className="conversation-empty compact">
                       <div className="empty-command">
@@ -1272,7 +1267,6 @@ export function App() {
                   </div>
                 </div>}
                 <div className={`composer-box ${chatTarget ? "has-session-controls" : ""}`}>
-                  {mode === "chat" && chatConfig && workspace && <ChatQuickControls workspaceId={workspace.id} config={chatConfig} onChange={setChatConfig} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} onDraft={setDraft} />}
                   {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name.split("·")[0].trim() || chatTarget.name} disabled={busy} />}
                   <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
                   <div className="composer-input-container">
@@ -1408,7 +1402,21 @@ export function App() {
             <RightDock open={preview} view={dockView} setView={setDockView} close={() => setPreview(false)} suspended={!!dialog || usageOpen}
               workspace={workspace} workspaces={workspaces} sessions={sessions} runs={runs} selected={selected} previewRequest={previewRequest}
               onSelect={session => { setActiveWs(session.wsId || activeWs); setSelected(session.id); setMode("code"); }}
-              onPrompt={text => { setDraft(current => current ? `${current}\n${text}` : text); requestAnimationFrame(() => composer.current?.focus()); }} onError={showError} />
+              onPrompt={text => {
+                if (selected) {
+                  const key = composerDraftKey(activeWs, "code", selected, target);
+                  setDraftFor(key, (curr: string) => curr ? `${curr}\n${text}` : text);
+                }
+                setDraft(current => current ? `${current}\n${text}` : text);
+                setComposerExpanded(true);
+                requestAnimationFrame(() => {
+                  composer.current?.focus();
+                  if (composer.current) {
+                    const len = composer.current.value.length;
+                    composer.current.setSelectionRange(len, len);
+                  }
+                });
+              }} onError={showError} />
           </div>
           <footer className="statusbar">
             <span className={`status-dot ${connected ? "" : "offline"}`} />
