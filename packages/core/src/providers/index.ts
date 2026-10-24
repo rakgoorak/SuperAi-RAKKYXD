@@ -6,6 +6,7 @@ export * from './CredentialStore.js';
 export * from './BaseProvider.js';
 export * from './MockProvider.js';
 export * from './OpenAIProvider.js';
+export * from './OpenAiCompatibleProvider.js';
 export * from './AnthropicProvider.js';
 export * from './GeminiProvider.js';
 export * from './OllamaProvider.js';
@@ -15,16 +16,19 @@ export * from './BrowserLogin.js';
 import { LLMProvider } from './BaseProvider.js';
 import { MockProvider } from './MockProvider.js';
 import { OpenAIProvider } from './OpenAIProvider.js';
+import { OpenAiCompatibleProvider } from './OpenAiCompatibleProvider.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import { GeminiProvider } from './GeminiProvider.js';
 import { OllamaProvider } from './OllamaProvider.js';
 import { WebSessionProvider } from './WebSessionProvider.js';
 
 export interface ProviderSelectionConfig {
-  provider: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'web_session' | 'mock';
+  provider: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'web_session' | 'mock' | 'deepseek' | 'groq' | 'openrouter' | 'openai_compatible';
   apiKey?: string;
   baseURL?: string;
   model?: string;
+  temperature?: number;
+  maxTokens?: number;
   webToken?: string;
   webService?: 'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'copilot';
 }
@@ -46,6 +50,9 @@ export function loadStoredAuth(selectedProvider?: string): Record<string, string
             if (key === 'ANTHROPIC_API_KEY') credentials['anthropic'] = val;
             if (key === 'OPENAI_API_KEY') credentials['openai'] = val;
             if (key === 'GEMINI_API_KEY') credentials['gemini'] = val;
+            if (key === 'DEEPSEEK_API_KEY') credentials['deepseek'] = val;
+            if (key === 'GROQ_API_KEY') credentials['groq'] = val;
+            if (key === 'OPENROUTER_API_KEY') credentials['openrouter'] = val;
           }
         }
       }
@@ -55,19 +62,30 @@ export function loadStoredAuth(selectedProvider?: string): Record<string, string
   if (process.env.ANTHROPIC_API_KEY) credentials['anthropic'] = process.env.ANTHROPIC_API_KEY;
   if (process.env.OPENAI_API_KEY) credentials['openai'] = process.env.OPENAI_API_KEY;
   if (process.env.GEMINI_API_KEY) credentials['gemini'] = process.env.GEMINI_API_KEY;
+  if (process.env.DEEPSEEK_API_KEY) credentials['deepseek'] = process.env.DEEPSEEK_API_KEY;
+  if (process.env.GROQ_API_KEY) credentials['groq'] = process.env.GROQ_API_KEY;
+  if (process.env.OPENROUTER_API_KEY) credentials['openrouter'] = process.env.OPENROUTER_API_KEY;
 
-  const store = new CredentialStore();
-  for (const provider of selectedProvider ? [selectedProvider] : ['openai', 'anthropic', 'gemini']) {
-    if (credentials[provider]) continue;
-    const token = store.get('api', provider);
-    if (token) credentials[provider] = token;
+  const defaultProviders = ['openai', 'anthropic', 'gemini', 'deepseek', 'groq', 'openrouter', 'openai_compatible'];
+  const targets = selectedProvider ? [selectedProvider] : defaultProviders;
+  const missing = targets.filter((p) => !credentials[p]);
+
+  if (missing.length > 0) {
+    try {
+      const store = new CredentialStore();
+      for (const provider of missing) {
+        const token = store.get('api', provider);
+        if (token) credentials[provider] = token;
+      }
+    } catch {}
   }
 
   return credentials;
 }
 
 export function createProvider(config: ProviderSelectionConfig): LLMProvider {
-  const auth = ['anthropic', 'openai', 'gemini'].includes(config.provider) && !config.apiKey ? loadStoredAuth(config.provider) : {};
+  const cloudProviders = ['anthropic', 'openai', 'gemini', 'deepseek', 'groq', 'openrouter', 'openai_compatible'];
+  const auth = cloudProviders.includes(config.provider) && !config.apiKey ? loadStoredAuth(config.provider) : {};
 
   switch (config.provider) {
     case 'anthropic':
@@ -80,6 +98,42 @@ export function createProvider(config: ProviderSelectionConfig): LLMProvider {
         apiKey: config.apiKey || auth['openai'],
         baseURL: config.baseURL,
         model: config.model,
+      });
+    case 'deepseek':
+      return new OpenAiCompatibleProvider({
+        providerId: 'deepseek',
+        apiKey: config.apiKey || auth['deepseek'],
+        baseURL: config.baseURL,
+        model: config.model,
+        temperature: config.temperature,
+        maxTokens: config.maxTokens,
+      });
+    case 'groq':
+      return new OpenAiCompatibleProvider({
+        providerId: 'groq',
+        apiKey: config.apiKey || auth['groq'],
+        baseURL: config.baseURL,
+        model: config.model,
+        temperature: config.temperature,
+        maxTokens: config.maxTokens,
+      });
+    case 'openrouter':
+      return new OpenAiCompatibleProvider({
+        providerId: 'openrouter',
+        apiKey: config.apiKey || auth['openrouter'],
+        baseURL: config.baseURL,
+        model: config.model,
+        temperature: config.temperature,
+        maxTokens: config.maxTokens,
+      });
+    case 'openai_compatible':
+      return new OpenAiCompatibleProvider({
+        providerId: 'openai_compatible',
+        apiKey: config.apiKey || auth['openai_compatible'] || auth['openai'],
+        baseURL: config.baseURL,
+        model: config.model,
+        temperature: config.temperature,
+        maxTokens: config.maxTokens,
       });
     case 'gemini':
       return new GeminiProvider({

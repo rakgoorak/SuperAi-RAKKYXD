@@ -47,6 +47,21 @@ export const PROVIDER_PROFILES: Record<string, ProviderProfile> = {
     effortNote: "OpenCode ส่ง effort เป็น --variant ซึ่งแต่ละผู้ให้บริการรองรับต่างกัน",
   },
   freebuff: { id: "freebuff", efforts: [], suggestedModels: [] },
+  deepseek: {
+    id: "deepseek",
+    efforts: [],
+    suggestedModels: ["deepseek-chat", "deepseek-reasoner"],
+  },
+  groq: {
+    id: "groq",
+    efforts: [],
+    suggestedModels: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b"],
+  },
+  openrouter: {
+    id: "openrouter",
+    efforts: [],
+    suggestedModels: ["deepseek/deepseek-r1", "anthropic/claude-3.5-sonnet", "google/gemini-2.5-flash"],
+  },
 };
 
 const SAFE = /^[\w.:/@+-]*$/;

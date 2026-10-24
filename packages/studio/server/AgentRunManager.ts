@@ -9,6 +9,7 @@ import {
   LLMResponse,
   ToolDefinition,
   LLMProvider,
+  createProvider,
 } from "@superai-rakkyxd/core";
 import { CliProvider, attachmentProblem } from "./CliProvider.js";
 import { cliLaunch } from "./CliCatalog.js";
@@ -302,9 +303,17 @@ export class AgentRunManager {
   }
 
   private provider(seat: Seat, cwd: string, signal: AbortSignal, tools: boolean, readTools: boolean, attachments: string[]): LLMProvider {
-    return seat.provider.startsWith("cli:")
-      ? new CliProvider(seat.provider, cwd, signal, tools, seat.model, readTools, attachments, seat.effort)
-      : new LocalProvider(seat.provider, signal);
+    if (seat.provider.startsWith("cli:")) {
+      return new CliProvider(seat.provider, cwd, signal, tools, seat.model, readTools, attachments, seat.effort);
+    }
+    const cloud = ["deepseek", "groq", "openrouter", "openai", "anthropic", "gemini", "openai_compatible"];
+    if (cloud.includes(seat.provider)) {
+      return createProvider({
+        provider: seat.provider as any,
+        model: seat.model || undefined,
+      });
+    }
+    return new LocalProvider(seat.provider, signal);
   }
 
   /** Run one prompt on a seat. CLIs use their own tools; Ollama gets SuperAi's file tools when allowed. */
