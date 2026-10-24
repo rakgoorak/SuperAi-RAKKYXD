@@ -1468,7 +1468,7 @@ export function App() {
           }}
         >
           <section
-            className={`dialog ${dialog === "setup" ? "setup-dialog" : ""} ${dialog === "settings" || dialog === "skills" || dialog === "history" || dialog === "changes" ? "settings-dialog" : ""}`}
+            className={`dialog ${dialog === "setup" ? "setup-dialog" : ""} ${dialog === "settings" || dialog === "skills" || dialog === "history" || dialog === "changes" ? "settings-dialog" : ""} ${dialog === "changes" ? "changes-dialog" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="dialog-title"
