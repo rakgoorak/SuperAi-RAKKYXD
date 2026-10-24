@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Gauge, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { api } from "../api";
+import { orderUsageWindows, usageResetLabel, type UsageWindow } from "../usageDisplay";
 
-interface UsageWindow { label: string; group?: string; remainingPercent: number | null; resetsAt?: string; resetsText?: string; note?: string; }
 interface ProviderUsage {
   id: string; name: string; status: "ok" | "unsupported" | "not-installed" | "error";
   windows: UsageWindow[]; details?: { label: string; value: string }[]; note?: string; updatedAt: number; dataTime?: number;
@@ -17,18 +17,6 @@ const PROVIDERS: { id: string; label: string }[] = [
 ];
 
 const level = (pct: number) => (pct > 50 ? "good" : pct >= 20 ? "warn" : "low");
-
-function resetLabel(w: UsageWindow) {
-  if (w.resetsAt) {
-    const at = new Date(w.resetsAt);
-    const ms = at.getTime() - Date.now();
-    if (ms <= 0) return "รีเซ็ตแล้ว";
-    const h = Math.floor(ms / 3_600_000), m = Math.round((ms % 3_600_000) / 60_000);
-    const relative = h >= 24 ? `${Math.floor(h / 24)} วัน ${h % 24} ชม.` : h ? `${h} ชม. ${m} นาที` : `${m} นาที`;
-    return `รีเซ็ตในอีก ${relative} · ${at.toLocaleString("th-TH", { weekday: "short", hour: "2-digit", minute: "2-digit" })}`;
-  }
-  return w.resetsText ? `รีเซ็ต ${w.resetsText}` : "";
-}
 
 const ago = (t?: number) => {
   if (!t) return "";
@@ -98,7 +86,7 @@ export function UsageButton({ open, onOpenChange: setOpen }: { open: boolean; on
                 <article key={id} className={`usage-card status-${p?.status || "loading"}`}>
                   <header>
                     <strong>{label}</strong>
-                    <small>{busy ? "กำลังตรวจ…" : p ? ago(p.dataTime || p.updatedAt) : ""}</small>
+                    <small>{busy ? "กำลังตรวจ…" : p ? `อัปเดต ${ago(p.dataTime || p.updatedAt)}` : ""}</small>
                     <button className="icon-button" title={`ตรวจ ${label} ใหม่`} disabled={busy} onClick={() => void load(id, true)}>
                       {busy ? <LoaderCircle size={12} className="spin" /> : <RefreshCw size={12} />}
                     </button>
@@ -107,7 +95,7 @@ export function UsageButton({ open, onOpenChange: setOpen }: { open: boolean; on
                   {groups.map((group) => (
                     <div key={group} className="usage-group">
                       {group && <span className="usage-group-name">{group}</span>}
-                      {p!.windows.filter((w) => (w.group || "") === group).map((w) => (
+                      {orderUsageWindows(p!.windows.filter((w) => (w.group || "") === group)).map((w) => (
                         <div key={w.label} className="usage-row">
                           <div className="usage-row-head">
                             <span>{w.label}</span>
@@ -120,7 +108,7 @@ export function UsageButton({ open, onOpenChange: setOpen }: { open: boolean; on
                               <span className={level(w.remainingPercent)} style={{ width: `${w.remainingPercent}%` }} />
                             </div>
                           )}
-                          {(resetLabel(w) || (w.note && w.remainingPercent !== null)) && <small>{[w.note && w.remainingPercent !== null ? w.note : "", resetLabel(w)].filter(Boolean).join(" · ")}</small>}
+                          {(usageResetLabel(w) || (w.note && w.remainingPercent !== null)) && <small>{[w.note && w.remainingPercent !== null ? w.note : "", usageResetLabel(w)].filter(Boolean).join(" · ")}</small>}
                         </div>
                       ))}
                     </div>
