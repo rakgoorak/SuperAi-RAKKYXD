@@ -1,4 +1,5 @@
 import { projectChanges, projectFile, stageFile, unstageFile, discardFile, saveProjectFile } from "./ProjectChanges.js";
+import { listWorktrees, createWorktree, mergeWorktree, removeWorktree } from "./GitWorktrees.js";
 import { readPreviewFile } from './PreviewFiles.js';
 import { listProjectFiles } from './ProjectFiles.js';
 import http from "node:http";
@@ -313,6 +314,60 @@ export class StudioServer {
       if (typeof req.body?.content !== 'string') return res.status(400).json({ error: 'กรุณาระบุเนื้อหาไฟล์' });
       try {
         const success = await saveProjectFile(ws.rootPath, filePath, req.body.content);
+        res.json({ success });
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+      }
+    });
+    this.app.get('/api/workspaces/:wsId/worktrees', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      try {
+        const worktrees = await listWorktrees(ws.rootPath);
+        const current = worktrees.find(w => w.isCurrent) || null;
+        res.json({
+          worktrees,
+          current,
+          isWorktree: current ? !current.isMain : false,
+        });
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+      }
+    });
+    this.app.post('/api/workspaces/:wsId/worktrees', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      const branch = typeof req.body?.branch === 'string' ? req.body.branch.trim() : '';
+      if (!branch) return res.status(400).json({ error: 'กรุณาระบุชื่อ Branch' });
+      try {
+        const worktree = await createWorktree(ws.rootPath, branch);
+        res.json({ success: true, worktree });
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+      }
+    });
+    this.app.post('/api/workspaces/:wsId/worktrees/merge', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      const sourceBranch = typeof req.body?.sourceBranch === 'string' ? req.body.sourceBranch.trim() : '';
+      if (!sourceBranch) return res.status(400).json({ error: 'กรุณาระบุ Source Branch ที่ต้องการรวมโค้ด' });
+      const targetBranch = typeof req.body?.targetBranch === 'string' && req.body.targetBranch.trim() ? req.body.targetBranch.trim() : 'main';
+      const deleteAfter = Boolean(req.body?.deleteAfter);
+      try {
+        const result = await mergeWorktree(ws.rootPath, sourceBranch, targetBranch, deleteAfter);
+        res.json(result);
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+      }
+    });
+    this.app.delete('/api/workspaces/:wsId/worktrees', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      const targetPath = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
+      if (!targetPath) return res.status(400).json({ error: 'กรุณาระบุพาธของ Worktree ที่ต้องการลบ' });
+      const deleteBranch = Boolean(req.body?.deleteBranch);
+      try {
+        const success = await removeWorktree(ws.rootPath, targetPath, deleteBranch);
         res.json({ success });
       } catch (error) {
         res.status(400).json({ error: (error as Error).message });
