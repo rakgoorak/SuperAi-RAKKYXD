@@ -4,14 +4,14 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { CliChatManager } from '../server/CliChat.js';
 
-function fixture(startup = 90, turn = 100) {
+function fixture(startup = 90, turn = 100, agent = 'codex') {
   let kills = 0;
   const proc = Object.assign(new EventEmitter(), {
     stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(),
     kill: () => { kills++; return true; },
   });
   const manager = new CliChatManager(() => proc as any, undefined, (command, args) => ({ command, args }), { startup, turn });
-  manager.send('timeout-fixture', { agent: 'codex', cwd: process.cwd(), text: 'งานที่ใช้เวลานาน' });
+  manager.send('timeout-fixture', { agent, cwd: process.cwd(), text: 'งานที่ใช้เวลานาน' });
   return { manager, proc, kills: () => kills, snapshot: () => manager.snapshot('timeout-fixture'), event: (value: object) => proc.stdout.write(JSON.stringify(value) + '\n') };
 }
 
@@ -44,18 +44,75 @@ test('valid hidden/protocol activity and partial JSON prevent a false startup ti
   } finally { f.proc.emit('close', 0); }
 });
 
-test('silence after progress still times out, keeps turn ownership until close and marks unfinished tools failed', t => {
+test('silence during a long tool warns without killing the CLI or failing its work', t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const f = fixture();
   f.event({ type: 'item.started', item: { id: 'work', type: 'command_execution', command: 'run-task', status: 'in_progress' } });
   t.mock.timers.tick(101);
-  assert.equal(f.kills(), 1);
+  assert.equal(f.kills(), 0, 'silence alone is not proof that the tool or Sub-agent is hung');
   assert.equal(f.manager.isRunning('timeout-fixture'), true);
-  f.proc.emit('close', 1);
+  assert.ok(f.snapshot().activity?.quiet);
+  assert.equal(f.snapshot().items.find(item => item.kind === 'tool')?.status, 'running');
+  assert.equal(f.snapshot().items.some(item => item.kind === 'error'), false);
+  f.proc.emit('close', 0);
   assert.equal(f.manager.isRunning('timeout-fixture'), false);
-  const error = f.snapshot().items.find(item => item.kind === 'error');
-  assert.ok(error && 'text' in error && /ไม่มีข้อมูลใหม่/.test(error.text), 'an idle timeout must explain stalled progress instead of suggesting every failure is login');
-  assert.equal(f.snapshot().items.find(item => item.kind === 'tool')?.status, 'failed');
+  assert.equal(f.snapshot().activity, undefined);
+  assert.equal(f.snapshot().items.find(item => item.kind === 'tool')?.status, 'done');
+  assert.equal(f.snapshot().items.some(item => item.kind === 'error'), false);
+});
+
+test('waiting extends only the warning deadline, and fresh output clears the warning', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = fixture();
+  try {
+    f.event({ type: 'turn.started' });
+    t.mock.timers.tick(101);
+    assert.ok(f.snapshot().activity?.quiet);
+    assert.equal(f.manager.wait('timeout-fixture'), true);
+    assert.equal(f.snapshot().activity?.quiet, undefined);
+    t.mock.timers.tick(99);
+    assert.equal(f.snapshot().activity?.quiet, undefined);
+    t.mock.timers.tick(2);
+    assert.ok(f.snapshot().activity?.quiet);
+    f.proc.stderr.write('Sub-agent progress\n');
+    assert.equal(f.snapshot().activity?.quiet, undefined);
+    assert.equal(f.kills(), 0);
+    assert.equal(f.proc.stdin.read()?.toString(), 'งานที่ใช้เวลานาน', 'Wait never sends a second prompt');
+  } finally { f.proc.emit('close', 0); }
+  assert.equal(f.manager.wait('timeout-fixture'), false);
+  assert.equal(f.manager.wait('unknown-session'), false);
+});
+
+test('manual stop still terminates a quiet task and leaves queued messages paused', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = fixture();
+  f.event({ type: 'turn.started' });
+  f.manager.send('timeout-fixture', { agent: 'codex', cwd: process.cwd(), text: 'queued follow-up' }, { queue: true });
+  t.mock.timers.tick(101);
+  assert.equal(f.manager.cancel('timeout-fixture'), true);
+  assert.equal(f.kills(), 1);
+  assert.equal(f.manager.wait('timeout-fixture'), false);
+  f.proc.emit('close', 1);
+  assert.equal(f.snapshot().items.at(-1)?.kind, 'notice');
+  assert.equal(f.snapshot().activity, undefined);
+  assert.equal(f.snapshot().queued.length, 1);
+});
+
+test('Antigravity Task delegation survives prolonged silence and reconnect sees its current warning', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = fixture(90, 100, 'antigravity');
+  try {
+    f.event({ event: 'step_update', step_update: { step_index: 1, state: 'ACTIVE', step_type: 'tool', tool_name: 'Task', tool_info: { parameters: { description: 'File Explorer Implementer' } } } });
+    t.mock.timers.tick(10000);
+    assert.equal(f.kills(), 0);
+    assert.equal(f.snapshot().items.find(item => item.kind === 'tool')?.status, 'running');
+    let snapshot: any;
+    const unsubscribe = f.manager.subscribe('timeout-fixture', message => { if (message.type === 'snapshot') snapshot = message.chat; });
+    assert.ok(snapshot.running && snapshot.activity.quiet);
+    unsubscribe();
+    f.event({ event: 'step_update', step_update: { step_index: 1, state: 'DONE', step_type: 'tool', tool_name: 'Task' } });
+    assert.equal(f.snapshot().activity?.quiet, undefined);
+  } finally { f.proc.emit('close', 0); }
 });
 
 test('a completely silent startup is still terminated once and reports account/Terminal guidance', t => {

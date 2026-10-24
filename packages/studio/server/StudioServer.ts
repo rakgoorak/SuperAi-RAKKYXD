@@ -796,6 +796,9 @@ export class StudioServer {
     this.app.post("/api/terminals/:id/chat/cancel", (req: Request, res: Response) => {
       res.json({ success: this.chats.cancel(String(req.params.id)) });
     });
+    this.app.post("/api/terminals/:id/chat/wait", (req: Request, res: Response) => {
+      res.json({ success: this.chats.wait(String(req.params.id)) });
+    });
     // Queued messages (Ctrl+Enter): send one now, or take it back.
     this.app.post("/api/terminals/:id/chat/queue/:queued/send", (req: Request, res: Response) => {
       res.json({ success: this.chats.sendNext(String(req.params.id), String(req.params.queued)) });

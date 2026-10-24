@@ -8,13 +8,14 @@ import { NextSteps } from './NextSteps';
 import { ResponseActions } from './ResponseActions';
 import { MessageAttachments } from './MessageAttachments';
 import { timeLabel, tokenLabel } from '../chatFormat';
+import '../chat-idle.css';
 
 // Mirrors server/CliChat.ts.
 type ToolKind = 'command' | 'read' | 'edit' | 'search' | 'web' | 'plan' | 'other';
 type ToolItem = { id: string; kind: 'tool'; tool: ToolKind; title: string; output?: string; images?: string[]; status: 'running' | 'done' | 'failed'; at: number };
 type TodoStatus = 'pending' | 'in_progress' | 'completed';
 type TodosItem = { id: string; kind: 'todos'; todos: { text: string; status: TodoStatus }[]; at: number };
-type Activity = { startedAt: number; outputTokens: number };
+type Activity = { startedAt: number; outputTokens: number; quiet?: { since: number; timeoutMs: number } };
 type Queued = { id: string; text: string; attachments?: string[] };
 type ChatItem =
   | { id: string; kind: 'user'; text: string; attachments?: string[]; request?: { text: string; model?: string; effort?: string; skillId?: string; attachments?: string[] }; at: number }
@@ -276,6 +277,12 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
     catch (error) { setProblem((error as Error).message); }
     finally { setPending(false); }
   };
+  const quietAction = async (action: 'wait' | 'cancel') => {
+    setPending(true); setProblem('');
+    try { await post(`/api/terminals/${sessionId}/chat/${action}`); }
+    catch (error) { setProblem((error as Error).message); }
+    finally { setPending(false); }
+  };
 
   useEffect(() => {
     let socket: WebSocket | null = null;
@@ -333,7 +340,7 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
       } catch {}
     }
     if (stick.current) el.scrollTop = el.scrollHeight;
-  }, [items, running]);
+  }, [items, running, activity?.quiet]);
 
   const started = activity?.startedAt ?? [...items].reverse().find((i) => i.kind === 'user')?.at ?? now;
   const seconds = Math.max(0, Math.round((now - started) / 1000));
@@ -386,15 +393,27 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
             }
             if (block.kind === 'tools') return <ToolGroup key={block.id} tools={block.tools} />;
             if (block.kind === 'todos') return block === liveTodos ? null : <TaskList key={block.id} item={block} live={false} />;
-            if (block.kind === 'error') return <div key={block.id} role="alert" className="chat-error"><AlertTriangle size={14} /><span>{block.text}</span></div>;
+            if (block.kind === 'error') {
+              const oldTimeout = lastUser && items.indexOf(block) < items.indexOf(lastUser) && /ไม่มีข้อมูลใหม่.*จึงหยุดรอบนี้/.test(block.text);
+              return <div key={block.id} role={oldTimeout ? undefined : 'alert'} className={oldTimeout ? 'chat-notice' : 'chat-error'}><AlertTriangle size={14} /><span>{oldTimeout ? `รอบก่อนถูกหยุด: ${block.text}` : block.text}</span></div>;
+            }
             return <div key={block.id} className="chat-notice">{block.text}</div>;
           })}
           {liveTodos && <TaskList key={liveTodos.id} item={liveTodos} live />}
+          {running && activity?.quiet && <div className="chat-idle-warning" role="status" aria-label="รอข้อมูลจากงานปัจจุบัน">
+            <div><Clock3 size={16} /><strong>ยังไม่ได้รับข้อมูลใหม่ครบ {Math.max(1, Math.ceil(activity.quiet.timeoutMs / 60000))} นาที</strong></div>
+            <p>โปรแกรมยังไม่หยุดงาน อาจกำลังรอเครื่องมือหรือ Subagent และยังยืนยันไม่ได้ว่างานค้าง</p>
+            <div className="chat-idle-actions">
+              <button className="secondary" disabled={pending || offline} onClick={() => void quietAction('wait')}>รอต่อ</button>
+              <button className="secondary" onClick={() => showChanges(sessionId)}>ดูไฟล์ที่เปลี่ยน</button>
+              <button className="secondary" disabled={pending || offline} onClick={() => void quietAction('cancel')}>หยุดงาน</button>
+            </div>
+          </div>}
           {running && (
-            <div className="chat-working" role="status" title={`${name} กำลังทำงาน · กดหยุดได้ที่ช่องคำสั่งด้านล่าง`}>
-              <span className="chat-pulse" aria-hidden="true"><i /><i /><i /></span>
+            <div className="chat-working" role="status" title={`${name} ${activity?.quiet ? 'รอข้อมูลเพิ่มเติม' : 'กำลังทำงาน'} · กดหยุดได้ที่ช่องคำสั่งด้านล่าง`}>
+              {activity?.quiet ? <Clock3 size={14} aria-hidden="true" /> : <span className="chat-pulse" aria-hidden="true"><i /><i /><i /></span>}
               {/* Codex reports tokens only when its turn ends: show the time alone until then. */}
-              <span>{activity?.outputTokens ? `${tokenLabel(activity.outputTokens)} tokens · ` : ''}{seconds >= 60 ? `${Math.floor(seconds / 60)} นาที ${seconds % 60} วิ` : `${seconds} วิ`}</span>
+              <span>{activity?.quiet ? 'รอข้อมูล · ' : ''}{activity?.outputTokens ? `${tokenLabel(activity.outputTokens)} tokens · ` : ''}{seconds >= 60 ? `${Math.floor(seconds / 60)} นาที ${seconds % 60} วิ` : `${seconds} วิ`}</span>
             </div>
           )}
           {queued.length > 0 && (
