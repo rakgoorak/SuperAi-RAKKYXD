@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Activity, Check, ClipboardList, Folder, Globe, MessageSquare, Play, Plus, Search, Trash2, X } from 'lucide-react';
+import { Activity, Check, ClipboardList, Folder, Forward, Globe, MessageSquare, Play, Plus, Search, Trash2, X } from 'lucide-react';
 import type { Run, Session, Workspace } from '../api';
 import { post } from '../api';
 import { PreviewPanel } from './PreviewPanel';
 import { FileExplorerPanel } from './FileExplorerPanel';
 import type { PreviewRequest } from '../previewLinks';
 import { paneView } from '../paneView';
+import { dispatchHandoff, formatHandoffPrompt } from '../handoffUtils';
 
 export type DockView = 'dashboard' | 'tasks' | 'prompts' | 'files' | 'browser';
 interface SavedItem {
@@ -155,6 +156,14 @@ export function RightDock({
   const [text, setText] = useState('');
   const [recipient, setRecipient] = useState(selected);
   const [sending, setSending] = useState('');
+  const [attachLatestSummary, setAttachLatestSummary] = useState(false);
+
+  const getLatestSummary = (): { agentName: string; text: string } | null => {
+    const latestRun = runs.find(r => r.status === 'completed' && r.output?.trim());
+    if (!latestRun) return null;
+    const agent = latestRun.main?.name || latestRun.summarizer?.name || 'AI';
+    return { agentName: agent, text: latestRun.output };
+  };
 
   const activeSessions = sessions.filter(isSessionActive);
   const projectActiveSessions = activeSessions.filter(s => !workspace || s.wsId === workspace.id);
@@ -242,11 +251,15 @@ export function RightDock({
         sessions.find(s => (!workspace || s.wsId === workspace.id) && isSessionActive(s)) ||
         sessions.find(s => isSessionActive(s));
       if (!target) throw new Error('ไม่พบ session ที่พร้อมใช้งานในขณะนี้ กรุณาเปิด session ก่อน');
+      const summary = (view === 'tasks' && attachLatestSummary) ? getLatestSummary() : null;
+      const deliverText = summary
+        ? formatHandoffPrompt({ agentName: summary.agentName, text: summary.text, nextInstruction: item.text })
+        : item.text;
       if (paneView(target) === 'chat') {
-        const result = await post<{ queued?: boolean }>(`/api/terminals/${target.id}/chat`, { text: item.text });
+        const result = await post<{ queued?: boolean }>(`/api/terminals/${target.id}/chat`, { text: deliverText });
         if (!result) throw new Error('ส่งงานเข้าแชตไม่สำเร็จ กรุณาตรวจ session');
       } else {
-        const result = await post(`/api/terminals/${target.id}/input`, { input: item.text + '\r' });
+        const result = await post(`/api/terminals/${target.id}/input`, { input: deliverText + '\r' });
         if (!result.success) throw new Error('ส่งงานเข้า Terminal ไม่สำเร็จ กรุณาตรวจ session');
       }
       persist(kind, currentList.map(x => (x.id === item.id ? { ...x, state: 'sent', sessionId: target.id } : x)));
@@ -442,21 +455,31 @@ export function RightDock({
           ) : (
             <>
               {view === 'tasks' && (
-                <label className="task-target">
-                  ส่งงานไปที่
-                  <select
-                    aria-label="session รับงาน"
-                    value={recipient}
-                    onChange={e => setRecipient(e.target.value)}
-                  >
-                    <option value="">เลือก session รับงาน</option>
-                    {(projectActiveSessions.length ? projectActiveSessions : activeSessions).map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({paneView(s) === 'chat' ? 'แชต' : 'Terminal'})
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="task-handoff-controls">
+                  <label className="task-target">
+                    ส่งงานไปที่
+                    <select
+                      aria-label="session รับงาน"
+                      value={recipient}
+                      onChange={e => setRecipient(e.target.value)}
+                    >
+                      <option value="">เลือก session รับงาน</option>
+                      {(projectActiveSessions.length ? projectActiveSessions : activeSessions).map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({paneView(s) === 'chat' ? 'แชต' : 'Terminal'})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="task-attach-summary-toggle">
+                    <input
+                      type="checkbox"
+                      checked={attachLatestSummary}
+                      onChange={e => setAttachLatestSummary(e.target.checked)}
+                    />
+                    <span>แนบข้อสรุปล่าสุดจาก AI อื่น</span>
+                  </label>
+                </div>
               )}
               {editing && (
                 <form
@@ -516,9 +539,38 @@ export function RightDock({
                         <Play size={12} />
                         {sending === item.id ? 'กำลังส่ง…' : 'ส่งเข้า session'}
                       </button>
-                      <button className="text-button" onClick={() => onPrompt(item.text)}>
+                      <button
+                        className="text-button"
+                        onClick={() => {
+                          const summary = view === 'tasks' && attachLatestSummary ? getLatestSummary() : null;
+                          const promptText = summary
+                            ? formatHandoffPrompt({ agentName: summary.agentName, text: summary.text, nextInstruction: item.text })
+                            : item.text;
+                          onPrompt(promptText);
+                        }}
+                      >
                         {view === 'tasks' ? 'ใส่ในช่องคำสั่ง' : 'ใช้พรอมป์ต์'}
                       </button>
+                      {view === 'tasks' && (
+                        <button
+                          className="text-button"
+                          title="ส่งต่องานนี้พร้อมข้อสรุปไปยัง session ที่เลือก"
+                          onClick={() => {
+                            const summary = getLatestSummary();
+                            const promptText = summary
+                              ? formatHandoffPrompt({ agentName: summary.agentName, text: summary.text, nextInstruction: item.text })
+                              : formatHandoffPrompt({ agentName: 'AI', text: item.text, nextInstruction: 'ช่วยดำเนินการต่อตามนี้' });
+                            if (recipient) {
+                              dispatchHandoff(recipient, promptText);
+                            } else {
+                              onPrompt(promptText);
+                            }
+                          }}
+                        >
+                          <Forward size={12} />
+                          ส่งต่องาน
+                        </button>
+                      )}
                       {view === 'tasks' && (
                         <button
                           className="text-button"

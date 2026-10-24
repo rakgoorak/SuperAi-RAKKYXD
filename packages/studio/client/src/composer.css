@@ -129,19 +129,39 @@
 /* Small answer controls stay distinct from follow-up prompts and error recovery. */
 #root .response-controls { margin: 10px 0 18px; }
 #root .response-actions { display: flex; align-items: center; gap: 2px; min-height: 30px; }
-#root .response-actions > button, #root .response-more > button {
+#root .response-actions > button, #root .response-more > button, #root .response-handoff-wrap > button {
   display: inline-flex; justify-content: center; align-items: center; width: 30px; height: 30px;
   padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--dim);
 }
 #root .response-actions button:hover { background: var(--raised); color: var(--text); }
 #root .response-actions button:disabled { cursor: default; opacity: .45; }
 #root .response-actions button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-#root .response-more { position: relative; }
+#root .response-more, #root .response-handoff-wrap { position: relative; }
 #root .response-options {
   position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 30; min-width: 215px; padding: 5px;
   background: var(--raised); border: 1px solid var(--control-border); border-radius: 10px;
 }
 #root .response-options button { display: flex; align-items: center; justify-content: flex-start; gap: 9px; width: 100%; padding: 9px 10px; border: 0; border-radius: 6px; font-size: 12px; white-space: nowrap; color: var(--text-secondary); }
+#root .response-handoff-menu {
+  min-width: 240px; max-width: 340px; padding: 6px; z-index: 35;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+#root .response-handoff-menu .handoff-title {
+  padding: 4px 8px 6px; font-size: 11px; font-weight: 600; color: var(--dim); border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+#root .response-handoff-menu .handoff-session-name {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#root .response-handoff-menu .handoff-empty,
+#root .response-handoff-menu .handoff-loading {
+  padding: 6px 8px; font-size: 11px; color: var(--dim);
+}
+#root .task-handoff-controls { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+#root .task-attach-summary-toggle {
+  display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); cursor: pointer; user-select: none;
+}
+#root .task-attach-summary-toggle input { cursor: pointer; margin: 0; }
 #root .response-copy-status { font-size: 11px; color: var(--dim); margin-left: 6px; }
 #root .response-controls > small { display: block; color: var(--error); font-size: 12px; margin-top: 6px; }
 #root .run-response .recovery-note { margin: 8px 0 16px; }

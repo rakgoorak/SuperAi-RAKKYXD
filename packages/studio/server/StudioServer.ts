@@ -610,7 +610,7 @@ export class StudioServer {
     );
 
     // Terminals
-    this.app.get("/api/terminals", (_req: Request, res: Response) => {
+    const listTerminalsHandler = (_req: Request, res: Response) => {
       for (const session of this.terminalManager.listSessions()) {
         if (session.wsId && session.threadId)
           this.workspaceRegistry.updateThread(session.wsId, session.threadId, {
@@ -623,7 +623,9 @@ export class StudioServer {
           });
       }
       res.json(this.terminalManager.listSessions().map((s) => ({ ...s, view: this.viewOf(s.id) })));
-    });
+    };
+    this.app.get("/api/terminals", listTerminalsHandler);
+    this.app.get("/api/sessions", listTerminalsHandler);
 
     this.app.post("/api/terminals/spawn", (req: Request, res: Response) => {
       try {
