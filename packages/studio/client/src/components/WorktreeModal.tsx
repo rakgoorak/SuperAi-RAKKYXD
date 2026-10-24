@@ -170,6 +170,19 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
                     </div>
 
                     <div className="worktree-item-actions">
+                      {onSelectWorktree && !wt.isCurrent && (
+                        <button
+                          type="button"
+                          className="btn-select-wt"
+                          onClick={() => {
+                            onSelectWorktree(wt);
+                            onClose();
+                          }}
+                          title="สลับไปยัง Worktree นี้"
+                        >
+                          สลับ
+                        </button>
+                      )}
                       {!wt.isMain && (
                         <button
                           type="button"

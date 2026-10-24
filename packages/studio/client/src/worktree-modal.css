@@ -266,6 +266,23 @@
   max-width: 280px;
 }
 
+.btn-select-wt {
+  background-color: #2e2e2a;
+  border: 1px solid #444440;
+  color: #dfdfd9;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-select-wt:hover {
+  background-color: #c88242;
+  color: #141412;
+  border-color: #c88242;
+}
+
 .btn-delete-wt {
   background: none;
   border: none;

@@ -19,9 +19,11 @@ import {
   AlertCircle,
   ArrowLeft,
   Search,
+  FolderGit2,
 } from 'lucide-react';
 import type { Workspace } from '../api';
 import { getProjectFiles, getPinnedContent, togglePinnedFile, saveProjectFile } from '../api';
+import { WorktreeModal } from './WorktreeModal';
 import {
   type TreeNode,
   buildFileTree,
@@ -52,6 +54,7 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
   const [search, setSearch] = useState('');
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  const [worktreeModalOpen, setWorktreeModalOpen] = useState(false);
 
   // Quick Editor states
   const [editingFile, setEditingFile] = useState<string | null>(null);
@@ -488,6 +491,15 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
             </div>
             <div className="file-explorer-toolbar">
               <button
+                type="button"
+                className="btn-worktree-trigger"
+                title="จัดการ Git Worktrees (คู่ขนาน)"
+                onClick={() => setWorktreeModalOpen(true)}
+              >
+                <FolderGit2 size={12} />
+                <span>Worktree</span>
+              </button>
+              <button
                 className="tree-action-btn"
                 title="รีเฟรชรายการไฟล์"
                 disabled={loading}
@@ -555,6 +567,13 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
           </div>
         </div>
       )}
+
+      <WorktreeModal
+        open={worktreeModalOpen}
+        onClose={() => setWorktreeModalOpen(false)}
+        wsId={workspace?.id || ''}
+        onWorktreeCreated={() => void loadFiles()}
+      />
     </div>
   );
 }
