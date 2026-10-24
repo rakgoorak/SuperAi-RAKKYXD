@@ -17,3 +17,5 @@ import "./mission-control.css";
 import "./composer.css";
 
 import "./minimal-workspace.css";
+
+import "./comparison-arena.css";

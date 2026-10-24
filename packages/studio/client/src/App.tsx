@@ -560,6 +560,25 @@ export function App() {
       attachments.clear();
     });
   useEffect(() => {
+    const prepareComposer = (event: Event) => {
+      const detail = (event as CustomEvent<{ text: string; mode?: Mode; sessionId?: string; expand?: boolean }>).detail;
+      const targetMode: Mode = detail.mode || "code";
+      setMode(targetMode);
+      if (detail.sessionId) {
+        const session = sessions.find((s) => s.id === detail.sessionId);
+        if (session?.wsId) setActiveWs(session.wsId);
+        setSelected(detail.sessionId);
+        setTarget("active");
+        setDraftFor(composerDraftKey(session?.wsId || activeWs, targetMode, detail.sessionId, "active"), detail.text);
+      } else {
+        setDraft(detail.text);
+        if (activeWs) {
+          setDraftFor(composerDraftKey(activeWs, targetMode, selected || "all", target), detail.text);
+        }
+      }
+      setComposerExpanded(detail.expand !== false);
+      requestAnimationFrame(() => composer.current?.focus());
+    };
     const prepare = (event: Event) => {
       const detail = (event as CustomEvent<{text: string; sessionId?: string; expand?: boolean}>).detail;
       if (detail.sessionId) {
@@ -598,6 +617,7 @@ export function App() {
       setDockView('browser'); setPreview(true);
     };
     const reload = () => { if (activeWs) void api<Run[]>(`/api/conversations/${activeWs}`).then(setRuns, error => showError(error.message)); };
+    window.addEventListener("superai:prepare-composer", prepareComposer);
     window.addEventListener("superai:prepare-message", prepare);
     window.addEventListener("superai:show-changes", changes);
     window.addEventListener("superai:open-setup", setup);
@@ -605,6 +625,7 @@ export function App() {
     window.addEventListener('superai:open-artifact', openArtifactEvent);
     window.addEventListener("superai:refresh-runs", reload);
     return () => {
+      window.removeEventListener("superai:prepare-composer", prepareComposer);
       window.removeEventListener("superai:prepare-message", prepare);
       window.removeEventListener("superai:show-changes", changes);
       window.removeEventListener("superai:open-setup", setup);

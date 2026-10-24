@@ -50,10 +50,11 @@ try {
   const imageFiles = ['first image.png', 'second.webp', 'missing.png', 'guide.pdf'];
   const chatItems = id => [{ id: `user-${id}`, kind: 'user', text: 'ช่วยปรับหน้าเข้าสู่ระบบให้อ่านง่ายขึ้น', attachments: imageFiles, at: 1, request: { text: 'ช่วยปรับหน้าเข้าสู่ระบบให้อ่านง่ายขึ้น', attachments: imageFiles, model: 'model-a', effort: 'high' } }, { id: `reply-${id}`, kind: 'assistant', text: answer, at: 2 }];
   const sockets = new Map();
+  let quietChat;
   await page.routeWebSocket('**/ws/chat/ui-*', socket => {
     const id = socket.url().split('/').at(-1);
     sockets.set(id, socket);
-    socket.send(JSON.stringify({ type: 'snapshot', chat: { items: chatItems(id), running: false } }));
+    socket.send(JSON.stringify({ type: 'snapshot', chat: id === 'ui-0' && quietChat ? quietChat : { items: chatItems(id), running: false } }));
   });
   const runs = ['agent', 'chat'].map(mode => ({ id: `run-${mode}`, wsId: workspace.id, mode, prompt: 'ช่วยวางแผนหน้าเข้าสู่ระบบให้ทีม', attachments: imageFiles.map(file => `.superai/attachments/${file}`), status: 'completed', output: answer, allowTools: false, activity: [], createdAt: Date.now() }));
   const sent = [];
@@ -91,6 +92,7 @@ try {
     }
     else if (/\/chat\/(wait|cancel)$/.test(pathname)) {
       quietActions.push(pathname);
+      if (quietChat) quietChat = { ...quietChat, running: !pathname.endsWith('/cancel'), activity: pathname.endsWith('/wait') ? { startedAt: Date.now(), outputTokens: 12 } : undefined };
       sockets.get('ui-0').send(JSON.stringify({ type: 'activity', activity: pathname.endsWith('/wait') ? { startedAt: Date.now(), outputTokens: 12 } : undefined }));
       if (pathname.endsWith('/cancel')) sockets.get('ui-0').send(JSON.stringify({ type: 'state', running: false }));
       json = { success: true };
@@ -399,12 +401,30 @@ try {
   await page.screenshot({ path: path.join(output, 'preview.png') });
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
   const modes = page.getByRole('navigation', { name: 'โหมดทำงาน' });
+  const longCommand = 'git commit -m "fix(studio): improve CLI idle timeout with quiet warning and cancel safeguard" ' + 'very-long-command-argument/'.repeat(15);
+  sockets.get('ui-0').send(JSON.stringify({ type: 'snapshot', chat: { items: [chatItems('ui-0')[0], { id: 'long-tool', kind: 'tool', tool: 'command', title: longCommand, status: 'running', at: Date.now() }], running: true, activity: { startedAt: Date.now(), outputTokens: 0 } } }));
+  const toolSummary = pane.locator('.chat-tools-summary');
+  await toolSummary.waitFor();
+  const toolBounds = () => toolSummary.evaluate(el => {
+    const box = el.getBoundingClientRect(), head = el.parentElement.getBoundingClientRect();
+    const dot = el.querySelector('.chat-dot').getBoundingClientRect(), chevron = el.querySelector('.chat-chevron').getBoundingClientRect();
+    return { inside: box.left >= head.left && box.right <= head.right + 1 && box.right <= innerWidth, inset: dot.left - box.left, endInset: box.right - chevron.right, clipped: el.children[1].scrollWidth > el.children[1].clientWidth };
+  });
+  let toolBox = await toolBounds();
+  check(toolBox.inside && toolBox.inset >= 10 && toolBox.endInset >= 10 && toolBox.clipped, 'long running commands truncate inside a padded frame while dot and chevron remain inset');
+  await page.screenshot({ path: path.join(output, 'tool-frame-desktop.png') });
+  await page.setViewportSize({ width: 1000, height: 760 });
+  toolBox = await toolBounds();
+  check(toolBox.inside && toolBox.inset >= 10 && toolBox.endInset >= 10, 'tool frame stays inside a narrower pane with balanced padding');
+  await page.screenshot({ path: path.join(output, 'tool-frame-narrow.png') });
+  await page.setViewportSize({ width: 1440, height: 900 });
   const quietActivity = { startedAt: Date.now() - 700000, outputTokens: 12, quiet: { since: Date.now(), timeoutMs: 600000 } };
-  sockets.get('ui-0').send(JSON.stringify({ type: 'snapshot', chat: { items: [
+  quietChat = { items: [
     { id: 'old-user', kind: 'user', text: 'previous round', at: 0 },
     { id: 'old-timeout', kind: 'error', text: 'Antigravity ไม่มีข้อมูลใหม่ติดต่อกัน 10 นาที จึงหยุดรอบนี้ ตรวจสถานะใน Terminal', at: 0 },
     ...chatItems('ui-0'),
-  ], running: true, activity: quietActivity } }));
+  ], running: true, activity: quietActivity };
+  sockets.get('ui-0').send(JSON.stringify({ type: 'snapshot', chat: quietChat }));
   const quietWarning = pane.getByRole('status', { name: 'รอข้อมูลจากงานปัจจุบัน', exact: true });
   await quietWarning.waitFor();
   check((await quietWarning.innerText()).includes('โปรแกรมยังไม่หยุดงาน') && (await pane.locator('.chat-working').innerText()).includes('รอข้อมูล'), 'quiet work shows uncertainty rather than claiming termination or live progress');
@@ -420,14 +440,24 @@ try {
   check(true, 'fresh CLI progress clears the current quiet warning');
   sockets.get('ui-0').send(JSON.stringify({ type: 'activity', activity: quietActivity }));
   await quietWarning.waitFor();
+  quietChat = { ...quietChat, activity: quietActivity };
   await page.screenshot({ path: path.join(output, 'quiet-work-warning.png') });
+  await page.setViewportSize({ width: 1000, height: 760 });
+  check(await quietWarning.evaluate(el => { const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && el.scrollWidth <= el.clientWidth; }), 'quiet warning and its actions fit a narrower desktop window');
+  await page.screenshot({ path: path.join(output, 'quiet-work-warning-narrow.png') });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await quietWarning.getByRole('button', { name: 'ดูไฟล์ที่เปลี่ยน', exact: true }).click();
   await page.getByRole('dialog').waitFor();
   check(quietActions.length === 1 && sent.length === sentBeforeWait, 'inspecting changed files does not stop or resend the quiet task');
   await page.keyboard.press('Escape');
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+  await page.waitForLoadState('networkidle');
+  sockets.get('ui-0').send(JSON.stringify({ type: 'snapshot', chat: quietChat }));
+  await quietWarning.waitFor();
   await quietWarning.getByRole('button', { name: 'หยุดงาน', exact: true }).click();
   await quietWarning.waitFor({ state: 'hidden' });
   check(quietActions.at(-1) === '/api/terminals/ui-0/chat/cancel', 'Stop uses the originating session cancellation route');
+  quietChat = undefined;
   sockets.get('ui-0').send(JSON.stringify({ type: 'snapshot', chat: { items: chatItems('ui-0'), running: false } }));
   // Team settings are a separate task, with pending edits isolated from live teams.
   const teamDialog = page.locator('dialog.team-settings');

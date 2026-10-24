@@ -1,0 +1,411 @@
+/* ==========================================================================
+   Multi-AI Comparison Arena Styles
+   Dark Minimalist Aesthetic (#181816 / #262624 palette)
+   ========================================================================== */
+
+.comparison-arena {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  margin: 12px 0 24px;
+}
+
+/* Arena Header / Overview */
+.arena-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid #2a2926;
+  padding-bottom: 8px;
+}
+
+.arena-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ecebec;
+}
+
+.arena-title-wrap svg {
+  color: #d97757;
+}
+
+.arena-count-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: #262624;
+  color: #9e9c96;
+  border: 1px solid #343330;
+}
+
+/* Multi-column Responsive Grid */
+.arena-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+@media (min-width: 640px) {
+  .arena-grid.columns-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 960px) {
+  .arena-grid.columns-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .arena-grid.columns-4,
+  .arena-grid.columns-5 {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+}
+
+/* Individual Model Card */
+.arena-card {
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1c;
+  border: 1px solid #343330;
+  border-radius: 10px;
+  padding: 14px;
+  position: relative;
+  min-width: 0;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.arena-card:hover {
+  border-color: #4a4944;
+}
+
+/* Winner Card State */
+.arena-card.is-winner {
+  border-color: #f59e0b;
+  background: #201f1b;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.15), inset 0 0 0 1px rgba(245, 158, 11, 0.2);
+}
+
+/* Card Header */
+.arena-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #2a2926;
+  margin-bottom: 12px;
+}
+
+.arena-card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.arena-seat-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.arena-seat-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #ecebec;
+  white-space: nowrap;
+}
+
+.arena-provider-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 6px;
+  background: #282825;
+  color: #c4c2bc;
+  border: 1px solid #393834;
+}
+
+.arena-model-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  font-size: 10.5px;
+  border-radius: 4px;
+  background: #242422;
+  color: #9e9c96;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arena-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  margin-left: auto;
+}
+
+.arena-status-indicator.state-running {
+  background: rgba(217, 119, 87, 0.12);
+  color: #e59074;
+  border: 1px solid rgba(217, 119, 87, 0.3);
+}
+
+.arena-status-indicator.state-completed {
+  background: rgba(123, 179, 142, 0.12);
+  color: #7bb38e;
+  border: 1px solid rgba(123, 179, 142, 0.3);
+}
+
+.arena-status-indicator.state-failed {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.arena-status-indicator.state-cancelled {
+  background: rgba(158, 156, 150, 0.12);
+  color: #9e9c96;
+  border: 1px solid #393834;
+}
+
+.arena-status-indicator.state-pending {
+  background: #242422;
+  color: #9e9c96;
+}
+
+/* Winner Ribbon / Badge */
+.arena-winner-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  padding: 2px 8px;
+  border-radius: 9999px;
+  animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Performance Metrics Pill */
+.arena-metrics-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: #242422;
+  border: 1px solid #33322e;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #a8a6a0;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.arena-metric-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.arena-metric-item svg {
+  color: #8c8a83;
+}
+
+.arena-metric-divider {
+  color: #4a4944;
+  font-weight: bold;
+}
+
+/* Card Actions Toolbar */
+.arena-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 0;
+}
+
+.arena-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  border-radius: 6px;
+  background: #262624;
+  border: 1px solid #383733;
+  color: #c4c2bc;
+  cursor: pointer;
+  transition: all 0.14s ease;
+  user-select: none;
+}
+
+.arena-action-btn:hover:not(:disabled) {
+  background: #2e2e2a;
+  border-color: #4d4c46;
+  color: #ecebec;
+}
+
+.arena-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.arena-action-btn.btn-winner {
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+}
+
+.arena-action-btn.btn-winner.active {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: #f59e0b;
+  color: #fef08a;
+}
+
+.arena-action-btn.btn-handoff {
+  border-color: rgba(96, 165, 250, 0.3);
+  color: #93c5fd;
+}
+
+.arena-action-btn.btn-handoff:hover:not(:disabled) {
+  background: rgba(96, 165, 250, 0.12);
+  border-color: #60a5fa;
+  color: #bfdbfe;
+}
+
+.arena-action-btn.btn-copied {
+  background: rgba(123, 179, 142, 0.15);
+  border-color: #7bb38e;
+  color: #86efac;
+}
+
+/* Card Body Content */
+.arena-card-body {
+  flex: 1;
+  min-height: 80px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #d8d7d4;
+  overflow-wrap: break-word;
+}
+
+.arena-card-body .markdown {
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.arena-card-body pre {
+  background: #141413;
+  border: 1px solid #2d2c29;
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+
+.arena-card-status-msg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 12px;
+  color: #9e9c96;
+  font-size: 13px;
+  justify-content: center;
+}
+
+.arena-card-status-msg.failed {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.06);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+/* Summarizer Card */
+.arena-summarizer-card {
+  margin-top: 8px;
+  padding: 16px;
+  background: #21201d;
+  border: 1px solid #454440;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.arena-summarizer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #33322e;
+}
+
+.arena-summarizer-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ecebec;
+}
+
+.arena-summarizer-title svg {
+  color: #d97757;
+}
+
+.arena-summarizer-meta {
+  font-size: 11px;
+  color: #9e9c96;
+  margin-left: 4px;
+}
+
+.arena-summarizer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.arena-summarizer-body {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #deddd9;
+}
+
+.arena-summarizer-body .markdown {
+  max-height: 600px;
+  overflow-y: auto;
+}

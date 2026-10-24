@@ -1,11 +1,13 @@
-import { LoaderCircle, MessagesSquare, Plus, Sparkles } from "lucide-react";
-import type { Cli, Run, Seat, StepStatus } from "../api";
-import { HEADLESS, firstReady, seatFor, seatSummary } from "../providers";
+import { MessagesSquare, Plus, Sparkles } from "lucide-react";
+import type { Cli, Run, Seat } from "../api";
+import { HEADLESS, firstReady, seatFor } from "../providers";
 import { SeatPicker } from "./SeatPicker";
 import { ConfigShell } from "./ConfigShell";
 import { useTeamDraft } from "./useTeamDraft";
 import { ProviderAccess } from "./ProviderAccess";
-import { Markdown } from "./Markdown";
+import { ComparisonArena } from "./ComparisonArena";
+
+export { ComparisonArena };
 
 export interface ChatConfig { panel: Seat[]; summarizer: Seat | null; style: "merge" | "best"; }
 const MAX_PANEL = 5;
@@ -80,36 +82,6 @@ export function ChatConfigEditor({ workspaceId, clis, ollamaModels, disabled, on
   );
 }
 
-const STEP: Record<StepStatus, string> = { pending: "รอ", running: "กำลังคิด", completed: "ตอบแล้ว", failed: "ไม่สำเร็จ", cancelled: "ยกเลิก", skipped: "ข้าม" };
-
 export function ChatRunView({ run }: { run: Run }) {
-  const panel = run.panel || [];
-  return (
-    <section className="chat-run" aria-label="คำตอบจาก AI แต่ละตัว">
-      <div className={`answer-grid count-${Math.min(panel.length, 3)}`}>
-        {panel.map((answer, index) => (
-          <article key={index} className={`answer-card state-${answer.status}`}>
-            <header>
-              <strong>{answer.seat.name}</strong>
-              <span className="chip">{answer.status === "running" && <LoaderCircle size={11} className="spin" />}{STEP[answer.status]}</span>
-            </header>
-            <small>{seatSummary(answer.seat)}</small>
-            {answer.output ? <Markdown text={answer.output} /> : answer.status === "running" ? <p className="muted">กำลังคิด…</p> : null}
-            {answer.error && <div className="inline-error">{answer.error}</div>}
-          </article>
-        ))}
-      </div>
-      {run.summarizer && (
-        <article className={`summary-card state-${run.summaryStatus || "pending"}`}>
-          <header>
-            <Sparkles size={14} />
-            <strong>สรุปโดย {run.summarizer.name}</strong>
-            <small>{seatSummary(run.summarizer)} · {run.summaryStyle === "best" ? "คัดส่วนที่ดี" : "รวมทุกความเห็น"}</small>
-            <span className="chip">{run.summaryStatus === "running" && <LoaderCircle size={11} className="spin" />}{run.summaryStatus === "pending" ? "รอคำตอบครบ" : run.summaryStatus === "completed" ? "สรุปแล้ว" : STEP[run.summaryStatus || "pending"]}</span>
-          </header>
-          {run.output ? <Markdown text={run.output} /> : null}
-        </article>
-      )}
-    </section>
-  );
+  return <ComparisonArena run={run} />;
 }

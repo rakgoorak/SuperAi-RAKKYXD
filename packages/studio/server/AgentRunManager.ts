@@ -79,6 +79,10 @@ export interface PanelAnswer {
   status: StepStatus;
   output: string;
   error?: string;
+  startedAt?: number;
+  firstChunkAt?: number;
+  completedAt?: number;
+  tokenCount?: number;
 }
 
 export interface AgentTask {
@@ -277,7 +281,12 @@ export class AgentRunManager {
         const stop = (s: StepStatus): StepStatus => (s === "pending" || s === "running" ? "cancelled" : s);
         if (run.status !== "completed") {
           run.tasks?.forEach((t) => (t.status = stop(t.status)));
-          run.panel?.forEach((a) => (a.status = stop(a.status)));
+          run.panel?.forEach((a) => {
+            a.status = stop(a.status);
+            if (!a.completedAt && (a.status === "cancelled" || a.status === "failed")) {
+              a.completedAt = Date.now();
+            }
+          });
           if (run.summaryStatus) run.summaryStatus = stop(run.summaryStatus);
         }
         this.controllers.delete(run.id);
@@ -335,26 +344,38 @@ export class AgentRunManager {
     const history = this.history(wsId, "chat");
     const run: ConversationRun = {
       id: randomUUID(), wsId, prompt, mode: "chat", status: "running", output: "", createdAt: Date.now(), allowTools: false, attachments, activity: [],
-      panel: panel.map((seat) => ({ seat, status: "running", output: "" })),
+      panel: panel.map((seat) => ({ seat, status: "running", output: "", startedAt: Date.now() })),
       summarizer, summaryStyle: style, summaryStatus: summarizer ? "pending" : undefined,
     };
     return this.launch(run, async (controller, note) => {
       await Promise.all(
         run.panel!.map(async (answer) => {
+          answer.startedAt = Date.now();
           note(answer.seat.name, `เริ่มคิด (${describe(answer.seat)})`);
           try {
             const selected = answer.seat.provider.startsWith("cli:") ? skillPrompt(prompt, cwd, answer.seat.provider.slice(4)) : prompt;
             const question = `${history ? `บทสนทนาก่อนหน้า:\n${history}\n\n` : ""}${selected}`;
             const text = await this.ask(answer.seat, `ตอบเป็นภาษาไทย ให้เหตุผลประกอบ\n\n${question}`, cwd, controller.signal, {
               tools: false, readTools: true, attachments,
-              onChunk: (t) => { if (!controller.signal.aborted) answer.output += t; },
+              onChunk: (t) => {
+                if (!controller.signal.aborted) {
+                  if (!answer.firstChunkAt) answer.firstChunkAt = Date.now();
+                  answer.tokenCount = (answer.tokenCount || 0) + Math.max(1, Math.ceil(t.length / 4));
+                  answer.output += t;
+                }
+              },
             });
             answer.output = text || answer.output;
             answer.status = "completed";
+            answer.completedAt = Date.now();
+            if (!answer.tokenCount && answer.output) {
+              answer.tokenCount = Math.max(1, Math.ceil(answer.output.length / 4));
+            }
             note(answer.seat.name, "ตอบเสร็จแล้ว");
           } catch (err: any) {
             answer.status = controller.signal.aborted ? "cancelled" : "failed";
             answer.error = err.message;
+            answer.completedAt = Date.now();
             note(answer.seat.name, `ตอบไม่สำเร็จ: ${err.message}`);
           }
         }),
