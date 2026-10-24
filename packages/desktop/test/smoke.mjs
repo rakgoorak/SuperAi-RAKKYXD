@@ -41,8 +41,8 @@ try {
   // A fresh profile opens the first-run setup guide with real machine checks.
   const setup = page.getByRole("dialog", { name: "เริ่มต้นใช้งาน SuperAi" });
   await setup.waitFor();
-  await setup.getByText("Node.js 22 LTS (เอนจินระบบ)", { exact: true }).waitFor();
-  await setup.getByText("บัญชีและสิทธิ์เข้าถึง (Authentication)", { exact: true }).waitFor();
+  await setup.getByText("Node.js 22", { exact: true }).waitFor();
+  await setup.getByText("บัญชีผู้ให้บริการ", { exact: true }).waitFor();
   await setup.getByRole("button", { name: "เสร็จแล้ว" }).click();
   await setup.waitFor({ state: "hidden" });
   checks++;

@@ -4,17 +4,10 @@ import {
   Download,
   FolderPlus,
   LoaderCircle,
-  LogIn,
   RefreshCw,
   Terminal,
-  Sparkles,
   Wand2,
-  Cpu,
-  FolderGit2,
-  KeyRound,
-  Sliders,
   Puzzle,
-  Mic,
 } from "lucide-react";
 import { api, post, type Cli, type CliAuthStatus, type NodeStatus, type Workspace } from "../api";
 import { ProviderAccess } from "./ProviderAccess";
@@ -69,7 +62,6 @@ export function SetupGuide({
   refreshClis,
   addProject,
   installCli,
-  login,
   openSkills,
   onError,
 }: Props) {
@@ -176,22 +168,21 @@ export function SetupGuide({
   const steps = [
     {
       key: "node",
-      icon: Cpu,
-      title: "Node.js 22 LTS (เอนจินระบบ)",
+      title: "Node.js 22",
       done: !!node?.ready,
       optional: false,
       detail: node?.ready
-        ? `ติดตั้งเรียบร้อย (${node.version}) พร้อมใช้งานทันที`
+        ? `ติดตั้งแล้ว (${node.version})`
         : node?.version
-        ? `รุ่นปัจจุบัน ${node.version} แนะนำ Node.js 22 เพื่อความเสถียร`
-        : "จำเป็นสำหรับรันเครื่องมือและสคริปต์ AI ทั้งหมด ติดตั้งแบบ Portable แยกอิสระ ไม่กระทบระบบเดิม",
+        ? `เครื่องนี้มี ${node.version} ซึ่ง CLI บางตัวต้องใช้ Node.js 22`
+        : "ใช้รัน CLI ของ AI ติดตั้งแบบพกพา ไม่แตะ Node.js เดิมในเครื่อง",
       action: !node?.ready && (
         <button
           className="setup-btn-primary"
           disabled={!!running || autoSettingUp}
           onClick={() => void install("/api/node/install")}
         >
-          <Download size={14} /> ติดตั้งอัตโนมัติ
+          <Download size={14} /> ติดตั้ง
         </button>
       ),
       job: lastJob("node"),
@@ -200,20 +191,19 @@ export function SetupGuide({
       ? [
           {
             key: "git",
-            icon: FolderGit2,
-            title: "Git for Windows (Git Bash)",
+                  title: "Git for Windows",
             done: git.installed,
             optional: false,
             detail: git.installed
-              ? `พร้อมใช้งาน · ${git.version || "Git Bash ติดตั้งแล้ว"}`
-              : "จำเป็นสำหรับเครื่องมือ AI เช่น Claude Code บน Windows ติดตั้งแบบพกพา ไม่ต้องใช้สิทธิ์ Admin",
+              ? git.version ? `ติดตั้งแล้ว (${git.version})` : "ติดตั้งแล้ว"
+              : "Claude Code บน Windows ต้องใช้ Git Bash ติดตั้งแบบพกพา ไม่ต้องใช้สิทธิ์ Admin",
             action: !git.installed && (
               <button
                 className="setup-btn-primary"
                 disabled={!!running || autoSettingUp}
                 onClick={() => void install("/api/git/install")}
               >
-                <Download size={14} /> ติดตั้งอัตโนมัติ
+                <Download size={14} /> ติดตั้ง
               </button>
             ),
             job: lastJob("git"),
@@ -222,47 +212,44 @@ export function SetupGuide({
       : []),
     {
       key: "cli",
-      icon: Terminal,
-      title: "ผู้ช่วย AI (AI Assistants)",
+      title: "ผู้ช่วย AI",
       done: hasCli,
       optional: false,
       detail: hasCli
-        ? `ผู้ช่วยพร้อมใช้งาน: ${clis
+        ? `พร้อมใช้: ${clis
             .filter((c) => AI_CLIS.includes(c.id) && c.available)
             .map((c) => c.name)
             .join(", ")}`
-        : "Claude Code, OpenAI Codex, OpenCode หรือ Antigravity CLI (มีรุ่นฟรีให้ใช้งานทันที)",
+        : "ติดตั้ง Claude Code, Codex, OpenCode หรือ Antigravity อย่างน้อย 1 ตัว (OpenCode มีรุ่นฟรี)",
       action: (
-        <button className="setup-btn-primary" onClick={installCli}>
-          <Terminal size={14} /> {hasCli ? "จัดการ / เพิ่มตัวอื่น" : "เลือกและติดตั้ง AI"}
+        <button className={hasCli ? "setup-btn-secondary" : "setup-btn-primary"} onClick={installCli}>
+          <Terminal size={14} /> {hasCli ? "เพิ่มหรือจัดการ" : "ติดตั้งผู้ช่วย AI"}
         </button>
       ),
     },
     {
       key: "project",
-      icon: FolderPlus,
-      title: "โฟลเดอร์โปรเจกต์ (Workspace)",
+      title: "โฟลเดอร์โปรเจกต์",
       done: workspaces.length > 0,
       optional: false,
       detail: workspaces.length
-        ? `เชื่อมต่อแล้ว ${workspaces.length} โปรเจกต์ (${workspaces[0]?.name})`
-        : "เลือกโฟลเดอร์ที่คุณต้องการให้ AI เข้าไปช่วยเขียนโค้ด หรือสร้างโฟลเดอร์ใหม่",
+        ? `${workspaces.length} โปรเจกต์ (${workspaces[0]?.name})`
+        : "เลือกโฟลเดอร์ที่ให้ AI อ่านและแก้ไฟล์",
       action: !workspaces.length && (
         <button className="setup-btn-primary" onClick={addProject}>
-          <FolderPlus size={14} /> เลือกโฟลเดอร์ทำงาน
+          <FolderPlus size={14} /> เลือกโฟลเดอร์
         </button>
       ),
     },
     {
       key: "login",
-      icon: KeyRound,
-      title: "บัญชีและสิทธิ์เข้าถึง (Authentication)",
+      title: "บัญชีผู้ให้บริการ",
       done: Object.values(accounts).some((a) => a.status === "authenticated"),
       optional:
         Object.values(accounts).length > 0 &&
         Object.values(accounts).every((a) => a.status === "unknown"),
       detail:
-        "ล็อกอินเข้าใช้บริการ AI ที่คุณต้องการ หรือใช้รุ่นฟรีของ OpenCode / โมเดล Ollama ในเครื่องได้โดยไม่ต้องล็อกอิน",
+        "เข้าสู่ระบบ CLI ที่จะใช้ OpenCode รุ่นฟรีและ Ollama ในเครื่องไม่ต้องเข้าสู่ระบบ",
       content: (
         <div className="setup-login-help" id="setup-login-help">
           <div className="provider-accounts">
@@ -278,19 +265,12 @@ export function SetupGuide({
               ))}
           </div>
           <small className="setup-notice-text">
-            ข้อมูลบัญชีและ Credentials ทั้งหมดถูกจัดเก็บอย่างปลอดภัยบนเครื่องของคุณผ่านระบบเข้ารหัสของ OS
+            CLI แต่ละตัวเก็บบัญชีของตัวเองไว้ในเครื่องนี้
           </small>
         </div>
       ),
       action: (
         <div className="setup-login-actions" aria-describedby="setup-login-help">
-          <button
-            className="setup-btn-secondary"
-            disabled={!firstCli || !workspaces.length}
-            onClick={() => firstCli && login(firstCli.id)}
-          >
-            <LogIn size={14} aria-hidden="true" /> เปิด Terminal เพื่อล็อกอิน
-          </button>
           <label className="setup-confirm">
             <input
               ref={loginCheckbox}
@@ -306,13 +286,12 @@ export function SetupGuide({
     },
     {
       key: "defaults",
-      icon: Sliders,
-      title: "ตั้งค่า Model และระดับความคิด (Effort)",
+      title: "Model และ Effort เริ่มต้น",
       done: defaultsDone,
       optional: false,
       detail: hasCli
-        ? "เลือกรุ่นโมเดลและ Effort เริ่มต้นที่ต้องการสำหรับแต่ละค่าย เพื่อความสะดวกรวดเร็วเวลาเปิดเซสชัน"
-        : "ติดตั้งผู้ช่วย AI อย่างน้อย 1 ตัวก่อน เพื่อตั้งค่าเริ่มต้น",
+        ? "ค่าที่ session ใหม่ของแต่ละผู้ให้บริการจะใช้ เปลี่ยนทีหลังได้ในช่องพิมพ์"
+        : "ติดตั้งผู้ช่วย AI ก่อน แล้วค่อยเลือกค่าเริ่มต้น",
       content: hasCli && (
         <ProviderDefaults clis={clis} onSaved={() => setDefaultsDone(true)} />
       ),
@@ -324,32 +303,30 @@ export function SetupGuide({
             setDefaultsDone(true);
           }}
         >
-          <Check size={14} /> บันทึกและใช้ค่านี้
+          <Check size={14} /> ใช้ค่านี้
         </button>
       ),
     },
     {
       key: "skills",
-      icon: Puzzle,
-      title: "Skills เสริมความสามารถ (ไม่บังคับ)",
+      title: "Skills",
       done: false,
       optional: true,
-      detail: "ค้นหาและติดตั้ง Agent Skills จากคลังมาตรฐานของ Vercel, Supabase และ Anthropic ได้ในคลิกเดียว",
+      detail: "ชุดคำแนะนำเสริมจาก Anthropic, OpenAI, Vercel และ Supabase ที่ AI เรียกใช้เมื่องานตรงกัน",
       action: workspaces.length > 0 && hasCli && (
         <button className="setup-btn-secondary" onClick={openSkills}>
-          <Puzzle size={14} /> ดูคลัง Skills
+          <Puzzle size={14} /> เปิด Skills
         </button>
       ),
     },
     {
       key: "voice",
-      icon: Mic,
-      title: "พูดเพื่อพิมพ์ / แปลงเสียงพูด (ไม่บังคับ)",
+      title: "พิมพ์ด้วยเสียง",
       done: !!model,
       optional: true,
       detail: model
-        ? "โมเดลเสียงพร้อมใช้งานแล้ว กดปุ่มไมค์ในช่องแชทเพื่อพูดแทนการพิมพ์ได้ทันที"
-        : `กดปุ่มไมค์ในช่องพิมพ์ครั้งแรกเพื่อดาวน์โหลดโมเดลเสียง (${SPEECH_MODELS[voice.model].size}) เก็บไว้ในเครื่อง`,
+        ? "โมเดลเสียงอยู่ในเครื่องแล้ว กดไมค์ในช่องพิมพ์เพื่อพูดแทนพิมพ์"
+        : `กดไมค์ในช่องพิมพ์ครั้งแรกเพื่อดาวน์โหลดโมเดลเสียง (${SPEECH_MODELS[voice.model].size})`,
       action: null,
     },
   ];
@@ -359,111 +336,84 @@ export function SetupGuide({
   const progressPercent = Math.round((completedCore / totalCore) * 100);
   const isReady = completedCore === totalCore;
 
+  const remaining = totalCore - completedCore;
+
   return (
-    <div className="setup-guide-container">
-      {/* Hero Mission Control Header */}
-      <div className="setup-hero-banner">
-        <div className="setup-hero-info">
-          <div className="setup-pill-badge">
-            <Sparkles size={13} className="text-cyan-400" />
-            <span>ศูนย์ตั้งค่าความพร้อมของสตูดิโอ (Setup Center)</span>
-          </div>
-          <h2>{isReady ? "🎉 ยินดีด้วย! สตูดิโอของคุณพร้อมทำงาน 100%" : "เตรียมความพร้อมสตูดิโอของคุณ"}</h2>
+    <div className="setup-center">
+      <header className="setup-status">
+        <div className="setup-status-text">
+          <h3>{isReady ? "พร้อมใช้งาน" : `เหลืออีก ${remaining} ขั้น`}</h3>
           <p>
             {isReady
-              ? "ระบบทุกอย่างถูกตั้งค่าเรียบร้อยแล้ว คุณสามารถปิดหน้านี้และเริ่มสร้างผลงานร่วมกับ AI ได้ทันที"
-              : "ทำตามขั้นตอนด้านล่าง หรือกดปุ่มติดตั้งอัตโนมัติ เพื่อให้ระบบเตรียมทุกอย่างให้ในคลิกเดียว"}
+              ? "ขั้นหลักครบแล้ว ปิดหน้านี้แล้วเริ่มงานได้เลย ส่วนที่ไม่บังคับทำทีหลังได้"
+              : "ทำทีละขั้นด้านล่าง หรือให้แอปติดตั้งส่วนที่ขาดให้"}
           </p>
-
-          {/* Progress Bar */}
-          <div className="setup-progress-wrapper">
-            <div className="setup-progress-label">
-              <span>ความคืบหน้าของระบบ: <strong>{completedCore} จาก {totalCore} รายการหลัก</strong></span>
-              <span className="setup-progress-percent">{progressPercent}%</span>
-            </div>
-            <div className="setup-progress-track">
-              <div
-                className="setup-progress-fill"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
+          <div
+            className="setup-meter"
+            role="progressbar"
+            aria-label="ขั้นหลักที่เสร็จแล้ว"
+            aria-valuemin={0}
+            aria-valuemax={totalCore}
+            aria-valuenow={completedCore}
+          >
+            <i style={{ width: `${progressPercent}%` }} />
           </div>
+          <small>{completedCore} จาก {totalCore} ขั้นหลัก</small>
         </div>
-
-        <div className="setup-hero-actions">
+        <div className="setup-status-actions">
           {!isReady && (
             <button
-              className="setup-quickstart-btn"
+              className="setup-btn-primary"
               disabled={!!running || autoSettingUp}
               onClick={() => void runAutoSetup()}
             >
-              <Wand2 size={16} />
-              <span>{autoSettingUp ? "กำลังดำเนินการ..." : "ติดตั้งสิ่งที่ขาดอัตโนมัติ"}</span>
+              <Wand2 size={14} /> {autoSettingUp ? "กำลังติดตั้ง…" : "ติดตั้งส่วนที่ขาด"}
             </button>
           )}
           <button
-            className="setup-refresh-btn"
+            className="setup-btn-secondary"
             disabled={checking}
             onClick={() => void check()}
-            title="ตรวจสถานะเครื่องมืออีกครั้ง"
           >
-            <RefreshCw size={13} className={checking ? "spin" : ""} />
-            <span>{checking ? "กำลังตรวจ..." : "ตรวจใหม่อีกครั้ง"}</span>
+            <RefreshCw size={14} className={checking ? "spin" : ""} /> {checking ? "กำลังตรวจ…" : "ตรวจอีกครั้ง"}
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Steps List */}
-      <div className="setup-card-list">
-        {steps.map((step, index) => {
-          const Icon = step.icon;
-          return (
-            <div
-              key={step.key}
-              className={`setup-step-card ${step.done ? "card-completed" : ""} ${
-                step.optional ? "card-optional" : ""
-              }`}
-            >
-              <div className="setup-card-header">
-                <div className={`setup-status-indicator ${step.done ? "indicator-done" : ""}`}>
-                  {step.done ? <Check size={16} /> : <span>{index + 1}</span>}
-                </div>
-                <div className="setup-card-title-group">
-                  <div className="flex items-center gap-2">
-                    <Icon size={16} className={step.done ? "text-emerald-400" : "text-cyan-400"} />
-                    <h3>{step.title}</h3>
-                    {step.optional && <span className="setup-badge-optional">ไม่บังคับ</span>}
-                    {step.done && <span className="setup-badge-done">พร้อมใช้</span>}
-                  </div>
-                  <p>{step.detail}</p>
-                </div>
-                {step.action && (
-                  <div className="setup-card-action-slot">{step.action}</div>
-                )}
-              </div>
-
-              {"content" in step && step.content && (
-                <div className="setup-card-subcontent">{step.content}</div>
-              )}
-
+      <ol className="setup-list">
+        {steps.map((step, index) => (
+          <li
+            key={step.key}
+            className={`setup-row${step.done ? " done" : ""}${step.optional ? " optional" : ""}`}
+          >
+            <span className="setup-mark" aria-hidden="true">
+              {step.done ? <Check size={14} /> : index + 1}
+            </span>
+            <div className="setup-text">
+              <h4>
+                <span>{step.title}</span>
+                {step.optional && <span className="setup-tag">ไม่บังคับ</span>}
+                {step.done && <span className="setup-done-label">เสร็จแล้ว</span>}
+              </h4>
+              <p>{step.detail}</p>
               {"job" in step && step.job && (
-                <div className={`setup-job-status ${step.job.status}`}>
-                  {step.job.status === "running" && (
-                    <LoaderCircle size={14} className="spin text-cyan-400" />
-                  )}
-                  <span>
-                    {step.job.status === "running"
-                      ? "กำลังดาวน์โหลดและแตกไฟล์... กรุณารอสักครู่"
-                      : step.job.status === "failed"
-                      ? "ติดตั้งไม่สำเร็จ ลองใหม่อีกครั้ง หรือตรวจสอบการเชื่อมต่ออินเทอร์เน็ต"
-                      : "การติดตั้งเสร็จสมบูรณ์"}
-                  </span>
-                </div>
+                <p className={`setup-job-status ${step.job.status}`}>
+                  {step.job.status === "running" && <LoaderCircle size={13} className="spin" />}
+                  {step.job.status === "running"
+                    ? "กำลังดาวน์โหลดและติดตั้ง…"
+                    : step.job.status === "failed"
+                    ? "ติดตั้งไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วกดติดตั้งอีกครั้ง"
+                    : "ติดตั้งเสร็จแล้ว"}
+                </p>
               )}
             </div>
-          );
-        })}
-      </div>
+            {step.action && <div className="setup-row-action">{step.action}</div>}
+            {"content" in step && step.content && (
+              <div className="setup-row-content">{step.content}</div>
+            )}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
