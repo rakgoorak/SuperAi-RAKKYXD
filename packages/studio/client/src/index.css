@@ -1748,10 +1748,11 @@ input[type="checkbox"] {
 .saved-item-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; }
 .saved-item-actions .text-button { font-size: 10px; padding: 4px; }
 .dock-runs { margin-top: 20px; }
-.dock-runs h3 { font-size: 12px; margin-bottom: 8px; }
-.dock-runs > div { padding: 8px 0; border-bottom: 1px solid #33322f; display: flex; gap: 8px; }
-.dock-runs strong { font-weight: 400; font-size: 11px; flex: 1; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
-.dock-runs small { font-size: 10px; }
+.dock-runs h3 { font-size: 12px; margin-bottom: 8px; color: #edece9; }
+.dock-runs > div, .dock-runs > .dock-run-item { padding: 8px 6px; border-bottom: 1px solid #33322f; display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; background: transparent; border-top: 0; border-left: 0; border-right: 0; border-radius: 6px; cursor: pointer; transition: background 0.12s ease; }
+.dock-runs > .dock-run-item:hover { background: #242320; }
+.dock-runs strong { font-weight: 400; font-size: 11px; flex: 1; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; color: #dcdad5; }
+.dock-runs small { font-size: 10px; color: #9e9c96; flex-shrink: 0; }
 .launch-presets { margin: 0 24px 12px; padding-bottom: 12px; border-bottom: 1px solid #383734; }
 .launch-presets h3 { display: flex; align-items: center; gap: 6px; font-size: 11px; margin-bottom: 8px; }
 .launch-presets summary { cursor: pointer; font-size: 11px; color: #d5d4d0; padding: 6px 0; }
@@ -2175,9 +2176,19 @@ img.small-brand { width: 18px; height: auto; background: none; border-radius: 0;
 .chat-empty { margin: 14vh auto 0; max-width: 480px; display: grid; gap: 10px; text-align: center; color: var(--dim); font-size: 13.5px; line-height: 1.7; }
 .chat-empty strong { font-size: 20px; font-weight: 600; color: #f3f2ee; }
 .chat-empty small { font-size: 11.5px; color: #797772; }
-.chat-user { display: flex; justify-content: flex-end; }
-.chat-user > div { max-width: 82%; padding: 11px 16px; border-radius: 18px 18px 4px 18px; background: #282825; border: 1px solid #363632; color: #f5f4f0; font-size: 14.5px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18); }
-.chat-user small { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 11px; color: #9e9c96; }
+.chat-user { display: flex; justify-content: flex-end; margin: 12px 0 20px; }
+.chat-user-wrap { display: flex; flex-direction: column; align-items: flex-end; max-width: 84%; min-width: 0; gap: 6px; }
+.chat-user-bubble { max-width: 100%; padding: 12px 18px; border-radius: 16px; background: #262624; border: 1px solid rgba(255, 255, 255, 0.08); color: #edece9; font-size: 14.5px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16); }
+.chat-user-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-user-meta { display: flex; align-items: center; justify-content: flex-end; gap: 7px; color: #8a8984; font-size: 11.5px; line-height: 1; padding: 0 4px; user-select: none; }
+.chat-user-status { display: inline-flex; align-items: center; gap: 4px; color: #8a8984; }
+.chat-user-check { color: #8a8984; flex-shrink: 0; }
+.chat-user-time { color: #8a8984; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.chat-user-sep { color: #555450; font-size: 11px; }
+.chat-user-actions { display: inline-flex; align-items: center; gap: 2px; }
+.chat-user-action-btn { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: none; background: transparent; border-radius: 5px; color: #8a8984; cursor: pointer; transition: all 0.15s ease; }
+.chat-user-action-btn:hover:not(:disabled) { color: #f1efe9; background: rgba(255, 255, 255, 0.08); }
+.chat-user-action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .chat-assistant { position: relative; padding-left: 2px; }
 .chat-assistant .markdown { font-size: 14.5px; line-height: 1.78; color: #e4e2dd; }
 .chat-assistant .markdown p { margin: 0 0 12px; }

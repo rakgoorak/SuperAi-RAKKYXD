@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronRight, Circle, Clock3, FilePen, FileText, Globe, ListChecks, Loader2, Paperclip, Search, Send, Terminal as TerminalIcon, Wrench, X } from 'lucide-react';
+import { AlertTriangle, Check, CheckCheck, CheckCircle2, ChevronRight, Circle, Clock3, Copy, FilePen, FileText, GitFork, Globe, ListChecks, Loader2, Paperclip, RotateCcw, Search, Send, Terminal as TerminalIcon, Wrench, X } from 'lucide-react';
 import { Markdown } from './Markdown';
 import { post } from '../api';
 import { prepareMessage, recoveryHint, showChanges } from '../recovery';
@@ -113,6 +113,120 @@ function TaskList({ item, live }: { item: TodosItem; live: boolean }) {
         </li>)}
       </ol>}
     </section>
+  );
+}
+
+function UserMessageItem({
+  block,
+  sessionId,
+  running,
+  pending,
+  now,
+  onProblem,
+}: {
+  block: Extract<ChatItem, { kind: 'user' }>;
+  sessionId: string;
+  running: boolean;
+  pending: boolean;
+  now: number;
+  onProblem: (msg: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [forked, setForked] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout>>();
+  const forkTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => {
+      clearTimeout(copyTimer.current);
+      clearTimeout(forkTimer.current);
+    };
+  }, []);
+
+  const handleCopy = async () => {
+    try {
+      if (!navigator.clipboard) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(block.text);
+      setCopied(true);
+      clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false), 1500);
+    } catch {
+      onProblem('คัดลอกข้อความไม่ได้ กรุณาลองเลือกข้อความแล้วคัดลอกเอง');
+    }
+  };
+
+  const handleEdit = () => {
+    prepareMessage(block.text, sessionId, { expand: false });
+    if (block.attachments?.length) {
+      onProblem('กรุณาแนบไฟล์เดิมอีกครั้งก่อนส่งข้อความที่แก้ไข');
+    }
+  };
+
+  const handleFork = () => {
+    prepareMessage(block.text, sessionId, { expand: false });
+    setForked(true);
+    clearTimeout(forkTimer.current);
+    forkTimer.current = setTimeout(() => setForked(false), 1500);
+  };
+
+  return (
+    <div key={block.id} data-message-id={block.id} className="chat-user">
+      <div className="chat-user-wrap">
+        <div className="chat-user-bubble">
+          <div className="chat-user-text">{block.text}</div>
+          {block.attachments && block.attachments.length > 0 && (
+            <MessageAttachments
+              paths={block.attachments}
+              endpoint={`/api/terminals/${encodeURIComponent(sessionId)}/preview-file`}
+            />
+          )}
+        </div>
+        <div className="chat-user-meta">
+          <span className="chat-user-status">
+            <CheckCheck size={13} className="chat-user-check" aria-hidden="true" />
+            <time
+              className="chat-user-time"
+              dateTime={new Date(block.at).toISOString()}
+              title={new Date(block.at).toLocaleString('th-TH')}
+            >
+              {timeLabel(block.at, now)}
+            </time>
+          </span>
+          <span className="chat-user-sep" aria-hidden="true">·</span>
+          <div className="chat-user-actions" role="group" aria-label="จัดการข้อความ">
+            <button
+              type="button"
+              className="chat-user-action-btn"
+              aria-label={copied ? 'คัดลอกแล้ว' : 'คัดลอกข้อความ'}
+              title={copied ? 'คัดลอกแล้ว' : 'คัดลอกข้อความ'}
+              onClick={() => void handleCopy()}
+            >
+              {copied ? <Check size={13} /> : <Copy size={13} />}
+            </button>
+            <button
+              type="button"
+              className="chat-user-action-btn"
+              aria-label="แก้ไขข้อความ"
+              title="แก้ไขข้อความในช่องคำสั่ง"
+              disabled={running || pending}
+              onClick={handleEdit}
+            >
+              <RotateCcw size={13} />
+            </button>
+            <button
+              type="button"
+              className="chat-user-action-btn"
+              aria-label={forked ? 'พร้อมใช้งานในช่องคำสั่ง' : 'แยกแชตใหม่ (Fork)'}
+              title={forked ? 'พร้อมใช้งานในช่องคำสั่ง' : 'แยกข้อความนี้ไปใช้ต่อ (Fork)'}
+              disabled={running || pending}
+              onClick={handleFork}
+            >
+              {forked ? <Check size={13} /> : <GitFork size={13} />}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -248,14 +362,15 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
           {blocks(items).filter(block => !search.trim() || (block.kind === 'tools' ? block.tools.map(t => t.title + ' ' + (t.output || '')).join(' ') : block.kind === 'todos' ? block.todos.map(t => t.text).join(' ') : block.text).toLowerCase().includes(search.trim().toLowerCase())).map((block) => {
             if (block.kind === 'user')
               return (
-                <div key={block.id} data-message-id={block.id} className="chat-user">
-                  <div>
-                    {block.text}
-                    <button className="edit-message" disabled={running || pending} onClick={() => { prepareMessage(block.text, sessionId); if (block.attachments?.length) setProblem('กรุณาแนบไฟล์เดิมอีกครั้งก่อนส่งข้อความที่แก้ไข'); }}>แก้ข้อความแล้วส่งใหม่</button>
-                    <MessageAttachments paths={block.attachments} endpoint={`/api/terminals/${encodeURIComponent(sessionId)}/preview-file`} />
-                    <time className="chat-time" dateTime={new Date(block.at).toISOString()} title={new Date(block.at).toLocaleString('th-TH')}>{timeLabel(block.at, now)}</time>
-                  </div>
-                </div>
+                <UserMessageItem
+                  key={block.id}
+                  block={block}
+                  sessionId={sessionId}
+                  running={running}
+                  pending={pending}
+                  now={now}
+                  onProblem={setProblem}
+                />
               );
             if (block.kind === 'assistant') {
               const latest = block.id === lastReply?.id && !!lastUser && replyIndex > items.indexOf(lastUser);

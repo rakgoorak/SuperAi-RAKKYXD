@@ -4,111 +4,550 @@ import type { Run, Session, Workspace } from '../api';
 import { post } from '../api';
 import { PreviewPanel } from './PreviewPanel';
 import type { PreviewRequest } from '../previewLinks';
+import { paneView } from '../paneView';
 
 export type DockView = 'dashboard' | 'tasks' | 'prompts' | 'browser';
-interface SavedItem { id: string; wsId: string; title: string; text: string; state: 'todo' | 'sent' | 'done'; sessionId?: string; }
+interface SavedItem {
+  id: string;
+  wsId: string;
+  title: string;
+  text: string;
+  state: 'todo' | 'sent' | 'done';
+  sessionId?: string;
+}
 interface Props {
   previewRequest?: PreviewRequest;
-  open: boolean; view: DockView; setView: (view: DockView) => void; close: () => void;
-  suspended: boolean; workspace?: Workspace; workspaces: Workspace[]; sessions: Session[]; runs: Run[]; selected: string;
-  onSelect: (session: Session) => void; onPrompt: (text: string) => void; onError: (message: string) => void;
+  open: boolean;
+  view: DockView;
+  setView: (view: DockView) => void;
+  close: () => void;
+  suspended: boolean;
+  workspace?: Workspace;
+  workspaces: Workspace[];
+  sessions: Session[];
+  runs: Run[];
+  selected: string;
+  onSelect: (session: Session) => void;
+  onPrompt: (text: string) => void;
+  onError: (message: string) => void;
 }
-function loadItems(key: string): SavedItem[] {
-  try { const value: unknown = JSON.parse(localStorage.getItem(key) || '[]');
-    return Array.isArray(value) ? value.filter(x => x && typeof x.id === 'string' && typeof x.wsId === 'string' && typeof x.title === 'string' && typeof x.text === 'string' && ['todo', 'sent', 'done'].includes(x.state)) : [];
-  } catch { return []; }
+
+function isSessionActive(s: Session): boolean {
+  return s.status === 'running' || paneView(s) === 'chat';
 }
-export function RightDock({ open, view, setView, close, suspended, workspace, workspaces, sessions, runs, selected, onSelect, onPrompt, onError, previewRequest }: Props) {
+
+const DEFAULT_TASKS: SavedItem[] = [
+  {
+    id: 'default-task-1',
+    wsId: '',
+    title: 'ตรวจสอบข้อผิดพลาดและ Lint โค้ด',
+    text: 'ช่วยตรวจสอบ syntax error, type error และ lint ในโปรเจกต์นี้ พร้อมสรุปจุดที่ต้องแก้ไข',
+    state: 'todo',
+  },
+  {
+    id: 'default-task-2',
+    wsId: '',
+    title: 'รัน Unit Tests และรายงานผล',
+    text: 'ช่วยรันชุดการทดสอบทั้งหมดในโปรเจกต์ แล้วรายงานผลว่ามี test ใดผ่านหรือล้มเหลวบ้าง',
+    state: 'todo',
+  },
+  {
+    id: 'default-task-3',
+    wsId: '',
+    title: 'ปรับปรุงประสิทธิภาพ (Optimization)',
+    text: 'ช่วยตรวจสอบโค้ดเพื่อหาจุดคอขวด (bottleneck) และแนะนำวิธีปรับแต่งให้ทำงานเร็วขึ้น',
+    state: 'todo',
+  },
+];
+
+const DEFAULT_PROMPTS: SavedItem[] = [
+  {
+    id: 'default-prompt-1',
+    wsId: '',
+    title: 'ตรวจสอบโค้ดและบั๊ก (Code Review)',
+    text: 'ช่วยตรวจสอบโค้ดในโปรเจกต์นี้ หาจุดบกพร่อง ข้อผิดพลาด และแนะนำแนวทางการแก้ไขหรือปรับปรุงประสิทธิภาพ',
+    state: 'todo',
+  },
+  {
+    id: 'default-prompt-2',
+    wsId: '',
+    title: 'เขียน Unit Tests ครอบคลุมฟังก์ชันหลัก',
+    text: 'ช่วยเขียน Unit Tests ครอบคลุมการทำงานของฟังก์ชันหลัก และตรวจสอบ edge cases ต่างๆ ให้ครบถ้วน',
+    state: 'todo',
+  },
+  {
+    id: 'default-prompt-3',
+    wsId: '',
+    title: 'อธิบายโครงสร้างโปรเจกต์',
+    text: 'ช่วยสรุปภาพรวมโครงสร้างของโปรเจกต์นี้ อธิบายหน้าที่ของแต่ละโฟลเดอร์และไฟล์สำคัญให้เข้าใจง่าย',
+    state: 'todo',
+  },
+  {
+    id: 'default-prompt-4',
+    wsId: '',
+    title: 'สรุป Release Notes และ Commit',
+    text: 'ช่วยดู git diff หรือการเปลี่ยนแปลงล่าสุด แล้วสรุป release notes และข้อความ commit ให้ชัดเจน',
+    state: 'todo',
+  },
+];
+
+function loadItems(key: string, defaults: SavedItem[] = []): SavedItem[] {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw && defaults.length) {
+      localStorage.setItem(key, JSON.stringify(defaults));
+      return defaults;
+    }
+    const value: unknown = JSON.parse(raw || '[]');
+    const loaded = Array.isArray(value)
+      ? value.filter(
+          x =>
+            x &&
+            typeof x.id === 'string' &&
+            typeof x.title === 'string' &&
+            typeof x.text === 'string' &&
+            ['todo', 'sent', 'done'].includes(x.state)
+        )
+      : [];
+    if (!loaded.length && defaults.length) {
+      return defaults;
+    }
+    return loaded;
+  } catch {
+    return defaults;
+  }
+}
+
+export function RightDock({
+  open,
+  view,
+  setView,
+  close,
+  suspended,
+  workspace,
+  workspaces,
+  sessions,
+  runs,
+  selected,
+  onSelect,
+  onPrompt,
+  onError,
+  previewRequest,
+}: Props) {
   const [width, setWidth] = useState(() => {
-    try { const n = Number(localStorage.getItem('superai-dock-width')); return Number.isFinite(n) && n >= 320 ? Math.min(n, innerWidth * .6) : 420; } catch { return 420; }
+    try {
+      const n = Number(localStorage.getItem('superai-dock-width'));
+      return Number.isFinite(n) && n >= 320 ? Math.min(n, innerWidth * 0.6) : 420;
+    } catch {
+      return 420;
+    }
   });
   const [resizing, setResizing] = useState(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
-  const [tasks, setTasks] = useState(() => loadItems('superai-tasks-v1'));
-  const [prompts, setPrompts] = useState(() => loadItems('superai-prompts-v1'));
+  const [tasks, setTasks] = useState(() => loadItems('superai-tasks-v1', DEFAULT_TASKS));
+  const [prompts, setPrompts] = useState(() => loadItems('superai-prompts-v1', DEFAULT_PROMPTS));
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
   const [recipient, setRecipient] = useState(selected);
   const [sending, setSending] = useState('');
-  useEffect(() => { setEditing(null); setSearch(''); setFilter('all'); setRecipient(selected); }, [view, workspace?.id]);
+
+  const activeSessions = sessions.filter(isSessionActive);
+  const projectActiveSessions = activeSessions.filter(s => !workspace || s.wsId === workspace.id);
+
+  useEffect(() => {
+    setEditing(null);
+    setSearch('');
+    setFilter('all');
+  }, [view, workspace?.id]);
+
+  useEffect(() => {
+    const available = projectActiveSessions.length ? projectActiveSessions : activeSessions;
+    if (selected && available.some(s => s.id === selected)) {
+      setRecipient(selected);
+    } else if (available.length > 0 && (!recipient || !available.some(s => s.id === recipient))) {
+      setRecipient(available[0].id);
+    }
+  }, [selected, workspace?.id, sessions]);
+
   const persist = (kind: 'tasks' | 'prompts', items: SavedItem[]) => {
     try {
       localStorage.setItem(`superai-${kind}-v1`, JSON.stringify(items));
       (kind === 'tasks' ? setTasks : setPrompts)(items);
-    } catch { onError('บันทึกรายการบนเครื่องไม่ได้ กรุณาตรวจพื้นที่จัดเก็บ'); }
+    } catch {
+      onError('บันทึกรายการบนเครื่องไม่ได้ กรุณาตรวจพื้นที่จัดเก็บ');
+    }
   };
+
   const changeWidth = (next: number) => {
-    const value = Math.max(320, Math.min(innerWidth * .6, next)); setWidth(value);
-    try { localStorage.setItem('superai-dock-width', String(value)); } catch { onError('บันทึกขนาดแผงไม่ได้'); }
+    const value = Math.max(320, Math.min(innerWidth * 0.6, next));
+    setWidth(value);
+    try {
+      localStorage.setItem('superai-dock-width', String(value));
+    } catch {
+      onError('บันทึกขนาดแผงไม่ได้');
+    }
   };
-  const matching = sessions.filter(s => `${s.name} ${s.agentType} ${workspaces.find(w => w.id === s.wsId)?.name || ''}`.toLowerCase().includes(search.toLowerCase()) && (filter === 'all' || s.status === filter));
+
+  const matching = sessions.filter(s => {
+    const matchesSearch = `${s.name} ${s.agentType} ${workspaces.find(w => w.id === s.wsId)?.name || ''}`
+      .toLowerCase()
+      .includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+    if (filter === 'all') return true;
+    if (filter === 'running') return isSessionActive(s);
+    if (filter === 'exited') return s.status === 'exited' && paneView(s) !== 'chat';
+    if (filter === 'error') return s.status === 'error';
+    return true;
+  });
+
   const kind = view === 'tasks' ? 'tasks' : 'prompts';
-  const items = (view === 'tasks' ? tasks : prompts).filter(x => x.wsId === workspace?.id && `${x.title} ${x.text}`.toLowerCase().includes(search.toLowerCase()));
-  const edit = (item?: SavedItem) => { setEditing(item?.id || 'new'); setTitle(item?.title || ''); setText(item?.text || ''); };
+  const currentList = view === 'tasks' ? tasks : prompts;
+  const items = currentList.filter(
+    x =>
+      (!x.wsId || !workspace || x.wsId === workspace.id) &&
+      `${x.title} ${x.text}`.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const edit = (item?: SavedItem) => {
+    setEditing(item?.id || 'new');
+    setTitle(item?.title || '');
+    setText(item?.text || '');
+  };
+
   const save = () => {
-    if (!workspace || !title.trim() || !text.trim()) return;
-    const current = kind === 'tasks' ? tasks : prompts;
-    const existing = current.find(x => x.id === editing);
-    const item: SavedItem = { id: editing === 'new' ? crypto.randomUUID() : editing!, wsId: workspace.id, title: title.trim(), text: text.trim(), state: existing?.state || 'todo', sessionId: existing?.sessionId };
-    persist(kind, editing === 'new' ? [...current, item] : current.map(x => x.id === item.id ? item : x));
+    if (!title.trim() || !text.trim()) return;
+    const existing = currentList.find(x => x.id === editing);
+    const item: SavedItem = {
+      id: editing === 'new' ? crypto.randomUUID() : editing!,
+      wsId: workspace?.id || existing?.wsId || '',
+      title: title.trim(),
+      text: text.trim(),
+      state: existing?.state || 'todo',
+      sessionId: existing?.sessionId,
+    };
+    persist(kind, editing === 'new' ? [...currentList, item] : currentList.map(x => (x.id === item.id ? item : x)));
     setEditing(null);
   };
+
   const deliver = async (item: SavedItem) => {
     setSending(item.id);
     try {
-      const target = sessions.find(s => s.id === recipient && s.wsId === workspace?.id && s.status === 'running');
-      if (!target) throw new Error('เลือก session ที่กำลังทำงานในโปรเจกต์นี้ก่อน');
-      const result = await post(`/api/terminals/${target.id}/input`, { input: item.text + '\r' });
-      if (!result.success) throw new Error('ส่งงานไม่สำเร็จ กรุณาตรวจ session');
-      persist('tasks', loadItems('superai-tasks-v1').map(x => x.id === item.id ? { ...x, state: 'sent', sessionId: target.id } : x));
-    } catch (e) { onError((e as Error).message); } finally { setSending(''); }
+      const target =
+        sessions.find(s => s.id === recipient && (!workspace || s.wsId === workspace.id) && isSessionActive(s)) ||
+        sessions.find(s => (!workspace || s.wsId === workspace.id) && isSessionActive(s)) ||
+        sessions.find(s => isSessionActive(s));
+      if (!target) throw new Error('ไม่พบ session ที่พร้อมใช้งานในขณะนี้ กรุณาเปิด session ก่อน');
+      if (paneView(target) === 'chat') {
+        const result = await post<{ queued?: boolean }>(`/api/terminals/${target.id}/chat`, { text: item.text });
+        if (!result) throw new Error('ส่งงานเข้าแชตไม่สำเร็จ กรุณาตรวจ session');
+      } else {
+        const result = await post(`/api/terminals/${target.id}/input`, { input: item.text + '\r' });
+        if (!result.success) throw new Error('ส่งงานเข้า Terminal ไม่สำเร็จ กรุณาตรวจ session');
+      }
+      persist(kind, currentList.map(x => (x.id === item.id ? { ...x, state: 'sent', sessionId: target.id } : x)));
+    } catch (e) {
+      onError((e as Error).message);
+    } finally {
+      setSending('');
+    }
   };
-  return <aside className={`right-dock ${open ? '' : 'not-visible'}`} style={{ width }} aria-label="แผงเครื่องมือ">
-    <div className="dock-resize" role="separator" aria-label="ปรับขนาดแผงด้านขวา" aria-orientation="vertical" tabIndex={0}
-      onKeyDown={e => { if (['ArrowLeft', 'ArrowRight'].includes(e.key)) { e.preventDefault(); changeWidth(width + (e.key === 'ArrowLeft' ? 24 : -24)); } }}
-      onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); setResizing(true); }}
-      onPointerMove={e => { if (e.currentTarget.hasPointerCapture(e.pointerId)) changeWidth(innerWidth - e.clientX); }}
-      onPointerUp={e => { if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); setResizing(false); }}
-      onPointerCancel={() => setResizing(false)} />
-    <nav className="dock-tabs" aria-label="เครื่องมือด้านขวา">
-      {([['dashboard', 'สถานะ', Activity], ['tasks', 'งาน', ClipboardList], ['prompts', 'พรอมป์ต์', MessageSquare], ['browser', 'Browser', Globe]] as const).map(([value, label, Icon]) =>
-        <button key={value} aria-pressed={view === value} onClick={() => setView(value)}><Icon size={12} />{label}</button>)}
-      <button className="icon-button" title="ปิดแผงด้านขวา" onClick={close}><X size={14} /></button>
-    </nav>
-    <div className={`dock-browser ${view === 'browser' ? '' : 'not-visible'}`}>
-      <PreviewPanel embedded onClose={close} suspended={!open || view !== 'browser' || suspended || resizing} onError={onError} request={previewRequest} workspaceId={workspace?.id} />
-    </div>
-    {view !== 'browser' && <div className="dock-content">
-      {view === 'dashboard' ? <>
-        <div className="dock-summary"><strong>{sessions.length}</strong><div><h2>session ทั้งหมด</h2><p>{sessions.filter(s => s.status === 'running').length} process เปิดอยู่ · {sessions.filter(s => s.status !== 'running').length} หยุด / ปิดแล้ว</p></div></div>
-        <p className="dock-note">สถานะ process จากระบบ · CLI ที่เปิดอยู่อาจกำลังรอคำสั่ง</p>
-        <div className="dock-filters">{[['all', 'ทั้งหมด'], ['running', 'เปิดอยู่'], ['exited', 'จบแล้ว'], ['error', 'ผิดพลาด']].map(([value, label]) => <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}</div>
-      </> : <div className="dock-section-heading"><div><h2>{view === 'tasks' ? 'งานของโปรเจกต์' : 'พรอมป์ต์ที่บันทึก'}</h2><p>{workspace?.name || 'เลือกโปรเจกต์ก่อน'} · บันทึกบนเครื่อง</p></div><button className="icon-button" title={view === 'tasks' ? 'เพิ่มงาน' : 'เพิ่มพรอมป์ต์'} disabled={!workspace} onClick={() => edit()}><Plus size={16} /></button></div>}
-      <label className="dock-search"><Search size={13} /><input aria-label="ค้นหาในแผง" placeholder="ค้นหา…" value={search} onChange={e => setSearch(e.target.value)} /></label>
-      {view === 'dashboard' ? <>
-        <div className="dock-list">{matching.map(s => <button className={`session-summary ${selected === s.id ? 'active' : ''}`} key={s.id} onClick={() => onSelect(s)}>
-          <span className={`status-dot ${s.status === 'running' ? '' : s.status === 'error' ? 'bad' : 'offline'}`} />
-          <span><strong>{s.name}</strong><small>{s.agentType} · {workspaces.find(w => w.id === s.wsId)?.name || s.cwd}</small></span>
-          <small>{s.status === 'running' ? 'เปิดอยู่' : s.status === 'stopping' ? 'กำลังปิด' : s.status === 'error' ? 'ผิดพลาด' : 'จบแล้ว'}</small>
-        </button>)}{!matching.length && <p className="dock-empty">ยังไม่มี session ที่ตรงกับตัวกรอง</p>}</div>
-        {runs.length > 0 && <section className="dock-runs"><h3>ประวัติผู้ช่วยในโปรเจกต์นี้</h3>{runs.slice(0, 15).map(run => <div key={run.id}><strong>{run.prompt}</strong><small>{run.status === 'completed' ? 'เสร็จแล้ว' : run.status === 'running' ? 'กำลังทำงาน' : run.status === 'failed' ? 'ผิดพลาด' : 'ยกเลิกแล้ว'}</small></div>)}</section>}
-      </> : <>
-        {view === 'tasks' && <label className="task-target">ส่งงานไปที่<select aria-label="session รับงาน" value={recipient} onChange={e => setRecipient(e.target.value)}><option value="">เลือก session</option>{sessions.filter(s => s.wsId === workspace?.id && s.status === 'running').map(s => <option key={s.id} value={s.id}>{s.name} · {s.id.slice(0, 5)}</option>)}</select></label>}
-        {editing && <form className="dock-editor" onSubmit={e => { e.preventDefault(); save(); }}>
-          <label>ชื่อ<input aria-label="ชื่อรายการ" required maxLength={120} value={title} onChange={e => setTitle(e.target.value)} /></label>
-          <label>ข้อความ<textarea aria-label="ข้อความรายการ" required maxLength={20000} rows={5} value={text} onChange={e => setText(e.target.value)} /></label>
-          <div className="inline"><button className="primary compact" type="submit">บันทึกรายการ</button><button className="text-button" type="button" onClick={() => setEditing(null)}>ยกเลิก</button></div>
-        </form>}
-        <div className="dock-list">{items.map(item => <article className="saved-item" key={item.id}>
-          <div className="saved-item-heading"><strong>{item.title}</strong>{view === 'tasks' && <small>{item.state === 'done' ? 'เสร็จแล้ว' : item.state === 'sent' ? 'ส่งแล้ว' : 'ยังไม่ส่ง'}</small>}</div>
-          <p>{item.text}</p><div className="saved-item-actions">
-            {view === 'tasks' ? <><button className="text-button" disabled={!!sending || item.state === 'done'} onClick={() => void deliver(item)}><Play size={12} />{sending === item.id ? 'กำลังส่ง…' : 'ส่งเข้า session'}</button><button className="text-button" onClick={() => persist('tasks', tasks.map(x => x.id === item.id ? { ...x, state: x.state === 'done' ? 'todo' : 'done' } : x))}><Check size={12} />{item.state === 'done' ? 'เปิดงานอีกครั้ง' : 'ทำเครื่องหมายเสร็จ'}</button></> : <button className="text-button" onClick={() => onPrompt(item.text)}>ใช้พรอมป์ต์</button>}
-            <button className="text-button" onClick={() => edit(item)}>แก้ไข</button><button className="icon-button" title={`ลบ ${item.title}`} disabled={!!sending} onClick={() => persist(kind, (kind === 'tasks' ? tasks : prompts).filter(x => x.id !== item.id))}><Trash2 size={13} /></button>
-          </div>
-        </article>)}{!items.length && !editing && <p className="dock-empty">{view === 'tasks' ? 'เพิ่มงานแล้วส่งคำสั่งให้ session ที่เลือก เมื่อทำเสร็จให้ทำเครื่องหมายด้วยตนเอง' : 'บันทึกคำสั่งที่ใช้บ่อย แล้วกดใช้เพื่อใส่ในช่องคำสั่งก่อนส่ง'}</p>}</div>
-      </>}
-    </div>}
-  </aside>;
+
+  const activeCount = sessions.filter(isSessionActive).length;
+  const stoppedCount = sessions.filter(s => !isSessionActive(s)).length;
+
+  return (
+    <aside className={`right-dock ${open ? '' : 'not-visible'}`} style={{ width }} aria-label="แผงเครื่องมือ">
+      <div
+        className="dock-resize"
+        role="separator"
+        aria-label="ปรับขนาดแผงด้านขวา"
+        aria-orientation="vertical"
+        tabIndex={0}
+        onKeyDown={e => {
+          if (['ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            e.preventDefault();
+            changeWidth(width + (e.key === 'ArrowLeft' ? 24 : -24));
+          }
+        }}
+        onPointerDown={e => {
+          e.preventDefault();
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setResizing(true);
+        }}
+        onPointerMove={e => {
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) changeWidth(innerWidth - e.clientX);
+        }}
+        onPointerUp={e => {
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+          setResizing(false);
+        }}
+        onPointerCancel={() => setResizing(false)}
+      />
+      <nav className="dock-tabs" aria-label="เครื่องมือด้านขวา">
+        {(
+          [
+            ['dashboard', 'สถานะ', Activity],
+            ['tasks', 'งาน', ClipboardList],
+            ['prompts', 'พรอมป์ต์', MessageSquare],
+            ['browser', 'Browser', Globe],
+          ] as const
+        ).map(([value, label, Icon]) => (
+          <button key={value} aria-pressed={view === value} onClick={() => setView(value)}>
+            <Icon size={12} />
+            {label}
+          </button>
+        ))}
+        <button className="icon-button" title="ปิดแผงด้านขวา" onClick={close}>
+          <X size={14} />
+        </button>
+      </nav>
+      <div className={`dock-browser ${view === 'browser' ? '' : 'not-visible'}`}>
+        <PreviewPanel
+          embedded
+          onClose={close}
+          suspended={!open || view !== 'browser' || suspended || resizing}
+          onError={onError}
+          request={previewRequest}
+          workspaceId={workspace?.id}
+        />
+      </div>
+      {view !== 'browser' && (
+        <div className="dock-content">
+          {view === 'dashboard' ? (
+            <>
+              <div className="dock-summary">
+                <strong>{sessions.length}</strong>
+                <div>
+                  <h2>session ทั้งหมด</h2>
+                  <p>
+                    {activeCount} session พร้อมใช้งาน · {stoppedCount} หยุด / ปิดแล้ว
+                  </p>
+                </div>
+              </div>
+              <p className="dock-note">สถานะ session ในโปรเจกต์ · แชตและ Terminal พร้อมรับคำสั่ง</p>
+              <div className="dock-filters">
+                {[
+                  ['all', 'ทั้งหมด'],
+                  ['running', 'เปิดอยู่'],
+                  ['exited', 'จบแล้ว'],
+                  ['error', 'ผิดพลาด'],
+                ].map(([value, label]) => (
+                  <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="dock-section-heading">
+              <div>
+                <h2>{view === 'tasks' ? 'งานของโปรเจกต์' : 'พรอมป์ต์ที่บันทึก'}</h2>
+                <p>{workspace?.name || 'โปรเจกต์ปัจจุบัน'} · บันทึกบนเครื่อง</p>
+              </div>
+              <button
+                className="icon-button"
+                title={view === 'tasks' ? 'เพิ่มงาน' : 'เพิ่มพรอมป์ต์'}
+                onClick={() => edit()}
+              >
+                <Plus size={16} />
+              </button>
+            </div>
+          )}
+
+          <label className="dock-search">
+            <Search size={13} />
+            <input
+              aria-label="ค้นหาในแผง"
+              placeholder="ค้นหา…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </label>
+
+          {view === 'dashboard' ? (
+            <>
+              <div className="dock-list">
+                {matching.map(s => {
+                  const isChat = paneView(s) === 'chat';
+                  const isActive = isSessionActive(s);
+                  return (
+                    <button
+                      className={`session-summary ${selected === s.id ? 'active' : ''}`}
+                      key={s.id}
+                      onClick={() => onSelect(s)}
+                    >
+                      <span className={`status-dot ${isActive ? '' : s.status === 'error' ? 'bad' : 'offline'}`} />
+                      <span>
+                        <strong>{s.name}</strong>
+                        <small>
+                          {s.agentType} · {workspaces.find(w => w.id === s.wsId)?.name || s.cwd}{' '}
+                          {isChat ? '· แชต' : '· Terminal'}
+                        </small>
+                      </span>
+                      <small>
+                        {s.status === 'error'
+                          ? 'ผิดพลาด'
+                          : s.status === 'stopping'
+                            ? 'กำลังปิด'
+                            : isChat
+                              ? 'แชตพร้อมใช้'
+                              : s.status === 'running'
+                                ? 'เปิดอยู่'
+                                : 'จบแล้ว'}
+                      </small>
+                    </button>
+                  );
+                })}
+                {!matching.length && <p className="dock-empty">ยังไม่มี session ที่ตรงกับตัวกรอง</p>}
+              </div>
+              {runs.length > 0 && (
+                <section className="dock-runs">
+                  <h3>ประวัติผู้ช่วยในโปรเจกต์นี้</h3>
+                  {runs.slice(0, 15).map(run => (
+                    <button
+                      key={run.id}
+                      type="button"
+                      className="dock-run-item"
+                      title="คลิกเพื่อนำคำสั่งนี้ไปใส่ในช่องคำสั่ง"
+                      onClick={() => onPrompt(run.prompt)}
+                    >
+                      <strong>{run.prompt}</strong>
+                      <small>
+                        {run.status === 'completed'
+                          ? 'เสร็จแล้ว'
+                          : run.status === 'running'
+                            ? 'กำลังทำงาน'
+                            : run.status === 'failed'
+                              ? 'ผิดพลาด'
+                              : 'ยกเลิกแล้ว'}
+                      </small>
+                    </button>
+                  ))}
+                </section>
+              )}
+            </>
+          ) : (
+            <>
+              {view === 'tasks' && (
+                <label className="task-target">
+                  ส่งงานไปที่
+                  <select
+                    aria-label="session รับงาน"
+                    value={recipient}
+                    onChange={e => setRecipient(e.target.value)}
+                  >
+                    <option value="">เลือก session รับงาน</option>
+                    {(projectActiveSessions.length ? projectActiveSessions : activeSessions).map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({paneView(s) === 'chat' ? 'แชต' : 'Terminal'})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {editing && (
+                <form
+                  className="dock-editor"
+                  onSubmit={e => {
+                    e.preventDefault();
+                    save();
+                  }}
+                >
+                  <label>
+                    ชื่อ
+                    <input
+                      aria-label="ชื่อรายการ"
+                      required
+                      maxLength={120}
+                      value={title}
+                      onChange={e => setTitle(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    ข้อความ
+                    <textarea
+                      aria-label="ข้อความรายการ"
+                      required
+                      maxLength={20000}
+                      rows={5}
+                      value={text}
+                      onChange={e => setText(e.target.value)}
+                    />
+                  </label>
+                  <div className="inline">
+                    <button className="primary compact" type="submit">
+                      บันทึกรายการ
+                    </button>
+                    <button className="text-button" type="button" onClick={() => setEditing(null)}>
+                      ยกเลิก
+                    </button>
+                  </div>
+                </form>
+              )}
+              <div className="dock-list">
+                {items.map(item => (
+                  <article className="saved-item" key={item.id}>
+                    <div className="saved-item-heading">
+                      <strong>{item.title}</strong>
+                      {view === 'tasks' && (
+                        <small>{item.state === 'done' ? 'เสร็จแล้ว' : item.state === 'sent' ? 'ส่งแล้ว' : 'ยังไม่ส่ง'}</small>
+                      )}
+                    </div>
+                    <p>{item.text}</p>
+                    <div className="saved-item-actions">
+                      <button
+                        className="text-button"
+                        disabled={!!sending || (view === 'tasks' && item.state === 'done')}
+                        onClick={() => void deliver(item)}
+                      >
+                        <Play size={12} />
+                        {sending === item.id ? 'กำลังส่ง…' : 'ส่งเข้า session'}
+                      </button>
+                      <button className="text-button" onClick={() => onPrompt(item.text)}>
+                        {view === 'tasks' ? 'ใส่ในช่องคำสั่ง' : 'ใช้พรอมป์ต์'}
+                      </button>
+                      {view === 'tasks' && (
+                        <button
+                          className="text-button"
+                          onClick={() =>
+                            persist(
+                              'tasks',
+                              tasks.map(x => (x.id === item.id ? { ...x, state: x.state === 'done' ? 'todo' : 'done' } : x))
+                            )
+                          }
+                        >
+                          <Check size={12} />
+                          {item.state === 'done' ? 'เปิดงานอีกครั้ง' : 'ทำเครื่องหมายเสร็จ'}
+                        </button>
+                      )}
+                      <button className="text-button" onClick={() => edit(item)}>
+                        แก้ไข
+                      </button>
+                      <button
+                        className="icon-button"
+                        title={`ลบ ${item.title}`}
+                        disabled={!!sending}
+                        onClick={() => persist(kind, currentList.filter(x => x.id !== item.id))}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </article>
+                ))}
+                {!items.length && !editing && (
+                  <p className="dock-empty">
+                    {view === 'tasks'
+                      ? 'เพิ่มงานแล้วส่งคำสั่งให้ session ที่เลือก เมื่อทำเสร็จให้ทำเครื่องหมายด้วยตนเอง'
+                      : 'บันทึกคำสั่งที่ใช้บ่อย แล้วกดใช้เพื่อใส่ในช่องคำสั่งก่อนส่ง'}
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </aside>
+  );
 }

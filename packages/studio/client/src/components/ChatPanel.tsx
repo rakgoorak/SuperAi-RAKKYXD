@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
 import { LoaderCircle, MessagesSquare, Plus, Sparkles } from "lucide-react";
 import type { Cli, Run, Seat, StepStatus } from "../api";
 import { HEADLESS, firstReady, seatFor, seatSummary } from "../providers";
 import { SeatPicker } from "./SeatPicker";
 import { ConfigShell } from "./ConfigShell";
+import { useTeamDraft } from "./useTeamDraft";
+import { ProviderAccess } from "./ProviderAccess";
 import { Markdown } from "./Markdown";
 
 export interface ChatConfig { panel: Seat[]; summarizer: Seat | null; style: "merge" | "best"; }
@@ -18,35 +19,26 @@ function defaultConfig(clis: Cli[]): ChatConfig {
   return { panel: ids.map((id, i) => seatFor(id, `Main ${i + 1}`)), summarizer: seatFor(ids[0], "ผู้สรุป"), style: "merge" };
 }
 
-export function ChatConfigEditor({ workspaceId, clis, ollamaModels, disabled, runCount, onChange, value }: {
-  workspaceId: string; clis: Cli[]; ollamaModels: string[]; disabled: boolean; runCount: number; onChange: (c: ChatConfig) => void; value?: ChatConfig | null;
+export function ChatConfigEditor({ workspaceId, clis, ollamaModels, disabled, onChange }: {
+  workspaceId: string; clis: Cli[]; ollamaModels: string[]; disabled: boolean; onChange: (c: ChatConfig) => void;
 }) {
   const key = `superai-chat-v1:${workspaceId}`;
-  const [savedConfig, setSavedConfig] = useState<ChatConfig>(() => {
+  const team = useTeamDraft<ChatConfig>(key, () => {
     try {
       const saved = JSON.parse(localStorage.getItem(key) || "null");
       if (saved && Array.isArray(saved.panel) && saved.panel.length && saved.panel.every(validSeat) && (saved.summarizer === null || validSeat(saved.summarizer))) return { ...saved, style: saved.style === "best" ? "best" : "merge" };
     } catch {}
     return defaultConfig(clis);
-  });
-  // A newly mounted workspace first publishes its own saved configuration, rather
-  // than inheriting the previous workspace's value for the render before effects run.
-  const [initialized, setInitialized] = useState(false);
-  const config = initialized && value ? value : savedConfig;
-  const setConfig = (update: ChatConfig | ((current: ChatConfig) => ChatConfig)) => {
-    const next = typeof update === 'function' ? update(config) : update;
-    setSavedConfig(next); onChange(next);
-  };
-  useEffect(() => {
-    setInitialized(true);
-    onChange(config);
-    try { localStorage.setItem(key, JSON.stringify(config)); } catch {}
-  }, [config, key, onChange]);
+  }, onChange);
+  const { config, saved, edit: setConfig } = team;
   const edit = (index: number, seat: Seat) => setConfig((c) => ({ ...c, panel: c.panel.map((s, i) => (i === index ? seat : s)) }));
   return (
-    <ConfigShell label="ตั้งค่า Chat" runCount={runCount} title={<><MessagesSquare size={17} /> ถามหลาย AI พร้อมกัน</>}
-      description="พิมพ์ครั้งเดียว ส่งให้ทุก Main ที่เลือก แต่ละตัวตอบแยกกัน แล้วให้ผู้สรุปรวมผลพร้อมบอกว่าใครเสนออะไร"
-      summary={`${config.panel.map((s) => `${s.name} (${seatSummary(s)})`).join(" · ")}${config.summarizer ? ` → สรุปโดย ${config.summarizer.name} (${seatSummary(config.summarizer)})` : ""}`}>
+    <ConfigShell label="ตั้งค่าทีม Chat" title={<><MessagesSquare size={19} /> ทีม Chat</>}
+      description="เลือก AI ที่ร่วมตอบคำถามเดียวกัน และกำหนดว่าจะให้ใครสรุปผล"
+      summary={`${saved.panel.length} AI · ${saved.summarizer ? "มีผู้สรุป" : "แยกคำตอบ"}`}
+      disabled={disabled} onOpen={team.begin} onSave={team.save} onCancel={team.cancel}>
+      <section aria-label="AI ที่ร่วมตอบ"><h3>AI ที่ร่วมตอบ</h3>
+      <p className="team-section-description">แต่ละตัวตอบแยกกัน เปรียบเทียบความเห็นได้ในบทสนทนา</p>
       {config.panel.map((seat, index) => (
         <div className="seat-row" key={index}>
           <span className="seat-badge">Main {index + 1}</span>
@@ -59,6 +51,9 @@ export function ChatConfigEditor({ workspaceId, clis, ollamaModels, disabled, ru
         onClick={() => setConfig((c) => ({ ...c, panel: [...c.panel, seatFor(firstReady(clis, c.panel.map((s) => s.provider.slice(4))) || HEADLESS[0], `Main ${c.panel.length + 1}`)] }))}>
         <Plus size={13} /> เพิ่ม Main ({config.panel.length}/{MAX_PANEL})
       </button>
+      </section>
+      <section aria-label="สรุปคำตอบ"><h3>สรุปคำตอบ</h3>
+      <p className="team-section-description">ให้ AI อีกหนึ่งตัวอ่านคำตอบทั้งหมด แล้วสรุปให้คุณ</p>
       <div className="summarizer-row">
         <label className="tool-permission">
           <input type="checkbox" checked={!!config.summarizer} disabled={disabled}
@@ -79,6 +74,8 @@ export function ChatConfigEditor({ workspaceId, clis, ollamaModels, disabled, ru
             onChange={(summarizer) => setConfig((c) => ({ ...c, summarizer }))} />
         </div>
       )}
+      </section>
+      <div className="team-access" aria-label="ความพร้อมของทีม">{Array.from(new Set([...config.panel, ...(config.summarizer ? [config.summarizer] : [])].map(s => s.provider).filter(p => p.startsWith("cli:")).map(p => p.slice(4)))).map(provider => <ProviderAccess key={provider} provider={provider} wsId={workspaceId} compact />)}</div>
     </ConfigShell>
   );
 }
