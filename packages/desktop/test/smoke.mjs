@@ -154,7 +154,7 @@ try {
     .click();
   await page.waitForSelector(".xterm");
   await page
-    .getByRole("textbox", { name: "คำสั่ง", exact: true })
+    .getByRole("combobox", { name: "คำสั่ง", exact: true })
     .fill("echo SUPERAI_DESKTOP_OK");
   await page
     .getByRole("button", { name: "ส่งคำสั่ง (Enter)", exact: true })
@@ -220,7 +220,7 @@ try {
   await page.screenshot({ path: path.join(output, "superai-attach.png") });
   checks++;
   // Composer: paste an image, drop a PDF outside the panes, remove one card, send.
-  const composerBox = page.getByRole("textbox", { name: "คำสั่ง", exact: true });
+  const composerBox = page.getByRole("combobox", { name: "คำสั่ง", exact: true });
   const cards = page.getByRole("list", { name: "ไฟล์แนบ" }).getByRole("listitem");
   await composerBox.evaluate((el, png) => {
     const dt = new DataTransfer();
@@ -281,7 +281,7 @@ try {
     .waitFor();
   if(process.env.SUPERAI_LIVE_CLI_TEST==='1') {
     await eventually(()=>page.evaluate(()=>{const m=localStorage.getItem('superai-opencode-model');return !!m&&m!=='auto';}));
-    await page.getByRole('textbox',{name:'คำสั่ง',exact:true}).fill('ตอบเพียงคำว่า พร้อม ห้ามแก้ไขไฟล์หรือเรียกเครื่องมือใดๆ');
+    await page.getByRole('combobox',{name:'คำสั่ง',exact:true}).fill('ตอบเพียงคำว่า พร้อม ห้ามแก้ไขไฟล์หรือเรียกเครื่องมือใดๆ');
     await page.getByRole('button',{name:'ส่งคำสั่ง (Enter)',exact:true}).click();
     for(let i=0;i<90;i++) {
       const projects=(await request('/api/workspaces')).body;const project=projects.find(w=>w.name==='โปรเจกต์ทดสอบ');

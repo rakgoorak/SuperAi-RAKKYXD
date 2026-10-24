@@ -257,7 +257,7 @@ test('a CLI that is not installed is refused before the message joins the chat',
   const fake = fakeSpawner();
   const chats = new CliChatManager(fake.spawner as any, undefined, () => { throw new Error('ยังไม่ได้ติดตั้ง Codex'); });
   assert.throws(() => chats.send('s9', { agent: 'codex', cwd: process.cwd(), text: 'สวัสดี' }), /ยังไม่ได้ติดตั้ง/);
-  assert.deepEqual(chats.snapshot('s9'), { items: [], running: false, conversationId: undefined }, 'not stuck as running');
+  assert.deepEqual(chats.snapshot('s9'), { items: [], running: false, conversationId: undefined, activity: undefined, queued: [] }, 'not stuck as running');
   assert.equal(fake.calls.length, 0);
 });
 
@@ -292,4 +292,77 @@ test('a selected project skill is sent to the CLI with the chosen model while th
     assert.equal((chats.snapshot('skill').items[0] as any).text, '/skill review ตรวจไฟล์');
     fake.finish(call.proc, [{ type: 'turn.completed' }]); await settle(chats, 'skill');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('task lists from each CLI become one live checklist per turn', () => {
+  const [claude] = lines('claude-code', [{ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 'tw', name: 'TodoWrite', input: { todos: [
+    { content: 'อ่านโค้ด', status: 'completed', activeForm: 'กำลังอ่านโค้ด' }, { content: 'แก้บั๊ก', status: 'in_progress' }, { content: 'รันเทสต์', status: 'pending' }] } }] } }]);
+  assert.deepEqual(claude.items, [{ id: 't1-todos', kind: 'todos', todos: [
+    { text: 'อ่านโค้ด', status: 'completed' }, { text: 'แก้บั๊ก', status: 'in_progress' }, { text: 'รันเทสต์', status: 'pending' }] }], 'TodoWrite is a checklist, not a tool row');
+  const [codex] = lines('codex', [{ type: 'item.updated', item: { id: 'p', type: 'todo_list', status: 'in_progress', items: [{ text: 'a', completed: true }, { text: 'b', completed: false }, { text: 'c', completed: false }] } }]);
+  assert.deepEqual((codex.items![0] as any).todos.map((t: any) => t.status), ['completed', 'in_progress', 'pending'], 'the first open Codex entry is the one in progress');
+  const [open] = lines('opencode', [{ type: 'tool_use', part: { id: 'x', tool: 'todowrite', state: { status: 'completed', input: { todos: [{ content: 'ทำ', status: 'pending' }] } } } }]);
+  assert.equal((open.items![0] as any).kind, 'todos');
+});
+
+test('tool screenshots come back as thumbnails; token counts add up without double counting', () => {
+  const png = 'iVBORw0KGgo=';
+  const [call, result] = lines('claude-code', [
+    { type: 'assistant', message: { id: 'm1', usage: { output_tokens: 40 }, content: [{ type: 'tool_use', id: 'shot', name: 'mcp__browser__screenshot', input: {} }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'shot', content: [{ type: 'text', text: 'captured' }, { type: 'image', source: { type: 'base64', media_type: 'image/png', data: png } }] }] } },
+  ]);
+  assert.equal(call.outputTokens, 40);
+  assert.deepEqual((result.items![0] as any).images, [`data:image/png;base64,${png}`]);
+  const repeated = lines('claude-code', [
+    { type: 'assistant', message: { id: 'm2', usage: { output_tokens: 10 }, content: [{ type: 'text', text: 'a' }] } },
+    { type: 'assistant', message: { id: 'm2', usage: { output_tokens: 25 }, content: [{ type: 'text', text: 'b' }] } },
+  ]);
+  assert.deepEqual(repeated.map((u) => u.outputTokens), [10, 15], 'one message is counted once even when repeated per block');
+  assert.equal(lines('codex', [{ type: 'turn.completed', usage: { output_tokens: 70, reasoning_output_tokens: 30 } }])[0].outputTokens, 100);
+  assert.equal(lines('antigravity', [{ event: 'step_update', step_update: { step_index: 2, state: 'DONE', step_type: 'agent_response', usage: { output_tokens: 12, thinking_tokens: 8 } } }])[0].outputTokens, 20);
+  assert.equal(lines('opencode', [{ type: 'step_finish', part: { tokens: { output: 5, reasoning: 1 } } }])[0].outputTokens, 6);
+});
+
+test('permission modes map to each CLI\'s own read-only / edit / auto switches', () => {
+  const arg = (agent: string, permission?: any) => chatArguments(agent, { prompt: 'x', permission });
+  assert.ok(arg('claude-code', 'read').join(' ').includes('--permission-mode plan'));
+  assert.ok(!arg('claude-code', 'edit').includes('Bash'), 'edit may change files but not run commands');
+  assert.ok(arg('claude-code').includes('Bash'), 'auto (the default) also runs commands');
+  assert.ok(arg('codex', 'read').includes('sandbox_mode="read-only"'));
+  assert.ok(arg('codex', 'auto').includes('sandbox_mode="workspace-write"'));
+  assert.ok(arg('antigravity', 'read').join(' ').includes('--mode plan'));
+  assert.ok(!arg('antigravity', 'edit').includes('--dangerously-skip-permissions'));
+  assert.ok(arg('opencode', 'read').join(' ').includes('--agent plan'));
+});
+
+test('Ctrl+Enter queues behind a running turn; the queue sends in order, can be edited, and a stop pauses it', async () => {
+  const fake = fakeSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch);
+  const seen: any[] = [];
+  chats.subscribe('q', (m) => seen.push(m));
+  assert.equal(chats.send('q', { agent: 'codex', cwd: process.cwd(), text: 'งานแรก' }), 'sent');
+  assert.ok(chats.snapshot('q').activity, 'a running turn reports when it started');
+  assert.throws(() => chats.send('q', { agent: 'codex', cwd: process.cwd(), text: 'แทรก' }), /Ctrl\+Enter/);
+  assert.equal(chats.send('q', { agent: 'codex', cwd: process.cwd(), text: 'งานสอง' }, { queue: true }), 'queued');
+  assert.equal(chats.send('q', { agent: 'codex', cwd: process.cwd(), text: 'งานสาม' }, { queue: true }), 'queued');
+  const third = chats.snapshot('q').queued[1].id;
+  assert.equal(chats.unqueue('q', third), true);
+  assert.deepEqual(chats.snapshot('q').queued.map((q) => q.text), ['งานสอง']);
+  fake.finish(fake.calls[0].proc, [{ type: 'turn.completed', usage: { output_tokens: 9 } }]);
+  for (let i = 0; i < 100 && fake.calls.length < 2; i++) await settle();
+  assert.equal(fake.calls.length, 2, 'the queued message starts once the first turn ends');
+  assert.match(fake.calls[1].stdin, /งานสอง/);
+  assert.deepEqual(chats.snapshot('q').queued, []);
+  assert.ok(seen.some((m) => m.type === 'activity' && m.activity?.outputTokens === 9), 'token counts stream to viewers');
+  chats.send('q', { agent: 'codex', cwd: process.cwd(), text: 'รอหลังหยุด' }, { queue: true });
+  chats.cancel('q');
+  fake.calls[1].proc.emit('close', 1);
+  await settle(chats, 'q');
+  await settle();
+  assert.equal(fake.calls.length, 2, 'stopping pauses the queue');
+  assert.equal(chats.snapshot('q').queued.length, 1);
+  assert.equal(chats.sendNext('q'), true);
+  assert.equal(fake.calls.length, 3);
+  const user = chats.snapshot('q').items.filter((i) => i.kind === 'user').at(-1) as any;
+  assert.equal(user.text, 'รอหลังหยุด');
 });

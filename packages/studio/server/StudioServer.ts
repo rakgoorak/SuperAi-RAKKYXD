@@ -23,7 +23,7 @@ import { UsageManager, USAGE_PROVIDERS } from "./UsageManager.js";
 import { trustFolder, repairCodexConfigFile } from "./FolderTrust.js";
 import { CliVersionManager, VERSIONED_CLIS } from "./CliVersions.js";
 import { AttachmentError, MAX_ATTACHMENT_BYTES, resolveAttachments, saveAttachment } from "./AttachmentStore.js";
-import { CliChatManager, CHAT_CLIS } from "./CliChat.js";
+import { CliChatManager, CHAT_CLIS, CHAT_PERMISSIONS } from "./CliChat.js";
 
 export class StudioServer {
   private agentRuns: AgentRunManager;
@@ -669,26 +669,35 @@ export class StudioServer {
           req.body.model === undefined ? session.restart?.model || (agent === "opencode" ? session.restart?.openCodeModel : "") : req.body.model,
           req.body.effort === undefined ? session.restart?.effort : req.body.effort);
         if (req.body.skillId !== undefined && (typeof req.body.skillId !== "string" || !/^[a-f0-9]{20}$/.test(req.body.skillId))) throw new Error("skill ไม่ถูกต้อง");
+        if (req.body.permission !== undefined && !CHAT_PERMISSIONS.includes(req.body.permission)) throw new Error("สิทธิ์ของแชตไม่ถูกต้อง");
         await cliAuth.requireReady(agent);
         if (this.terminalManager.getSession(id) !== session || this.viewOf(id) !== "chat") return res.status(409).json({ error: "session เปลี่ยนไปแล้ว กรุณาลองใหม่" });
         if (session.sleeping || ["running", "stopping"].includes(session.status)) return res.status(409).json({ error: "Terminal ยังปิดไม่เสร็จ กรุณารอก่อนส่งข้อความ" });
-        this.chats.send(id, {
+        const outcome = this.chats.send(id, {
           agent,
           cwd: session.cwd,
           text: typeof req.body?.text === "string" ? req.body.text : "",
           ...chosen,
           skillId: req.body.skillId,
+          permission: req.body.permission,
           attachments,
-        });
+        }, { queue: req.body.queue === true });
         session.restart = { ...session.restart, ...chosen };
         this.saveSessions();
-        res.json({ success: true });
+        res.json({ success: true, queued: outcome === "queued" });
       } catch (err: any) {
         res.status(/ยังตอบ/.test(err.message) ? 409 : 400).json({ error: err.message });
       }
     });
     this.app.post("/api/terminals/:id/chat/cancel", (req: Request, res: Response) => {
       res.json({ success: this.chats.cancel(String(req.params.id)) });
+    });
+    // Queued messages (Ctrl+Enter): send one now, or take it back.
+    this.app.post("/api/terminals/:id/chat/queue/:queued/send", (req: Request, res: Response) => {
+      res.json({ success: this.chats.sendNext(String(req.params.id), String(req.params.queued)) });
+    });
+    this.app.post("/api/terminals/:id/chat/queue/:queued/remove", (req: Request, res: Response) => {
+      res.json({ success: this.chats.unqueue(String(req.params.id), String(req.params.queued)) });
     });
 
     this.app.post("/api/terminals/:id/restart", (req: Request, res: Response) => {

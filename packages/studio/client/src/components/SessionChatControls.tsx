@@ -4,7 +4,7 @@ import { api, loginProvider } from '../api';
 import { useModels, EFFORT_LABEL } from '../providers';
 import { ModelCombo } from './ModelCombo';
 import { useProviderAccess } from './ProviderAccess';
-import { chatPrefs, hasChatPrefs, onChatCommand, setChatPrefs } from '../chatControls';
+import { chatPrefs, hasChatPrefs, onChatCommand, setChatPrefs, PERMISSION_LABEL, type ChatPermission } from '../chatControls';
 
 /**
  * Account, Model and Effort of the chat session the bottom composer sends to.
@@ -14,6 +14,7 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
   const [agent, setAgent] = useState('');
   const [model, setModel] = useState(chatPrefs(sessionId).model);
   const [effort, setEffort] = useState(chatPrefs(sessionId).effort);
+  const [permission, setPermission] = useState<ChatPermission>(chatPrefs(sessionId).permission);
   const [ready, setReady] = useState(false);
   const [problem, setProblem] = useState('');
   const [busy, setBusy] = useState(false);
@@ -70,6 +71,11 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
           onChange={(value) => { setModel(value); setEffort(''); }} /></label>
         <label>Effort<select aria-label={`Effort ในแชท ${name}`} value={effort} disabled={disabled || !efforts.length} onChange={(e) => setEffort(e.target.value)}>
           <option value="">ค่าเริ่มต้น</option>{efforts.map((e) => <option key={e} value={e}>{EFFORT_LABEL[e] || e}</option>)}
+        </select></label>
+        <label>สิทธิ์<select aria-label={`สิทธิ์ของ ${name} ในข้อความถัดไป`} value={permission} disabled={disabled}
+          title="CLI ที่ทำงานเบื้องหลังถามก่อนไม่ได้ จึงเลือกไว้ล่วงหน้า: อ่านอย่างเดียว / แก้ไฟล์ในโปรเจกต์ได้ / แก้ไฟล์และรันคำสั่งได้เอง"
+          onChange={(e) => { const value = e.target.value as ChatPermission; setPermission(value); setChatPrefs(sessionId, { permission: value }); }}>
+          {(Object.keys(PERMISSION_LABEL) as ChatPermission[]).map((p) => <option key={p} value={p}>{PERMISSION_LABEL[p]}</option>)}
         </select></label>
       </div>
       {modelError && <small className="muted">{modelError} · พิมพ์ชื่อ Model เองได้</small>}

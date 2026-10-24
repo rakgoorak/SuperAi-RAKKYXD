@@ -1,4 +1,5 @@
 import { spawn, execFile, type ChildProcess, type SpawnOptions } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { cliLaunch, cliEnv } from "./CliCatalog.js";
@@ -19,17 +20,60 @@ const MAX_PROMPT = 20000;
 const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 
 export type ToolKind = "command" | "read" | "edit" | "search" | "web" | "plan" | "other";
+export type TodoStatus = "pending" | "in_progress" | "completed";
+/** What the CLI may do on its own in a chat turn (headless CLIs cannot ask first). */
+export type ChatPermission = "read" | "edit" | "auto";
+export const CHAT_PERMISSIONS: ChatPermission[] = ["read", "edit", "auto"];
+type ChatRequestRecord = { text: string; model?: string; effort?: string; skillId?: string; attachments?: string[]; permission?: ChatPermission };
 export type ChatItem =
-  | { id: string; kind: "user"; text: string; attachments?: string[]; request?: { text: string; model?: string; effort?: string; skillId?: string; attachments?: string[] }; at: number }
+  | { id: string; kind: "user"; text: string; attachments?: string[]; request?: ChatRequestRecord; at: number }
   | { id: string; kind: "assistant"; text: string; at: number }
-  | { id: string; kind: "tool"; tool: ToolKind; title: string; output?: string; status: "running" | "done" | "failed"; at: number }
+  | { id: string; kind: "tool"; tool: ToolKind; title: string; output?: string; images?: string[]; status: "running" | "done" | "failed"; at: number }
+  /** The CLI's own task list (Claude TodoWrite, Codex todo_list, OpenCode todowrite), one per turn, updated in place. */
+  | { id: string; kind: "todos"; todos: { text: string; status: TodoStatus }[]; at: number }
   | { id: string; kind: "error" | "notice"; text: string; at: number };
 type NewItem = ChatItem extends infer T ? (T extends ChatItem ? Omit<T, "at"> : never) : never;
 
-/** What one line of a CLI's JSON stream changes. */
-export interface ChatUpdate { items?: NewItem[]; conversationId?: string; error?: string; done?: boolean }
-export interface ChatSnapshot { items: ChatItem[]; running: boolean; conversationId?: string }
-export type ChatMessage = { type: "snapshot"; chat: ChatSnapshot } | { type: "item"; item: ChatItem } | { type: "state"; running: boolean };
+/** What one line of a CLI's JSON stream changes. `outputTokens` is added to the turn's count. */
+export interface ChatUpdate { items?: NewItem[]; conversationId?: string; error?: string; done?: boolean; outputTokens?: number }
+/** The turn in progress: when it started and how many tokens the CLI has written so far. */
+export interface ChatActivity { startedAt: number; outputTokens: number }
+export interface QueuedChat { id: string; text: string; attachments?: string[] }
+export interface ChatSnapshot { items: ChatItem[]; running: boolean; conversationId?: string; activity?: ChatActivity; queued: QueuedChat[] }
+export type ChatMessage =
+  | { type: "snapshot"; chat: ChatSnapshot }
+  | { type: "item"; item: ChatItem }
+  | { type: "state"; running: boolean }
+  | { type: "activity"; activity?: ChatActivity }
+  | { type: "queue"; queued: QueuedChat[] };
+
+// Screenshots a tool returns (Claude Code): shown as thumbnails, kept small enough for the chat file.
+const MAX_IMAGE_CHARS = 2_000_000;
+const MAX_IMAGES = 4;
+function toolImages(content: unknown): string[] | undefined {
+  if (!Array.isArray(content)) return undefined;
+  const images = content
+    .filter((c: any) => c?.type === "image" && c.source?.type === "base64" && typeof c.source.data === "string" && /^image\/(png|jpeg|gif|webp)$/.test(c.source.media_type))
+    .map((c: any) => `data:${c.source.media_type};base64,${c.source.data}`)
+    .filter((url) => url.length <= MAX_IMAGE_CHARS)
+    .slice(0, MAX_IMAGES);
+  return images.length ? images : undefined;
+}
+
+const tokensWritten = (n: number): { outputTokens?: number } => (n > 0 ? { outputTokens: n } : {});
+
+/** A CLI's todo entries in one shape. `done` lists (Codex) mark the first open entry as in progress. */
+function todoList(entries: unknown, prefix: string, running = true): NewItem | null {
+  if (!Array.isArray(entries) || !entries.length) return null;
+  let current = false;
+  const todos = entries.map((t: any) => {
+    const text = String(t?.content ?? t?.text ?? t?.activeForm ?? "").trim();
+    let status: TodoStatus = t?.status === "completed" || t?.completed === true ? "completed" : t?.status === "in_progress" ? "in_progress" : "pending";
+    if (t?.status === undefined && status === "pending" && running && !current) { status = "in_progress"; current = true; }
+    return { text, status };
+  }).filter((t) => t.text);
+  return todos.length ? { id: `${prefix}-todos`, kind: "todos", todos } : null;
+}
 
 /** `"...\powershell.exe" -Command 'echo hi'` → `echo hi`: the shell wrapper Codex adds is noise. */
 export function shellCommand(command: string): string {
@@ -79,10 +123,8 @@ function codexItem(item: any, prefix: string): NewItem | null {
       return { id, kind: "tool", tool: "other", title: [item.server, item.tool].filter(Boolean).join(": ") || "MCP", status };
     case "web_search":
       return { id, kind: "tool", tool: "web", title: String(item.query || "ค้นเว็บ"), status };
-    case "todo_list": {
-      const todos = Array.isArray(item.items) ? item.items : [];
-      return { id, kind: "tool", tool: "plan", title: "แผนงาน", output: todos.map((t: any) => `${t?.completed ? "☑" : "☐"} ${t?.text || ""}`).join("\n"), status };
-    }
+    case "todo_list":
+      return todoList(item.items, prefix, item?.status !== "completed");
     case "error":
       return { id, kind: "error", text: String(item.message || "เกิดข้อผิดพลาด") };
     default:
@@ -94,6 +136,8 @@ function codexItem(item: any, prefix: string): NewItem | null {
 export function chatParser(agent: string, prefix: string): (line: string) => ChatUpdate {
   const texts = new Map<string, string>();
   const tools = new Map<string, NewItem>();
+  // Claude Code repeats a message's usage on each of its content blocks: count each message once.
+  const written = new Map<string, number>();
   let answered = false;
   return (line: string) => {
     let event: any;
@@ -110,6 +154,9 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
             if (block?.type === "text" && typeof block.text === "string" && block.text.trim()) {
               answered = true;
               items.push({ id: `${prefix}-${event.message.id}-${i}`, kind: "assistant", text: block.text });
+            } else if (block?.type === "tool_use" && block.name === "TodoWrite") {
+              const todos = todoList(block.input?.todos, prefix);
+              if (todos) items.push(todos);
             } else if (block?.type === "tool_use") {
               const name = String(block.name || "tool");
               const item: NewItem = { id: `${prefix}-${block.id}`, kind: "tool", tool: toolKind(name), title: toolTitle(name, block.input), status: "running" };
@@ -117,7 +164,11 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
               items.push(item);
             }
           });
-          return { items };
+          const messageId = String(event.message?.id || "");
+          const total = Number(event.message?.usage?.output_tokens) || 0;
+          const before = written.get(messageId) || 0;
+          if (total > before) written.set(messageId, total);
+          return { items, ...tokensWritten(total - before) };
         }
         case "user": {
           const items: NewItem[] = [];
@@ -126,7 +177,8 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
             if (tool?.kind !== "tool") continue;
             const output = typeof block.content === "string" ? block.content
               : Array.isArray(block.content) ? block.content.map((c: any) => (typeof c?.text === "string" ? c.text : "")).join("\n") : "";
-            const done: NewItem = { ...tool, output: output || undefined, status: block.is_error ? "failed" : "done" };
+            const images = toolImages(block.content);
+            const done: NewItem = { ...tool, output: output || undefined, ...(images ? { images } : {}), status: block.is_error ? "failed" : "done" };
             tools.set(String(block.tool_use_id), done);
             items.push(done);
           }
@@ -147,9 +199,17 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
           if (typeof part.text !== "string" || !part.text.trim()) return conversation;
           answered = true;
           return { ...conversation, items: [{ id: `${prefix}-${part.id || "text"}`, kind: "assistant", text: part.text }] };
+        case "step_finish": {
+          const tokens = Number(part.tokens?.output || 0) + Number(part.tokens?.reasoning || 0);
+          return { ...conversation, ...tokensWritten(tokens) };
+        }
         case "tool_use": {
           const name = String(part.tool || "tool");
           const state = part.state || {};
+          if (name === "todowrite") {
+            const todos = todoList(state.input?.todos, prefix);
+            return todos ? { ...conversation, items: [todos] } : conversation;
+          }
           const output = typeof state.output === "string" && state.output ? state.output : state.error ? String(state.error) : undefined;
           return { ...conversation, items: [{ id: `${prefix}-${part.id || part.callID}`, kind: "tool", tool: toolKind(name),
             title: typeof state.title === "string" && state.title ? state.title : toolTitle(name, state.input), output,
@@ -169,7 +229,10 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
         }
         case "turn.failed": return { error: String(event.error?.message || "Codex ทำงานไม่สำเร็จ") };
         case "error": return { error: String(event.message || "Codex ทำงานไม่สำเร็จ") };
-        case "turn.completed": return { done: true };
+        case "turn.completed": {
+          const tokens = Number(event.usage?.output_tokens || 0) + Number(event.usage?.reasoning_output_tokens || 0);
+          return { done: true, ...tokensWritten(tokens) };
+        }
         default: return {};
       }
     }
@@ -178,13 +241,16 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
       case "step_update": {
         const step = event.step_update || {};
         const id = `${prefix}-s${step.step_index}`;
+        // A finished response step reports what it wrote (thinking included).
+        const tokens = step.state === "DONE" && step.usage ? Number(step.usage.output_tokens || 0) + Number(step.usage.thinking_tokens || 0) : 0;
         if (step.step_type === "agent_response" && typeof step.text_delta === "string") {
           const text = (texts.get(id) || "") + step.text_delta;
           texts.set(id, text);
-          if (!text.trim()) return {};
+          if (!text.trim()) return tokensWritten(tokens);
           answered = true;
-          return { items: [{ id, kind: "assistant", text }] };
+          return { items: [{ id, kind: "assistant", text }], ...tokensWritten(tokens) };
         }
+        if (step.step_type === "agent_response") return tokensWritten(tokens);
         if (step.step_type === "tool") {
           const name = String(step.tool_name || step.tool_info?.name || "tool");
           const output = step.tool_info?.output;
@@ -207,23 +273,30 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
 }
 
 /**
- * Arguments for one headless turn. Edits stay inside the project; commands cannot prompt, so they are pre-approved.
- * `files` are attached natively (Codex: images, OpenCode: any file); others get paths in the prompt.
+ * Arguments for one headless turn. Headless CLIs cannot ask before acting, so `permission` decides
+ * up front: "read" only reads and answers, "edit" may change files in the project, "auto" may also
+ * run commands (the default). `files` are attached natively (Codex: images, OpenCode: any file);
+ * others get paths in the prompt.
  */
-export function chatArguments(agent: string, o: { prompt: string; conversationId?: string; model?: string; effort?: string; files?: string[] }): string[] {
+export function chatArguments(agent: string, o: { prompt: string; conversationId?: string; model?: string; effort?: string; files?: string[]; permission?: ChatPermission }): string[] {
+  const permission = o.permission || "auto";
   if (agent === "claude-code")
     return [
       "-p",
       "--output-format", "stream-json", "--verbose",
       ...(o.conversationId ? ["--resume", o.conversationId] : []),
       ...modelEffortArgs(agent, o.model, o.effort),
-      "--permission-mode", "acceptEdits", "--allowedTools", "Bash",
+      ...(permission === "read" ? ["--permission-mode", "plan"]
+        : permission === "edit" ? ["--permission-mode", "acceptEdits"]
+          : ["--permission-mode", "acceptEdits", "--allowedTools", "Bash"]),
     ];
   if (agent === "opencode")
     return [
       "run",
       "--format", "json",
       ...(o.conversationId ? ["--session", o.conversationId] : []),
+      // OpenCode's plan agent only reads; its build agent edits and runs commands.
+      ...(permission === "read" ? ["--agent", "plan"] : []),
       ...modelEffortArgs(agent, o.model, o.effort),
       ...(o.files || []).flatMap((file) => ["--file", file]),
       "--",
@@ -235,7 +308,8 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
       ...(o.conversationId ? ["resume", o.conversationId] : []),
       "--json",
       "--skip-git-repo-check",
-      "-c", 'sandbox_mode="workspace-write"',
+      // Codex has no edit-without-commands mode: "edit" and "auto" both run in the workspace sandbox.
+      "-c", permission === "read" ? 'sandbox_mode="read-only"' : 'sandbox_mode="workspace-write"',
       ...modelEffortArgs(agent, o.model, o.effort),
       ...(o.files || []).map((file) => `--image=${file}`),
       "-",
@@ -244,7 +318,9 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
     return [
       ...modelEffortArgs(agent, o.model, o.effort),
       ...(o.conversationId ? ["--conversation", o.conversationId] : []),
-      "--mode", "accept-edits", "--sandbox", "--dangerously-skip-permissions",
+      ...(permission === "read" ? ["--mode", "plan"]
+        : permission === "edit" ? ["--mode", "accept-edits"]
+          : ["--mode", "accept-edits", "--sandbox", "--dangerously-skip-permissions"]),
       "--output-format", "stream-json",
       `--print=${o.prompt}`,
     ];
@@ -252,8 +328,9 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
 }
 
 type Spawner = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
-interface Chat extends ChatSnapshot { turns: number; proc?: ChildProcess; cancelled?: boolean; listeners: Set<(m: ChatMessage) => void>; saveTimer?: NodeJS.Timeout }
-export interface ChatRequest { agent: string; cwd: string; text: string; model?: string; effort?: string; attachments?: string[]; skillId?: string }
+interface QueuedRequest extends QueuedChat { request: ChatRequest }
+interface Chat extends Omit<ChatSnapshot, "queued"> { turns: number; proc?: ChildProcess; cancelled?: boolean; listeners: Set<(m: ChatMessage) => void>; saveTimer?: NodeJS.Timeout; queue: QueuedRequest[] }
+export interface ChatRequest { agent: string; cwd: string; text: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission }
 
 export class CliChatManager {
   private chats = new Map<string, Chat>();
@@ -270,7 +347,7 @@ export class CliChatManager {
   private chat(id: string): Chat {
     let chat = this.chats.get(id);
     if (chat) return chat;
-    chat = { items: [], running: false, turns: 0, listeners: new Set() };
+    chat = { items: [], running: false, turns: 0, listeners: new Set(), queue: [] };
     const file = this.file(id);
     try {
       if (file && fs.existsSync(file)) {
@@ -315,8 +392,8 @@ export class CliChatManager {
   }
 
   snapshot(id: string): ChatSnapshot {
-    const { items, running, conversationId } = this.chat(id);
-    return { items, running, conversationId };
+    const { items, running, conversationId, activity, queue } = this.chat(id);
+    return { items, running, conversationId, activity, queued: queue.map(({ id, text, attachments }) => ({ id, text, attachments })) };
   }
   subscribe(id: string, listener: (m: ChatMessage) => void): () => void {
     const chat = this.chat(id);
@@ -343,13 +420,23 @@ export class CliChatManager {
     this.save(id, chat, true);
   }
 
-  send(id: string, request: ChatRequest) {
+  /**
+   * Start a turn, or with `queue` while one is running, hold the message and send it when the
+   * current turn ends (Ctrl+Enter). Returns what happened.
+   */
+  send(id: string, request: ChatRequest, options: { queue?: boolean } = {}): "sent" | "queued" {
     const { agent } = request;
     if (!CHAT_CLIS.includes(agent)) throw new Error("CLI นี้ยังไม่รองรับมุมมองแชต กรุณาใช้ terminal");
     const text = request.text.trim();
     if (!text) throw new Error("กรุณาพิมพ์ข้อความ");
     const chat = this.chat(id);
-    if (chat.running) throw new Error(`${NAMES[agent]} ยังตอบข้อความก่อนหน้าอยู่ รอให้เสร็จหรือกดหยุดก่อน`);
+    if (chat.running && options.queue) {
+      const files = request.attachments || [];
+      chat.queue.push({ id: randomUUID(), text, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}), request: { ...request, text } });
+      this.emitQueue(chat);
+      return "queued";
+    }
+    if (chat.running) throw new Error(`${NAMES[agent]} ยังตอบข้อความก่อนหน้าอยู่ กด Ctrl+Enter เพื่อต่อคิว หรือรอให้เสร็จหรือกดหยุดก่อน`);
     if (agent === "codex" && chat.conversationId && [...this.chats.values()].some((other) => other !== chat && other.running && other.conversationId === chat.conversationId))
       throw new Error("Codex ยังตอบบทสนทนานี้อยู่ในอีกแท็บ กรุณารอให้เสร็จก่อน");
     const files = request.attachments || [];
@@ -358,13 +445,15 @@ export class CliChatManager {
     const selected = skillPrompt(text, request.cwd, agent, request.skillId);
     const prompt = listed.length ? `${selected}\n\nไฟล์แนบ:\n${listed.map((f) => `- ${f}`).join("\n")}` : selected;
     if (prompt.length > MAX_PROMPT) throw new Error("ข้อความยาวเกินไป กรุณาแบ่งส่งหรือใส่ไว้ในไฟล์แล้วแนบแทน");
-    const args = chatArguments(agent, { prompt, conversationId: chat.conversationId, model: request.model, effort: request.effort, files: attached });
+    const args = chatArguments(agent, { prompt, conversationId: chat.conversationId, model: request.model, effort: request.effort, files: attached, permission: request.permission });
 
     // Resolved first: a CLI that is not installed is refused before the message joins the chat.
     const launch = this.launcher(agent, args);
     const prefix = `t${++chat.turns}`;
-    this.put(id, chat, { id: `${prefix}-user`, kind: "user", text, request: { text, model: request.model, effort: request.effort, skillId: request.skillId, attachments: files }, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}) });
+    this.put(id, chat, { id: `${prefix}-user`, kind: "user", text, request: { text, model: request.model, effort: request.effort, skillId: request.skillId, attachments: files, permission: request.permission }, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}) });
     chat.running = true;
+    chat.activity = { startedAt: Date.now(), outputTokens: 0 };
+    this.emit(chat, { type: "activity", activity: chat.activity });
     chat.cancelled = false;
     this.emit(chat, { type: "state", running: true });
     this.onChange?.(id);
@@ -384,7 +473,11 @@ export class CliChatManager {
       if (chat.cancelled) this.put(id, chat, { id: `${prefix}-stopped`, kind: "notice", text: "หยุดแล้ว" });
       else if (problem && !failed) this.put(id, chat, { id: `${prefix}-error`, kind: "error", text: problem });
       chat.running = false;
+      chat.activity = undefined;
+      this.emit(chat, { type: "activity" });
       this.emit(chat, { type: "state", running: false });
+      // The next queued message goes once this turn has ended; a stop pauses the queue.
+      if (!chat.cancelled && chat.queue.length) setImmediate(() => this.sendNext(id));
       this.save(id, chat, true);
       this.onChange?.(id);
     };
@@ -395,6 +488,10 @@ export class CliChatManager {
         this.onChange?.(id);
       }
       for (const item of update.items || []) this.put(id, chat, item);
+      if (update.outputTokens && chat.activity) {
+        chat.activity = { ...chat.activity, outputTokens: chat.activity.outputTokens + update.outputTokens };
+        this.emit(chat, { type: "activity", activity: chat.activity });
+      }
       if (update.error && !chat.cancelled) {
         failed = true;
         cliAuth.failure(agent, update.error);
@@ -411,7 +508,7 @@ export class CliChatManager {
       });
     } catch (error: any) {
       finish(`เปิด ${NAMES[agent]} ไม่สำเร็จ: ${error.message}`);
-      return;
+      return "sent";
     }
     chat.proc = proc;
     const timeout = (reason: 'startup' | 'idle') => {
@@ -456,6 +553,37 @@ export class CliChatManager {
           : undefined;
       finish(timeoutProblem || (code === 0 ? undefined : cliFailure(agent, request.model || "", errors, "", code)));
     });
+    return "sent";
+  }
+
+  private emitQueue(chat: Chat) {
+    this.emit(chat, { type: "queue", queued: chat.queue.map(({ id, text, attachments }) => ({ id, text, attachments })) });
+  }
+
+  /** Send the oldest queued message (or the one asked for) now; a failure is shown in the chat. */
+  sendNext(id: string, queuedId?: string): boolean {
+    const chat = this.chat(id);
+    if (chat.running) return false;
+    const index = queuedId ? chat.queue.findIndex((q) => q.id === queuedId) : 0;
+    if (index < 0 || !chat.queue[index]) return false;
+    const [next] = chat.queue.splice(index, 1);
+    this.emitQueue(chat);
+    try {
+      this.send(id, next.request);
+    } catch (error: any) {
+      this.put(id, chat, { id: `q-${next.id}`, kind: "error", text: `ส่งข้อความในคิวไม่สำเร็จ: ${error.message}` });
+    }
+    return true;
+  }
+
+  /** Take a message out of the queue before it is sent. */
+  unqueue(id: string, queuedId: string): boolean {
+    const chat = this.chat(id);
+    const before = chat.queue.length;
+    chat.queue = chat.queue.filter((q) => q.id !== queuedId);
+    if (chat.queue.length === before) return false;
+    this.emitQueue(chat);
+    return true;
   }
 
   cancel(id: string): boolean {

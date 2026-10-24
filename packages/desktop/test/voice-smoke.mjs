@@ -67,7 +67,7 @@ try {
   await page.waitForSelector(".app-shell");
   await page.getByRole("navigation", { name: "โหมดทำงาน" }).getByRole("button", { name: "Chat", exact: true }).click();
   // Speak-to-type: click, speak, click again; text lands in the composer unsent.
-  const composer = page.getByRole("textbox", { name: "คำสั่ง", exact: true });
+  const composer = page.getByRole("combobox", { name: "คำสั่ง", exact: true });
   await composer.fill("Note:");
   const mic = page.getByRole("button", { name: /กดค้างเพื่ออัดเสียง/ });
   await mic.click();
