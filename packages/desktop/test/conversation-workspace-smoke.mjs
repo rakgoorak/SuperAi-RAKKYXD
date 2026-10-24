@@ -118,10 +118,19 @@ try {
   await imageButton.click();
   const imageDialog = page.getByRole('dialog', { name: 'ดูรูป first image.png', exact: true });
   await imageDialog.waitFor();
+  const imageClose = imageDialog.getByRole('button', { name: 'ปิดรูปภาพ', exact: true });
+  const closeBounds = await imageClose.boundingBox();
+  check(closeBounds.y >= 65 && closeBounds.height >= 44, 'image close button clears the 53px native titlebar with a visible gap');
+  check((await imageClose.innerText()).includes('ปิดรูปภาพ') && (await imageClose.innerText()).includes('Esc'), 'image close action has a readable label and keyboard hint');
   check(await imageDialog.locator('img').getAttribute('src') === '/api/terminals/ui-0/preview-file?path=' + encodeURIComponent(`.superai/attachments/${imageFiles[0]}`), 'image preview resolves legacy basenames from its originating session');
   await imageDialog.locator('img').click();
   check(await imageDialog.isVisible(), 'clicking the image keeps the viewer open');
   await page.screenshot({ path: path.join(output, 'message-image-desktop.png') });
+  await page.setViewportSize({ width: 1000, height: 700 });
+  const normalCloseBounds = await imageClose.boundingBox();
+  check(normalCloseBounds.y >= 65 && normalCloseBounds.x + normalCloseBounds.width <= 1000, 'image close action stays visible in a normal-sized window');
+  await page.screenshot({ path: path.join(output, 'message-image-window.png') });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.keyboard.press('Escape');
   await imageDialog.waitFor({ state: 'hidden' });
   check(await imageButton.evaluate(el => el === document.activeElement), 'Escape closes the viewer and restores focus to its thumbnail');
@@ -140,6 +149,8 @@ try {
   await imageButton.click();
   const imageBounds = await imageDialog.boundingBox();
   check(imageBounds.width <= 390 && imageBounds.height <= 844, 'image viewer fits a mobile viewport');
+  const mobileCloseBounds = await imageClose.boundingBox();
+  check(mobileCloseBounds.y >= 65 && mobileCloseBounds.x >= 0 && mobileCloseBounds.x + mobileCloseBounds.width <= 390, 'image close action stays below native controls and inside a narrow viewport');
   await page.screenshot({ path: path.join(output, 'message-image-mobile.png') });
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 1440, height: 900 });
