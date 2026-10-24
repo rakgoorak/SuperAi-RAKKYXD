@@ -179,13 +179,13 @@ export function App() {
   const workspace = workspaces.find((w) => w.id === activeWs);
   const [pinnedPickerOpen, setPinnedPickerOpen] = useState(false);
   const [pinnedSearch, setPinnedSearch] = useState("");
-  const [projectFileList, setProjectFileList] = useState<Array<{ path: string; name: string }>>([]);
+  const [projectFileList, setProjectFileList] = useState<string[]>([]);
 
   const loadProjectFiles = useCallback(async () => {
     if (!workspace) return;
     try {
-      const res = await api<{ files: Array<{ path: string; name: string }> }>(`/api/workspaces/${workspace.id}/files`);
-      setProjectFileList(res.files || []);
+      const res = await api<{ files: string[] }>(`/api/workspaces/${workspace.id}/files`);
+      setProjectFileList(Array.isArray(res.files) ? res.files : []);
     } catch {}
   }, [workspace]);
 
@@ -1212,23 +1212,25 @@ export function App() {
                         </div>
                         <div className="pin-dropdown-list">
                           {projectFileList
-                            .filter((f) =>
-                              f.path.toLowerCase().includes(pinnedSearch.toLowerCase())
+                            .filter((filePath) =>
+                              typeof filePath === "string" &&
+                              filePath.toLowerCase().includes(pinnedSearch.toLowerCase())
                             )
                             .slice(0, 30)
-                            .map((f) => {
-                              const isPinned = workspace?.pinnedFiles?.includes(f.path);
+                            .map((filePath) => {
+                              const fileName = filePath.split(/[\\/]/).pop() || filePath;
+                              const isPinned = Boolean(workspace?.pinnedFiles?.includes(filePath));
                               return (
                                 <button
-                                  key={f.path}
+                                  key={filePath}
                                   type="button"
                                   className={`pin-dropdown-item ${isPinned ? "is-pinned" : ""}`}
                                   onClick={() => {
-                                    void handleTogglePin(f.path);
+                                    void handleTogglePin(filePath);
                                   }}
                                 >
-                                  <span className="item-name">{f.name}</span>
-                                  <span className="item-path">{f.path}</span>
+                                  <span className="item-name">{fileName}</span>
+                                  <span className="item-path">{filePath}</span>
                                   <span className="item-status">
                                     {isPinned ? "✓ ปักหมุดแล้ว" : "+ ปักหมุด"}
                                   </span>
