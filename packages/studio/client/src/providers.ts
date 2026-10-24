@@ -10,6 +10,9 @@ export const PROVIDER_LABEL: Record<string, string> = {
   opencode: "OpenCode",
   freebuff: "Freebuff",
   terminal: "Terminal",
+  deepseek: "DeepSeek",
+  groq: "Groq",
+  openrouter: "OpenRouter",
 };
 export const EFFORT_LABEL: Record<string, string> = {
   minimal: "น้อยที่สุด",
@@ -30,7 +33,9 @@ export const EFFORTS: Record<string, string[]> = {
 };
 
 export function providerName(provider: string) {
-  return provider.startsWith("cli:") ? PROVIDER_LABEL[provider.slice(4)] || provider.slice(4) : `Ollama · ${provider}`;
+  if (provider.startsWith("cli:")) return PROVIDER_LABEL[provider.slice(4)] || provider.slice(4);
+  if (PROVIDER_LABEL[provider]) return PROVIDER_LABEL[provider];
+  return `Ollama · ${provider}`;
 }
 export function seatSummary(seat: Seat) {
   return [providerName(seat.provider), seat.model || (seat.provider.startsWith("cli:") ? "รุ่นเริ่มต้น" : ""), seat.effort && `effort ${EFFORT_LABEL[seat.effort] || seat.effort}`]

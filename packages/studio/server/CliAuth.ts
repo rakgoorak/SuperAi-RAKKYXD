@@ -1,10 +1,17 @@
 import { execFile } from "node:child_process";
+import { loadStoredAuth } from "@superai-rakkyxd/core";
 import { cliEnv, cliLaunch, findExecutable, getCliDefinition, incompleteInstall } from "./CliCatalog.js";
 
 export type AuthState = "authenticated" | "login-required" | "unknown" | "not-installed";
 export interface CliAuthStatus { id: string; status: AuthState; note: string; checkedAt: number; loginCommand: string }
 export const LOGIN_ARGS: Record<string, string[]> = {
   "claude-code": ["auth", "login"], codex: ["login"], opencode: ["auth", "login"], antigravity: [], freebuff: [],
+};
+
+export const CLOUD_BYOK_KEYS: Record<string, string> = {
+  deepseek: "DEEPSEEK_API_KEY",
+  groq: "GROQ_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
 };
 
 // Match authentication failures, not quota, network, model-access, or generic HTTP 403 failures.
@@ -31,11 +38,14 @@ export class CliAuthManager {
   }) {}
 
   private result(id: string, status: AuthState, note: string): CliAuthStatus {
+    if (id in CLOUD_BYOK_KEYS) {
+      return { id, status, note, checkedAt: Date.now(), loginCommand: `${CLOUD_BYOK_KEYS[id]} in .env` };
+    }
     const definition = getCliDefinition(id);
     return { id, status, note, checkedAt: Date.now(), loginCommand: [definition.command, ...(LOGIN_ARGS[id] || [])].join(" ") };
   }
   async get(id: string, refresh = false): Promise<CliAuthStatus> {
-    if (!(id in LOGIN_ARGS)) throw new Error("ไม่รู้จักผู้ให้บริการนี้");
+    if (!(id in LOGIN_ARGS) && !(id in CLOUD_BYOK_KEYS)) throw new Error("ไม่รู้จักผู้ให้บริการนี้");
     const cached = this.cache.get(id);
     if (!refresh && cached && Date.now() - cached.checkedAt < 15000) return cached;
     const pending = this.pending.get(id);
@@ -45,6 +55,20 @@ export class CliAuthManager {
     return request;
   }
   private async probe(id: string): Promise<CliAuthStatus> {
+    if (id in CLOUD_BYOK_KEYS) {
+      const keyName = CLOUD_BYOK_KEYS[id];
+      const hasEnv = !!process.env[keyName];
+      let hasStored = false;
+      try {
+        const stored = loadStoredAuth(id);
+        hasStored = !!stored[id];
+      } catch {}
+      if (hasEnv || hasStored) {
+        return this.result(id, "authenticated", `พร้อมใช้งาน (พบ ${keyName})`);
+      }
+      return this.result(id, "login-required", `ต้องการ ${keyName} (ตั้งค่าใน .env)`);
+    }
+
     if (!this.installed(id)) return this.result(id, "not-installed", "ยังไม่พบ CLI กรุณาติดตั้งก่อนเข้าสู่ระบบ");
     if (id === "antigravity" || id === "freebuff")
       return this.result(id, "unknown", "ตรวจบัญชีอัตโนมัติไม่ได้ เปิด Terminal เพื่อเข้าสู่ระบบหรือตรวจบัญชีของ CLI");
@@ -71,10 +95,20 @@ export class CliAuthManager {
     }
   }
   failure(id: string, text: string) {
+    if (id in CLOUD_BYOK_KEYS && isAuthFailure(text)) {
+      this.cache.set(id, this.result(id, "login-required", `API Key ไม่ถูกต้องหรือหมดอายุ (${CLOUD_BYOK_KEYS[id]})`));
+      return;
+    }
     if (id in LOGIN_ARGS && isAuthFailure(text)) this.cache.set(id, this.result(id, "login-required", "บัญชียังไม่พร้อมหรือหมดอายุ กรุณาเข้าสู่ระบบใหม่แล้วลองส่งอีกครั้ง"));
   }
   async requireReady(id: string) {
     const auth = await this.get(id);
+    if (id in CLOUD_BYOK_KEYS) {
+      if (auth.status === "login-required") {
+        throw new Error(`${id}: ${auth.note}`);
+      }
+      return;
+    }
     if (auth.status === "not-installed" || (auth.status === "login-required" && id !== "opencode"))
       throw new Error(`${getCliDefinition(id).name}: ${auth.note} (${auth.loginCommand})`);
   }
