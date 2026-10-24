@@ -82,6 +82,7 @@ function fakeSpawner() {
     proc.stdout = new PassThrough();
     proc.stderr = new PassThrough();
     proc.stdin = new PassThrough();
+    proc.kill = () => true;
     const call = { command, args, stdin: '', proc };
     proc.stdin.on('data', (d: Buffer) => (call.stdin += d.toString()));
     calls.push(call);

@@ -97,6 +97,19 @@ test('signed-out chat does not start a turn or change preferences and can retry 
   } finally { await server.stop().catch(() => {}); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('wait endpoint acknowledges only the requested chat without starting a turn', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-wait-'));
+  const server = new StudioServer({ customWorkspacePath: path.join(dir, 'workspaces.json') });
+  const internal = server as any;
+  const seen: string[] = [];
+  t.mock.method(internal.chats, 'wait', (id: string) => { seen.push(id); return id === 'quiet-session'; });
+  try {
+    assert.deepEqual((await request(server, '/api/terminals/:id/chat/wait', { id: 'quiet-session' })).body, { success: true });
+    assert.deepEqual((await request(server, '/api/terminals/:id/chat/wait', { id: 'finished-session' })).body, { success: false });
+    assert.deepEqual(seen, ['quiet-session', 'finished-session']);
+  } finally { await server.stop().catch(() => {}); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('login terminals cannot become chats and never enter the saved conversation list', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'login-only-'));
   const server = new StudioServer({ customWorkspacePath: path.join(dir, 'workspaces.json') });
