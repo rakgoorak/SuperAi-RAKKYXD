@@ -1,0 +1,430 @@
+.worktree-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+  animation: wtFadeIn 0.15s ease-out;
+}
+
+@keyframes wtFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.worktree-modal-card {
+  background-color: #1e1e1c;
+  border: 1px solid #333330;
+  border-radius: 10px;
+  width: 100%;
+  max-width: 540px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+  color: #dfdfd9;
+  overflow: hidden;
+}
+
+.worktree-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #2e2e2a;
+}
+
+.worktree-modal-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.worktree-title-icon {
+  color: #c88242;
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.worktree-modal-title h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #f0f0eb;
+}
+
+.worktree-modal-title p {
+  margin: 3px 0 0 0;
+  font-size: 12px;
+  color: #9a9a92;
+}
+
+.worktree-modal-close {
+  background: none;
+  border: none;
+  color: #888880;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.worktree-modal-close:hover {
+  background-color: #2b2b28;
+  color: #dfdfd9;
+}
+
+.worktree-alert {
+  margin: 12px 20px 0 20px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.worktree-alert.success {
+  background-color: rgba(52, 199, 89, 0.12);
+  border: 1px solid rgba(52, 199, 89, 0.3);
+  color: #4cd964;
+}
+
+.worktree-alert.error {
+  background-color: rgba(255, 69, 58, 0.12);
+  border: 1px solid rgba(255, 69, 58, 0.3);
+  color: #ff6b6b;
+}
+
+.worktree-create-form {
+  padding: 16px 20px;
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid #2e2e2a;
+}
+
+.worktree-input-group {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.worktree-input-group .input-icon {
+  position: absolute;
+  left: 10px;
+  color: #777770;
+  pointer-events: none;
+}
+
+.worktree-input-group input {
+  width: 100%;
+  background-color: #141412;
+  border: 1px solid #383834;
+  border-radius: 6px;
+  padding: 8px 10px 8px 30px;
+  font-size: 13px;
+  color: #f0f0eb;
+  transition: border-color 0.15s;
+}
+
+.worktree-input-group input:focus {
+  outline: none;
+  border-color: #c88242;
+}
+
+.btn-create-worktree {
+  background-color: #c88242;
+  color: #141412;
+  border: none;
+  border-radius: 6px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+
+.btn-create-worktree:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btn-create-worktree:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.worktree-list-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 20px;
+  max-height: 380px;
+}
+
+.worktree-list-head {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888880;
+  margin-bottom: 8px;
+}
+
+.worktree-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.worktree-item {
+  background-color: #242422;
+  border: 1px solid #333330;
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: border-color 0.15s;
+}
+
+.worktree-item.active {
+  border-color: #c88242;
+  background-color: rgba(200, 130, 66, 0.06);
+}
+
+.worktree-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.worktree-item-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #f0f0eb;
+}
+
+.worktree-item-title strong {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge-main {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: #2e2e2a;
+  color: #b0b0a8;
+  font-weight: normal;
+}
+
+.badge-current {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: rgba(200, 130, 66, 0.2);
+  color: #df9e62;
+  font-weight: 500;
+}
+
+.worktree-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #888880;
+}
+
+.commit-hash {
+  font-family: ui-monospace, monospace;
+  background-color: #1a1a18;
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: #aaa;
+}
+
+.item-path {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.btn-delete-wt {
+  background: none;
+  border: none;
+  color: #888880;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.btn-delete-wt:hover:not(:disabled) {
+  background-color: rgba(255, 69, 58, 0.15);
+  color: #ff6b6b;
+}
+
+.btn-delete-wt:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.worktree-loading,
+.worktree-empty {
+  padding: 28px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #888880;
+}
+
+.worktree-modal-footer {
+  padding: 12px 20px;
+  background-color: #1a1a18;
+  border-top: 1px solid #282824;
+  font-size: 11px;
+  color: #888880;
+}
+
+.worktree-modal-footer code {
+  color: #c88242;
+  background-color: #222220;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.spin {
+  animation: wtSpin 0.8s linear infinite;
+}
+
+@keyframes wtSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Smart Merge Banner inside ChangesPanel */
+.worktree-smart-merge-banner {
+  background: linear-gradient(135deg, rgba(200, 130, 66, 0.14), rgba(30, 30, 28, 0.95));
+  border: 1px solid rgba(200, 130, 66, 0.35);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.worktree-merge-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #df9e62;
+  font-size: 13px;
+}
+
+.worktree-merge-header strong {
+  color: #f5f5f0;
+}
+
+.worktree-merge-details {
+  font-size: 12px;
+  color: #b0b0a8;
+  margin: 0;
+}
+
+.worktree-merge-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.worktree-delete-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #aaa;
+  cursor: pointer;
+  user-select: none;
+}
+
+.worktree-delete-checkbox input {
+  accent-color: #c88242;
+  cursor: pointer;
+}
+
+.btn-merge-action {
+  background-color: #c88242;
+  color: #141412;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity 0.15s;
+}
+
+.btn-merge-action:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btn-merge-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-worktree-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  background-color: #242422;
+  border: 1px solid #383834;
+  color: #dfdfd9;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-worktree-trigger:hover {
+  background-color: #2e2e2a;
+  border-color: #c88242;
+  color: #f0f0eb;
+}
+
+.btn-worktree-trigger.is-worktree {
+  border-color: rgba(200, 130, 66, 0.5);
+  background-color: rgba(200, 130, 66, 0.1);
+  color: #df9e62;
+}
