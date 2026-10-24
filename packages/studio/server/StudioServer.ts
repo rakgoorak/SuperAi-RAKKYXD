@@ -1,4 +1,4 @@
-import { projectChanges, projectFile } from "./ProjectChanges.js";
+import { projectChanges, projectFile, stageFile, unstageFile, discardFile, saveProjectFile } from "./ProjectChanges.js";
 import { readPreviewFile } from './PreviewFiles.js';
 import { listProjectFiles } from './ProjectFiles.js';
 import http from "node:http";
@@ -268,6 +268,55 @@ export class StudioServer {
       if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
       try { res.json(await projectFile(ws.rootPath, String(req.query.path || ''))); }
       catch (error) { res.status(400).json({ error: (error as Error).message }); }
+    });
+    this.app.post('/api/workspaces/:wsId/files/stage', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      const filePath = typeof req.body?.filePath === 'string' ? req.body.filePath.trim() : (typeof req.body?.path === 'string' ? req.body.path.trim() : '');
+      if (!filePath) return res.status(400).json({ error: 'กรุณาระบุพาธไฟล์' });
+      try {
+        const success = await stageFile(ws.rootPath, filePath);
+        res.json({ success });
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+      }
+    });
+    this.app.post('/api/workspaces/:wsId/files/unstage', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      const filePath = typeof req.body?.filePath === 'string' ? req.body.filePath.trim() : (typeof req.body?.path === 'string' ? req.body.path.trim() : '');
+      if (!filePath) return res.status(400).json({ error: 'กรุณาระบุพาธไฟล์' });
+      try {
+        const success = await unstageFile(ws.rootPath, filePath);
+        res.json({ success });
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+      }
+    });
+    this.app.post('/api/workspaces/:wsId/files/discard', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      const filePath = typeof req.body?.filePath === 'string' ? req.body.filePath.trim() : (typeof req.body?.path === 'string' ? req.body.path.trim() : '');
+      if (!filePath) return res.status(400).json({ error: 'กรุณาระบุพาธไฟล์' });
+      try {
+        const success = await discardFile(ws.rootPath, filePath);
+        res.json({ success });
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+      }
+    });
+    this.app.post('/api/workspaces/:wsId/files/save', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      const filePath = typeof req.body?.filePath === 'string' ? req.body.filePath.trim() : (typeof req.body?.path === 'string' ? req.body.path.trim() : '');
+      if (!filePath) return res.status(400).json({ error: 'กรุณาระบุพาธไฟล์' });
+      if (typeof req.body?.content !== 'string') return res.status(400).json({ error: 'กรุณาระบุเนื้อหาไฟล์' });
+      try {
+        const success = await saveProjectFile(ws.rootPath, filePath, req.body.content);
+        res.json({ success });
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+      }
     });
     const previewFile = (folder: (req: Request) => string | undefined) => async (req: Request, res: Response) => {
       const root = folder(req);
