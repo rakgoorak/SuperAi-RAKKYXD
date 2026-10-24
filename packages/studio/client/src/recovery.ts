@@ -4,8 +4,8 @@ export function recoveryHint(message: string) {
   if (/network|fetch|connect|timeout|timed.?out|ECONN|เชื่อมต่อ/i.test(message)) return 'การเชื่อมต่อขัดข้อง ตรวจเครือข่ายและผู้ให้บริการ แล้วลองใหม่';
   return 'ตรวจรายละเอียดข้อผิดพลาดด้านล่าง แก้ข้อความหรือเครื่องมือก่อนลองใหม่';
 }
-export function prepareMessage(text: string, sessionId?: string) {
-  window.dispatchEvent(new CustomEvent('superai:prepare-message', { detail: { text, sessionId } }));
+export function prepareMessage(text: string, sessionId?: string, options?: { expand?: boolean }) {
+  window.dispatchEvent(new CustomEvent('superai:prepare-message', { detail: { text, sessionId, ...options } }));
 }
 export function showChanges(sessionId?: string) {
   window.dispatchEvent(new CustomEvent('superai:show-changes', { detail: { sessionId } }));

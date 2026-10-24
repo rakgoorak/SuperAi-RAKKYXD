@@ -1,4 +1,6 @@
-import { forwardRef, useEffect, useId, useImperativeHandle, useState, type KeyboardEvent } from 'react';
+import { forwardRef, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { Command, X } from 'lucide-react';
 import { api, type ChatSkill } from '../api';
 import { setChatPrefs } from '../chatControls';
 
@@ -17,6 +19,9 @@ export function extractSlashQuery(text: string): { query: string; slashIndex: nu
 /** Offers only commands implemented by this composer and skills reported by its provider. */
 export const SlashMenu = forwardRef<SlashMenuHandle, Props>(function SlashMenu({ draft, sessionId, workspaceId, providers, onDraft }, ref) {
   const id = useId();
+  const anchor = useRef<HTMLSpanElement>(null);
+  const popup = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<CSSProperties>({});
   const [skills, setSkills] = useState<ChatSkill[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -27,6 +32,28 @@ export const SlashMenu = forwardRef<SlashMenuHandle, Props>(function SlashMenu({
   const slashInfo = extractSlashQuery(draft);
   const searching = eligible && slashInfo !== null;
   const open = searching && dismissed !== draft;
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const field = anchor.current?.parentElement;
+    if (!field) return;
+    const place = () => {
+      const rect = field.getBoundingClientRect();
+      const width = Math.min(520, rect.width, window.innerWidth - 24);
+      setPosition({ width, left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)), bottom: window.innerHeight - rect.top + 8, maxHeight: Math.max(64, Math.min(320, rect.top - 20)) });
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(field);
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    const dismiss = (event: Event) => {
+      if (event.target instanceof Node && !popup.current?.contains(event.target) && !field.contains(event.target)) setDismissed(draft);
+    };
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('focusin', dismiss);
+    return () => { observer.disconnect(); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('pointerdown', dismiss); document.removeEventListener('focusin', dismiss); };
+  }, [open, draft]);
 
   useEffect(() => { setDismissed(null); setActive(0); }, [draft, sessionId, workspaceId, signature]);
 
@@ -81,26 +108,36 @@ export const SlashMenu = forwardRef<SlashMenuHandle, Props>(function SlashMenu({
       setActive(index => choices.length ? (index + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length : 0);
       return true;
     }
-    if ((event.key === 'Enter' || event.key === 'Tab') && !event.shiftKey) {
+    if (event.key === 'Tab') { setDismissed(draft); return false; }
+    if (event.key === 'Enter' && !event.shiftKey && choices[active]) {
       event.preventDefault();
-      if (choices[active]) pick(choices[active]);
+      pick(choices[active]);
       return true;
     }
     return false;
   }}));
 
   useEffect(() => { document.getElementById(`${id}-${active}`)?.scrollIntoView({ block: 'nearest' }); }, [active, id]);
-  if (!open) return null;
+  useEffect(() => {
+    const input = anchor.current?.parentElement?.querySelector('textarea');
+    if (!input) return;
+    input.setAttribute('role', 'combobox');
+    input.setAttribute('aria-autocomplete', 'list');
+    input.setAttribute('aria-expanded', String(open));
+    if (open) input.setAttribute('aria-controls', `${id}-list`);
+    if (open && choices[active]) input.setAttribute('aria-activedescendant', `${id}-${active}`);
+    return () => { for (const attr of ['role', 'aria-autocomplete', 'aria-expanded', 'aria-controls', 'aria-activedescendant']) input.removeAttribute(attr); };
+  }, [open, active, id, choices.length]);
 
-  return <div className="slash-menu" aria-label="คำสั่งและ Skills">
-    <header><strong>Skills และคำสั่ง</strong><span>↑ ↓ เลือก · Enter เติม · Esc ปิด</span></header>
-    <div role="listbox" aria-label="เลือก skill หรือคำสั่ง">
+  return <><span ref={anchor} hidden />{open && createPortal(<div ref={popup} className="slash-menu" aria-label="คำสั่งและ Skills" style={position}>
+    <header><strong><Command size={14} /> Skills และคำสั่ง <small>{choices.length}</small></strong><button type="button" aria-label="ปิดรายการคำสั่ง" onClick={() => setDismissed(draft)}><X size={15} /></button></header>
+    <div role="listbox" id={`${id}-list`} aria-label="เลือก skill หรือคำสั่ง">
       {choices.map((choice, index) => <button type="button" role="option" aria-selected={active === index} id={`${id}-${index}`} key={choice.id} className={active === index ? 'active' : ''}
-        onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(index)} onClick={() => pick(choice)}><span className="slash-symbol">/</span><strong>{choice.label}</strong><small>{choice.description}</small></button>)}
+        title={choice.description} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(index)} onClick={() => pick(choice)}><span className="slash-symbol">/</span><span className="slash-choice"><strong>{choice.label}</strong><small>{choice.description}</small></span></button>)}
     </div>
     {loading && <p role="status">กำลังค้นหา skill ที่ใช้ได้…</p>}
     {error && <p role="alert">{error}</p>}
     {!loading && !error && !choices.length && <p>ไม่พบ skill ที่ตรงกัน · ติดตั้งเพิ่มได้จากหน้า Skills</p>}
-    <footer>เลือกแล้วพิมพ์รายละเอียดงานต่อได้ · ยังไม่ส่งข้อความ</footer>
-  </div>;
+    <footer><span>↑ ↓ เลือก · Enter เติม · Esc ปิด</span><span>ยังไม่ส่งข้อความ</span></footer>
+  </div>, document.body)}</>;
 });

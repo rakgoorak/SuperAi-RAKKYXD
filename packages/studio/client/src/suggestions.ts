@@ -7,88 +7,42 @@ export interface SuggestionItem {
 
 export interface SuggestionContext {
   mode: "code" | "agent" | "chat";
-  lastRun?: {
-    status?: string;
-    mode?: string;
-    allowTools?: boolean;
-    prompt?: string;
-    output?: string;
-    error?: string;
-  } | null;
-  activeSessionName?: string;
-  draft: string;
+  lastRun?: { status?: string; allowTools?: boolean; output?: string; error?: string } | null;
 }
 
-export interface SuggestionResult {
-  items: SuggestionItem[];
-  topChoice?: SuggestionItem;
-  ghostSuffix: string;
-}
-
-export const SLASH_COMMANDS: SuggestionItem[] = [
-  { id: "slash-skills", label: "/skills", promptText: "/skills " },
-  { id: "slash-test", label: "/test", promptText: "/test " },
-  { id: "slash-diff", label: "/diff", promptText: "/diff " },
-  { id: "slash-clear", label: "/clear", promptText: "/clear" },
-];
-
-export function getSuggestions(ctx: SuggestionContext): SuggestionResult {
-  const { mode, lastRun, draft } = ctx;
-  let items: SuggestionItem[] = [];
-
-  const isFailed = lastRun && (lastRun.status === "failed" || !!lastRun.error);
-  const isCompleted = lastRun && lastRun.status === "completed";
-
-  if (isFailed) {
-    items = [
-      { id: "retry", label: "ลองใหม่อีกครั้ง", promptText: "ลองใหม่อีกครั้งพร้อมวิเคราะห์สาเหตุและแก้ไข", icon: "refresh" },
-      { id: "explain-err", label: "อธิบายวิธีแก้ปัญหา", promptText: "ขอวิธีแก้ปัญหาและข้อผิดพลาดที่เกิดขึ้นแบบทีละขั้นตอน", icon: "help" },
-      { id: "check-logs", label: "ตรวจบันทึก Log", promptText: "ตรวจดูบันทึกข้อผิดพลาดและแนะนำวิธีแก้ไข", icon: "file" },
-    ];
-  } else if (isCompleted && mode === "agent") {
-    if (lastRun?.allowTools) {
-      items = [
-        { id: "diff", label: "ตรวจดู Git Diff", promptText: "ตรวจดูการแก้ไขไฟล์ (Git Diff)", icon: "git" },
-        { id: "test", label: "รันการทดสอบ", promptText: "รันการทดสอบระบบ (Test)", icon: "play" },
-        { id: "explain", label: "อธิบายโค้ดที่แก้", promptText: "อธิบายรายละเอียดโค้ดที่แก้และไฟล์ที่เปลี่ยนแปลง", icon: "help" },
-        { id: "next-step", label: "สรุปขั้นตอนถัดไป", promptText: "สรุปขั้นตอนถัดไปที่แนะนำในการพัฒนา", icon: "sparkles" },
-      ];
-    } else {
-      items = [
-        { id: "start-code", label: "เริ่มลงมือเขียนโค้ด", promptText: "เริ่มลงมือเขียนโค้ดตามแผนที่วางไว้", icon: "sparkles" },
-        { id: "code-sample", label: "ขอตัวอย่างโค้ดละเอียด", promptText: "ขอตัวอย่างโค้ดและโครงสร้างไฟล์แบบละเอียด", icon: "file" },
-        { id: "test-plan", label: "วางแผนการทดสอบ", promptText: "วางแผนการทดสอบระบบและกรณีทดสอบ (Test cases)", icon: "play" },
-      ];
+/** Suggestions belong to a finished answer, never to the user's partially typed prompt. */
+export function getSuggestions({ mode, lastRun }: SuggestionContext): SuggestionItem[] {
+  if (lastRun?.status !== "completed" || lastRun.error || !lastRun.output?.trim()) return [];
+  const answer = lastRun.output.replace(/```[\s\S]*?```/g, "").replace(/`([^`]+)`/g, "$1");
+  const lines = answer.split(/\r?\n/);
+  const candidates: string[] = [];
+  let inNextSteps = false;
+  for (const line of lines) {
+    if (/^\s*(?:#{1,6}\s*)?(?:\*\*)?(?:ขั้นตอน(?:ถัดไป|ต่อไป)|สิ่งที่(?:ควร|แนะนำให้)ทำต่อ|ข้อเสนอแนะ|แนะนำให้ทำต่อ|next steps?|recommended actions?)[:：\s*]*$/iu.test(line.trim())) {
+      inNextSteps = true;
+      continue;
     }
-  } else if (isCompleted && mode === "chat") {
-    items = [
-      { id: "chat-sample", label: "ขอตัวอย่างโค้ดละเอียด", promptText: "ขอตัวอย่างโค้ดและการนำไปประยุกต์ใช้อย่างละเอียด", icon: "file" },
-      { id: "chat-compare", label: "เปรียบเทียบข้อดีข้อเสีย", promptText: "เปรียบเทียบข้อดีข้อเสียและจุดเด่นของแต่ละแนวทางข้างต้น", icon: "sparkles" },
-      { id: "chat-action", label: "เริ่มลงมือทำตามคำแนะนำ", promptText: "ช่วยพาเริ่มลงมือทำตามแนวทางที่แนะนำทีละขั้นตอน", icon: "play" },
-    ];
-  } else {
-    items = [
-      { id: "cmd-test", label: "รันการทดสอบ", promptText: "รันการทดสอบระบบและตรวจความเรียบร้อย", icon: "play" },
-      { id: "cmd-diff", label: "ตรวจ Git Diff", promptText: "ตรวจดูการแก้ไขไฟล์ล่าสุดในโปรเจกต์ (Git Diff)", icon: "git" },
-      { id: "cmd-skills", label: "เรียกใช้ Skill", promptText: "/skills ", icon: "sparkles" },
-    ];
-  }
-
-  const topChoice = items[0];
-  let ghostSuffix = "";
-
-  if (!draft.includes("\n")) {
-    const trimmed = draft.trim();
-    if (!trimmed && topChoice) {
-      ghostSuffix = topChoice.promptText;
-    } else if (trimmed) {
-      const allCandidates = [...SLASH_COMMANDS, ...items];
-      const match = allCandidates.find((c) => c.promptText.toLowerCase().startsWith(draft.toLowerCase()) && c.promptText.length > draft.length);
-      if (match) {
-        ghostSuffix = match.promptText.slice(draft.length);
-      }
+    if (inNextSteps && /^\s*#{1,6}\s/.test(line)) inNextSteps = false;
+    if (inNextSteps && /^\s*(?:[-*•]|\d+[.)])\s+/.test(line)) {
+      candidates.push(line.replace(/^\s*(?:[-*•]|\d+[.)])\s+(?:\[[ x]\]\s*)?/i, ""));
     }
   }
-
-  return { items, topChoice, ghostSuffix };
+  const offered = answer.match(/(?:หากต้องการ|ถ้าต้องการ|ผมสามารถ|ฉันสามารถ|would you like me to|I can)\s*([^\n.!?。]{8,180})/gi);
+  if (offered) for (const offer of offered.slice(-2)) {
+    const action = offer.replace(/^(?:(?:หาก|ถ้า)ต้องการ[,\s]*(?:ผม|ฉัน)?(?:สามารถ|จะ|ช่วย)?|(?:ผม|ฉัน)สามารถ|would you like me to|I can)\s*/i, "")
+      .replace(/(?:ให้(?:คุณ)?(?:ต่อ)?ได้|ได้เลย|ครับ|ค่ะ|ไหม|หรือไม่)[\s?]*$/g, "").trim();
+    if (/^(?:ช่วย|เริ่ม|ทำ|เขียน|เพิ่ม|ปรับ|แก้|ตรวจ|ทดสอบ|สร้าง|วางแผน|สรุป|อธิบาย|build|implement|add|fix|test|review|create|write|explain)/i.test(action)) candidates.push(action);
+  }
+  const unique = [...new Set(candidates.map(text => text.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/\*\*/g, "").trim()))]
+    .filter(text => text.length >= 6 && text.length <= 180);
+  if (unique.length) return unique.slice(0, 3).map((text, index) => ({
+    id: `answer-${index}`, label: text, promptText: `ช่วยทำขั้นตอนต่อไปจากคำตอบล่าสุด: ${text}`,
+  }));
+  if (/(?:แผน(?:งาน|การ|นี้)|ขั้นตอน(?:การ|ที่)|implementation plan|proposed approach)/i.test(answer) && (mode !== "agent" || !lastRun.allowTools)) {
+    return [{ id: "follow-plan", label: "เริ่มทำตามแผนนี้", promptText: "ช่วยเริ่มลงมือทำตามแผนที่แนะนำในคำตอบล่าสุด" }];
+  }
+  if (/(?:แก้(?:ไข)?(?:ไฟล์|โค้ด)|เปลี่ยนแปลงไฟล์|implemented|files? changed|git diff)/i.test(answer)) {
+    return [{ id: "review-changes", label: "ตรวจการแก้ไขและทดสอบ", promptText: "ช่วยตรวจการแก้ไขจากงานล่าสุดและรันการทดสอบที่เกี่ยวข้อง พร้อมสรุปผล" }];
+  }
+  return [];
 }

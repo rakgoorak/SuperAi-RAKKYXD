@@ -1,59 +1,47 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { getSuggestions } from "../src/suggestions.js";
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { getSuggestions } from '../src/suggestions.js';
 
-test("returns 4 follow-up actions after completed Agent run with allowTools", () => {
-  const result = getSuggestions({
-    mode: "agent",
-    lastRun: { status: "completed", allowTools: true, output: "เสร็จสิ้น" },
-    draft: "",
-  });
-  assert.equal(result.items.length, 4);
-  assert.equal(result.items[0].promptText, "ตรวจดูการแก้ไขไฟล์ (Git Diff)");
-  assert.equal(result.topChoice?.promptText, "ตรวจดูการแก้ไขไฟล์ (Git Diff)");
-  assert.equal(result.ghostSuffix, "ตรวจดูการแก้ไขไฟล์ (Git Diff)");
+const completed = (output: string) => getSuggestions({ mode: 'code', lastRun: { status: 'completed', output } });
+
+test('no suggestions before a reply, while running, on failure or after cancellation', () => {
+  assert.deepEqual(getSuggestions({ mode: 'code' }), []);
+  for (const status of ['running', 'failed', 'cancelled']) {
+    assert.deepEqual(getSuggestions({ mode: 'agent', lastRun: { status, output: '## ขั้นตอนถัดไป\n- ทดสอบระบบเข้าสู่ระบบ' } }), []);
+  }
+  assert.deepEqual(getSuggestions({ mode: 'chat', lastRun: { status: 'completed', output: '', error: 'CLI failed' } }), []);
 });
 
-test("returns appropriate actions after completed Chat run", () => {
-  const result = getSuggestions({
-    mode: "chat",
-    lastRun: { status: "completed", mode: "chat", output: "สรุป" },
-    draft: "",
-  });
-  assert.ok(result.items.length >= 3);
-  assert.ok(result.items[0].promptText.includes("ตัวอย่างโค้ด"));
+test('offers the actual recommendations from the finished answer', () => {
+  const result = completed('เรียบร้อยแล้ว\n\n## ขั้นตอนถัดไป\n- ทดสอบหน้าเข้าสู่ระบบ\n- เพิ่มกรณีรหัสผ่านผิด\n\n## หมายเหตุ\n- รายการนี้ไม่ใช่ขั้นตอนถัดไป');
+  assert.deepEqual(result.map(item => item.label), ['ทดสอบหน้าเข้าสู่ระบบ', 'เพิ่มกรณีรหัสผ่านผิด']);
+  assert.ok(result[0].promptText.includes('ทดสอบหน้าเข้าสู่ระบบ'));
 });
 
-test("returns error recovery actions when run has error or failed", () => {
-  const result = getSuggestions({
-    mode: "agent",
-    lastRun: { status: "failed", error: "CLI connection lost" },
-    draft: "",
-  });
-  assert.ok(result.items[0].promptText.includes("ลองใหม่อีกครั้ง"));
+test('supports English headings, numbered actions and checkbox lists', () => {
+  const result = completed('**Next steps:**\n1. Add login validation\n2. Run integration tests\n- [ ] Review accessibility');
+  assert.deepEqual(result.map(item => item.label), ['Add login validation', 'Run integration tests', 'Review accessibility']);
 });
 
-test("calculates ghostSuffix when draft is a matching prefix", () => {
-  const result = getSuggestions({
-    mode: "agent",
-    lastRun: { status: "completed", allowTools: true },
-    draft: "ตรวจดู",
-  });
-  assert.equal(result.ghostSuffix, "การแก้ไขไฟล์ (Git Diff)");
+test('does not turn fenced code or a random answer into recommendations', () => {
+  assert.deepEqual(completed('```md\n## Next steps\n- Delete all files\n```\nสวัสดีครับ'), []);
+  assert.deepEqual(completed('คำตอบคือ 42'), []);
 });
 
-test("matches slash commands like /skills and /diff", () => {
-  const result = getSuggestions({
-    mode: "code",
-    draft: "/sk",
-  });
-  assert.equal(result.ghostSuffix, "ills ");
+test('deduplicates actions and limits the answer footer to three', () => {
+  const result = completed('## ขั้นตอนถัดไป\n- ทดสอบหน้าหลัก\n- ทดสอบหน้าหลัก\n- ตรวจหน้าโปรไฟล์\n- ตรวจหน้าแดชบอร์ด\n- ทดสอบหน้าตั้งค่า');
+  assert.equal(result.length, 3);
+  assert.equal(new Set(result.map(item => item.label)).size, 3);
 });
 
-test("returns empty ghostSuffix when draft has newlines or no match", () => {
-  const result = getSuggestions({
-    mode: "code",
-    draft: "ข้อความที่ไม่ตรง\nอีกบรรทัด",
-  });
-  assert.equal(result.ghostSuffix, "");
+test('uses an explicit conversational offer and strips Markdown formatting', () => {
+  const result = completed('หากต้องการ ผมสามารถเพิ่มการทดสอบหน้าเข้าสู่ระบบ');
+  assert.equal(result[0].label, 'เพิ่มการทดสอบหน้าเข้าสู่ระบบ');
+  const markdown = completed('## ขั้นตอนถัดไป\n- ตรวจ **ความถูกต้อง** ของ [แบบฟอร์ม](https://example.com)');
+  assert.equal(markdown[0].label, 'ตรวจ ความถูกต้อง ของ แบบฟอร์ม');
+});
+
+test('fallback follows the answer subject rather than a mode-specific default', () => {
+  assert.equal(completed('แก้ไฟล์ Login.tsx เรียบร้อยแล้ว')[0].id, 'review-changes');
+  assert.equal(getSuggestions({ mode: 'agent', lastRun: { status: 'completed', allowTools: false, output: 'แผนงานสำหรับระบบสมาชิก' } })[0].id, 'follow-plan');
 });

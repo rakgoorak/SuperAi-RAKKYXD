@@ -43,9 +43,6 @@ import {
   Puzzle,
   Download,
   Users,
-  Sparkles,
-  Wand2,
-  Lightbulb,
 } from "lucide-react";
 import { api, post, loginProvider, Workspace, Cli, Session, Run, Seat } from "./api";
 import { paneView } from "./paneView";
@@ -53,6 +50,7 @@ import { chatPrefs, sendChatCommand, setChatPrefs } from "./chatControls";
 import { SessionChatControls } from "./components/SessionChatControls";
 import { SessionCanvas, type CanvasLayout } from "./components/SessionCanvas";
 import { RightDock, type DockView } from "./components/RightDock";
+import { parsePreviewTarget, type PreviewRequest } from './previewLinks';
 import { AgentConfigEditor, AgentRunView, type AgentConfig } from "./components/AgentPanel";
 import { ChatConfigEditor, ChatRunView, type ChatConfig } from "./components/ChatPanel";
 import { SkillsPanel } from "./components/SkillsPanel";
@@ -73,7 +71,8 @@ import { SetupGuide, setupNeeded } from "./components/SetupGuide";
 import { ChatQuickControls } from "./components/ChatQuickControls";
 import { loadVoiceSettings, saveVoiceSettings, type VoiceSettings } from "./voice/speech";
 import { getSuggestions } from "./suggestions";
-import { SuggestedChips } from "./components/SuggestedChips";
+import { NextSteps } from "./components/NextSteps";
+import { WorkspaceWelcome } from "./components/WorkspaceWelcome";
 
 type Mode = "agent" | "code" | "chat";
 type Dialog = "history" | "changes" | "session-delete" | "session" | "settings" | "project" | "delete" | "clear" | "setup" | "skills" | "update" | null;
@@ -103,6 +102,8 @@ export function App() {
   const slashMenu = useRef<SlashMenuHandle>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWs, setActiveWs] = useState(initial("superai-workspace", ""));
+  const activeWsRef = useRef(activeWs);
+  activeWsRef.current = activeWs;
   const [sessions, setSessions] = useState<Session[]>([]);
   const [clis, setClis] = useState<Cli[]>([]);
   const [selected, setSelected] = useState(() => initial("superai-selected", ""));
@@ -123,6 +124,7 @@ export function App() {
   const [zoomed, setZoomed] = useState(false);
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [dockView, setDockView] = useState<DockView>("browser");
+  const [previewRequest, setPreviewRequest] = useState<PreviewRequest>();
   const [launchPlan, setLaunchPlan] = useState<LaunchSeat[] | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [deleteSession, setDeleteSession] = useState<{id: string; name: string} | null>(null);
@@ -140,7 +142,6 @@ export function App() {
   useEffect(() => {
     try { if (draft) localStorage.setItem("superai-draft", draft); else localStorage.removeItem("superai-draft"); } catch {}
   }, [draft]);
-  const [ghostDismissed, setGhostDismissed] = useState(false);
   const [target, setTarget] = useState("active");
   const [launchType, setLaunchType] = useState("claude-code");
   const [count, setCount] = useState(1);
@@ -182,9 +183,7 @@ export function App() {
   const latestRun = conversation[conversation.length - 1] || null;
   const suggestions = getSuggestions({
     mode,
-    lastRun: latestRun,
-    activeSessionName: selectedSession?.name,
-    draft,
+    lastRun: latestRun ? { ...latestRun, output: latestRun.output || latestRun.panel?.filter(answer => answer.status === "completed").map(answer => answer.output).join("\n\n") || "" } : null,
   });
   const activeRun = runs.find((r) => r.status === "running");
   const launchCli = clis.find((c) => c.id === launchType);
@@ -438,6 +437,17 @@ export function App() {
     window.addEventListener("superai:login-session", opened);
     return () => window.removeEventListener("superai:login-session", opened);
   }, [refresh, showError]);
+  const retryRun = (previous: Run) => task(async () => {
+    if (activeRun || busy) return;
+    const created = await post<Run>(`/api/conversations/${previous.wsId}`, {
+      mode: previous.mode, prompt: previous.prompt, attachments: previous.attachments || [],
+      allowTools: previous.allowTools, main: previous.main, subagents: previous.subagents,
+      panel: previous.panel?.map(answer => answer.seat), summarizer: previous.summarizer,
+      summaryStyle: previous.summaryStyle,
+    });
+    // Apply the returned run before releasing shared busy state: all rows and Send stay locked.
+    if (activeWsRef.current === previous.wsId) setRuns(current => [...current.filter(run => run.id !== created.id), created]);
+  });
   const send = () =>
     task(async () => {
       if (!draft.trim() && !attachments.items.length) return;
@@ -517,13 +527,13 @@ export function App() {
     });
   useEffect(() => {
     const prepare = (event: Event) => {
-      const detail = (event as CustomEvent<{text: string; sessionId?: string}>).detail;
+      const detail = (event as CustomEvent<{text: string; sessionId?: string; expand?: boolean}>).detail;
       if (detail.sessionId) {
         const session = sessions.find(s => s.id === detail.sessionId);
         if (session?.wsId) setActiveWs(session.wsId);
         setMode("code"); setSelected(detail.sessionId); setTarget(detail.sessionId);
       }
-      setDraft(detail.text); setComposerExpanded(true);
+      setDraft(detail.text); setComposerExpanded(detail.expand !== false);
       requestAnimationFrame(() => composer.current?.focus());
     };
     const changes = (event: Event) => {
@@ -533,15 +543,25 @@ export function App() {
       setDialog("changes");
     };
     const setup = () => setDialog("setup");
+    const openLink = (event: Event) => {
+      try {
+        const href = (event as CustomEvent<{ href: string }>).detail.href;
+        const target = parsePreviewTarget(href);
+        setPreviewRequest({ id: crypto.randomUUID(), workspaceId: activeWs || undefined, target });
+        setDockView('browser'); setPreview(true);
+      } catch (error) { showError((error as Error).message); }
+    };
     const reload = () => { if (activeWs) void api<Run[]>(`/api/conversations/${activeWs}`).then(setRuns, error => showError(error.message)); };
     window.addEventListener("superai:prepare-message", prepare);
     window.addEventListener("superai:show-changes", changes);
     window.addEventListener("superai:open-setup", setup);
+    window.addEventListener('superai:open-preview-link', openLink);
     window.addEventListener("superai:refresh-runs", reload);
     return () => {
       window.removeEventListener("superai:prepare-message", prepare);
       window.removeEventListener("superai:show-changes", changes);
       window.removeEventListener("superai:open-setup", setup);
+      window.removeEventListener('superai:open-preview-link', openLink);
       window.removeEventListener("superai:refresh-runs", reload);
     };
   }, [sessions, activeWs, showError]);
@@ -978,114 +998,7 @@ export function App() {
                     select={setSelected} zoom={id => { setSelected(id); setZoomed(true); }} close={closeSession} restart={restartSession} add={openSession} switchView={switchView}
                     refresh={() => void refresh().catch(() => {})} onError={showError} />
                 ) : (
-                  <div className="studio-hub-container">
-                    {/* Hero Header */}
-                    <div className="studio-hub-hero">
-                      <div className="studio-hub-badge">
-                        <Sparkles size={13} className="text-cyan-400" />
-                        <span>SuperAi & RAKKYXD Studio Hub</span>
-                      </div>
-                      <h2>สร้างสรรค์ไอเดียได้เร็วขึ้นด้วยทีม AI อัจฉริยะ</h2>
-                      <p>
-                        โปรเจกต์: <strong className="text-white">{workspace?.name || "เริ่มต้นโปรเจกต์"}</strong>
-                        {workspace?.rootPath && <span className="hub-path-pill">{workspace.rootPath}</span>}
-                      </p>
-                    </div>
-
-                    {/* 3 Core Workflow Cards */}
-                    <div className="studio-hub-cards">
-                      <div className="hub-workflow-card card-code" onClick={() => openSession()}>
-                        <div className="hub-card-icon-wrap icon-code">
-                          <Terminal size={22} />
-                        </div>
-                        <div className="hub-card-content">
-                          <h3>โหมดห้องทำงาน (Coding Studio)</h3>
-                          <p>เปิด Terminal สด พร้อม AI คู่คิดที่ช่วยแก้โค้ด รันคำสั่ง และคอมไพล์ในโปรเจกต์</p>
-                          <span className="hub-card-action">
-                            <Plus size={14} /> เปิดเซสชันแรก
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="hub-workflow-card card-agent" onClick={() => setMode("agent")}>
-                        <div className="hub-card-icon-wrap icon-agent">
-                          <Layers size={22} />
-                        </div>
-                        <div className="hub-card-content">
-                          <h3>โหมดทีม Agent (Multi-Agent)</h3>
-                          <p>แบ่งงาน วางแผนขั้นตอน และให้หลาย AI โมเดลช่วยกันแก้โจทย์คู่ขนานอัตโนมัติ</p>
-                          <span className="hub-card-action">
-                            <Wand2 size={14} /> เริ่มทีม Agent
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="hub-workflow-card card-chat" onClick={() => setMode("chat")}>
-                        <div className="hub-card-icon-wrap icon-chat">
-                          <MessageSquare size={22} />
-                        </div>
-                        <div className="hub-card-content">
-                          <h3>โหมดถาม-ตอบ (Chat & Plan)</h3>
-                          <p>สนทนาอิสระ ระดมไอเดีย หรือเปรียบเทียบผลลัพธ์จาก AI หลายค่ายในจอเดียว</p>
-                          <span className="hub-card-action">
-                            <MessageSquare size={14} /> เริ่มถาม-ตอบ
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Quick Assistant Selector */}
-                    <div className="studio-hub-assistants">
-                      <div className="hub-section-title">
-                        <span>เลือกเปิดผู้ช่วย AI ประจำการ</span>
-                      </div>
-                      <div className="hub-agents-grid">
-                        {clis
-                          .filter((c) => c.id !== "terminal")
-                          .map((c) => (
-                            <button
-                              key={c.id}
-                              className={`hub-agent-pill ${c.available ? "agent-ready" : "agent-missing"}`}
-                              onClick={() => openSession(c.id)}
-                              title={c.available ? `คลิกเพื่อเปิด ${c.name}` : `${c.name} ยังไม่ติดตั้ง`}
-                            >
-                              <span className="hub-agent-avatar">{c.name.slice(0, 1)}</span>
-                              <div className="hub-agent-text">
-                                <strong>{c.name}</strong>
-                                <small>{c.available ? "พร้อมใช้" : "คลิกเพื่อติดตั้ง"}</small>
-                              </div>
-                            </button>
-                          ))}
-                      </div>
-                    </div>
-
-                    {/* Quick Starters & Inspirations */}
-                    <div className="studio-hub-prompts">
-                      <div className="hub-section-title">
-                        <Lightbulb size={13} className="text-amber-400" />
-                        <span>ไอเดียสั่งงานเริ่มต้น (คลิกเพื่อเริ่มงานทันที)</span>
-                      </div>
-                      <div className="hub-prompts-list">
-                        {[
-                          "🚀 เริ่มต้นโครงสร้างโปรเจกต์เว็บสมัยใหม่ด้วย React & Tailwind",
-                          "🔍 วิเคราะห์หาจุดบกพร่องและปรับปรุงโค้ดในโปรเจกต์นี้",
-                          "⚡ เขียนฟังก์ชันเชื่อมต่อ API และจัดการข้อมูล",
-                          "📖 สรุปและสร้างเอกสารคู่มือ README ให้โปรเจกต์นี้",
-                        ].map((promptText, i) => (
-                          <button
-                            key={i}
-                            className="hub-prompt-chip"
-                            onClick={() => {
-                              setDraft(promptText);
-                              openSession();
-                            }}
-                          >
-                            <span>{promptText}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                  <WorkspaceWelcome clis={clis} openSession={openSession} onMode={setMode} />
                 )}
               </div>
               {mode !== "code" && (
@@ -1137,7 +1050,8 @@ export function App() {
                             ) : null}
                           </div>
                         )}
-                        <RunActions run={run} blocked={!!activeRun || busy} />
+                        <RunActions run={run} blocked={!!activeRun || busy} onRetry={retryRun} />
+                        {run.id === latestRun?.id && !activeRun && <NextSteps items={suggestions} disabled={busy} onSelect={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />}
                         {run.error && <div className="inline-error" role="alert">{run.error}<button className="secondary" onClick={() => setDialog("setup")}>ตรวจเครื่องมือและบัญชี</button></div>}
                       </article>
                     ))
@@ -1207,37 +1121,14 @@ export function App() {
                   {mode === "chat" && chatConfig && workspace && <ChatQuickControls workspaceId={workspace.id} config={chatConfig} onChange={setChatConfig} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} onDraft={setDraft} />}
                   {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name.split("·")[0].trim() || chatTarget.name} disabled={busy} />}
                   <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
-                  <details className="composer-suggestions" open={mode !== "agent"}><summary>คำแนะนำสำหรับขั้นตอนถัดไป</summary><SuggestedChips
-                    items={suggestions.items}
-                    disabled={busy || !!activeRun}
-                    onSelect={(text) => {
-                      setDraft(text);
-                      requestAnimationFrame(() => composer.current?.focus());
-                    }}
-                  /></details>
                   <div className="composer-input-container">
                     <SlashMenu ref={slashMenu} draft={draft} sessionId={chatTarget?.id} workspaceId={mode === "chat" ? workspace?.id : undefined} providers={mode === "chat" ? [...new Set((chatConfig?.panel || []).filter(seat => seat.provider.startsWith("cli:")).map(seat => seat.provider.slice(4)))] : []} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
-                    {!/(?:^|\s)\/[^\s]*$/.test(draft) && !ghostDismissed && suggestions.ghostSuffix && (mode !== "code" || !!draft.trim()) && (
-                      <div className="composer-ghost-layer" aria-hidden="true">
-                        {draft ? (
-                          <>
-                            <span style={{ opacity: 0 }}>{draft}</span>
-                            <span>{suggestions.ghostSuffix}</span>
-                          </>
-                        ) : (
-                          <span>{suggestions.topChoice?.promptText || suggestions.ghostSuffix}</span>
-                        )}
-                        <span className="tab-badge">Tab ⇥</span>
-                      </div>
-                    )}
                     <textarea
                       ref={composer}
                       rows={mode === "code" && !composerExpanded ? 1 : 3}
                       aria-label="คำสั่ง"
                       placeholder={
-                        mode !== "code" && !draft && suggestions.ghostSuffix && !ghostDismissed
-                          ? ""
-                          : mode === "code"
+                        mode === "code"
                             ? chatTarget ? `พิมพ์ข้อความถึง ${chatTarget.name.split("·")[0].trim()}…` : "พิมพ์คำสั่งหรือเลือก session เพื่อเริ่มทำงาน…"
                             : mode === "agent"
                               ? "บอกเป้าหมายให้ทีม เช่น ทำหน้าเข้าสู่ระบบพร้อมทดสอบ…"
@@ -1246,7 +1137,6 @@ export function App() {
                       value={draft}
                       onChange={(e) => {
                         setDraft(e.target.value);
-                        if (ghostDismissed) setGhostDismissed(false);
                       }}
                       onPaste={(e) => {
                         const files = pastedFiles(e.clipboardData);
@@ -1256,28 +1146,6 @@ export function App() {
                       }}
                       onKeyDown={(e) => {
                         if (slashMenu.current?.keyDown(e)) return;
-                        if (
-                          e.key === "Tab" &&
-                          !e.shiftKey &&
-                          !e.ctrlKey &&
-                          !e.altKey &&
-                          !e.nativeEvent.isComposing &&
-                          !ghostDismissed &&
-                          (mode !== "code" || !!draft.trim()) &&
-                          suggestions.ghostSuffix
-                        ) {
-                          e.preventDefault();
-                          const completed = draft
-                            ? draft + suggestions.ghostSuffix
-                            : (suggestions.topChoice?.promptText || suggestions.ghostSuffix);
-                          setDraft(completed);
-                          return;
-                        }
-                        if (e.key === "Escape" && suggestions.ghostSuffix && !ghostDismissed) {
-                          e.preventDefault();
-                          setGhostDismissed(true);
-                          return;
-                        }
                         if (
                           e.key === "Enter" &&
                           !e.shiftKey &&
@@ -1359,7 +1227,7 @@ export function App() {
               </div>
             </main>
             <RightDock open={preview} view={dockView} setView={setDockView} close={() => setPreview(false)} suspended={!!dialog || usageOpen}
-              workspace={workspace} workspaces={workspaces} sessions={sessions} runs={runs} selected={selected}
+              workspace={workspace} workspaces={workspaces} sessions={sessions} runs={runs} selected={selected} previewRequest={previewRequest}
               onSelect={session => { setActiveWs(session.wsId || activeWs); setSelected(session.id); setMode("code"); }}
               onPrompt={text => { setDraft(current => current ? `${current}\n${text}` : text); requestAnimationFrame(() => composer.current?.focus()); }} onError={showError} />
           </div>

@@ -1,171 +1,95 @@
 ---
 name: SuperAi & RAKKYXD
-description: Compact Thai desktop workspace for several AI CLIs; SR logo, green-teal-blue brand on blue-black.
+description: Thai-first conversation workspace for several AI CLIs, using warm charcoal, paper text and restrained clay actions.
 colors:
-  base: "#0c1116"
-  surface: "#10181f"
-  raised: "#152029"
-  border: "#1e2d38"
-  text: "#e1e8ee"
-  dim: "#a0afbd"
-  accent: "#74b3fb"
-  brand-green: "#30f457"
-  brand-teal: "#00b89c"
-  brand-blue: "#1a8cff"
-  primary: "#30f457"
-  primary-hover: "#1a8cff"
-  primary-text: "#04140f"
-  secondary: "#26323d"
-  secondary-text: "#dfebf5"
-  hover: "#25303b"
-  running: "#3ddc84"
-  pending: "#edcb86"
-  error: "#f398a3"
-  offline: "#83929f"
-  danger: "#a93e48"
-  terminal: "#0a0d14"
-  dictation-recording: "#f4a6a6"
+  base: "#222220"
+  surface: "#2b2b28"
+  raised: "#33332f"
+  selected: "#3d3c36"
+  border: "#3b3b35"
+  control-border: "#505048"
+  text: "#eeede7"
+  secondary-text: "#d0cec3"
+  dim: "#aaa89e"
+  accent: "#d9a080"
+  accent-hover: "#e7b297"
+  on-accent: "#28211d"
+  focus: "#bcac94"
+  running: "#91bf9f"
+  pending: "#d4b97f"
+  error: "#edb3a3"
 typography:
   body:
     fontFamily: '"Noto Sans Thai", "Segoe UI", sans-serif'
     fontSize: "14px"
-  headline:
-    fontFamily: '"Noto Sans Thai", "Segoe UI", sans-serif'
-    fontSize: "26px"
-    fontWeight: 500
-    lineHeight: 1.5
-    letterSpacing: "-0.025em"
-  title:
-    fontFamily: '"Noto Sans Thai", "Segoe UI", sans-serif'
-    fontSize: "13px"
-    fontWeight: 500
-  message:
-    fontFamily: '"Noto Sans Thai", "Segoe UI", sans-serif'
-    fontSize: "13px"
+  conversation:
+    fontSize: "15px"
     lineHeight: 1.9
-  label:
-    fontFamily: '"Noto Sans Thai", "Segoe UI", sans-serif'
+  controls:
     fontSize: "12px"
-  terminal:
-    fontFamily: '"Cascadia Code", "Cascadia Mono", Consolas, "Courier New", monospace'
-    fontSize: "13px"
+  code:
+    fontFamily: '"Cascadia Code", Consolas, monospace'
 rounded:
-  tab: "5px"
-  icon: "6px"
-  button: "7px"
   control: "8px"
-  composer: "10px"
-  dialog: "14px"
-spacing:
-  tight: "4px"
-  small: "8px"
-  control: "12px"
-  section: "24px"
-components:
-  button-primary:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.primary-text}"
-    rounded: "{rounded.button}"
-    padding: "10px 15px"
-  button-primary-hover:
-    backgroundColor: "{colors.primary-hover}"
-  button-secondary:
-    backgroundColor: "{colors.secondary}"
-    textColor: "{colors.secondary-text}"
-    rounded: "{rounded.button}"
-    padding: "10px 15px"
-  button-danger:
-    backgroundColor: "{colors.danger}"
-    textColor: "white"
-    rounded: "{rounded.button}"
-    padding: "10px 15px"
+  popup: "12px"
+  composer: "16px"
+  dialog: "16px"
 ---
 
-# Design System: SuperAi & RAKKYXD
+# SuperAi & RAKKYXD conversation workspace
 
-## Overview
+Implemented 2026-10-24. The user's request replaces Tab ghost completion with next steps beneath completed answers and asks for a complete UI refresh. The visual direction continues the approved Claude-like minimal workspace recorded in `docs/minimal-workspace-design.md`. Product requirements live in `PRODUCT.md`.
 
-**Creative North Star: "The Graphite Workspace"**
+## Visual system
 
-The approved direction is a compact, Thai-first working environment: graphite planes, readable cool text, restrained sky-blue actions, and visible operational status. The project rail, working canvas and website Preview share one desktop frame. SuperAi Voice & RAKKYXD is a separate companion window with the same palette and a simpler form layout.
+Warm charcoal surfaces establish application hierarchy. The sidebar and titlebar use #1c1c1a; the canvas uses #222220; forms use #2b2b28. Paper text and a restrained clay accent support reading and sending. Semantic colors represent actual running, pending and failed state. Retain original SuperAi & RAKKYXD logo/wordmark assets and bundled Thai fonts. Use one sans family for application content; monospace belongs to code and terminal output.
 
-**Key Characteristics:**
+`minimal-workspace.css` owns the shared tokens and the final visual decisions for navigation, welcome, conversations, Agent/Chat forms and results, Preview, Skills, settings, setup, history and project/session dialogs. Its application selectors are scoped to `#root` so existing layout rules cannot override those decisions by accident. `composer.css` owns the shared writing surface, provider controls, answer actions and slash popup. Existing `index.css` and `mission-control.css` retain supporting layouts and behaviors; obsolete ghost/suggestion-chip rules were removed.
 
-- Functional density with stable navigation and independently scrolling work areas.
-- Original SuperAi & RAKKYXD identity; compact symbols and agent initials support recognition.
-- Actual projects, sessions and errors determine what the interface displays.
+## Application frame
 
-This document records the implementation on 2026-10-20. Sources: `packages/studio/client/src/App.tsx`, `index.css`, `components/PreviewPanel.tsx`, `components/TerminalPane.tsx`, `components/DictationButton.tsx` and `components/SetupGuide.tsx`. Product constraints remain in `PRODUCT.md`.
+The 54px titlebar contains the brand and centered Agent/Code/Chat selector. Electron's native titlebar overlay matches its background and height. The project rail is 238px by default, 250px at 1600px, 210px below 1200px and progressively narrower below that. It retains project search, nested sessions, history, setup, Skills and settings, and can be hidden.
 
-## Colors
+The workspace toolbar is 56px high with project context, usage, status, Preview and session creation. The footer is 26px. Conversations, session grids and utility panels scroll independently. Single chat sessions omit redundant layout headings. Multiple sessions retain tabs, grids, reordering, resizing and zoom. The terminal layout has `min-width: 0` and a 100% maximum so it shrinks when Preview opens.
 
-The frontmatter records the core implemented values; graphite neutrals carry most of the screen. Sky blue marks primary actions, selected utilities and focus. Secondary actions use bordered slate surfaces. Small green, amber, pink-red and gray dots distinguish running, pending, failed and offline sessions; keep accompanying text wherever the state needs explanation.
+The welcome surface uses actual provider availability and launch actions, plus keyboard-accessible Agent and Chat entry points. It replaces the previous promotional card grid.
 
-**The Operational Color Rule.** Status color must follow real application state. Agent monograms may use muted identity tints; they do not signal availability by themselves.
+## Conversations and composing
 
-The composer mic turns to the recording tint while it listens, with a ring that grows with input level.
+The composer is centered at a maximum width of 780px. Reading columns align with it. Conversation text uses 15px type with 1.9 line height; user messages use quieter raised surfaces. Folded tool activity remains available. Thai combining marks and normal IME composition are preserved.
 
-## Typography
+All modes share a gently rounded writing surface, attachment row and action rail. Code retains per-session model, effort and account controls. Multi-AI Chat groups its per-message models and accounts behind “ตัวเลือกข้อความ”; the menu closes on Escape or outside interaction. Voice dictation, attachments, stop, explicit send and expanded multiline editing remain available.
 
-Studio bundles Noto Sans Thai at weights 400, 500 and 600, with Segoe UI fallback. Branding, URL fields and some technical tags use Segoe UI; terminal output uses the monospace stack above. The dictation menu uses the bundled Studio font.
+Ordinary Tab navigation never completes the user's draft. No ghost text or Tab badge is rendered.
 
-The empty workspace heading is the largest Studio text: its documented default grows to (30px) at widths from (1600px), and contracts to (23px) below (1200px), then (21px) below (600px). Dialog headings use (20px); navigation and controls generally use (11–12px). Supporting status and metadata use (9–10px). Conversation copy uses generous line spacing for Thai.
+## Next steps beneath answers
 
-**The Thai Legibility Rule.** Preserve Thai shaping and generous copy line height; do not force compact labels into uppercase or apply terminal typography to prose.
+Show “ทำต่อจากคำตอบนี้” beneath the latest successful answer, with no more than three actions. Extract explicit recommendations from Thai/English next-step sections or conversational offers. Plans and code changes can receive a relevant fallback; unrelated answers receive no fabricated action. This is deterministic text extraction, not an additional model request.
 
-## Layout
+Actions appear only after completion. In Code they are hidden while working, pending, disconnected, searching, after an error, or when a newer user message has no answer. Agent and Chat use their own latest completed run. Failed turns keep their existing recovery actions.
 
-Windows desktop is the primary platform, using Electron with a React/TypeScript renderer; Studio also exposes a browser workspace. A fixed-height shell contains the titlebar (40px), project rail, workspace toolbar (38px), flexible canvas and footer (28px). Overflow belongs inside lists, terminals, conversation and dialogs.
+Selecting an action fills and focuses the existing composer for review. It does not send a message or execute work. Code actions target their originating session and keep the compact composer. Message editing can still expand the composer.
 
-The project rail is (220px) by default, (240px) from (1600px), (210px) below (1200px), (180px) below (900px), and (155px) below (600px). The center combines a (34px) code section heading, mode-specific content and a persistent bottom composer. Terminal sessions support full-area tabs, a vertical stack and a two-column split, with a persisted layout choice. Split/stack panes have a minimum row height of (360px) and the canvas scrolls for additional sessions. Split adapts to one column when the actual canvas width is at most (900px), including when Preview is docked. Each pane can expand to the full canvas and restore the previous layout without remounting its terminal. The code-mode composer defaults to a compact (90px) area and expands on request without losing multiline text. Success notices float within the terminal canvas and dismiss after (4.5s); errors remain until dismissed. Conversation runs cap at (850px) wide.
+Completed answers use a compact shared `ResponseActions` row: copy with confirmation, regenerate, and an overflow for editing the original prompt or inspecting changes. Copy failures have an actionable message. Overflow closes on outside interaction, Escape or keyboard focus leaving the menu. File changes and Preview are distinct; Code exposes changes for turns reporting edit tools, while editable Agent runs can inspect project changes. Successful replies have no generic recovery footer. Failed Code turns retain an explicit retry action. Agent/Chat regeneration locks all submission controls through the POST and inserts the accepted run into shared state before unlocking, retaining the original team, model settings, attachments and tool permissions.
 
-Preview starts at (440px), has a (320px) minimum and a desktop maximum of (55vw), reduced to (40vw) below (1200px). Drag its left divider or use keyboard arrows in (24px) steps. Below (900px), Preview becomes a right overlay (420px), capped at (75vw), between the toolbar and footer. Narrow layouts progressively hide secondary labels; they retain the project rail rather than introducing a mobile navigation pattern.
+Follow-up suggestions use restrained text rows with arrows, separate from response controls. They retain the draft-only behavior. The Claude Desktop/web reference describes conversation interaction and layout; actual capabilities still come from each provider. This correction does not claim complete Claude feature parity.
 
-The mic sits in the composer's trailing controls; its download prompt and right-click menu open above it as small popovers. The setup guide is a dialog list of numbered steps with trailing actions.
+## Slash search
 
-## Elevation & Depth
+The popup is portalled into the document body and fixed above the input. It is at most 520px wide and 320px high, further limited by the viewport and space above the input. Only its list scrolls. Names remain on one line, descriptions truncate, and the full description is available on hover.
 
-Studio uses one-pixel separators and neighboring dark tones to establish regions. Shadows are limited to the selected mode, modal dialogs, and narrow-screen Preview overlay. Dialogs use a dark translucent scrim and a short (180ms) upward entrance. Button hover transitions take (140ms); loading indicators rotate continuously. Studio disables animations and transitions for reduced-motion preference. The recording ring follows microphone level; reduced-motion removes its transition.
+Preserve the provider's discovered skills and implemented commands. Search matches names and descriptions. Up/down select, Enter inserts, Escape closes, outside interaction dismisses, and Tab moves focus without inserting. Combobox expanded/active-descendant metadata points to the listbox. Loading, empty results and errors remain visible within the popup.
 
-## Shapes
+## Clickable answer links and file Preview
 
-Small rounded tabs and icon buttons support the compact shell. Main controls are gently curved; the composer is slightly softer and dialogs more rounded. Agent initials sit in compact rounded squares. Circular shapes are reserved for status dots and the Preview empty-state globe. Avoid turning operational panels into floating decorative cards.
+Markdown links and bare HTTP(S)/www URLs are interactive. They open the right-side Preview while preserving the conversation. Websites use the existing native Chromium view in Electron, with the iframe fallback and explicit external-open button in the browser renderer.
 
-## Components
+Local links open an image/PDF/text viewer in that same panel. Resolve files through the currently registered project, including Windows absolute paths, encoded spaces and source line references. Keep filenames visible, use contained image sizing by default, and provide reload/download controls. Show useful loading and missing-file states. Files outside the project are rejected; HTML is shown as text. Hide the native website view whenever a local file is active so it cannot cover the file viewer or application dialogs.
 
-- **Project rail:** active project rows gain a slate fill and brighter text; nested sessions follow an indented vertical guide. Truncate long names and retain full working space in the center.
-- **Modes and sessions:** the segmented control switches assistant, code and chat views. Its active segment is filled. Code mode shows real CLI terminals, with active tabs or a bordered focused grid cell. Session counts and availability come from application data.
-- **Buttons and fields:** primary actions use light blue with dark text; secondary actions use slate plus a border; destructive confirmations use red. Standard Studio primary controls have minimum height (36px), compact ones (32px). Disabled buttons reduce opacity to (0.4), or (0.45) for primary and Voice controls. Preserve accessible names when a visible label is hidden.
-- **Composer:** a bordered dark input surface, context selector and send/stop controls anchor the center. Focus changes the border; standard keyboard focus uses an accent outline (2px) offset by (3px). Controls disable when their prerequisites or pending operation require it.
-- **Empty, pending and failure states:** empty workspace and conversation views give a concrete next action. Loading uses text and spinners. Success and error banners sit above the canvas; inline failures and dialog errors stay near their operation. Errors should expose a retry or actionable explanation rather than a sample success state.
-- **Preview:** native Electron uses a Chromium view with real tabs, URL entry, back/forward, reload and external opening. Browser-only Studio uses an iframe and explains sites may refuse embedding. Empty and failed navigation views offer a next action. The native view is hidden while a dialog is open, when a tab fails, and when the panel unmounts, so it cannot cover renderer dialogs.
-- **Dialogs:** centered, scrollable surfaces (560px wide; settings 640px) with titled headers, grouped fields and trailing footer actions. Destructive copy describes the affected data. Keep dialog focus handling and Escape dismissal intact.
-- **Speak-to-type:** press and hold the composer mic to record and release to insert, or tap to start and tap to stop; right-click picks microphone and language. Recording, downloading and transcribing states are visible on the button and in its label. Text is inserted for review, never sent. The model download asks first and states its size.
-- **Setup guide:** opens on first launch until dismissed; each step shows a real check result and, when missing, one action (install, add project, open CLI to log in). Install logs stream into the step.
+## Forms, overlays and accessibility
 
-Visual references are `output/playwright/superai-workspace.png`. The workspace renderer screenshot shows the Chromium toolbar but may omit the separate native browser surface: a blank captured rectangle does not establish that navigation failed. Verify native page content through the browser view separately.
+Settings, setup, Skills, history and project/session forms share opaque neutral surfaces, 8px fields, 16px dialog corners and consistent title/action spacing. Errors retain actionable text. Dialog focus management, keyboard access, reduced-motion preferences and existing permission controls remain in place. Menus use softer shadows; ordinary work areas rely on neighboring tones and separators.
 
-## Do's and Don'ts
+## Verification
 
-- Do preserve the Thai interface, original branding, graphite planes and restrained blue actions.
-- Do tie counts, status, terminal output and assistant content to real state.
-- Do keep focus visible and give empty or failed operations a useful next action.
-- Do verify both the renderer and native Chromium surface when reviewing desktop Preview.
-- Don't replace real sessions with sample activity or make decorative controls appear operational.
-- Don't send dictated text automatically; the user reviews and sends it.
-- Don't interpret a renderer-only screenshot as proof of native browser content rendering.
-
-
-## Reference tiled workspace refinement
-
-The seven user-supplied BridgeMind screenshots establish the updated structure: project rail, a quiet top mode switch, tiled live terminal seats, and a persistent right tool dock. SuperAi & RAKKYXD keeps its own sky-blue identity and Thai labels. The mode switch now sits in the 40px titlebar; the breadcrumb/action toolbar is 38px. Code mode hides the shared composer until requested, dictation arrives, or a saved prompt is applied. Direct CLI input remains primary.
-
-The default auto layout fits up to four columns to available canvas width with a 180px minimum column target. Six seats form three columns and two rows when width permits; nine form four columns with a full-width final seat. Fitted rows have a 176px safety floor, allowing outer scrolling when the window cannot hold every row. User-selected stack/split modes retain the 360px floor. Splitters alter row/column weights with pointer capture or keyboard arrows; headers support drag reorder, keyboard-accessible move controls, pane labels, add, focus and close. All modes retain the same keyed TerminalPane instances beneath one parent.
-
-RightDock owns width and contains a single mounted embedded PreviewPanel. Its tabs show actual process status, project tasks with explicit user completion, reusable prompts, and browser tabs. Browser native views are suspended for other dock tabs, collapsed dock, modals and dock resizing. No Context percentages, credits, completion or AI-thinking indicators are invented. Local saved state validates schema and reports storage failures. Presets launch actual installed CLIs through the existing server checks and preserve only unlaunched entries after a partial failure.
-
-## Brand
-
-Logo: the green "S" + white "R" mark with a blue orbit, and the "SuperAi & RAKKYXD" wordmark ("Ai" green, "XD" blue). Assets are generated from the brand sheet by `scripts/brand/make-icons.py` into `packages/desktop/assets` (app icons) and `packages/studio/client/public/brand` (mark, wordmark, favicons).
-
-The brand gradient (`#30f457 → #00c2a6 → #1a8cff`, dark text `#04140f`) is reserved for brand moments: primary actions, the send button, the active mode underline and a 1 px titlebar hairline. Selection, links and focus use the blue accent; everything else stays neutral blue-black so the tool reads calmly.
+Renderer fixtures and screenshots are in `output/conversation-workspace/`; run `npm run test:conversation-ui` after building the client. These fixtures make no real provider calls. Focused tests cover recommendation extraction, model/effort persistence, session isolation and skill discovery. Native Electron smoke verification is limited by a GPU-process crash in the current execution environment; browser renderer checks do not substitute for native window integration.
