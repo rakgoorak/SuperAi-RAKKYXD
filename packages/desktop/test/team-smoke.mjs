@@ -61,13 +61,15 @@ try{
  await dialog.getByRole('button',{name:'ยกเลิก',exact:true}).click();
  steps.step('Agent team setup');
  await page.getByRole('navigation', { name: 'โหมดทำงาน' }).getByRole('button', { name: 'Agent', exact: true }).click();
+ await page.getByRole('button', { name: 'ตั้งค่าทีม Agent', exact: true }).click();
  const seats=[['Main','leader-fixture'],['Sub-agent 1','coder-fixture'],['Sub-agent 2','reviewer-fixture']];
  for(const [label,model] of seats){
   await page.getByLabel(`ผู้ให้บริการของ${label}`,{exact:true}).selectOption('ollama');
   await page.getByLabel(`model ของ${label}`,{exact:true}).fill(model);
  }
- await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });await page.getByRole('navigation', { name: 'โหมดทำงาน' }).getByRole('button', { name: 'Agent', exact: true }).click();await page.getByLabel('model ของMain',{exact:true}).waitFor();
- assert.equal(await page.getByLabel('model ของSub-agent 1',{exact:true}).inputValue(),'coder-fixture');passed.push('per-project Agent team persisted');
+ await page.getByRole('button', { name: 'บันทึกทีม', exact: true }).click();
+ await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });await page.getByRole('navigation', { name: 'โหมดทำงาน' }).getByRole('button', { name: 'Agent', exact: true }).click();await page.getByRole('button', { name: 'ตั้งค่าทีม Agent', exact: true }).click();await page.getByLabel('model ของMain',{exact:true}).waitFor();
+ assert.equal(await page.getByLabel('model ของSub-agent 1',{exact:true}).inputValue(),'coder-fixture');passed.push('per-project Agent team persisted');await page.getByRole('button', { name: 'ยกเลิก', exact: true }).click();
  steps.step('Agent run');
  await page.getByLabel('คำสั่ง',{exact:true}).fill('สร้างและตรวจงานทดสอบ');await page.getByTitle('ส่งคำสั่ง (Enter)',{exact:true}).click();
  await page.getByText('สรุปผลจากหัวหน้า TEAM_COMPLETE',{exact:true}).waitFor({timeout:30000});
@@ -118,6 +120,7 @@ try{
  steps.step('Chat run');
  // Chat: one prompt to two Mains, then a summarizer that credits both.
  await page.getByRole('navigation', { name: 'โหมดทำงาน' }).getByRole('button', { name: 'Chat', exact: true }).click();
+ await page.getByRole('button', { name: 'ตั้งค่าทีม Chat', exact: true }).click();
  const chatSeats=[['Main 1','coder-fixture'],['Main 2','reviewer-fixture'],['ผู้สรุป','leader-fixture']];
  while(await page.getByTitle('เอาMain 3ออก',{exact:true}).count())await page.getByTitle('เอาMain 3ออก',{exact:true}).click();
  if(!await page.getByLabel('model ของMain 2',{exact:true}).count())await page.getByRole('button',{name:/เพิ่ม Main/}).click();
@@ -126,6 +129,7 @@ try{
   await page.getByLabel(`ผู้ให้บริการของ${label}`,{exact:true}).selectOption('ollama');
   await page.getByLabel(`model ของ${label}`,{exact:true}).fill(model);
  }
+ await page.getByRole('button', { name: 'บันทึกทีม', exact: true }).click();
  calls.length=0;
  await page.getByLabel('คำสั่ง',{exact:true}).fill('ควรใช้ภาษาอะไรดี');await page.getByTitle('ส่งคำสั่ง (Enter)',{exact:true}).click();
  await page.getByText('CHAT_SUMMARY จาก Main 1 และ Main 2',{exact:true}).waitFor({timeout:30000});

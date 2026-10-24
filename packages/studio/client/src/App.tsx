@@ -63,6 +63,7 @@ import { CliVersionsPanel, OutdatedNotice } from "./components/CliVersions";
 import { ProviderDefaults } from "./components/ProviderDefaults";
 import { SeatPicker } from "./components/SeatPicker";
 import { Markdown } from "./components/Markdown";
+import { ImageEndpointContext } from "./components/MarkdownImage";
 import { HEADLESS, loadDefaults, saveDefaults, seatFor } from "./providers";
 import { CliInstaller } from "./components/CliInstaller";
 import { LaunchPresets, type LaunchSeat } from "./components/LaunchPresets";
@@ -1085,7 +1086,7 @@ export function App() {
                 )}
               </div>
               {mode !== "code" && (
-                <div className="conversation-scroll">
+                <ImageEndpointContext.Provider value={`/api/workspaces/${encodeURIComponent(activeWs)}/preview-file`}><div className="conversation-scroll">
                   {!conversation.length ? (
                     <div className="conversation-empty compact">
                       <div className="empty-command">
@@ -1135,7 +1136,7 @@ export function App() {
                       </article>
                     ))
                   )}
-                </div>
+                </div></ImageEndpointContext.Provider>
               )}
               <div className={`composer-area ${mode === "code" && !composerExpanded ? "compact-code" : ""}`}>
                 <div className="composer-context-tags">
@@ -1425,11 +1426,7 @@ export function App() {
               workspace={workspace} workspaces={workspaces} sessions={sessions} runs={runs} selected={selected} previewRequest={previewRequest}
               onSelect={session => { setActiveWs(session.wsId || activeWs); setSelected(session.id); setMode("code"); }}
               onPrompt={text => {
-                if (selected) {
-                  const key = composerDraftKey(activeWs, "code", selected, target);
-                  setDraftFor(key, (curr: string) => curr ? `${curr}\n${text}` : text);
-                }
-                setDraft(current => current ? `${current}\n${text}` : text);
+                setDraft(text);
                 setComposerExpanded(true);
                 requestAnimationFrame(() => {
                   composer.current?.focus();

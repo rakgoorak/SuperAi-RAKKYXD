@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlignJustify, Check, Columns2, Copy, Minus, Plus, RotateCcw } from 'lucide-react';
+import { AlignJustify, Check, Columns2, Copy, FileText, Minus, Plus, RotateCcw } from 'lucide-react';
 import { post } from '../api';
 import {
   computeDiffLines,
@@ -41,7 +41,7 @@ export function VisualDiffViewer({
   onActionComplete,
   onError,
 }: VisualDiffViewerProps) {
-  const [mode, setMode] = useState<'side-by-side' | 'inline'>('side-by-side');
+  const [mode, setMode] = useState<'side-by-side' | 'inline' | 'file'>('side-by-side');
   const [copied, setCopied] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -219,6 +219,15 @@ export function VisualDiffViewer({
               <AlignJustify size={13} />
               <span>บรรทัดรวม</span>
             </button>
+            <button
+              type="button"
+              className={`diff-btn-group-item ${mode === 'file' ? 'active' : ''}`}
+              onClick={() => setMode('file')}
+              title="เปิดไฟล์ (ดูเนื้อหาไฟล์)"
+            >
+              <FileText size={13} />
+              <span>เปิดไฟล์</span>
+            </button>
           </div>
 
           {/* Action: Copy Path */}
@@ -294,7 +303,13 @@ export function VisualDiffViewer({
 
       {/* Diff Viewport */}
       <div className="diff-viewport">
-        {diffLines.length === 0 ? (
+        {mode === 'file' ? (
+          <div className="diff-raw-file-container" style={{ padding: '14px', overflow: 'auto', height: '100%', boxSizing: 'border-box' }}>
+            <pre tabIndex={0} style={{ margin: 0, fontFamily: 'monospace', fontSize: '12px', whiteSpace: 'pre-wrap', color: 'var(--text, #edece9)' }}>
+              {modified || (deleted ? 'ไฟล์นี้ถูกลบแล้ว' : 'ไฟล์ว่าง')}
+            </pre>
+          </div>
+        ) : diffLines.length === 0 ? (
           <div className="diff-empty-message">
             ไม่มีการเปลี่ยนแปลงในไฟล์นี้ (ไฟล์ว่างหรือเนื้อหาตรงกับ HEAD)
           </div>

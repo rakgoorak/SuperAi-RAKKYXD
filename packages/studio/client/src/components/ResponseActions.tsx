@@ -232,7 +232,7 @@ export function ResponseActions({
               {handoffDone ? <Check size={16} /> : <Share2 size={16} />}
             </button>
             {handoffOpen && (
-              <div className="response-options response-handoff-menu" role="menu">
+              <div className="response-handoff-menu" role="menu">
                 <div className="handoff-title">ส่งต่องานไปยัง</div>
                 {loadingSessions && (
                   <div className="handoff-loading">กำลังโหลด session…</div>
@@ -323,18 +323,6 @@ export function ResponseActions({
                   >
                     <FilePen size={14} />
                     ดูไฟล์ที่เปลี่ยน
-                  </button>
-                )}
-                {text?.trim() && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpen(false);
-                      setHandoffOpen(true);
-                    }}
-                  >
-                    <Share2 size={14} />
-                    ส่งต่องาน (Handoff)
                   </button>
                 )}
               </div>

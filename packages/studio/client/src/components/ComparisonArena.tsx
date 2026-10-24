@@ -129,7 +129,7 @@ export function ComparisonArena({ run }: { run: Run }) {
           return (
             <article
               key={index}
-              className={`arena-card state-${answer.status} ${isWinner ? "is-winner" : ""}`}
+              className={`arena-card answer-card state-${answer.status} ${isWinner ? "is-winner" : ""}`}
               aria-label={`คำตอบจาก ${answer.seat.name}`}
             >
               <header className="arena-card-header">
@@ -246,7 +246,7 @@ export function ComparisonArena({ run }: { run: Run }) {
 
       {run.summarizer && (
         <article
-          className={`arena-summarizer-card state-${run.summaryStatus || "pending"}`}
+          className={`arena-summarizer-card summary-card state-${run.summaryStatus || "pending"}`}
           aria-label="สรุปผลรวมคำตอบ"
         >
           <header className="arena-summarizer-header">

@@ -137,11 +137,11 @@
 #root .response-actions button:disabled { cursor: default; opacity: .45; }
 #root .response-actions button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 #root .response-more, #root .response-handoff-wrap { position: relative; }
-#root .response-options {
+#root .response-options, #root .response-handoff-menu {
   position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 30; min-width: 215px; padding: 5px;
   background: var(--raised); border: 1px solid var(--control-border); border-radius: 10px;
 }
-#root .response-options button { display: flex; align-items: center; justify-content: flex-start; gap: 9px; width: 100%; padding: 9px 10px; border: 0; border-radius: 6px; font-size: 12px; white-space: nowrap; color: var(--text-secondary); }
+#root .response-options button, #root .response-handoff-menu button { display: flex; align-items: center; justify-content: flex-start; gap: 9px; width: 100%; padding: 9px 10px; border: 0; border-radius: 6px; font-size: 12px; white-space: nowrap; color: var(--text-secondary); }
 #root .response-handoff-menu {
   min-width: 240px; max-width: 340px; padding: 6px; z-index: 35;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
