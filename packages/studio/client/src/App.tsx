@@ -935,8 +935,9 @@ export function App() {
             <div className="toolbar-actions">
               <UsageButton open={usageOpen} onOpenChange={setUsageOpen} />
               <button className={`toolbar-button ${preview && dockView === "dashboard" ? "selected" : ""}`} title="เปิดแผงสถานะ" onClick={() => { setDockView("dashboard"); setPreview(true); }}><Activity size={14} /><span>สถานะ</span></button>
+              <button className={`toolbar-button ${preview && dockView === "files" ? "selected" : ""}`} title="เปิดไฟล์และแก้ไขด่วน" onClick={() => { setDockView("files"); setPreview(dockView === "files" ? !preview : true); }}><Folder size={14} /><span>ไฟล์</span></button>
               <button
-                aria-label="Preview" className={`toolbar-button ${preview ? "selected" : ""}`}
+                aria-label="Preview" className={`toolbar-button ${preview && dockView === "browser" ? "selected" : ""}`}
                 onClick={() => { setDockView("browser"); setPreview(dockView === "browser" ? !preview : true); }}
               >
                 <Globe size={15} />

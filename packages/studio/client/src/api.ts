@@ -33,6 +33,13 @@ export async function getPinnedContent(wsId: string): Promise<{ files: PinnedFil
 export async function togglePinnedFile(wsId: string, filePath: string): Promise<Workspace> {
   return post(`/api/workspaces/${wsId}/pinned-files/toggle`, { filePath });
 }
+export async function getProjectFiles(wsId: string, query = ''): Promise<{ files: string[] }> {
+  const q = query ? `?query=${encodeURIComponent(query)}` : '';
+  return api(`/api/workspaces/${wsId}/files${q}`);
+}
+export async function saveProjectFile(wsId: string, filePath: string, content: string): Promise<{ success: boolean }> {
+  return post(`/api/workspaces/${wsId}/files/save`, { filePath, content });
+}
 
 export interface Workspace {
   id: string;
