@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Maximize2, Pencil, Plus, Terminal, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Maximize2, Pencil, Plus, Terminal, X } from 'lucide-react';
 import { TerminalPane } from './TerminalPane';
 import { SessionEnded } from './SessionEnded';
 import type { Session } from '../api';
@@ -17,12 +17,14 @@ function stored<T>(key: string, fallback: T): T {
 interface Props {
   sessions: Session[]; workspaceId: string; selected: string; layout: CanvasLayout;
   zoomed: boolean; active: boolean; busy: boolean;
+  hiddenIds?: string[];
   select: (id: string) => void; zoom: (id: string) => void;
+  hide?: (id: string) => void; unhide?: (id: string) => void; unhideAll?: () => void;
   close: (id: string) => void; restart: (id: string) => void; add: (type?: string) => void; refresh: () => void;
   switchView: (id: string, view: PaneView) => void;
   onError: (message: string) => void;
 }
-export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed, active, busy, select, zoom, close, restart, add, refresh, onError, switchView }: Props) {
+export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed, active, busy, hiddenIds = [], select, zoom, hide, unhide, unhideAll, close, restart, add, refresh, onError, switchView }: Props) {
   // Closing deletes the session for good (it is kept across restarts otherwise), so ask first.
   const remove = (s: Session) => {
     window.dispatchEvent(new CustomEvent("superai:delete-session", { detail: { id: s.id, name: names[s.id] || s.name } }));
@@ -46,17 +48,20 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
   const resizeCleanup = useRef<(() => void) | null>(null);
   useEffect(() => () => resizeCleanup.current?.(), []);
   const dragging = useRef('');
-  const ordered = [...sessions].sort((a, b) => {
+  const hiddenSet = new Set(hiddenIds);
+  const allOrdered = [...sessions].sort((a, b) => {
     const ai = order.indexOf(a.id), bi = order.indexOf(b.id);
     return (ai < 0 ? Infinity : ai) - (bi < 0 ? Infinity : bi);
   });
+  const ordered = allOrdered.filter(s => !hiddenSet.has(s.id));
+  const hiddenList = allOrdered.filter(s => hiddenSet.has(s.id));
   const grid = layout !== 'tabs' && !zoomed;
-  const columns = canvasColumns(layout, sessions.length, width);
-  const rows = Math.ceil(sessions.length / columns);
+  const columns = canvasColumns(layout, ordered.length, width);
+  const rows = Math.ceil((ordered.length || 1) / columns);
   const signature = `${workspaceId}:${layout}:${columns}:${rows}`;
   const cols = weights[signature + ':x']?.length === columns ? weights[signature + ':x'] : Array(columns).fill(1);
   const rowSizes = weights[signature + ':y']?.length === rows ? weights[signature + ':y'] : Array(rows).fill(1);
-  const fitted = grid && !['stack', 'split'].includes(layout);
+  const fitted = grid && !['stack', 'split'].includes(layout) && ordered.length > 0;
   useEffect(() => {
     if (!area.current) return;
     const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
@@ -71,8 +76,8 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
     } catch { onError('บันทึกการจัดวางบนเครื่องไม่ได้ กรุณาตรวจพื้นที่จัดเก็บ'); }
   }, [order, names, weights, onError]);
   useEffect(() => {
-    if (grid && active) document.getElementById(`session-${selected}`)?.scrollIntoView({ block: 'nearest' });
-  }, [grid, active, selected]);
+    if (grid && active && !hiddenSet.has(selected)) document.getElementById(`session-${selected}`)?.scrollIntoView({ block: 'nearest' });
+  }, [grid, active, selected, hiddenIds]);
   const reorder = (from: string, to: string) => {
     if (from === to) return;
     const ids = ordered.map(s => s.id), start = ids.indexOf(from), end = ids.indexOf(to);
@@ -113,45 +118,72 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
       }} />;
   });
   return <div className="session-canvas" ref={area}>
-    {!grid && <div className="session-tabs">
+    {!grid && ordered.length > 0 && <div className="session-tabs">
       {ordered.map(s => <div key={s.id} className={`session-tab ${s.id === selected ? 'active' : ''}`}>
         <button onClick={() => select(s.id)}><span className={`status-dot ${s.status === 'running' ? '' : 'offline'}`} />{names[s.id] || s.name}</button>
+        {hide && <button title={`ซ่อน ${s.name} พับเก็บไว้ก่อน (ไม่ลบ)`} aria-label={`ซ่อน ${s.name}`} onClick={() => hide(s.id)}><EyeOff size={12} /></button>}
         <button title={`ลบ ${s.name}`} disabled={busy} onClick={() => remove(s)}><X size={12} /></button>
       </div>)}
       <button className="icon-button" title="เพิ่ม session" onClick={() => add()}><Plus size={14} /></button>
     </div>}
     <div className={`tile-surface ${fitted ? 'fitted' : ''}`}>
-      <div className={`terminal-layout ${grid ? `grid ${layout} ${fitted ? 'fitted-grid' : ''}` : ''}`}
-        style={grid ? { gridTemplateColumns: cols.map(v => `minmax(0,${v}fr)`).join(' '),
+      {ordered.length === 0 && hiddenList.length > 0 && (
+        <div className="hidden-sessions-empty">
+          <div className="hidden-sessions-empty-icon"><EyeOff size={24} /></div>
+          <h3>ซ่อนไว้ทั้งหมด {hiddenList.length} session</h3>
+          <p>ทุก session ยังทำงานและเก็บประวัติแชตไว้ครบ คลิกเลือกเพื่อเปิดกลับมาแสดงบนหน้าจอได้ทันที</p>
+          <div className="hidden-sessions-empty-list">
+            {hiddenList.map(s => (
+              <button key={s.id} type="button" className="secondary" onClick={() => unhide?.(s.id)}>
+                <Eye size={14} />
+                <span>{names[s.id] || s.name}</span>
+              </button>
+            ))}
+            {hiddenList.length > 1 && unhideAll && (
+              <button type="button" className="primary" onClick={unhideAll}>
+                <Eye size={14} /> แสดงทั้งหมด ({hiddenList.length})
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      <div className={`terminal-layout ${ordered.length === 0 ? 'not-visible' : ''} ${grid ? `grid ${layout} ${fitted ? 'fitted-grid' : ''}` : ''}`}
+        style={grid && ordered.length > 0 ? { gridTemplateColumns: cols.map(v => `minmax(0,${v}fr)`).join(' '),
           ...(fitted ? { gridTemplateRows: rowSizes.map(v => `minmax(176px,${v}fr)`).join(' ') } : {}) } : undefined}>
-        {ordered.map((s, i) => <div key={s.id} id={`session-${s.id}`} data-session-id={s.id}
-          className={`terminal-cell ${!grid && s.id !== selected ? 'not-visible' : ''} ${selected === s.id ? 'focused' : ''}`}
-          style={fitted && i === ordered.length - 1 && ordered.length % columns ? { gridColumn: `span ${columns - i % columns}` } : undefined}
-          onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); reorder(dragging.current, s.id); dragging.current = ''; }}>
-          {grid && <div className="terminal-cell-heading" draggable={editing !== s.id}
-            onDragStart={e => { dragging.current = s.id; e.dataTransfer.setData('text/plain', s.id); }}
-            onDragEnd={() => { dragging.current = ''; }} onDoubleClick={() => zoom(s.id)}>
-            {editing === s.id ? <form className="pane-rename" onSubmit={e => { e.preventDefault(); setNames(current => ({ ...current, [s.id]: name.trim() || s.name })); setEditing(''); }}>
-              <input autoFocus aria-label="ชื่อ session" value={name} maxLength={60} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setEditing(''); }} />
-              <button type="submit">บันทึก</button><button type="button" onClick={() => setEditing('')}>ยกเลิก</button>
-            </form> : <button className="pane-title" onClick={() => select(s.id)} title={`${names[s.id] || s.name} · ${s.agentType} · ${s.cwd}`}>
-              <span className={`status-dot ${s.status === 'running' ? '' : s.status === 'error' ? 'bad' : 'offline'}`} />
-              <Terminal size={12} /><strong>{names[s.id] || s.name}</strong>
-            </button>}
-            <div className="pane-actions">
-              <button className="icon-button secondary-pane-action" title={`เปลี่ยนชื่อ ${s.name}`} onClick={() => { setName(names[s.id] || s.name); setEditing(s.id); }}><Pencil size={11} /></button>
-              <button className="icon-button secondary-pane-action" title={`ย้าย ${s.name} ก่อนหน้า`} disabled={!i} onClick={() => reorder(s.id, ordered[i - 1].id)}><ArrowLeft size={11} /></button>
-              <button className="icon-button secondary-pane-action" title={`ย้าย ${s.name} ถัดไป`} disabled={i === ordered.length - 1} onClick={() => reorder(s.id, ordered[i + 1].id)}><ArrowRight size={11} /></button>
-              <button className="icon-button" title={`เพิ่ม session แบบ ${s.name}`} onClick={() => add(s.agentType)}><Plus size={13} /></button>
-              <button className="icon-button" title={`ขยาย ${s.name}`} onClick={() => zoom(s.id)}><Maximize2 size={12} /></button>
-              <button className="icon-button" title={`ลบ ${s.name}`} disabled={busy} onClick={() => remove(s)}><X size={12} /></button>
-            </div>
-          </div>}
-          {(s.status === 'exited' || s.status === 'error') && paneView(s) !== 'chat' && <SessionEnded key={`${s.id}-${s.createdAt}`} session={{ ...s, name: names[s.id] || s.name }} onRestart={restart} onClose={close} />}
-          <TerminalPane key={`${s.id}-${s.createdAt}`} tab={{ id: s.id, sessionId: s.id, authOnly: s.authOnly, name: names[s.id] || s.name, type: s.agentType, status: s.status === 'stopping' ? 'exited' : s.status, view: paneView(s) }}
-            visible={active && (grid || s.id === selected)} focused={active && s.id === selected} showHeader={false}
-            onFocus={() => select(s.id)} onClose={() => close(s.id)} onExit={refresh} registerSender={() => {}} onSwitchView={view => switchView(s.id, view)} />
-        </div>)}
+        {allOrdered.map((s) => {
+          const isHidden = hiddenSet.has(s.id);
+          const visibleIndex = isHidden ? -1 : ordered.findIndex(v => v.id === s.id);
+          const cellVisible = !isHidden && (grid || s.id === selected);
+          return <div key={s.id} id={`session-${s.id}`} data-session-id={s.id}
+            className={`terminal-cell ${!cellVisible ? 'not-visible' : ''} ${selected === s.id ? 'focused' : ''}`}
+            style={!isHidden && fitted && visibleIndex === ordered.length - 1 && ordered.length % columns ? { gridColumn: `span ${columns - visibleIndex % columns}` } : undefined}
+            onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); reorder(dragging.current, s.id); dragging.current = ''; }}>
+            {grid && <div className="terminal-cell-heading" draggable={editing !== s.id}
+              onDragStart={e => { dragging.current = s.id; e.dataTransfer.setData('text/plain', s.id); }}
+              onDragEnd={() => { dragging.current = ''; }} onDoubleClick={() => zoom(s.id)}>
+              {editing === s.id ? <form className="pane-rename" onSubmit={e => { e.preventDefault(); setNames(current => ({ ...current, [s.id]: name.trim() || s.name })); setEditing(''); }}>
+                <input autoFocus aria-label="ชื่อ session" value={name} maxLength={60} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setEditing(''); }} />
+                <button type="submit">บันทึก</button><button type="button" onClick={() => setEditing('')}>ยกเลิก</button>
+              </form> : <button className="pane-title" onClick={() => select(s.id)} title={`${names[s.id] || s.name} · ${s.agentType} · ${s.cwd}`}>
+                <span className={`status-dot ${s.status === 'running' ? '' : s.status === 'error' ? 'bad' : 'offline'}`} />
+                <Terminal size={12} /><strong>{names[s.id] || s.name}</strong>
+              </button>}
+              <div className="pane-actions">
+                <button className="icon-button secondary-pane-action" title={`เปลี่ยนชื่อ ${s.name}`} onClick={() => { setName(names[s.id] || s.name); setEditing(s.id); }}><Pencil size={11} /></button>
+                <button className="icon-button secondary-pane-action" title={`ย้าย ${s.name} ก่อนหน้า`} disabled={visibleIndex <= 0} onClick={() => visibleIndex > 0 && reorder(s.id, ordered[visibleIndex - 1].id)}><ArrowLeft size={11} /></button>
+                <button className="icon-button secondary-pane-action" title={`ย้าย ${s.name} ถัดไป`} disabled={visibleIndex < 0 || visibleIndex === ordered.length - 1} onClick={() => visibleIndex >= 0 && visibleIndex < ordered.length - 1 && reorder(s.id, ordered[visibleIndex + 1].id)}><ArrowRight size={11} /></button>
+                <button className="icon-button" title={`เพิ่ม session แบบ ${s.name}`} onClick={() => add(s.agentType)}><Plus size={13} /></button>
+                {hide && <button className="icon-button" title={`ซ่อน ${s.name} พับเก็บไว้ก่อน (ไม่ลบ)`} aria-label={`ซ่อน ${s.name}`} onClick={() => hide(s.id)}><EyeOff size={12} /></button>}
+                <button className="icon-button" title={`ขยาย ${s.name}`} onClick={() => zoom(s.id)}><Maximize2 size={12} /></button>
+                <button className="icon-button" title={`ลบ ${s.name}`} disabled={busy} onClick={() => remove(s)}><X size={12} /></button>
+              </div>
+            </div>}
+            {(s.status === 'exited' || s.status === 'error') && paneView(s) !== 'chat' && <SessionEnded key={`${s.id}-${s.createdAt}`} session={{ ...s, name: names[s.id] || s.name }} onRestart={restart} onClose={close} />}
+            <TerminalPane key={`${s.id}-${s.createdAt}`} tab={{ id: s.id, sessionId: s.id, authOnly: s.authOnly, name: names[s.id] || s.name, type: s.agentType, status: s.status === 'stopping' ? 'exited' : s.status, view: paneView(s) }}
+              visible={active && cellVisible} focused={active && cellVisible && s.id === selected} showHeader={false}
+              onFocus={() => select(s.id)} onClose={() => close(s.id)} onExit={refresh} registerSender={() => {}} onSwitchView={view => switchView(s.id, view)} />
+          </div>;
+        })}
       </div>
       {fitted && <div className="pane-splitters">{separator('x', cols)}{separator('y', rowSizes)}</div>}
     </div>

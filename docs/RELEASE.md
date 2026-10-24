@@ -1,3 +1,19 @@
+# SuperAi & RAKKYXD v1.0.26
+
+## มีอะไรใหม่ใน v1.0.26 (Parallel Git Worktrees, Beginner Experience, Interactive Artifacts & UI Polish)
+
+- **Parallel Git Worktrees & One-Click Smart Merge:** แยกโฟลเดอร์ทำงานคู่ขนานใน `.worktrees/<branch>` เพื่อพัฒนาโค้ดพร้อมกันได้ 100% โดยไม่ทับซ้อนกัน พร้อมแถบ **Smart Merge Banner** ในหน้าต่างตรวจสอบไฟล์ที่เปลี่ยน ให้รวมโค้ดกลับเข้าสู่ `main` และลบ Worktree อัตโนมัติได้ในคลิกเดียว
+- **Working Folder & Real Git Branch Strip (`ComposerLocation`):** แสดงโฟลเดอร์ทำงานจริงและชื่อ Git Branch ล่าสุดเหนือช่องพิมพ์คำสั่ง พร้อมสลับตาม Session ที่เลือก หรือแสดงจำนวนโฟลเดอร์เมื่อส่งแบบ Broadcast
+- **3-Step Beginner Onboarding & Curated Starter Skills:** ปรับโฉมหน้าต่างเริ่มต้นใช้งานและหน้าจอต้อนรับให้เข้าใจง่ายสำหรับมือใหม่ใน 3 ขั้นตอน (เลือกโฟลเดอร์ → เลือกผู้ช่วยและบัญชี → เลือกตัวอย่างงานหรือพิมพ์คำสั่ง) พร้อมชุด Starter Skills บน `skills.sh` ที่กดติดตั้งได้ทันทีเมื่อผู้ใช้เลือก
+- **Session Hide / Collapse Without Deleting:** พับเก็บ Session ออกจากพื้นที่ทำงานหลักชั่วคราวโดยไม่ลบประวัติแชตหรือโปรเซส พร้อมชิปเปิดกลับบนแถบด้านบนและแถบข้างซ้าย
+- **Interactive Local React/JSX/TSX, SVG Zoom/Fit & Mermaid Artifacts:** พรีวิวโค้ด React/JSX/TSX แบบโต้ตอบได้จริงด้วย Local Runtime + Sucrase, ซูมและจัดขนาดไดอะแกรม SVG/Mermaid พร้อมโหมดขยายเต็มกรอบที่รองรับปุ่มปิดและปุ่มลัด `Escape`
+- **UI & Dialog Usability Polish:**
+  - แก้ไขปัญหาปุ่มแนบไฟล์ (`+`) ซ้อนทับกับแถบเครื่องมือด้านล่างของช่องพิมพ์คำสั่งในโหมด Terminal / Agent / Chat
+  - เพิ่มการป้องกันข้อมูลว่างใน `ChangesPanel` และ `WorktreeModal` ไม่ให้เกิดหน้าจอค้างเมื่อตรวจไฟล์ที่เปลี่ยน
+  - รองรับการกด `Escape` และคลิกพื้นที่ว่างเพื่อปิดหน้าต่างย่อย (`WorktreeModal`, เมนูปักหมุดไฟล์ `+ ปักหมุดไฟล์`, เมนูแนบไฟล์ และ Quick Editor โหมดขยาย) อย่างเป็นธรรมชาติ
+
+---
+
 # SuperAi & RAKKYXD v1.0.25
 
 ## มีอะไรใหม่ใน v1.0.25 (Unified AI Provider Hub & Multi-AI Suite)

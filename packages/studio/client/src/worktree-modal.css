@@ -17,16 +17,16 @@
 }
 
 .worktree-modal-card {
-  background-color: #1e1e1c;
-  border: 1px solid #333330;
-  border-radius: 10px;
+  background-color: var(--surface, #2b2b28);
+  border: 1px solid var(--border, #3b3b35);
+  border-radius: 12px;
   width: 100%;
   max-width: 540px;
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
-  color: #dfdfd9;
+  box-shadow: var(--popover-shadow, 0 14px 36px rgba(0, 0, 0, 0.55));
+  color: var(--text, #eeede7);
   overflow: hidden;
 }
 
@@ -35,7 +35,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid #2e2e2a;
+  border-bottom: 1px solid var(--border, #3b3b35);
 }
 
 .worktree-modal-title {
@@ -45,7 +45,7 @@
 }
 
 .worktree-title-icon {
-  color: #c88242;
+  color: var(--accent, #d9a080);
   margin-top: 3px;
   flex-shrink: 0;
 }
@@ -54,19 +54,19 @@
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #f0f0eb;
+  color: var(--text, #eeede7);
 }
 
 .worktree-modal-title p {
   margin: 3px 0 0 0;
   font-size: 12px;
-  color: #9a9a92;
+  color: var(--dim, #aaa89e);
 }
 
 .worktree-modal-close {
   background: none;
   border: none;
-  color: #888880;
+  color: var(--dim, #aaa89e);
   cursor: pointer;
   padding: 6px;
   border-radius: 6px;
@@ -77,8 +77,8 @@
 }
 
 .worktree-modal-close:hover {
-  background-color: #2b2b28;
-  color: #dfdfd9;
+  background-color: var(--raised, #33332f);
+  color: var(--text, #eeede7);
 }
 
 .worktree-alert {
@@ -107,7 +107,7 @@
   padding: 16px 20px;
   display: flex;
   gap: 8px;
-  border-bottom: 1px solid #2e2e2a;
+  border-bottom: 1px solid var(--border, #3b3b35);
 }
 
 .worktree-input-group {
@@ -120,44 +120,44 @@
 .worktree-input-group .input-icon {
   position: absolute;
   left: 10px;
-  color: #777770;
+  color: var(--dim, #aaa89e);
   pointer-events: none;
 }
 
 .worktree-input-group input {
   width: 100%;
-  background-color: #141412;
-  border: 1px solid #383834;
-  border-radius: 6px;
+  background-color: var(--base, #222220);
+  border: 1px solid var(--control-border, #505048);
+  border-radius: 7px;
   padding: 8px 10px 8px 30px;
   font-size: 13px;
-  color: #f0f0eb;
+  color: var(--text, #eeede7);
   transition: border-color 0.15s;
 }
 
 .worktree-input-group input:focus {
   outline: none;
-  border-color: #c88242;
+  border-color: var(--accent, #d9a080);
 }
 
 .btn-create-worktree {
-  background-color: #c88242;
-  color: #141412;
+  background-color: var(--accent, #d9a080);
+  color: var(--on-accent, #28211d);
   border: none;
-  border-radius: 6px;
+  border-radius: 7px;
   padding: 0 14px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 6px;
-  transition: opacity 0.15s;
+  transition: background-color 0.15s, opacity 0.15s;
   white-space: nowrap;
 }
 
 .btn-create-worktree:hover:not(:disabled) {
-  opacity: 0.9;
+  background-color: var(--accent-hover, #e7b297);
 }
 
 .btn-create-worktree:disabled {
@@ -188,9 +188,9 @@
 }
 
 .worktree-item {
-  background-color: #242422;
-  border: 1px solid #333330;
-  border-radius: 6px;
+  background-color: var(--raised, #33332f);
+  border: 1px solid var(--border, #3b3b35);
+  border-radius: 8px;
   padding: 10px 12px;
   display: flex;
   align-items: center;
@@ -199,8 +199,8 @@
 }
 
 .worktree-item.active {
-  border-color: #c88242;
-  background-color: rgba(200, 130, 66, 0.06);
+  border-color: var(--accent, #d9a080);
+  background-color: rgba(217, 160, 128, 0.08);
 }
 
 .worktree-item-info {
@@ -320,15 +320,15 @@
 
 .worktree-modal-footer {
   padding: 12px 20px;
-  background-color: #1a1a18;
-  border-top: 1px solid #282824;
+  background-color: var(--base, #222220);
+  border-top: 1px solid var(--border, #3b3b35);
   font-size: 11px;
-  color: #888880;
+  color: var(--dim, #aaa89e);
 }
 
 .worktree-modal-footer code {
-  color: #c88242;
-  background-color: #222220;
+  color: var(--accent, #d9a080);
+  background-color: var(--raised, #33332f);
   padding: 1px 4px;
   border-radius: 3px;
 }
@@ -344,8 +344,8 @@
 
 /* Smart Merge Banner inside ChangesPanel */
 .worktree-smart-merge-banner {
-  background: linear-gradient(135deg, rgba(200, 130, 66, 0.14), rgba(30, 30, 28, 0.95));
-  border: 1px solid rgba(200, 130, 66, 0.35);
+  background: linear-gradient(135deg, rgba(217, 160, 128, 0.14), rgba(43, 43, 40, 0.95));
+  border: 1px solid rgba(217, 160, 128, 0.35);
   border-radius: 8px;
   padding: 12px 14px;
   margin-bottom: 12px;
@@ -359,17 +359,17 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #df9e62;
+  color: var(--accent, #d9a080);
   font-size: 13px;
 }
 
 .worktree-merge-header strong {
-  color: #f5f5f0;
+  color: var(--text, #eeede7);
 }
 
 .worktree-merge-details {
   font-size: 12px;
-  color: #b0b0a8;
+  color: var(--text-secondary, #d0cec3);
   margin: 0;
 }
 
@@ -386,19 +386,19 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #aaa;
+  color: var(--dim, #aaa89e);
   cursor: pointer;
   user-select: none;
 }
 
 .worktree-delete-checkbox input {
-  accent-color: #c88242;
+  accent-color: var(--accent, #d9a080);
   cursor: pointer;
 }
 
 .btn-merge-action {
-  background-color: #c88242;
-  color: #141412;
+  background-color: var(--accent, #d9a080);
+  color: var(--on-accent, #28211d);
   border: none;
   border-radius: 6px;
   padding: 6px 14px;
@@ -408,11 +408,11 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  transition: opacity 0.15s;
+  transition: background-color 0.15s, opacity 0.15s;
 }
 
 .btn-merge-action:hover:not(:disabled) {
-  opacity: 0.9;
+  background-color: var(--accent-hover, #e7b297);
 }
 
 .btn-merge-action:disabled {
@@ -426,22 +426,22 @@
   gap: 5px;
   padding: 3px 8px;
   font-size: 11px;
-  border-radius: 4px;
-  background-color: #242422;
-  border: 1px solid #383834;
-  color: #dfdfd9;
+  border-radius: 6px;
+  background-color: var(--raised, #33332f);
+  border: 1px solid var(--control-border, #505048);
+  color: var(--text, #eeede7);
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .btn-worktree-trigger:hover {
-  background-color: #2e2e2a;
-  border-color: #c88242;
-  color: #f0f0eb;
+  background-color: var(--selected, #3d3c36);
+  border-color: var(--accent, #d9a080);
+  color: var(--text, #eeede7);
 }
 
 .btn-worktree-trigger.is-worktree {
-  border-color: rgba(200, 130, 66, 0.5);
-  background-color: rgba(200, 130, 66, 0.1);
-  color: #df9e62;
+  border-color: rgba(217, 160, 128, 0.5);
+  background-color: rgba(217, 160, 128, 0.12);
+  color: var(--accent, #d9a080);
 }

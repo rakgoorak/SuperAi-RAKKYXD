@@ -26,7 +26,7 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
     setError(null);
     try {
       const data = await getWorktrees(wsId);
-      setWorktrees(data.worktrees || []);
+      setWorktrees(Array.isArray(data?.worktrees) ? data.worktrees : []);
     } catch (err: any) {
       setError(err.message || 'อ่านข้อมูล Worktree ไม่สำเร็จ');
     } finally {
@@ -42,6 +42,18 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
       setNotice(null);
     }
   }, [open, fetchWorktrees]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [open, onClose]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,7 +99,19 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
   if (!open) return null;
 
   return (
-    <div className="worktree-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="จัดการ Git Worktrees">
+    <div
+      className="worktree-modal-backdrop"
+      onClick={onClose}
+      onKeyDown={e => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="จัดการ Git Worktrees"
+    >
       <div className="worktree-modal-card" onClick={e => e.stopPropagation()}>
         <header className="worktree-modal-header">
           <div className="worktree-modal-title">
@@ -205,7 +229,7 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
 
         <footer className="worktree-modal-footer">
           <small>
-            💡 โฟลเดอร์ <code>.worktrees/</code> จะถูกป้องกันใน <code>.gitignore</code> ให้อัตโนมัติ ไม่ต้องกังวลเรื่องไฟล์หลุดเข้า Git
+            โฟลเดอร์ <code>.worktrees/</code> จะถูกป้องกันใน <code>.gitignore</code> ให้อัตโนมัติ ไม่ต้องกังวลเรื่องไฟล์หลุดเข้า Git
           </small>
         </footer>
       </div>

@@ -1,6 +1,7 @@
 import { projectChanges, projectFile, stageFile, unstageFile, discardFile, saveProjectFile } from "./ProjectChanges.js";
 import { listWorktrees, createWorktree, mergeWorktree, removeWorktree } from "./GitWorktrees.js";
 import { readPreviewFile } from './PreviewFiles.js';
+import { workingContext } from './WorkingContext.js';
 import { listProjectFiles } from './ProjectFiles.js';
 import http from "node:http";
 import { randomUUID } from "node:crypto";
@@ -803,6 +804,16 @@ export class StudioServer {
       }
     });
 
+    this.app.get('/api/workspaces/:wsId/context', async (req, res) => {
+      const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!workspace) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      res.json(await workingContext(workspace.rootPath));
+    });
+    this.app.get('/api/terminals/:id/context', async (req, res) => {
+      const session = this.terminalManager.getSession(String(req.params.id));
+      if (!session) return res.status(404).json({ error: 'ไม่พบ session' });
+      res.json(await workingContext(session.cwd));
+    });
     // Chat view of a Code session: the same CLI, model and folder, driven through its JSON stream.
     this.app.get("/api/terminals/:id/chat/settings", (req, res) => {
       const session = this.terminalManager.getSession(String(req.params.id));

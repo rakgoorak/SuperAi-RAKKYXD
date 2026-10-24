@@ -558,6 +558,15 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
       {editingFile && isModal && (
         <div
           className="quick-editor-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`แก้ไขไฟล์ ${editingFile}`}
+          onKeyDown={e => {
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              setIsModal(false);
+            }
+          }}
           onClick={e => {
             if (e.target === e.currentTarget) handleCloseEditor();
           }}

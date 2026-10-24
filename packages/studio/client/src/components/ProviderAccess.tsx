@@ -46,8 +46,8 @@ export function useProviderAccess(provider: string) {
   return { auth, checking, error, check };
 }
 
-export function ProviderAccess({ provider, wsId, sessionId, onStatus, compact = false, onInstall }: {
-  provider: string; wsId?: string; sessionId?: string; onStatus?: (status: CliAuthStatus) => void; compact?: boolean; onInstall?: () => void;
+export function ProviderAccess({ provider, wsId, sessionId, onStatus, compact = false, onInstall, friendly = false }: {
+  provider: string; wsId?: string; sessionId?: string; onStatus?: (status: CliAuthStatus) => void; compact?: boolean; onInstall?: () => void; friendly?: boolean;
 }) {
   const { auth, checking, error, check } = useProviderAccess(provider);
   const [opening, setOpening] = useState(false);
@@ -61,7 +61,7 @@ export function ProviderAccess({ provider, wsId, sessionId, onStatus, compact = 
   return <div className={`provider-access ${auth?.status || "checking"}`}>
     <div>
       <strong>{PROVIDER_LABEL[provider] || provider}</strong>
-      <small>{error || auth?.note || (isCloud ? "กำลังตรวจ API Key…" : "กำลังตรวจบัญชี…")}</small>
+      <small>{error || (friendly && auth?.status === "unknown" ? "แอปตรวจบัญชีนี้อัตโนมัติไม่ได้ เปิดหน้าเข้าสู่ระบบแล้วทำตามคำแนะนำ" : auth?.note) || (isCloud ? "กำลังตรวจ API Key…" : "กำลังตรวจบัญชี…")}</small>
     </div>
     <button type="button" className="text-button" disabled={checking || opening} onClick={() => void check(true)}>
       <RefreshCw size={12} className={checking ? "spin" : ""} /> ตรวจอีกครั้ง
@@ -73,7 +73,7 @@ export function ProviderAccess({ provider, wsId, sessionId, onStatus, compact = 
         catch { setProblem("เปิดขั้นตอนเข้าสู่ระบบไม่สำเร็จ กรุณาตรวจโปรเจกต์และ CLI แล้วลองใหม่"); }
         finally { setOpening(false); }
       }}>
-        <LogIn size={13} /> {auth?.status === "authenticated" ? "จัดการบัญชี" : "เข้าสู่ระบบใน Terminal"}
+        <LogIn size={13} /> {auth?.status === "authenticated" ? "จัดการบัญชี" : friendly ? "เข้าสู่ระบบ" : "เข้าสู่ระบบใน Terminal"}
       </button>
     )}
     {isCloud && (

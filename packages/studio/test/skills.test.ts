@@ -96,6 +96,13 @@ test('search finds skills from skills.sh and reads descriptions', async () => {
   assert.equal(results[0].description, 'Browser automation CLI');
 });
 
+test('skills search distinguishes an unavailable registry from an empty result', async () => {
+  const unavailable = new SkillManager((async () => new Response('{}', { status: 503 })) as typeof fetch);
+  await assert.rejects(unavailable.search('browser'), /ค้นหา.*ไม่สำเร็จ/);
+  const empty = new SkillManager((async () => new Response(JSON.stringify({ skills: [] }))) as typeof fetch);
+  assert.deepEqual(await empty.search('no-matching-skills'), []);
+});
+
 test('install works for skills from skills.sh with custom repo options', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'superai-sh-skill-'));
   try {

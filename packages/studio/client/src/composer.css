@@ -69,7 +69,7 @@
   grid-column: 2; grid-row: 3; position: relative; right: auto; bottom: auto;
   padding: 2px 12px 10px 4px; display: flex; gap: 4px; align-self: end; border: 0; background: transparent;
 }
-#root .work-canvas .composer-box:not(.has-session-controls):not(:has(.chat-quick-controls)) .composer-bottom { grid-column: 1 / -1; justify-content: space-between; padding-left: 12px; }
+#root .work-canvas .composer-box:not(.has-session-controls):not(:has(.chat-quick-controls)) .composer-bottom { grid-column: 2 / -1; justify-content: space-between; padding-left: 4px; }
 #root .work-canvas .composer-bottom .composer-tools > span { display: none; }
 #root .work-canvas .composer-bottom .icon-button { width: 32px; height: 34px; color: var(--text-secondary); border-radius: 8px; }
 #root .work-canvas .composer-bottom .send-button {
