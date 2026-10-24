@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Activity, Check, ClipboardList, Globe, MessageSquare, Play, Plus, Search, Trash2, X } from 'lucide-react';
+import { Activity, Check, ClipboardList, Folder, Globe, MessageSquare, Play, Plus, Search, Trash2, X } from 'lucide-react';
 import type { Run, Session, Workspace } from '../api';
 import { post } from '../api';
 import { PreviewPanel } from './PreviewPanel';
+import { FileExplorerPanel } from './FileExplorerPanel';
 import type { PreviewRequest } from '../previewLinks';
 import { paneView } from '../paneView';
 
-export type DockView = 'dashboard' | 'tasks' | 'prompts' | 'browser';
+export type DockView = 'dashboard' | 'tasks' | 'prompts' | 'files' | 'browser';
 interface SavedItem {
   id: string;
   wsId: string;
@@ -30,6 +31,7 @@ interface Props {
   onSelect: (session: Session) => void;
   onPrompt: (text: string) => void;
   onError: (message: string) => void;
+  onOpenFile?: (path: string) => void;
 }
 
 function isSessionActive(s: Session): boolean {
@@ -133,6 +135,7 @@ export function RightDock({
   onPrompt,
   onError,
   previewRequest,
+  onOpenFile,
 }: Props) {
   const [width, setWidth] = useState(() => {
     try {
@@ -291,6 +294,7 @@ export function RightDock({
             ['dashboard', 'สถานะ', Activity],
             ['tasks', 'งาน', ClipboardList],
             ['prompts', 'พรอมป์ต์', MessageSquare],
+            ['files', 'ไฟล์', Folder],
             ['browser', 'Browser', Globe],
           ] as const
         ).map(([value, label, Icon]) => (
@@ -313,7 +317,14 @@ export function RightDock({
           workspaceId={workspace?.id}
         />
       </div>
-      {view !== 'browser' && (
+      {view === 'files' && (
+        <FileExplorerPanel
+          workspace={workspace}
+          onOpenFile={onOpenFile}
+          onError={onError}
+        />
+      )}
+      {view !== 'browser' && view !== 'files' && (
         <div className="dock-content">
           {view === 'dashboard' ? (
             <>
