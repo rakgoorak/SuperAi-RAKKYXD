@@ -39,70 +39,11 @@ function isSessionActive(s: Session): boolean {
   return s.status === 'running' || paneView(s) === 'chat';
 }
 
-const DEFAULT_TASKS: SavedItem[] = [
-  {
-    id: 'default-task-1',
-    wsId: '',
-    title: 'ตรวจสอบข้อผิดพลาดและ Lint โค้ด',
-    text: 'ช่วยตรวจสอบ syntax error, type error และ lint ในโปรเจกต์นี้ พร้อมสรุปจุดที่ต้องแก้ไข',
-    state: 'todo',
-  },
-  {
-    id: 'default-task-2',
-    wsId: '',
-    title: 'รัน Unit Tests และรายงานผล',
-    text: 'ช่วยรันชุดการทดสอบทั้งหมดในโปรเจกต์ แล้วรายงานผลว่ามี test ใดผ่านหรือล้มเหลวบ้าง',
-    state: 'todo',
-  },
-  {
-    id: 'default-task-3',
-    wsId: '',
-    title: 'ปรับปรุงประสิทธิภาพ (Optimization)',
-    text: 'ช่วยตรวจสอบโค้ดเพื่อหาจุดคอขวด (bottleneck) และแนะนำวิธีปรับแต่งให้ทำงานเร็วขึ้น',
-    state: 'todo',
-  },
-];
-
-const DEFAULT_PROMPTS: SavedItem[] = [
-  {
-    id: 'default-prompt-1',
-    wsId: '',
-    title: 'ตรวจสอบโค้ดและบั๊ก (Code Review)',
-    text: 'ช่วยตรวจสอบโค้ดในโปรเจกต์นี้ หาจุดบกพร่อง ข้อผิดพลาด และแนะนำแนวทางการแก้ไขหรือปรับปรุงประสิทธิภาพ',
-    state: 'todo',
-  },
-  {
-    id: 'default-prompt-2',
-    wsId: '',
-    title: 'เขียน Unit Tests ครอบคลุมฟังก์ชันหลัก',
-    text: 'ช่วยเขียน Unit Tests ครอบคลุมการทำงานของฟังก์ชันหลัก และตรวจสอบ edge cases ต่างๆ ให้ครบถ้วน',
-    state: 'todo',
-  },
-  {
-    id: 'default-prompt-3',
-    wsId: '',
-    title: 'อธิบายโครงสร้างโปรเจกต์',
-    text: 'ช่วยสรุปภาพรวมโครงสร้างของโปรเจกต์นี้ อธิบายหน้าที่ของแต่ละโฟลเดอร์และไฟล์สำคัญให้เข้าใจง่าย',
-    state: 'todo',
-  },
-  {
-    id: 'default-prompt-4',
-    wsId: '',
-    title: 'สรุป Release Notes และ Commit',
-    text: 'ช่วยดู git diff หรือการเปลี่ยนแปลงล่าสุด แล้วสรุป release notes และข้อความ commit ให้ชัดเจน',
-    state: 'todo',
-  },
-];
-
-function loadItems(key: string, defaults: SavedItem[] = []): SavedItem[] {
+function loadItems(key: string): SavedItem[] {
   try {
     const raw = localStorage.getItem(key);
-    if (!raw && defaults.length) {
-      localStorage.setItem(key, JSON.stringify(defaults));
-      return defaults;
-    }
     const value: unknown = JSON.parse(raw || '[]');
-    const loaded = Array.isArray(value)
+    return Array.isArray(value)
       ? value.filter(
           x =>
             x &&
@@ -112,12 +53,8 @@ function loadItems(key: string, defaults: SavedItem[] = []): SavedItem[] {
             ['todo', 'sent', 'done'].includes(x.state)
         )
       : [];
-    if (!loaded.length && defaults.length) {
-      return defaults;
-    }
-    return loaded;
   } catch {
-    return defaults;
+    return [];
   }
 }
 
@@ -149,8 +86,8 @@ export function RightDock({
   const [resizing, setResizing] = useState(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
-  const [tasks, setTasks] = useState(() => loadItems('superai-tasks-v1', DEFAULT_TASKS));
-  const [prompts, setPrompts] = useState(() => loadItems('superai-prompts-v1', DEFAULT_PROMPTS));
+  const [tasks, setTasks] = useState(() => loadItems('superai-tasks-v1'));
+  const [prompts, setPrompts] = useState(() => loadItems('superai-prompts-v1'));
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
