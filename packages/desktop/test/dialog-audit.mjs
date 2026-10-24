@@ -79,7 +79,7 @@ try {
   auditReport.push({ dialog: 'setup-guide', viewport: '850x600', metrics: setupMetrics });
 
   // Dismiss setup guide for subsequent tests
-  await page.getByRole('button', { name: 'เสร็จแล้ว' }).click();
+  await page.getByRole('button', { name: 'ปิดไว้ก่อน' }).click();
   await setupDialog.waitFor({ state: 'hidden' });
   await resize(1280, 800);
 
@@ -100,7 +100,7 @@ try {
   steps.step('session-dialog');
   // Click "+" in sidebar or open session
   await page.getByRole('button', { name: 'โปรเจกต์ทดสอบ UI Dialog', exact: true }).click();
-  await page.getByRole('button', { name: 'เปิด session', exact: true }).click();
+  await page.getByRole('button', { name: 'เปิด session ใหม่' }).click();
   const sessionDialog = page.getByRole('dialog', { name: 'เปิด session ใหม่' });
   await sessionDialog.waitFor();
   await page.screenshot({ path: path.join(outputDir, '03-session-dialog-normal.png') });
@@ -125,7 +125,7 @@ try {
   // 3. SETTINGS DIALOG
   steps.step('settings-dialog');
   // Open settings from sidebar
-  await page.getByRole('button', { name: 'ตั้งค่าพื้นที่ทำงาน', exact: true }).click();
+  await page.getByRole('button', { name: 'การตั้งค่า', exact: true }).click();
   const settingsDialog = page.getByRole('dialog', { name: 'การตั้งค่าพื้นที่ทำงาน' });
   await settingsDialog.waitFor();
 
@@ -157,7 +157,7 @@ try {
   await page.screenshot({ path: path.join(outputDir, '09-settings-folders.png') });
 
   // Tab: voice
-  await page.getByRole('button', { name: 'เสียง' }).click();
+  await settingsDialog.getByRole('button', { name: 'เสียง', exact: true }).click();
   await page.waitForTimeout(200);
   await page.screenshot({ path: path.join(outputDir, '10-settings-voice.png') });
 

@@ -3,6 +3,7 @@ import { Download, ExternalLink, LoaderCircle, RefreshCw, Search, Sparkles, Tras
 import { api, post, type Cli, type InstalledSkill, type Seat, type SkillInfo, type Workspace } from "../api";
 import { HEADLESS, firstReady, seatFor } from "../providers";
 import { SeatPicker } from "./SeatPicker";
+import "../beginner-experience.css";
 
 /**
  * Official Agent Skills for the active project. The chosen AI proposes skills; nothing is
@@ -24,10 +25,14 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
   const [shResults, setShResults] = useState<SkillInfo[]>([]);
   const [shSearching, setShSearching] = useState(false);
   const [shHasSearched, setShHasSearched] = useState(false);
+  const [shError, setShError] = useState("");
+  const [submittedQuery, setSubmittedQuery] = useState("");
+  const [catalogError, setCatalogError] = useState("");
 
   const load = useCallback(async (refresh = false) => {
     if (!workspace) return;
     setLoading("catalog");
+    setCatalogError("");
     try {
       const [c, i] = await Promise.all([
         api<SkillInfo[]>(`/api/skills/catalog${refresh ? "?refresh=1" : ""}`),
@@ -36,6 +41,7 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
       setCatalog(c);
       setInstalled(i);
     } catch (e) {
+      setCatalogError((e as Error).message);
       onError((e as Error).message);
     } finally {
       setLoading("");
@@ -92,20 +98,21 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
     }
   };
 
-  const searchSkillsSh = async (e?: React.FormEvent) => {
+  const searchSkillsSh = async (e?: React.FormEvent, query = shQuery) => {
     e?.preventDefault();
-    const q = shQuery.trim();
+    const q = query.trim();
     if (q.length < 2) {
       onError("กรุณากรอกคำค้นหาอย่างน้อย 2 ตัวอักษร");
       return;
     }
     setShSearching(true);
     setShHasSearched(true);
+    setShError(""); setSubmittedQuery(q); setShResults([]);
     try {
       const res = await api<SkillInfo[]>(`/api/skills/search?q=${encodeURIComponent(q)}`);
       setShResults(res);
     } catch (err: any) {
-      onError(err.message || "ค้นหาบน skills.sh ไม่สำเร็จ");
+      setShError(err.message || "ค้นหาไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วลองอีกครั้ง");
     } finally {
       setShSearching(false);
     }
@@ -143,11 +150,10 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
   return (
     <div className="skills-panel">
       <p className="muted">
-        Skill คือชุดคำแนะนำ/สคริปต์ที่ AI เรียกใช้เองเมื่องานเกี่ยวข้อง ดึงจากแหล่งทางการของ Anthropic, OpenAI และ Vercel (skills.sh) ติดตั้งลงโปรเจกต์
-        <code>{workspace.name}</code> ที่ <code>.claude/skills</code> (Claude, OpenCode) และ <code>.agents/skills</code> (Codex) · ติดตั้งเมื่อคุณกดยืนยันเท่านั้น
+        Skills คือความสามารถเสริมให้ AI เช่น ออกแบบเว็บหรือทดสอบงาน เลือกติดตั้งเฉพาะที่ต้องใช้ในโปรเจกต์ <strong>{workspace.name}</strong> หรือเริ่มใช้งานโดยยังไม่ติดตั้งก็ได้
       </p>
-      <section className="skills-recommend">
-        <h3><Sparkles size={15} /> ให้ AI เลือก skill ที่จำเป็น</h3>
+      <details className="skills-recommend">
+        <summary><Sparkles size={15} /> ให้ AI ช่วยเลือกให้ (ไม่บังคับ)</summary>
         <SeatPicker seat={seat} onChange={setSeat} label="ผู้แนะนำ skill" named={false} clis={clis} ollamaModels={ollamaModels} disabled={!!loading} />
         <div className="input-action">
           <input value={goal} maxLength={2000} placeholder="งานที่จะทำ (ไม่บังคับ) เช่น ทำเว็บขายของและทดสอบหน้าเว็บ" onChange={(e) => setGoal(e.target.value)} />
@@ -157,15 +163,15 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
         </div>
         {loading === "recommend" && <p className="muted">AI กำลังอ่านโครงสร้างโปรเจกต์และเลือก skill อาจใช้เวลาสักครู่…</p>}
         {picks && (picks.length ? <ul className="skill-list">{picks.map(card)}</ul> : <p className="muted">AI ไม่พบ skill ที่จำเป็นเพิ่มสำหรับโปรเจกต์นี้</p>)}
-      </section>
+      </details>
       {installed.length > 0 && (
-        <section>
-          <h3>ติดตั้งในโปรเจกต์นี้ ({installed.length})</h3>
+        <details className="skills-installed">
+          <summary>ติดตั้งในโปรเจกต์นี้ ({installed.length})</summary>
           <ul className="installed-skills">
             {installed.map((s) => (
               <li key={s.name}>
                 <strong>{s.name}</strong>
-                <small>{s.targets.join(", ")}{s.managed ? "" : " · เพิ่มเอง"}</small>
+                <small title={s.targets.join(", ")}>{s.managed ? "พร้อมใช้กับ AI" : "เพิ่มไว้แล้ว"}</small>
                 {s.managed && (
                   <button className="icon-button" title={`ลบ ${s.name}`} disabled={!!loading} onClick={() => void remove(s.name)}>
                     <Trash2 size={13} />
@@ -174,7 +180,8 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
               </li>
             ))}
           </ul>
-        </section>
+          <p className="muted">AI จะเลือกใช้เมื่อเกี่ยวข้องกับงาน คุณไม่ต้องเปิดทีละตัว</p>
+        </details>
       )}
       <section>
         <div className="skill-tabs">
@@ -183,7 +190,7 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
             className={tab === "catalog" ? "active" : ""}
             onClick={() => setTab("catalog")}
           >
-            แค็ตตาล็อกหลัก ({catalog.length})
+            รายการแนะนำ ({catalog.length})
           </button>
           <button
             type="button"
@@ -197,7 +204,7 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
         {tab === "catalog" ? (
           <>
             <div className="settings-section-title">
-              <span className="muted">รวม Anthropic, OpenAI, Vercel Labs และ Supabase</span>
+              <span className="muted">เริ่มเลือกจากแหล่งทางการ: Anthropic, OpenAI, Vercel Labs และ Supabase</span>
               <button className="text-button" disabled={!!loading} onClick={() => void load(true)}>
                 <RefreshCw size={13} className={loading === "catalog" ? "spin" : ""} /> โหลดใหม่
               </button>
@@ -206,15 +213,17 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
               <Search size={14} />
               <input placeholder="ค้นหาในแค็ตตาล็อกหลัก" aria-label="ค้นหา skill" value={filter} onChange={(e) => setFilter(e.target.value)} />
             </label>
+            {catalogError && <p role="alert">โหลดรายการไม่สำเร็จ กดโหลดใหม่เพื่อลองอีกครั้ง</p>}
             <ul className="skill-list">{shown.map(card)}</ul>
           </>
         ) : (
           <>
             <div className="settings-section-title">
-              <span className="muted">ค้นหาจากสารบบโอเพนซอร์สของ skills.sh (Vercel Labs)</span>
+              <span className="muted">เลือกหมวดงานหรือพิมพ์คำค้น เพื่อค้นหาเพิ่มเติมจาก skills.sh</span>
             </div>
             <form onSubmit={(e) => void searchSkillsSh(e)} className="skills-search-bar">
               <input
+                aria-label="ค้นหาบน skills.sh"
                 placeholder="พิมพ์ชื่อ skill เช่น browser, react, docker, python..."
                 value={shQuery}
                 onChange={(e) => setShQuery(e.target.value)}
@@ -224,16 +233,22 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
                 {shSearching ? <LoaderCircle size={14} className="spin" /> : <Search size={14} />} ค้นหา
               </button>
             </form>
+            <div className="skill-categories" aria-label="เลือกหมวดค้นหา">
+              {[["ออกแบบเว็บ", "frontend"], ["ทดสอบเว็บ", "testing"], ["จัดการไฟล์", "files"], ["เขียน Python", "python"]].map(([label, query]) => <button key={query} className="secondary" disabled={shSearching} onClick={() => { setShQuery(query); void searchSkillsSh(undefined, query); }}>{label}</button>)}
+              {shHasSearched && <button className="text-button" disabled={shSearching} onClick={() => { setShHasSearched(false); setShError(""); setShQuery(""); }}>กลับรายการเริ่มต้น</button>}
+            </div>
             {shSearching && <p className="muted">กำลังค้นหาและดึงข้อมูลจาก skills.sh…</p>}
-            {shHasSearched && !shSearching && (
+            {shError && <div role="alert" className="skills-search-error"><p>{shError}</p><button className="secondary" onClick={() => void searchSkillsSh(undefined, submittedQuery)}>ลองค้นหาอีกครั้ง</button></div>}
+            {shHasSearched && !shSearching && !shError && (
               shResults.length > 0 ? (
                 <ul className="skill-list">{shResults.map(card)}</ul>
               ) : (
-                <p className="muted">ไม่พบ skill ที่ตรงกับคำค้นหา "{shQuery}" บน skills.sh</p>
+                <p className="muted">ไม่พบ skill ที่ตรงกับคำค้นหา "{submittedQuery}" ลองใช้คำอื่นหรือเลือกหมวดงานด้านบน</p>
               )
             )}
             {!shHasSearched && (
-              <p className="muted">พิมพ์คำค้นหาเพื่อค้นหา Agent Skills เพิ่มเติมจากสารบบของ skills.sh</p>
+              <><h3>รายการเริ่มต้นจากแค็ตตาล็อกของแอป</h3><p className="muted">เลือกติดตั้งจากรายการแนะนำได้เลย หรือเลือกหมวดงานด้านบนเพื่อค้นหาเพิ่มเติม</p>
+                {loading === "catalog" ? <p role="status">กำลังโหลดรายการเริ่มต้น…</p> : catalog.length ? <ul className="skill-list">{catalog.slice(0, 12).map(card)}</ul> : <p>ยังโหลดรายการไม่ได้ <button className="secondary" onClick={() => void load(true)}>ลองโหลดอีกครั้ง</button></p>}</>
             )}
           </>
         )}

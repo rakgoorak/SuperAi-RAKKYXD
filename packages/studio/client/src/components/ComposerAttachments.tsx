@@ -90,6 +90,10 @@ export const AttachMenu: React.FC<{ onFiles: (files: File[]) => void; disabled?:
   };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        return;
+      }
       if (disabled || !(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'u') return;
       // Ctrl+U inside a terminal pane belongs to the shell/CLI (clear line).
       if ((event.target as HTMLElement | null)?.closest?.('.xterm')) return;

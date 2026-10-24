@@ -51,9 +51,9 @@ export function SeatPicker({ seat, onChange, clis, ollamaModels, label, named = 
         </select>
       </label>}
       <label>
-        Model
+        รุ่น AI (Model)
         {cli ? (
-          <ModelCombo label={`model ของ${label}`} value={seat.model} options={list?.models || []} placeholder="ค่าเริ่มต้นของ CLI" disabled={disabled}
+          <ModelCombo label={`model ของ${label}`} value={seat.model} options={list?.models || []} placeholder="ใช้รุ่นเริ่มต้นได้" disabled={disabled}
             onChange={(model) => onChange({ ...seat, model: model.trim(), effort: efforts.includes(seat.effort) || !seat.effort ? seat.effort : "" })} />
         ) : (
           <ModelCombo label={`model ของ${label}`} value={seat.provider} options={ollamaModels} maxLength={150} placeholder="ชื่อรุ่น Ollama" disabled={disabled}
@@ -61,7 +61,7 @@ export function SeatPicker({ seat, onChange, clis, ollamaModels, label, named = 
         )}
       </label>
       <label>
-        Effort
+        ระดับการคิด (Effort)
         <select aria-label={`effort ของ${label}`} value={seat.effort} disabled={disabled || !cli || !efforts.length} onChange={(e) => onChange({ ...seat, effort: e.target.value })}>
           <option value="">ค่าเริ่มต้น</option>
           {efforts.map((level) => <option key={level} value={level}>{EFFORT_LABEL[level] || level} ({level})</option>)}

@@ -134,8 +134,9 @@ export class SkillManager {
       const res = await this.http(`https://skills.sh/api/search?q=${encodeURIComponent(q)}&limit=20`, {
         signal: AbortSignal.timeout(10000),
       });
-      if (!res.ok) return [];
+      if (!res.ok) throw new Error(`skills.sh HTTP ${res.status}`);
       const data: any = await res.json();
+      if (!Array.isArray(data?.skills)) throw new Error('Invalid skills.sh response');
       const list = Array.isArray(data?.skills) ? data.skills : [];
       const results: SkillInfo[] = [];
       for (const item of list) {
@@ -181,7 +182,7 @@ export class SkillManager {
       );
       return results;
     } catch {
-      return [];
+      throw new Error("ค้นหาบน skills.sh ไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วลองอีกครั้ง");
     }
   }
 

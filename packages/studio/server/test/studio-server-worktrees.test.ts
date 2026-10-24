@@ -36,10 +36,8 @@ test('StudioServer: REST endpoints for Git Worktrees and Merge', async () => {
     server = new StudioServer({
       port: 0,
       customWorkspacePath: regFile,
-      chatHistoryDir: path.join(configDir, 'chats'),
     });
-    await server.start();
-    const port = server.port;
+    const port = await server.start();
     const base = `http://127.0.0.1:${port}`;
 
     // 1. GET /api/workspaces/ws-test/worktrees

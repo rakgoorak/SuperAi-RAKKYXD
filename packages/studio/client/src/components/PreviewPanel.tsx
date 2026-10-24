@@ -15,9 +15,10 @@ import {
 import type { BrowserState } from "../desktop";
 import { parsePreviewTarget, type PreviewRequest } from '../previewLinks';
 import { ProjectFilePreview, type FilePreviewRequest } from './ProjectFilePreview';
-import { ArtifactPreview } from './ArtifactPreview';
+const ArtifactPreview = React.lazy(() => import('./ArtifactPreview').then(module => ({ default: module.ArtifactPreview })));
 
 interface ArtifactState {
+  id: string;
   title: string;
   language: string;
   content: string;
@@ -60,7 +61,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
   const action = useCallback(
     async (name: string, payload?: Record<string, unknown>) => {
       try {
-        if (name !== 'bounds' && name !== 'state') setFileRequest(undefined);
+        if (name !== 'bounds' && name !== 'state') { setFileRequest(undefined); setArtifact(null); }
         if (native) setState(await native.browser(name, payload));
       } catch (e) {
         onError((e as Error).message);
@@ -73,12 +74,14 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
     if (request.target.kind === 'artifact') {
       setFileRequest(undefined);
       setArtifact({
+        id: request.id,
         title: request.target.title,
         language: request.target.language,
         content: request.target.content,
       });
       setUrl(`artifact:${request.target.language}`);
     } else if (request.target.kind === 'file') {
+      setArtifact(null);
       setUrl(request.target.path);
       setFileRequest({ id: request.id, workspaceId: request.workspaceId, target: request.target });
     } else {
@@ -96,8 +99,8 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
     return native.onBrowser(setState);
   }, [native, onError]);
   useEffect(() => {
-    if (tab?.url && !fileRequest) setUrl(tab.url);
-  }, [tab?.url, tab?.id, fileRequest]);
+    if (tab?.url && !fileRequest && !artifact) setUrl(tab.url);
+  }, [tab?.url, tab?.id, fileRequest, artifact]);
   useEffect(() => {
     if (!native || !area.current) return;
     const update = () => {
@@ -128,7 +131,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
     if (/^(?:file:|\/|[a-z]:[\\/]|\.{1,2}[\\/])/i.test(url.trim()) || fileRequest?.target.path === url.trim()) {
       try {
         const target = parsePreviewTarget(url);
-        if (target.kind === 'file') { setFileRequest({ id: crypto.randomUUID(), workspaceId, target }); return; }
+        if (target.kind === 'file') { setArtifact(null); setFileRequest({ id: crypto.randomUUID(), workspaceId, target }); return; }
       } catch (error) { onError((error as Error).message); return; }
     }
     setFileRequest(undefined);
@@ -143,6 +146,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
         const parsed = new URL(value);
         if (!["http:", "https:"].includes(parsed.protocol))
           throw new Error("ใช้ได้เฉพาะ http/https");
+        setArtifact(null);
         setWebUrl(parsed.href);
         setUrl(parsed.href);
         setRevision((v) => v + 1);
@@ -282,7 +286,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
           type="button"
           className="icon-button"
           title="เปิดใน browser ภายนอก"
-          disabled={!!fileRequest}
+          disabled={!!fileRequest || !!artifact}
           onClick={external}
         >
           <ExternalLink size={14} />
@@ -294,7 +298,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
         </div>
       )}
       <div className="browser-canvas" ref={area}>
-        {artifact ? <ArtifactPreview title={artifact.title} language={artifact.language} content={artifact.content} onClose={() => setArtifact(null)} /> : fileRequest ? <ProjectFilePreview request={fileRequest} /> : native ? (
+        {artifact ? <React.Suspense fallback={<div className="preview-empty" role="status">กำลังเปิดชิ้นงาน…</div>}><ArtifactPreview key={artifact.id} title={artifact.title} language={artifact.language} content={artifact.content} onClose={() => setArtifact(null)} /></React.Suspense> : fileRequest ? <ProjectFilePreview request={fileRequest} /> : native ? (
           tab?.error ? (
             <div className="preview-empty">
               <AlertTriangle size={30} />

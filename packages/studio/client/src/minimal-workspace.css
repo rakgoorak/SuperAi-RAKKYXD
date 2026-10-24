@@ -673,7 +673,7 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--dim);
   margin-right: 2px;
 }
 
@@ -711,7 +711,7 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 #root .pinned-chip-remove {
   background: transparent;
   border: none;
-  color: var(--text-dim);
+  color: var(--dim);
   cursor: pointer;
   padding: 1px;
   display: flex;
@@ -739,7 +739,7 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
   border-radius: 6px;
   padding: 3px 8px;
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--dim);
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -786,7 +786,7 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 #root .pin-close-btn {
   background: transparent;
   border: none;
-  color: var(--text-dim);
+  color: var(--dim);
   cursor: pointer;
   padding: 2px;
 }
@@ -831,7 +831,7 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 #root .pin-dropdown-item .item-path {
   flex: 1;
   font-size: 10px;
-  color: var(--text-dim);
+  color: var(--dim);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -847,5 +847,123 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
   padding: 12px;
   text-align: center;
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--dim);
+}
+
+/* Session Visibility Toggle (Hide / Restore without deleting) */
+#root .sidebar-session.is-hidden {
+  opacity: 0.65;
+}
+#root .sidebar-hidden-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  white-space: nowrap;
+}
+#root .sidebar-session-visibility {
+  flex-shrink: 0;
+  padding: 5px;
+  border-radius: 5px;
+  color: #92918d;
+  opacity: 0;
+}
+#root .sidebar-session-visibility.is-hidden,
+#root .sidebar-session-row:hover .sidebar-session-visibility,
+#root .sidebar-session-visibility:focus-visible {
+  opacity: 1;
+}
+#root .sidebar-session-visibility:hover {
+  color: var(--accent);
+}
+#root .hidden-sessions-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+#root .hidden-sessions-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+#root .hidden-session-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--raised);
+  border: 1px solid var(--control-border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.2;
+  max-width: 160px;
+}
+#root .hidden-session-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#root .hidden-session-chip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+#root .hidden-session-restore-all {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--accent);
+  background: transparent;
+  border: 1px dashed var(--control-border);
+  white-space: nowrap;
+}
+#root .hidden-session-restore-all:hover {
+  background: var(--raised);
+  border-color: var(--accent);
+}
+#root .hidden-sessions-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 24px;
+  text-align: center;
+}
+#root .hidden-sessions-empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+}
+#root .hidden-sessions-empty h3 {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--text);
+}
+#root .hidden-sessions-empty p {
+  font-size: 12.5px;
+  color: var(--dim);
+  max-width: 420px;
+  line-height: 1.7;
+}
+#root .hidden-sessions-empty-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
 }

@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { workingContext } from '../server/WorkingContext.js';
+
+test('working context reads actual folder branches, unborn repositories and detached HEAD without mutations', async t => {
+  const root = path.resolve('output/working-context-test');
+  await fs.mkdir(root, { recursive: true });
+  const previousCeiling = process.env.GIT_CEILING_DIRECTORIES;
+  process.env.GIT_CEILING_DIRECTORIES = root;
+  t.after(() => { if (previousCeiling === undefined) delete process.env.GIT_CEILING_DIRECTORIES; else process.env.GIT_CEILING_DIRECTORIES = previousCeiling; });
+  const folder = await fs.mkdtemp(path.join(root, 'repo-'));
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: folder, encoding: 'utf8', windowsHide: true });
+  assert.equal((await workingContext(folder)).git, 'none');
+  git('init', '-b', 'feature/composer');
+  assert.equal((await workingContext(folder)).branch, 'feature/composer');
+  await fs.writeFile(path.join(folder, 'example.txt'), 'test');
+  git('add', 'example.txt');
+  git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', 'fixture');
+  const before = git('status', '--porcelain');
+  const worktree = path.join(root, `worktree-${path.basename(folder)}`);
+  git('worktree', 'add', '-b', 'feature/other', worktree);
+  assert.equal((await workingContext(worktree)).branch, 'feature/other');
+  assert.equal((await workingContext(folder)).branch, 'feature/composer');
+  git('checkout', '--detach');
+  const detached = await workingContext(folder);
+  assert.equal(detached.branch, null);
+  assert.match(detached.commit || '', /^[a-f0-9]+$/);
+  assert.equal(git('status', '--porcelain'), before);
+  await fs.mkdir(path.join(folder, 'nested'));
+  assert.equal((await workingContext(path.join(folder, 'nested'))).commit, detached.commit);
+  assert.equal((await workingContext(path.join(folder, 'missing'))).git, 'unavailable');
+});

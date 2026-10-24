@@ -46,11 +46,14 @@ import {
   Puzzle,
   Download,
   Users,
+  Eye,
+  EyeOff,
 } from "lucide-react";
-import { api, post, loginProvider, Workspace, Cli, Session, Run, Seat, togglePinnedFile } from "./api";
+import { api, post, Workspace, Cli, Session, Run, Seat, togglePinnedFile } from "./api";
 import { paneView } from "./paneView";
 import { chatPrefs, sendChatCommand, setChatPrefs } from "./chatControls";
 import { SessionChatControls } from "./components/SessionChatControls";
+import { ComposerLocation } from "./components/ComposerLocation";
 import { SessionCanvas, type CanvasLayout } from "./components/SessionCanvas";
 import { RightDock, type DockView } from "./components/RightDock";
 import { parsePreviewTarget, type PreviewRequest } from './previewLinks';
@@ -64,7 +67,7 @@ import { ProviderDefaults } from "./components/ProviderDefaults";
 import { SeatPicker } from "./components/SeatPicker";
 import { Markdown } from "./components/Markdown";
 import { ImageEndpointContext } from "./components/MarkdownImage";
-import { HEADLESS, loadDefaults, saveDefaults, seatFor } from "./providers";
+import { HEADLESS, loadDefaults, saveDefaults, seatFor, confirmDefaults } from "./providers";
 import { CliInstaller } from "./components/CliInstaller";
 import { LaunchPresets, type LaunchSeat } from "./components/LaunchPresets";
 import { VoiceSettingsPanel } from "./components/VoiceSettingsPanel";
@@ -133,6 +136,7 @@ export function App() {
   const [previewRequest, setPreviewRequest] = useState<PreviewRequest>();
   const [launchPlan, setLaunchPlan] = useState<LaunchSeat[] | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [returnToSetup, setReturnToSetup] = useState(false);
   const [deleteSession, setDeleteSession] = useState<{id: string; name: string} | null>(null);
   useEffect(() => { const request = (event: Event) => { setDeleteSession((event as CustomEvent<{id: string; name: string}>).detail); setDialog("session-delete"); }; window.addEventListener("superai:delete-session", request); return () => window.removeEventListener("superai:delete-session", request); }, []);
   const [settingsTab, setSettingsTab] = useState("tools");
@@ -180,6 +184,27 @@ export function App() {
   const [pinnedPickerOpen, setPinnedPickerOpen] = useState(false);
   const [pinnedSearch, setPinnedSearch] = useState("");
   const [projectFileList, setProjectFileList] = useState<string[]>([]);
+  const pinPickerWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!pinnedPickerOpen) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (pinPickerWrapRef.current && !pinPickerWrapRef.current.contains(e.target as Node)) {
+        setPinnedPickerOpen(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPinnedPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [pinnedPickerOpen]);
 
   const loadProjectFiles = useCallback(async () => {
     if (!workspace) return;
@@ -199,7 +224,40 @@ export function App() {
       showError(err.message);
     }
   };
-  const visible = sessions.filter((s) => s.wsId === activeWs);
+  const [hiddenSessions, setHiddenSessions] = useState<string[]>(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem("superai-hidden-sessions") || "[]");
+      return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("superai-hidden-sessions", JSON.stringify(hiddenSessions));
+    } catch {}
+  }, [hiddenSessions]);
+  const workspaceSessions = sessions.filter((s) => s.wsId === activeWs);
+  const visible = workspaceSessions.filter((s) => !hiddenSessions.includes(s.id));
+  const hiddenInWorkspace = workspaceSessions.filter((s) => hiddenSessions.includes(s.id));
+  const hideSession = useCallback((id: string) => {
+    setHiddenSessions((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    if (selected === id) {
+      const nextVisible = workspaceSessions.find((s) => s.id !== id && !hiddenSessions.includes(s.id));
+      setSelected(nextVisible?.id || "");
+      setZoomed(false);
+    }
+    setNotice("ซ่อน session พับเก็บไว้แล้ว · คลิกชื่อในแถบซ้ายหรือแถบด้านบนเพื่อเปิดกลับมาได้ตลอดเวลา");
+  }, [selected, workspaceSessions, hiddenSessions]);
+  const unhideSession = useCallback((id: string) => {
+    setHiddenSessions((prev) => prev.filter((item) => item !== id));
+    setSelected(id);
+    setMode("code");
+  }, []);
+  const unhideAllWorkspaceSessions = useCallback(() => {
+    const wsIds = new Set(workspaceSessions.map((s) => s.id));
+    setHiddenSessions((prev) => prev.filter((id) => !wsIds.has(id)));
+  }, [workspaceSessions]);
   const selectedSession = visible.find((s) => s.id === selected);
   // Chat sessions take messages without a running terminal.
   const running = visible.filter((s) => s.status === "running" || paneView(s) === "chat");
@@ -443,6 +501,7 @@ export function App() {
       const result = await post(`/api/terminals/${id}/kill`);
       if (!result.success)
         throw new Error("ปิด session ไม่สำเร็จ กรุณาลองใหม่");
+      setHiddenSessions((prev) => prev.filter((item) => item !== id));
       await refresh();
     });
   const restartSession = useCallback((id: string) =>
@@ -706,7 +765,8 @@ export function App() {
       );
       await refresh();
       setActiveWs(result.id);
-      setDialog(null);
+      setDialog(returnToSetup ? "setup" : null);
+      setReturnToSetup(false);
       setNotice(editing ? "แก้ไขโปรเจกต์แล้ว" : "เพิ่มโปรเจกต์แล้ว");
     });
   const openProject = (ws?: Workspace) => {
@@ -726,7 +786,30 @@ export function App() {
     try { localStorage.setItem("superai-setup-dismissed", "1"); } catch {}
     setDialog(null);
   };
-  const closeDialog = () => (dialog === "setup" ? closeSetup() : setDialog(null));
+  const closeDialog = () => {
+    if (dialog === "project" && returnToSetup) { setReturnToSetup(false); setDialog("setup"); }
+    else if (dialog === "setup") closeSetup();
+    else setDialog(null);
+  };
+  const startFromSetup = async (type: string, wsId: string, text: string) => {
+    const ws = workspaces.find(w => w.id === wsId);
+    const cli = clis.find(c => c.id === type && c.available);
+    if (!ws || !cli) throw new Error("ยังไม่พบโฟลเดอร์หรือผู้ช่วยที่เลือก กลับไปตรวจความพร้อมอีกครั้ง");
+    let session = sessions.find(s => s.wsId === wsId && s.agentType === type && s.status === "running");
+    if (!session) {
+      const chosen = seatFor(type, "");
+      session = await post<Session>("/api/terminals/spawn", { agentType: type, wsId, name: cli.name,
+        ...(HEADLESS.includes(type) ? { model: chosen.model, effort: chosen.effort } : {}), trustFolder: trustFolders });
+      if (session.status === "error") throw new Error(`เปิด ${cli.name} ไม่สำเร็จ ตรวจการติดตั้งและบัญชีแล้วลองอีกครั้ง`);
+      const created = session;
+      setSessions(current => current.some(s => s.id === created.id) ? current : [...current, created]);
+    }
+    setActiveWs(wsId); setSelected(session.id); setTarget("active"); setMode("code");
+    if (text.trim()) setDraftFor(composerDraftKey(wsId, "code", session.id, "active"), current => current.trim() && current !== text ? `${current}\n\n${text}` : text);
+    confirmDefaults(); closeSetup();
+    await refresh().catch(() => showError("เปิดห้องคุยแล้ว แต่ยังอ่านสถานะล่าสุดไม่ได้ กรุณาตรวจการเชื่อมต่อ"));
+    requestAnimationFrame(() => composer.current?.focus());
+  };
 
   return (
     <div className={`app-shell ${window.superai?.platform === "darwin" ? "platform-mac" : ""}`}>
@@ -745,6 +828,7 @@ export function App() {
                 <button
                   key={m}
                   className={mode === m ? "active" : ""}
+                  title={m === "agent" ? "ให้ทีม AI แบ่งงานและลงมือทำ" : m === "code" ? "คุยกับผู้ช่วย AI และทำงานกับไฟล์" : "ถามหลาย AI แล้วเปรียบเทียบคำตอบ"}
                   onClick={() => { setMode(m); if (m === "agent") setPreview(false); }}
                 >
                   {m === "code" ? (
@@ -754,7 +838,7 @@ export function App() {
                   ) : (
                     <Bot size={15} />
                   )}
-                  <span>{modeLabels[m]}</span>
+                  <span>{modeLabels[m]}<small aria-hidden="true">{m === "agent" ? "ทีมช่วยทำงาน" : m === "code" ? "คุยกับผู้ช่วย" : "เทียบคำตอบ"}</small></span>
                 </button>
               ))}
             </nav>
@@ -848,34 +932,49 @@ export function App() {
                       )}
                       {activeWs === ws.id && (
                         <div className="project-sessions">
-                          {entries.map((s) => (
-                            <div key={s.id} className="sidebar-session-row">
-                              <button
-                                className={`sidebar-session ${s.id === selected && mode === "code" ? "active" : ""}`}
-                                onClick={() => {
-                                  setSelected(s.id);
-                                  setMode("code");
-                                }}
-                              >
-                                {paneView(s) === "chat" ? <MessageSquare size={13} /> : <Terminal size={13} />}
-                                <span>{s.name}</span>
-                                <span
-                                  className={`status-dot ${s.status === "running" || paneView(s) === "chat" ? "" : s.status === "error" ? "bad" : "offline"}`}
-                                />
-                              </button>
-                              <button
-                                className="sidebar-session-delete"
-                                title={`ลบ ${s.name}`}
-                                aria-label={`ลบ ${s.name}`}
-                                disabled={busy}
-                                onClick={() => {
-                                  setDeleteSession({id: s.id, name: s.name}); setDialog("session-delete");
-                                }}
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            </div>
-                          ))}
+                          {entries.map((s) => {
+                            const isHidden = hiddenSessions.includes(s.id);
+                            return (
+                              <div key={s.id} className={`sidebar-session-row ${isHidden ? "is-hidden" : ""}`}>
+                                <button
+                                  className={`sidebar-session ${s.id === selected && mode === "code" && !isHidden ? "active" : ""} ${isHidden ? "is-hidden" : ""}`}
+                                  title={isHidden ? `${s.name} (ซ่อนอยู่ · คลิกเพื่อเปิดกลับมาแสดงบนหน้าจอ)` : s.name}
+                                  onClick={() => {
+                                    unhideSession(s.id);
+                                  }}
+                                >
+                                  {paneView(s) === "chat" ? <MessageSquare size={13} /> : <Terminal size={13} />}
+                                  <span>{s.name}</span>
+                                  {isHidden && <small className="sidebar-hidden-badge">ซ่อนอยู่</small>}
+                                  <span
+                                    className={`status-dot ${s.status === "running" || paneView(s) === "chat" ? "" : s.status === "error" ? "bad" : "offline"}`}
+                                  />
+                                </button>
+                                <button
+                                  className={`sidebar-session-visibility ${isHidden ? "is-hidden" : ""}`}
+                                  title={isHidden ? `แสดง ${s.name} บนหน้าจอ` : `ซ่อน ${s.name} พับเก็บไว้ก่อน`}
+                                  aria-label={isHidden ? `แสดง ${s.name}` : `ซ่อน ${s.name}`}
+                                  onClick={() => {
+                                    if (isHidden) unhideSession(s.id);
+                                    else hideSession(s.id);
+                                  }}
+                                >
+                                  {isHidden ? <EyeOff size={12} /> : <Eye size={12} />}
+                                </button>
+                                <button
+                                  className="sidebar-session-delete"
+                                  title={`ลบ ${s.name}`}
+                                  aria-label={`ลบ ${s.name}`}
+                                  disabled={busy}
+                                  onClick={() => {
+                                    setDeleteSession({id: s.id, name: s.name}); setDialog("session-delete");
+                                  }}
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            );
+                          })}
                           <button
                             className="add-session-link"
                             onClick={() => openSession()}
@@ -1021,6 +1120,35 @@ export function App() {
                       ? `${visible.length} session`
                       : `${conversation.length} งาน`}
                   </span>
+                  {mode === "code" && hiddenInWorkspace.length > 0 && (
+                    <div className="hidden-sessions-bar" role="group" aria-label="session ที่ซ่อนอยู่">
+                      <span className="hidden-sessions-label">
+                        <EyeOff size={12} /> ซ่อนอยู่ {hiddenInWorkspace.length}:
+                      </span>
+                      {hiddenInWorkspace.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className="hidden-session-chip"
+                          title={`คลิกเพื่อแสดง ${s.name} กลับมาบนหน้าจอ`}
+                          onClick={() => unhideSession(s.id)}
+                        >
+                          <Eye size={11} />
+                          <span>{s.name.split("·")[0].trim() || s.name}</span>
+                        </button>
+                      ))}
+                      {hiddenInWorkspace.length > 1 && (
+                        <button
+                          type="button"
+                          className="hidden-session-restore-all"
+                          title="แสดงทุก session ที่ซ่อนอยู่ในโปรเจกต์นี้"
+                          onClick={unhideAllWorkspaceSessions}
+                        >
+                          แสดงทั้งหมด
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="inline">
                   {mode === "code" ? (
@@ -1077,9 +1205,11 @@ export function App() {
               <div
                 className={`code-workspace ${mode !== "code" ? "not-visible" : ""}`}
               >
-                {visible.length > 0 ? (
-                  <SessionCanvas sessions={visible} workspaceId={activeWs} selected={selected} layout={layout} zoomed={zoomed} active={mode === "code"} busy={busy}
-                    select={setSelected} zoom={id => { setSelected(id); setZoomed(true); }} close={closeSession} restart={restartSession} add={openSession} switchView={switchView}
+                {workspaceSessions.length > 0 ? (
+                  <SessionCanvas sessions={workspaceSessions} hiddenIds={hiddenSessions} workspaceId={activeWs} selected={selected} layout={layout} zoomed={zoomed} active={mode === "code"} busy={busy}
+                    select={setSelected} zoom={id => { setSelected(id); setZoomed(true); }}
+                    hide={hideSession} unhide={unhideSession} unhideAll={unhideAllWorkspaceSessions}
+                    close={closeSession} restart={restartSession} add={openSession} switchView={switchView}
                     refresh={() => void refresh().catch(() => {})} onError={showError} />
                 ) : (
                   <WorkspaceWelcome clis={clis} openSession={openSession} onMode={setMode} />
@@ -1194,7 +1324,7 @@ export function App() {
                       })}
                     </div>
                   )}
-                  <div className="composer-pin-picker-wrap">
+                  <div className="composer-pin-picker-wrap" ref={pinPickerWrapRef}>
                     <button
                       type="button"
                       className="composer-add-pin-btn"
@@ -1289,7 +1419,9 @@ export function App() {
                     )}
                   </div>
                 </div>}
+                <ComposerLocation workspace={workspace} recipients={mode === 'code' ? target === 'all' ? running : composerTarget ? [composerTarget] : [] : undefined} />
                 <div className={`composer-box ${chatTarget ? "has-session-controls" : ""}`}>
+                  <div className="composer-leading"><AttachMenu onFiles={attachToComposer} disabled={!workspace} /></div>
                   {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name.split("·")[0].trim() || chatTarget.name} disabled={busy} />}
                   <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
                   <div className="composer-input-container">
@@ -1332,7 +1464,6 @@ export function App() {
                   </div>
                   <div className="composer-bottom">
                     <div className="composer-tools">
-                    <AttachMenu onFiles={attachToComposer} disabled={!workspace} />
                     {mode === "code" && (
                       <button className="icon-button" title={composerExpanded ? "ย่อช่องคำสั่ง" : "ขยายช่องคำสั่ง"}
                         aria-expanded={composerExpanded} onClick={() => setComposerExpanded(!composerExpanded)}>
@@ -1424,7 +1555,7 @@ export function App() {
             </main>
             <RightDock open={preview} view={dockView} setView={setDockView} close={() => setPreview(false)} suspended={!!dialog || usageOpen}
               workspace={workspace} workspaces={workspaces} sessions={sessions} runs={runs} selected={selected} previewRequest={previewRequest}
-              onSelect={session => { setActiveWs(session.wsId || activeWs); setSelected(session.id); setMode("code"); }}
+              onSelect={session => { setActiveWs(session.wsId || activeWs); unhideSession(session.id); }}
               onPrompt={text => {
                 setDraft(text);
                 setComposerExpanded(true);
@@ -1463,8 +1594,7 @@ export function App() {
         sessions={sessions}
         selectedSession={selected}
         onSelectSession={(sessId) => {
-          setSelected(sessId);
-          setMode("code");
+          unhideSession(sessId);
         }}
         onAction={(actionName) => {
           if (actionName === "session") setDialog("session");
@@ -1518,13 +1648,13 @@ export function App() {
                 </h2>
                 <p>
                   {dialog === "session"
-                    ? "เลือก CLI, model, effort และจำนวนแท็บที่ต้องการ"
+                    ? "เลือกผู้ช่วยที่อยากคุยด้วย ใช้ค่ารุ่น AI เริ่มต้นได้ ห้องคุยแต่ละห้องแยกจากกัน"
                     : dialog === "settings"
                       ? "ตรวจเครื่องมือ และเลือก model กับ effort เริ่มต้นของแต่ละผู้ให้บริการ"
                       : dialog === "project"
                         ? "เลือกโฟลเดอร์ที่ใช้ทำงานจริงบนเครื่อง"
                         : dialog === "setup"
-                          ? "ตรวจเครื่องมือ บัญชี และค่าเริ่มต้นก่อนเริ่มงาน"
+                          ? "เลือกโฟลเดอร์ เชื่อมต่อผู้ช่วย แล้วเริ่มคุยได้เลย"
                           : dialog === "skills"
                             ? `${workspace?.name || ""} · AI เสนอ คุณเป็นคนกดติดตั้ง`
                             : dialog === "update"
@@ -1550,7 +1680,7 @@ export function App() {
             )}
             {dialog === "history" && <HistoryPanel workspaces={workspaces} sessions={sessions} onSelect={openHistoryEntry} />}
             {dialog === "changes" && workspace && <ChangesPanel workspaceId={workspace.id} onPreview={() => { setDialog(null); setDockView("browser"); setPreview(true); }} />}
-            {dialog === "session-delete" && deleteSession && <><p className="confirm-description"><strong>{deleteSession.name}</strong><br />ประวัติแชตใน session นี้จะถูกลบด้วย</p><div className="dialog-footer"><button className="secondary" autoFocus onClick={closeDialog}>ยกเลิก</button><button className="danger-button" disabled={busy} onClick={() => { closeSession(deleteSession.id); setDialog(null); }}>ลบ session</button></div></>}
+            {dialog === "session-delete" && deleteSession && <><p className="confirm-description"><strong>{deleteSession.name}</strong><br />ประวัติแชตใน session นี้จะถูกลบด้วย (หากต้องการพักไว้ชั่วคราว กด “ซ่อนไว้ก่อน” เพื่อเปิดกลับมาใช้ทีหลังได้)</p><div className="dialog-footer"><button className="secondary" autoFocus onClick={closeDialog}>ยกเลิก</button><button className="secondary" disabled={busy} onClick={() => { hideSession(deleteSession.id); setDialog(null); }}><EyeOff size={15} /> ซ่อนไว้ก่อน (ไม่ลบ)</button><button className="danger-button" disabled={busy} onClick={() => { closeSession(deleteSession.id); setDialog(null); }}>ลบ session</button></div></>}
             {dialog === "session" && (
               <>
                 <CliInstaller clis={clis} onRefresh={checkClis} onError={showError}/>
@@ -1603,12 +1733,12 @@ export function App() {
                 {!launchPlan && HEADLESS.includes(launchType) && launchCli?.available && (
                   <div className="session-model">
                     <SeatPicker named={false} fixedProvider label={launchCli.name} clis={clis} ollamaModels={[]} seat={sessionSeat} onChange={setSessionSeat} />
-                    <small className="muted">เว้นว่างเพื่อใช้ค่าเริ่มต้นที่ตั้งไว้ใน CLI · เปลี่ยนภายหลังได้ด้วยคำสั่ง /model ของ CLI นั้น</small>
+                    <small className="muted">ไม่แน่ใจว่าจะเลือกรุ่นไหน ใช้ค่าเริ่มต้นได้ แล้วค่อยเปลี่ยนทีหลัง</small>
                   </div>
                 )}
                 <div className="dialog-field-row">
                   <label>
-                    จำนวน session
+                    จำนวนห้องคุย (session)
                     <select
                       value={count}
                       onChange={(e) => { setLaunchPlan(null); setCount(Number(e.target.value)); }}
@@ -1624,7 +1754,7 @@ export function App() {
                     </select>
                   </label>
                   <p>
-                    แต่ละ session ทำงานในโฟลเดอร์
+                    แต่ละห้องคุยทำงานในโฟลเดอร์
                     <br />
                     <strong>{workspace?.name}</strong>
                   </p>
@@ -1656,12 +1786,11 @@ export function App() {
             )}
             {dialog === "setup" && (
               <>
-                <SetupGuide clis={clis} workspaces={workspaces} voice={voiceSettings} refreshClis={checkClis} onError={showError}
-                  addProject={() => openProject()} installCli={() => openSession()} openSkills={() => setDialog("skills")}
-                  login={(id) => { void task(() => loginProvider(id, { wsId: workspace?.id || workspaces[0]?.id })); }} />
+                <SetupGuide clis={clis} workspaces={workspaces} workspaceId={activeWs} voice={voiceSettings} refreshClis={checkClis} onStart={startFromSetup}
+                  addProject={() => { setReturnToSetup(true); openProject(); }} openSkills={() => setDialog("skills")} />
                 <div className="dialog-footer">
                   <span className="muted">เปิดหน้านี้อีกครั้งได้จากแถบซ้าย “เริ่มต้นใช้งาน”</span>
-                  <button className="primary" onClick={closeSetup}>เสร็จแล้ว <Check size={15} /></button>
+                  <button className="secondary" onClick={closeSetup}>ปิดไว้ก่อน</button>
                 </div>
               </>
             )}
@@ -1728,7 +1857,7 @@ export function App() {
                     </div>
                   </label>
                   <label>
-                    คำสั่งประจำโปรเจกต์ (Custom Instructions)
+                    คำแนะนำสำหรับ AI (ไม่บังคับ)
                     <textarea
                       rows={3}
                       value={projectInstructions}
@@ -1747,7 +1876,7 @@ export function App() {
                   <button
                     type="button"
                     className="secondary"
-                    onClick={() => setDialog(null)}
+                    onClick={closeDialog}
                   >
                     ยกเลิก
                   </button>

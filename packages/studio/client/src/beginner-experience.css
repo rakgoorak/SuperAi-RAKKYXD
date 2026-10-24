@@ -1,0 +1,49 @@
+#root .beginner-setup { display: grid; gap: 22px; }
+#root .beginner-intro { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.85; max-width: 70ch; }
+#root .beginner-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; list-style: none; margin: 0; padding: 0; }
+#root .beginner-steps button { width: 100%; min-height: 46px; display: flex; align-items: center; justify-content: flex-start; gap: 9px; padding: 10px 12px; border-radius: 8px; color: var(--text-secondary); background: var(--base); border: 1px solid var(--border); font-size: 12px; }
+#root .beginner-steps button[aria-current='step'] { background: var(--selected); border-color: var(--focus); color: var(--text); }
+#root .beginner-steps button > span { flex-shrink: 0; width: 22px; height: 22px; display: grid; place-items: center; background: var(--raised); border-radius: 50%; font-size: 11px; }
+#root .beginner-step { padding: 4px 0; }
+#root .beginner-step > svg { color: var(--accent); margin: 0 0 12px; }
+#root .beginner-step h3 { margin: 0 0 10px; font-size: 21px; font-weight: 600; line-height: 1.6; }
+#root .beginner-step p, #root .beginner-details p { font-size: 13px; line-height: 1.85; color: var(--text-secondary); max-width: 70ch; margin: 0 0 18px; }
+#root .beginner-field { display: grid; gap: 8px; margin: 20px 0; font-size: 13px; color: var(--text); }
+#root .beginner-field select, #root .beginner-field textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 42px; padding: 10px 12px; background: var(--base); color: var(--text); border: 1px solid var(--control-border); border-radius: 8px; font: inherit; }
+#root .beginner-field textarea { resize: vertical; }
+#root .beginner-field small, #root .beginner-step > small, #root .beginner-account > small { font-size: 12px; line-height: 1.8; color: var(--dim); overflow-wrap: anywhere; }
+#root .beginner-actions { position: sticky; bottom: 0; z-index: 1; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin: 24px 0 12px; padding: 12px 0; background: #292925; }
+#root .beginner-actions button, #root .beginner-readiness button, #root .beginner-step > button { min-height: 42px; padding: 10px 15px; }
+#root .beginner-details { border-top: 1px solid var(--border); padding-top: 16px; color: var(--text-secondary); font-size: 12px; }
+#root .beginner-details summary { display: flex; align-items: center; gap: 8px; cursor: pointer; line-height: 1.8; }
+#root .beginner-details summary::before { content: '+'; flex-shrink: 0; }
+#root .beginner-details[open] > summary::before { content: '−'; }
+#root .beginner-details h4 { margin: 24px 0 8px; font-size: 14px; color: var(--text); }
+#root .beginner-details dl { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 10px; margin-top: 16px; }
+#root .beginner-details dd { margin: 0; overflow-wrap: anywhere; }
+#root .beginner-readiness, #root .beginner-account { margin: 20px 0; padding: 18px 0; border-top: 1px solid var(--border); }
+#root .beginner-readiness h4, #root .beginner-account h4 { font-size: 14px; margin: 0 0 8px; }
+#root .beginner-account .setup-confirm { display: flex; align-items: flex-start; gap: 8px; margin: 14px 0; font-size: 12px; line-height: 1.8; }
+#root .beginner-account .provider-access { flex-wrap: wrap; gap: 10px; }
+#root .beginner-examples { display: grid; gap: 8px; margin: 20px 0; }
+#root .beginner-examples button { text-align: left; justify-content: flex-start; padding: 11px 14px; min-height: 42px; white-space: normal; line-height: 1.8; }
+#root .beginner-problem, #root .skills-search-error { padding: 14px; background: var(--raised); border-radius: 8px; color: var(--text); font-size: 13px; line-height: 1.8; }
+#root .beginner-summary { padding-top: 16px; border-top: 1px solid var(--border); }
+#root .skill-categories { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 20px; }
+#root .skill-categories button { padding: 7px 11px; min-height: 34px; }
+#root .skills-recommend > summary, #root .skills-installed > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; min-height: 32px; color: var(--text); }
+#root .skills-recommend[open] > summary, #root .skills-installed[open] > summary { margin-bottom: 16px; }
+#root .skills-panel .skills-search-bar input { min-width: 0; }
+#root .skills-installed { border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+#root .mode-switch button > span { display: flex; flex-direction: column; gap: 0; line-height: 1.35; }
+#root .mode-switch button small { font-size: 10px; color: var(--text-secondary); font-weight: 400; }
+#root .titlebar .mode-switch { top: 5px; }
+@media (max-width: 600px) {
+  #root .beginner-steps { gap: 5px; }
+  #root .beginner-steps button { flex-direction: column; gap: 6px; padding: 9px 5px; font-size: 11px; }
+  #root .beginner-step h3 { font-size: 18px; }
+  #root .beginner-actions { justify-content: stretch; }
+  #root .beginner-actions button { flex: 1; }
+  #root .skills-search-bar { flex-wrap: wrap; }
+  #root .skills-search-bar input { flex-basis: 100%; }
+}

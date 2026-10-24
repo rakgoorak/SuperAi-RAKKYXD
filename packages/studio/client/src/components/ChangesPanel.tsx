@@ -33,11 +33,12 @@ export function ChangesPanel({ workspaceId, onPreview }: { workspaceId: string; 
     let disposed = false;
     setProblem('');
     setLoading(true);
-    api<{ files: string[] }>(`/api/workspaces/${workspaceId}/changes`)
+    api<{ files?: string[] }>(`/api/workspaces/${workspaceId}/changes`)
       .then(data => {
         if (!disposed) {
-          setFiles(data.files);
-          setSelected(prev => (prev && data.files.includes(prev) ? prev : (data.files[0] || '')));
+          const list = Array.isArray(data?.files) ? data.files : [];
+          setFiles(list);
+          setSelected(prev => (prev && list.includes(prev) ? prev : (list[0] || '')));
         }
       })
       .catch(error => {
@@ -58,7 +59,11 @@ export function ChangesPanel({ workspaceId, onPreview }: { workspaceId: string; 
     let disposed = false;
     getWorktrees(workspaceId)
       .then(data => {
-        if (!disposed) setWorktreeInfo(data);
+        if (!disposed && data && Array.isArray(data.worktrees)) {
+          setWorktreeInfo(data);
+        } else if (!disposed) {
+          setWorktreeInfo(null);
+        }
       })
       .catch(() => {
         if (!disposed) setWorktreeInfo(null);
@@ -176,7 +181,7 @@ export function ChangesPanel({ workspaceId, onPreview }: { workspaceId: string; 
           title="จัดการ Git Worktrees"
         >
           <FolderGit2 size={13} />
-          <span>{worktreeInfo?.current ? (isCurrentWorktree ? `🌿 ${worktreeInfo.current.branch}` : '🌿 main') : '🌿 Worktrees'}</span>
+          <span>{worktreeInfo?.current ? (isCurrentWorktree ? worktreeInfo.current.branch : 'main') : 'Worktrees'}</span>
         </button>
         <button className="secondary" onClick={() => setRevision(n => n + 1)}>
           ตรวจไฟล์อีกครั้ง
