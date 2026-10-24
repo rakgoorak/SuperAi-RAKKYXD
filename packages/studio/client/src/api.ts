@@ -41,6 +41,58 @@ export async function saveProjectFile(wsId: string, filePath: string, content: s
   return post(`/api/workspaces/${wsId}/files/save`, { filePath, content });
 }
 
+export interface WorktreeInfo {
+  path: string;
+  branch: string;
+  commit: string;
+  isMain: boolean;
+  isCurrent: boolean;
+  relativeDir: string;
+}
+
+export interface WorktreeListResponse {
+  worktrees: WorktreeInfo[];
+  current: WorktreeInfo | null;
+  isWorktree: boolean;
+}
+
+export interface MergeWorktreeResponse {
+  success: boolean;
+  commit?: string;
+  deleted?: boolean;
+  conflict?: boolean;
+  conflictingFiles?: string[];
+  error?: string;
+}
+
+export async function getWorktrees(wsId: string): Promise<WorktreeListResponse> {
+  return api(`/api/workspaces/${encodeURIComponent(wsId)}/worktrees`);
+}
+
+export async function createWorktree(wsId: string, branch: string): Promise<{ success: boolean; worktree: WorktreeInfo }> {
+  return post(`/api/workspaces/${encodeURIComponent(wsId)}/worktrees`, { branch });
+}
+
+export async function mergeWorktree(
+  wsId: string,
+  sourceBranch: string,
+  targetBranch: string = 'main',
+  deleteAfter: boolean = false
+): Promise<MergeWorktreeResponse> {
+  return post(`/api/workspaces/${encodeURIComponent(wsId)}/worktrees/merge`, { sourceBranch, targetBranch, deleteAfter });
+}
+
+export async function deleteWorktree(
+  wsId: string,
+  path: string,
+  deleteBranch: boolean = false
+): Promise<{ success: boolean }> {
+  return api(`/api/workspaces/${encodeURIComponent(wsId)}/worktrees`, {
+    method: 'DELETE',
+    body: JSON.stringify({ path, deleteBranch }),
+  });
+}
+
 export interface Workspace {
   id: string;
   name: string;
