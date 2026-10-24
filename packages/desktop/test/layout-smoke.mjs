@@ -74,8 +74,8 @@ try {
       await page.getByRole('button', { name: 'Preview', exact: true }).click();
       await page.waitForSelector('.preview-panel');
       assert.equal((await measure()).columns, 1);
-      await page.getByRole('textbox', { name: 'คำสั่ง', exact: true }).fill('echo ทดสอบแจ้งเตือนขณะเปิด Preview');
-      await page.getByRole('textbox', { name: 'คำสั่ง', exact: true }).press('Enter');
+      await page.getByRole('combobox', { name: 'คำสั่ง', exact: true }).fill('echo ทดสอบแจ้งเตือนขณะเปิด Preview');
+      await page.getByRole('combobox', { name: 'คำสั่ง', exact: true }).press('Enter');
       await page.waitForSelector('.message-banner:not(.error)');
       assert.ok(await page.evaluate(() => {
         const toast = document.querySelector('.message-banner').getBoundingClientRect();
@@ -92,9 +92,9 @@ try {
       await page.screenshot({ path: path.join(output, 'superai-layout-wide.png') });
       checks++;
       await page.getByTitle('ขยายช่องคำสั่ง', { exact: true }).click();
-      await page.getByRole('textbox', { name: 'คำสั่ง', exact: true }).fill('บรรทัดที่หนึ่ง\nบรรทัดที่สอง');
+      await page.getByRole('combobox', { name: 'คำสั่ง', exact: true }).fill('บรรทัดที่หนึ่ง\nบรรทัดที่สอง');
       await page.getByTitle('ย่อช่องคำสั่ง', { exact: true }).click();
-      assert.equal(await page.getByRole('textbox', { name: 'คำสั่ง', exact: true }).inputValue(), 'บรรทัดที่หนึ่ง\nบรรทัดที่สอง');
+      assert.equal(await page.getByRole('combobox', { name: 'คำสั่ง', exact: true }).inputValue(), 'บรรทัดที่หนึ่ง\nบรรทัดที่สอง');
       checks++;
       await request(`/api/terminals/${ids[0]}/input`, { input: 'echo LAYOUT_SESSION_PRESERVED\r' });
       await page.waitForFunction(async id => (await (await fetch('/api/terminals')).json()).find(s => s.id === id)?.bufferedOutput.includes('LAYOUT_SESSION_PRESERVED'), ids[0]);

@@ -1,21 +1,32 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AlertTriangle, ChevronRight, FilePen, FileText, Globe, ListChecks, Loader2, Paperclip, Search, Terminal as TerminalIcon, Wrench } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronRight, Circle, Clock3, FilePen, FileText, Globe, ListChecks, Loader2, Paperclip, Search, Send, Terminal as TerminalIcon, Wrench, X } from 'lucide-react';
 import { Markdown } from './Markdown';
 import { post } from '../api';
 import { prepareMessage, recoveryHint, showChanges } from '../recovery';
 import { getSuggestions } from '../suggestions';
 import { NextSteps } from './NextSteps';
 import { ResponseActions } from './ResponseActions';
+import { timeLabel, tokenLabel } from '../chatFormat';
 
 // Mirrors server/CliChat.ts.
 type ToolKind = 'command' | 'read' | 'edit' | 'search' | 'web' | 'plan' | 'other';
-type ToolItem = { id: string; kind: 'tool'; tool: ToolKind; title: string; output?: string; status: 'running' | 'done' | 'failed'; at: number };
+type ToolItem = { id: string; kind: 'tool'; tool: ToolKind; title: string; output?: string; images?: string[]; status: 'running' | 'done' | 'failed'; at: number };
+type TodoStatus = 'pending' | 'in_progress' | 'completed';
+type TodosItem = { id: string; kind: 'todos'; todos: { text: string; status: TodoStatus }[]; at: number };
+type Activity = { startedAt: number; outputTokens: number };
+type Queued = { id: string; text: string; attachments?: string[] };
 type ChatItem =
   | { id: string; kind: 'user'; text: string; attachments?: string[]; request?: { text: string; model?: string; effort?: string; skillId?: string; attachments?: string[] }; at: number }
   | { id: string; kind: 'assistant'; text: string; at: number }
   | ToolItem
+  | TodosItem
   | { id: string; kind: 'error' | 'notice'; text: string; at: number };
-type Message = { type: 'snapshot'; chat: { items: ChatItem[]; running: boolean } } | { type: 'item'; item: ChatItem } | { type: 'state'; running: boolean };
+type Message =
+  | { type: 'snapshot'; chat: { items: ChatItem[]; running: boolean; activity?: Activity; queued?: Queued[] } }
+  | { type: 'item'; item: ChatItem }
+  | { type: 'state'; running: boolean }
+  | { type: 'activity'; activity?: Activity }
+  | { type: 'queue'; queued: Queued[] };
 type Block = Exclude<ChatItem, ToolItem> | { id: string; kind: 'tools'; tools: ToolItem[] };
 
 const ICONS = { command: TerminalIcon, read: FileText, edit: FilePen, search: Search, web: Globe, plan: ListChecks, other: Wrench };
@@ -41,33 +52,66 @@ function summary(tools: ToolItem[]) {
   return [...counts].map(([kind, n]) => COUNTS[kind](n)).join(' · ');
 }
 
+/** A screenshot from a tool; click to see it full width. */
+function Shot({ src, small = false }: { src: string; small?: boolean }) {
+  const [big, setBig] = useState(false);
+  return <button type="button" className={`chat-shot ${small ? 'thumb' : ''} ${big ? 'big' : ''}`} title={big ? 'ย่อรูป' : 'ดูรูปเต็ม'}
+    onClick={(e) => { e.stopPropagation(); setBig(!big); }}><img src={src} alt="ภาพจากเครื่องมือ" loading="lazy" /></button>;
+}
+
 function ToolRow({ tool }: { tool: ToolItem }) {
   const [open, setOpen] = useState(false);
   const Icon = ICONS[tool.tool] || Wrench;
   return (
     <li className={`chat-tool ${tool.status}`}>
-      <button className="chat-tool-row" onClick={() => setOpen(!open)} disabled={!tool.output} aria-expanded={open}>
+      <button className="chat-tool-row" onClick={() => setOpen(!open)} disabled={!tool.output && !tool.images?.length} aria-expanded={open}>
         {tool.status === 'running' ? <Loader2 size={13} className="spin" /> : <Icon size={13} />}
         <code>{tool.title}</code>
         {tool.status === 'failed' && <span className="chat-tool-failed">ไม่สำเร็จ</span>}
       </button>
       {open && tool.output && <pre>{tool.output.trimEnd()}</pre>}
+      {open && tool.images?.length ? <div className="chat-shots">{tool.images.map((src, i) => <Shot key={i} src={src} />)}</div> : null}
     </li>
   );
 }
 
+/** Folded steps, like Claude's "Resized browser, waited, captured page ▸", with screenshot thumbnails. */
 function ToolGroup({ tools }: { tools: ToolItem[] }) {
   const running = tools.find((t) => t.status === 'running');
   const [open, setOpen] = useState(false);
+  const images = tools.flatMap((t) => t.images || []);
   return (
     <div className="chat-tools">
-      <button className="chat-tools-summary" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className={`chat-dot ${running ? 'running' : tools.some((t) => t.status === 'failed') ? 'failed' : ''}`} />
-        <span>{running ? `กำลังทำงาน: ${running.title.split('\n')[0]}` : summary(tools)}</span>
-        <ChevronRight size={13} className={`chat-chevron ${open ? 'open' : ''}`} />
-      </button>
+      <div className="chat-tools-head">
+        <button className="chat-tools-summary" onClick={() => setOpen(!open)} aria-expanded={open}>
+          <span className={`chat-dot ${running ? 'running' : tools.some((t) => t.status === 'failed') ? 'failed' : ''}`} />
+          <span>{running ? `กำลังทำงาน: ${running.title.split('\n')[0]}` : summary(tools)}</span>
+          <ChevronRight size={13} className={`chat-chevron ${open ? 'open' : ''}`} />
+        </button>
+        {!open && images.length > 0 && <span className="chat-thumbs">{images.slice(-3).map((src, i) => <Shot key={i} src={src} small />)}</span>}
+      </div>
       {open && <ul>{tools.map((t) => <ToolRow key={t.id} tool={t} />)}</ul>}
     </div>
+  );
+}
+
+/** The CLI's task list as a live checklist: ✓ done, spinner in progress, ○ waiting. */
+function TaskList({ item, live }: { item: TodosItem; live: boolean }) {
+  const done = item.todos.filter((t) => t.status === 'completed').length;
+  const [open, setOpen] = useState(true);
+  return (
+    <section className={`chat-tasks ${live ? 'live' : ''}`} aria-label="รายการงานของ AI">
+      <button type="button" className="chat-tasks-head" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <ListChecks size={14} /><span>รายการงาน</span><small>{done}/{item.todos.length}</small>
+        <ChevronRight size={13} className={`chat-chevron ${open ? 'open' : ''}`} />
+      </button>
+      {open && <ol>
+        {item.todos.map((t, i) => <li key={i} className={t.status}>
+          {t.status === 'completed' ? <CheckCircle2 size={15} /> : t.status === 'in_progress' && live ? <Loader2 size={15} className="spin" /> : <Circle size={15} />}
+          <span>{t.text}</span>
+        </li>)}
+      </ol>}
+    </section>
   );
 }
 
@@ -78,6 +122,8 @@ function ToolGroup({ tools }: { tools: ToolItem[] }) {
 export function ChatView({ sessionId, name }: { sessionId: string; name: string }) {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [running, setRunning] = useState(false);
+  const [activity, setActivity] = useState<Activity | undefined>();
+  const [queued, setQueued] = useState<Queued[]>([]);
   const [offline, setOffline] = useState(false);
   const [now, setNow] = useState(Date.now());
   const scroller = useRef<HTMLDivElement>(null);
@@ -127,8 +173,10 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
       socket.onmessage = (event) => {
         let message: Message;
         try { message = JSON.parse(event.data); } catch { return; }
-        if (message.type === 'snapshot') { setItems(message.chat.items); setRunning(message.chat.running); }
+        if (message.type === 'snapshot') { setItems(message.chat.items); setRunning(message.chat.running); setActivity(message.chat.activity); setQueued(message.chat.queued || []); }
         else if (message.type === 'state') setRunning(message.running);
+        else if (message.type === 'activity') setActivity(message.activity);
+        else if (message.type === 'queue') setQueued(message.queued);
         else if (message.type === 'item') {
           const item = message.item;
           setItems((current) => {
@@ -150,9 +198,10 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
     return () => { disposed = true; window.clearTimeout(retry); socket?.close(); };
   }, [sessionId]);
 
+  // Every second while working (live counter), every half minute otherwise (message times).
   useEffect(() => {
-    if (!running) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), running ? 1000 : 30000);
     return () => window.clearInterval(timer);
   }, [running]);
 
@@ -171,8 +220,13 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
     if (stick.current) el.scrollTop = el.scrollHeight;
   }, [items, running]);
 
-  const started = [...items].reverse().find((i) => i.kind === 'user')?.at ?? now;
+  const started = activity?.startedAt ?? [...items].reverse().find((i) => i.kind === 'user')?.at ?? now;
   const seconds = Math.max(0, Math.round((now - started) / 1000));
+  // The task list of the turn in progress stays pinned above the live counter, like Claude's.
+  const liveTodos = running && lastUser ? [...turnItems].reverse().find((item): item is TodosItem => item.kind === 'todos') : undefined;
+  const queueAction = (id: string, action: 'send' | 'remove') => {
+    post(`/api/terminals/${sessionId}/chat/queue/${id}/${action}`).catch((error) => setProblem((error as Error).message));
+  };
 
   return (
     <div className="chat-view">
@@ -190,7 +244,7 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
               <small>เลือก Model, Effort, /skills และเข้าสู่ระบบได้ที่ช่องคำสั่งด้านล่าง เมื่อเลือก session นี้อยู่</small>
             </div>
           )}
-          {blocks(items).filter(block => !search.trim() || (block.kind === 'tools' ? block.tools.map(t => t.title + ' ' + (t.output || '')).join(' ') : block.text).toLowerCase().includes(search.trim().toLowerCase())).map((block) => {
+          {blocks(items).filter(block => !search.trim() || (block.kind === 'tools' ? block.tools.map(t => t.title + ' ' + (t.output || '')).join(' ') : block.kind === 'todos' ? block.todos.map(t => t.text).join(' ') : block.text).toLowerCase().includes(search.trim().toLowerCase())).map((block) => {
             if (block.kind === 'user')
               return (
                 <div key={block.id} data-message-id={block.id} className="chat-user">
@@ -198,6 +252,7 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
                     {block.text}
                     <button className="edit-message" disabled={running || pending} onClick={() => { prepareMessage(block.text, sessionId); if (block.attachments?.length) setProblem('กรุณาแนบไฟล์เดิมอีกครั้งก่อนส่งข้อความที่แก้ไข'); }}>แก้ข้อความแล้วส่งใหม่</button>
                     {block.attachments?.length ? <small><Paperclip size={11} /> {block.attachments.join(', ')}</small> : null}
+                    <time className="chat-time" dateTime={new Date(block.at).toISOString()} title={new Date(block.at).toLocaleString('th-TH')}>{timeLabel(block.at, now)}</time>
                   </div>
                 </div>
               );
@@ -206,7 +261,7 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
               const currentTurn = !!lastUser && items.indexOf(block) > items.indexOf(lastUser);
               return <div key={block.id} data-message-id={block.id}>
                 <div className="chat-assistant"><Markdown text={block.text} /></div>
-                {!(running && currentTurn) && <ResponseActions text={block.text} disabled={pending || offline || running}
+                {!(running && currentTurn) && <ResponseActions text={block.text} at={block.at} now={now} disabled={pending || offline || running}
                   onRetry={latest && !turnFailed && !search.trim() && (lastUser?.request || !lastUser?.attachments?.length) ? () => void retry() : undefined}
                   onEdit={latest ? () => { prepareMessage(lastUser!.text, sessionId, { expand: false }); if (lastUser!.attachments?.length) setProblem('กรุณาแนบไฟล์เดิมอีกครั้งก่อนส่งข้อความที่แก้ไข'); } : undefined}
                   onChanges={latest && turnEdited ? () => showChanges(sessionId) : undefined} />}
@@ -214,13 +269,29 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
               </div>;
             }
             if (block.kind === 'tools') return <ToolGroup key={block.id} tools={block.tools} />;
+            if (block.kind === 'todos') return block === liveTodos ? null : <TaskList key={block.id} item={block} live={false} />;
             if (block.kind === 'error') return <div key={block.id} role="alert" className="chat-error"><AlertTriangle size={14} /><span>{block.text}</span></div>;
             return <div key={block.id} className="chat-notice">{block.text}</div>;
           })}
+          {liveTodos && <TaskList key={liveTodos.id} item={liveTodos} live />}
           {running && (
-            <div className="chat-working" role="status">
-              <Loader2 size={14} className="spin" />
-              <span>{name} กำลังทำงาน · {seconds} วิ · กดหยุดได้ที่ช่องคำสั่งด้านล่าง</span>
+            <div className="chat-working" role="status" title={`${name} กำลังทำงาน · กดหยุดได้ที่ช่องคำสั่งด้านล่าง`}>
+              <span className="chat-pulse" aria-hidden="true"><i /><i /><i /></span>
+              {/* Codex reports tokens only when its turn ends: show the time alone until then. */}
+              <span>{activity?.outputTokens ? `${tokenLabel(activity.outputTokens)} tokens · ` : ''}{seconds >= 60 ? `${Math.floor(seconds / 60)} นาที ${seconds % 60} วิ` : `${seconds} วิ`}</span>
+            </div>
+          )}
+          {queued.length > 0 && (
+            <div className="chat-queue" aria-label="ข้อความที่รอคิว">
+              {queued.map((q) => (
+                <div key={q.id} className="chat-queued">
+                  <Clock3 size={13} />
+                  <span>{q.text}{q.attachments?.length ? <small><Paperclip size={11} /> {q.attachments.join(', ')}</small> : null}</span>
+                  <small>{running ? 'รอคิว' : 'หยุดไว้'}</small>
+                  {!running && <button type="button" title="ส่งข้อความนี้เลย" onClick={() => queueAction(q.id, 'send')}><Send size={13} /></button>}
+                  <button type="button" title="เอาออกจากคิว" onClick={() => queueAction(q.id, 'remove')}><X size={13} /></button>
+                </div>
+              ))}
             </div>
           )}
           {!running && lastUser && turnFailed && <div className="recovery-actions"><button disabled={pending || offline || (!lastUser.request && !!lastUser.attachments?.length)} onClick={() => void retry()}>ลองส่งอีกครั้ง</button></div>}

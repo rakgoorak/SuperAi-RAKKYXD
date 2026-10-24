@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Copy, FilePen, MoreHorizontal, Pencil, RotateCcw } from 'lucide-react';
+import { timeLabel } from '../chatFormat';
 
 /** Response controls are separate from suggestions and never invent provider capabilities. */
-export function ResponseActions({ text, disabled = false, onRetry, onEdit, onChanges }: {
+export function ResponseActions({ text, at, now, disabled = false, onRetry, onEdit, onChanges }: {
   text?: string; disabled?: boolean; onRetry?: () => void; onEdit?: () => void; onChanges?: () => void;
+  /** When the answer arrived, shown after the buttons like Claude's "Just now". */
+  at?: number; now?: number;
 }) {
   const [copied, setCopied] = useState(false);
   const [problem, setProblem] = useState('');
@@ -44,6 +47,7 @@ export function ResponseActions({ text, disabled = false, onRetry, onEdit, onCha
         </div>}
       </div>}
       <span className="response-copy-status" role="status">{copied ? 'คัดลอกแล้ว' : ''}</span>
+      {at ? <time className="response-time" dateTime={new Date(at).toISOString()} title={new Date(at).toLocaleString('th-TH')}>{timeLabel(at, now)}</time> : null}
     </div>
     {problem && <small role="alert">{problem}</small>}
   </div>;

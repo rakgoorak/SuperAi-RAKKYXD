@@ -38,7 +38,6 @@ import {
   Code2,
   ShieldCheck,
   Layers,
-  Radio,
   Rocket,
   Puzzle,
   Download,
@@ -448,9 +447,11 @@ export function App() {
     // Apply the returned run before releasing shared busy state: all rows and Send stay locked.
     if (activeWsRef.current === previous.wsId) setRuns(current => [...current.filter(run => run.id !== created.id), created]);
   });
-  const send = () =>
+  /** `queue` (Ctrl+Enter): a chat that is still answering takes the message after its current turn. */
+  const send = (queue = false) =>
     task(async () => {
       if (!draft.trim() && !attachments.items.length) return;
+      let queuedCount = 0;
       if (!workspace) throw new Error("กรุณาสร้างโปรเจกต์ก่อน");
       // Save attached images/PDFs into <project>/.superai/attachments first.
       if (mode === "chat" && /^\/skills?\s*$/.test(draft.trim())) { setNotice("เลือก skill จากรายการเหนือช่องพิมพ์ แล้วระบุงานที่ต้องการ"); return; }
@@ -484,13 +485,17 @@ export function App() {
             if (recipients.length === 1 && /^\/skills?\s*$/.test(text)) { setDialog("skills"); setDraft(""); return; }
             const hasSkill = /(?:^|\s)\/(?:skill\s+)?([\w.:-]+)/.test(text);
             const skillId = prefs.skillId && hasSkill ? prefs.skillId : "";
-            await post(`/api/terminals/${recipient.id}/chat`, {
+            const result = await post<{ queued?: boolean }>(`/api/terminals/${recipient.id}/chat`, {
               text,
               model: prefs.model,
               effort: prefs.effort,
+              permission: prefs.permission,
               ...(skillId ? { skillId } : {}),
               attachments: saved.map((file) => file.path),
+              // Ctrl+Enter: wait behind a running turn instead of being refused.
+              ...(queue ? { queue: true } : {}),
             });
+            if (result.queued) queuedCount++;
             if (prefs.skillId) setChatPrefs(recipient.id, { skillId: "" });
             continue;
           }
@@ -506,9 +511,11 @@ export function App() {
             );
         }
         setNotice(
-          target === "all"
-            ? `ส่งให้ ${recipients.length} session ในโปรเจกต์นี้แล้ว`
-            : "ส่งคำสั่งแล้ว",
+          queuedCount
+            ? "ต่อคิวแล้ว · ส่งเองเมื่องานก่อนหน้าเสร็จ"
+            : target === "all"
+              ? `ส่งให้ ${recipients.length} session ในโปรเจกต์นี้แล้ว`
+              : "ส่งคำสั่งแล้ว",
         );
       } else {
         const prompt = draft.trim() || "ช่วยดูไฟล์แนบนี้";
@@ -1059,34 +1066,10 @@ export function App() {
                 </div>
               )}
               <div className={`composer-area ${mode === "code" && !composerExpanded ? "compact-code" : ""}`}>
-                <div className="composer-context">
+                {/* Code mode has no row above the box: its target and size controls sit in the bottom row, like Claude's. */}
+                {mode !== "code" && <div className="composer-context">
                   <div className="inline">
-                    {mode === "code" ? (
-                      <>
-                        <Radio size={13} />
-                        <select
-                          aria-label="เป้าหมายคำสั่ง"
-                          value={target}
-                          onChange={(e) => {
-                            setTarget(e.target.value);
-                            if (e.target.value !== "active" && e.target.value !== "all") setSelected(e.target.value);
-                          }}
-                        >
-                          <option value="active">
-                            {selectedSession?.name || "เลือก session"} ·
-                            ที่เลือก
-                          </option>
-                          <option value="all">
-                            ทุก session ในโปรเจกต์ ({running.length})
-                          </option>
-                          {running.map((s) => (
-                            <option value={s.id} key={s.id}>
-                              {s.name} · {s.id.slice(0, 5)}
-                            </option>
-                          ))}
-                        </select>
-                      </>
-                    ) : (
+                    {(
                       <>
                         <Bot size={13} />
                         <span>
@@ -1108,15 +1091,7 @@ export function App() {
                       </>
                     )}
                   </div>
-                  <div className="inline">
-                    {mode === "code" && (
-                      <button className="icon-button" title={composerExpanded ? "ย่อช่องคำสั่ง" : "ขยายช่องคำสั่ง"}
-                        aria-expanded={composerExpanded} onClick={() => setComposerExpanded(!composerExpanded)}>
-                        {composerExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                      </button>
-                    )}
-                  </div>
-                </div>
+                </div>}
                 <div className={`composer-box ${chatTarget ? "has-session-controls" : ""}`}>
                   {mode === "chat" && chatConfig && workspace && <ChatQuickControls workspaceId={workspace.id} config={chatConfig} onChange={setChatConfig} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} onDraft={setDraft} />}
                   {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name.split("·")[0].trim() || chatTarget.name} disabled={busy} />}
@@ -1152,7 +1127,7 @@ export function App() {
                           !e.nativeEvent.isComposing
                         ) {
                           e.preventDefault();
-                          void send();
+                          void send(mode === "code" && (e.ctrlKey || e.metaKey));
                         }
                       }}
                     />
@@ -1160,6 +1135,36 @@ export function App() {
                   <div className="composer-bottom">
                     <div className="composer-tools">
                     <AttachMenu onFiles={attachToComposer} disabled={!workspace} />
+                    {mode === "code" && (
+                      <button className="icon-button" title={composerExpanded ? "ย่อช่องคำสั่ง" : "ขยายช่องคำสั่ง"}
+                        aria-expanded={composerExpanded} onClick={() => setComposerExpanded(!composerExpanded)}>
+                        {composerExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                      </button>
+                    )}
+                    {/* Only worth showing when there is more than one session to send to. */}
+                    {mode === "code" && (running.length > 1 || target !== "active") && (
+                      <select
+                        className="composer-target"
+                        aria-label="เป้าหมายคำสั่ง"
+                        value={target}
+                        onChange={(e) => {
+                          setTarget(e.target.value);
+                          if (e.target.value !== "active" && e.target.value !== "all") setSelected(e.target.value);
+                        }}
+                      >
+                        <option value="active">
+                          {selectedSession?.name || "เลือก session"} · ที่เลือก
+                        </option>
+                        <option value="all">
+                          ทุก session ในโปรเจกต์ ({running.length})
+                        </option>
+                        {running.map((s) => (
+                          <option value={s.id} key={s.id}>
+                            {s.name} · {s.id.slice(0, 5)}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     <span>
                       {mode === "code" ? (
                         <>
@@ -1208,7 +1213,7 @@ export function App() {
                           !workspace ||
                           (mode !== "code" && !!activeRun)
                         }
-                        onClick={send}
+                        onClick={() => send()}
                       >
                         {busy ? (
                           <LoaderCircle size={16} className="spin" />
@@ -1221,7 +1226,7 @@ export function App() {
                   </div>
                 </div>
                 <div className="composer-hint">
-                  <span>Enter ส่ง · Shift + Enter ขึ้นบรรทัดใหม่ · Ctrl+U แนบรูปหรือ PDF</span>
+                  <span>Enter ส่ง{mode === "code" ? " · Ctrl+Enter ต่อคิว" : ""} · Shift + Enter ขึ้นบรรทัดใหม่ · Ctrl+U แนบรูปหรือ PDF</span>
                   <span>ตรวจคำสั่งก่อนส่งเสมอ</span>
                 </div>
               </div>

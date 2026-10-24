@@ -10,11 +10,17 @@ export interface ChatPrefs {
   /** Not signed in or not installed: sending would fail. */
   blocked: boolean;
   note: string;
+  /** What the CLI may do on its own: read only, edit files, or edit and run commands. */
+  permission: ChatPermission;
 }
+
+export type ChatPermission = 'read' | 'edit' | 'auto';
+export const PERMISSION_LABEL: Record<ChatPermission, string> = { read: 'อ่านอย่างเดียว', edit: 'แก้ไฟล์ได้', auto: 'อัตโนมัติ' };
+const isPermission = (value: unknown): value is ChatPermission => value === 'read' || value === 'edit' || value === 'auto';
 
 const prefs = new Map<string, ChatPrefs>();
 const choices = new Set<string>();
-const EMPTY: ChatPrefs = { model: '', effort: '', skillId: '', blocked: false, note: '' };
+const EMPTY: ChatPrefs = { model: '', effort: '', skillId: '', blocked: false, note: '', permission: 'auto' };
 
 export function hasChatPrefs(sessionId: string): boolean { chatPrefs(sessionId); return choices.has(sessionId); }
 
@@ -30,7 +36,7 @@ export function chatPrefs(sessionId: string): ChatPrefs {
     try {
       const saved = JSON.parse(localStorage.getItem(`superai-chat-prefs:${sessionId}`) || 'null');
       if (saved && typeof saved.model === 'string' && typeof saved.effort === 'string') {
-        prefs.set(sessionId, { ...EMPTY, model: saved.model, effort: saved.effort });
+        prefs.set(sessionId, { ...EMPTY, model: saved.model, effort: saved.effort, permission: isPermission(saved.permission) ? saved.permission : 'auto' });
         choices.add(sessionId);
       }
     } catch {}
@@ -41,8 +47,8 @@ export function chatPrefs(sessionId: string): ChatPrefs {
 export function setChatPrefs(sessionId: string, patch: Partial<ChatPrefs>) {
   if ("model" in patch || "effort" in patch) choices.add(sessionId);
   prefs.set(sessionId, { ...chatPrefs(sessionId), ...patch });
-  if ("model" in patch || "effort" in patch) {
-    try { const value = prefs.get(sessionId)!; localStorage.setItem(`superai-chat-prefs:${sessionId}`, JSON.stringify({ model: value.model, effort: value.effort })); } catch {}
+  if ("model" in patch || "effort" in patch || "permission" in patch) {
+    try { const value = prefs.get(sessionId)!; localStorage.setItem(`superai-chat-prefs:${sessionId}`, JSON.stringify({ model: value.model, effort: value.effort, permission: value.permission })); } catch {}
   }
   listeners.get(sessionId)?.forEach(listener => listener());
 }

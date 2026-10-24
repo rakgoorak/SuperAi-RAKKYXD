@@ -153,3 +153,78 @@
 }
 @media (max-height: 700px) { #root .work-canvas .composer-area { padding-top: 6px; padding-bottom: 10px; } #root .work-canvas .composer-box textarea { height: 60px; min-height: 60px; } #root .work-canvas .composer-hint { display: none; } }
 @media (max-width: 760px) { #root .work-canvas .composer-area { padding: 10px 14px 14px; } .slash-menu footer span:last-child { display: none; } }
+
+/* Claude-style chat details: live task list, step thumbnails, token counter, times, queue. */
+#root .chat-tasks { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 4px 6px 8px; }
+#root .chat-tasks.live { border-color: var(--control-border); }
+#root .chat-tasks-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 8px; color: var(--text-secondary); font-size: 13px; justify-content: flex-start; }
+#root .chat-tasks-head small { margin-left: auto; color: var(--dim); font-variant-numeric: tabular-nums; }
+#root .chat-tasks ol { list-style: none; margin: 0; padding: 0 8px; display: grid; gap: 4px; }
+#root .chat-tasks li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.6; color: var(--text); }
+#root .chat-tasks li svg { flex-shrink: 0; margin-top: 4px; color: var(--dim); }
+#root .chat-tasks li.completed { color: var(--dim); }
+#root .chat-tasks li.completed span { text-decoration: line-through; text-decoration-color: var(--border); }
+#root .chat-tasks li.completed svg { color: var(--green); }
+#root .chat-tasks li.in_progress svg { color: var(--accent); }
+#root .chat-tools-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+#root .chat-thumbs { display: inline-flex; gap: 4px; flex-shrink: 0; }
+#root .chat-shot { padding: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--raised); cursor: zoom-in; }
+#root .chat-shot img { display: block; max-width: 100%; max-height: 220px; object-fit: contain; }
+#root .chat-shot.thumb img { width: 44px; height: 28px; object-fit: cover; }
+#root .chat-shot.big { cursor: zoom-out; }
+#root .chat-shot.big img { max-height: none; }
+#root .chat-shots { display: grid; gap: 6px; margin: 6px 0 8px 22px; }
+#root .chat-working { display: flex; align-items: center; gap: 10px; color: var(--dim); font-size: 13px; font-variant-numeric: tabular-nums; }
+#root .chat-pulse { display: inline-flex; gap: 3px; }
+#root .chat-pulse i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: chat-pulse-dot 1.2s ease-in-out infinite; }
+#root .chat-pulse i:nth-child(2) { animation-delay: .15s; }
+#root .chat-pulse i:nth-child(3) { animation-delay: .3s; }
+@keyframes chat-pulse-dot { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { #root .chat-pulse i { animation: none; opacity: .7; } }
+#root .chat-time { display: block; margin-top: 6px; font-size: 11px; color: var(--dim); opacity: 0; transition: opacity .15s ease; }
+#root .chat-user:hover .chat-time, #root .chat-user:focus-within .chat-time { opacity: 1; }
+#root .response-time { margin-left: 6px; font-size: 12px; color: var(--dim); }
+#root .chat-queue { display: grid; gap: 6px; }
+#root .chat-queued { display: flex; align-items: center; gap: 8px; margin-left: auto; max-width: 82%; padding: 8px 10px 8px 12px; border: 1px dashed var(--control-border); border-radius: 14px; color: var(--text-secondary); font-size: 14px; }
+#root .chat-queued > span { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+#root .chat-queued > small { color: var(--dim); font-size: 11px; flex-shrink: 0; }
+#root .chat-queued > button { padding: 4px; border-radius: 6px; color: var(--dim); flex-shrink: 0; }
+#root .chat-queued > button:hover { background: var(--raised); color: var(--text); }
+/* Compact composer, like Claude's: two lines to start, grows by dragging. */
+#root .work-canvas .composer-box textarea,
+#root .work-canvas.code-mode .composer-box textarea { height: 56px; min-height: 56px; padding-top: 14px; }
+#root .work-canvas .composer-context[hidden] { display: none; }
+/* Code mode: one compact box (≤104px) — padding, a two-line input and one control row. */
+#root .work-canvas.code-mode .composer-area { padding-top: 6px; padding-bottom: 8px; }
+#root .work-canvas.code-mode .composer-box textarea { height: 50px; min-height: 50px; padding: 12px 16px 6px; }
+#root .work-canvas.code-mode .composer-bottom,
+#root .work-canvas.code-mode .session-chat-controls { padding-top: 0; padding-bottom: 4px; }
+#root .work-canvas .composer-target { max-width: min(240px, 30vw); min-height: 30px; padding: 4px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); font-size: 12px; }
+#root .work-canvas .composer-target:hover { background: var(--raised); }
+#root .work-canvas.code-mode .composer-bottom { min-height: 0; padding-right: 6px; gap: 2px; }
+#root .work-canvas.code-mode .composer-bottom .icon-button,
+#root .work-canvas.code-mode .composer-bottom button { min-height: 30px; height: 30px; min-width: 30px; }
+#root .work-canvas .composer-target { max-width: 150px; text-overflow: ellipsis; }
+#root .work-canvas.code-mode .chat-model-controls label:first-child { flex: 0 1 170px; }
+#root .work-canvas.code-mode .chat-model-controls input,
+#root .work-canvas.code-mode .chat-model-controls select { min-height: 30px; height: 30px; padding: 4px 6px; }
+#root .work-canvas.code-mode .session-chat-controls { flex-wrap: nowrap; gap: 2px; padding-left: 8px; }
+#root .work-canvas.code-mode .session-chat-controls .chat-model-controls { flex-wrap: nowrap; }
+/* Every mode: the same compact box as Code (Agent/Chat keep their one context row). */
+#root .work-canvas .composer-area { padding-top: 6px; padding-bottom: 8px; }
+#root .work-canvas .composer-box textarea { height: 50px; min-height: 50px; padding: 12px 16px 6px; }
+#root .work-canvas .composer-bottom,
+#root .work-canvas .session-chat-controls,
+#root .work-canvas .chat-quick-controls { padding-top: 0; padding-bottom: 4px; min-height: 0; }
+#root .work-canvas .composer-bottom button { min-height: 30px; height: 30px; min-width: 30px; }
+#root .work-canvas .composer-context { margin-bottom: 4px; }
+/* Short screens (laptops at 720-800px): quieter chrome so the conversation keeps its height. */
+@media (max-height: 800px) {
+  body #root .workspace-toolbar { min-height: 44px; }
+  body #root .canvas-heading { padding-top: 4px; padding-bottom: 4px; min-height: 0; }
+  body #root .terminal-layout { padding: 6px; }
+  #root .work-canvas .composer-hint { display: none; }
+}
+
+/* Keep the three team seats on one row inside the reading column. */
+#root .agent-cards { grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 10px; }
