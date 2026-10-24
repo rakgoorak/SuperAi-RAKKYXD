@@ -81,7 +81,7 @@ export async function loginProvider(id: string, context: { sessionId?: string; w
   window.dispatchEvent(new CustomEvent("superai:login-session", { detail: session.id }));
 }
 export type StepStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "skipped";
-export interface PanelAnswer { seat: Seat; status: StepStatus; output: string; error?: string; }
+export interface PanelAnswer { seat: Seat; status: StepStatus; output: string; error?: string; startedAt?: number; firstChunkAt?: number; completedAt?: number; tokenCount?: number; }
 export interface AgentTask { id: string; title: string; assignee: number; instructions: string; dependsOn: string[]; status: StepStatus; output: string; error?: string; }
 export interface Activity { at: number; who: string; text: string; }
 export interface SkillInfo { source: string; sourceLabel: string; name: string; description: string; files: string[]; url: string; repo?: string; branch?: string; prefix?: string; installs?: number; reason?: string; }

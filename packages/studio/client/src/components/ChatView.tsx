@@ -87,7 +87,7 @@ function ToolGroup({ tools }: { tools: ToolItem[] }) {
       <div className="chat-tools-head">
         <button className="chat-tools-summary" onClick={() => setOpen(!open)} aria-expanded={open}>
           <span className={`chat-dot ${running ? 'running' : tools.some((t) => t.status === 'failed') ? 'failed' : ''}`} />
-          <span>{running ? `กำลังทำงาน: ${running.title.split('\n')[0]}` : summary(tools)}</span>
+          <span title={running ? running.title : undefined}>{running ? `กำลังทำงาน: ${running.title.split('\n')[0]}` : summary(tools)}</span>
           <ChevronRight size={13} className={`chat-chevron ${open ? 'open' : ''}`} />
         </button>
         {!open && images.length > 0 && <span className="chat-thumbs">{images.slice(-3).map((src, i) => <Shot key={i} src={src} small />)}</span>}
