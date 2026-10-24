@@ -57,6 +57,7 @@ try {
   });
   const runs = ['agent', 'chat'].map(mode => ({ id: `run-${mode}`, wsId: workspace.id, mode, prompt: 'ช่วยวางแผนหน้าเข้าสู่ระบบให้ทีม', attachments: imageFiles.map(file => `.superai/attachments/${file}`), status: 'completed', output: answer, allowTools: false, activity: [], createdAt: Date.now() }));
   const sent = [];
+  const quietActions = [];
   let holdDraftSend = false;
   let releaseDraftSend;
   const conversationPosts = [];
@@ -87,6 +88,12 @@ try {
           runs.push(json); resolve();
         }; });
       } else json = runs;
+    }
+    else if (/\/chat\/(wait|cancel)$/.test(pathname)) {
+      quietActions.push(pathname);
+      sockets.get('ui-0').send(JSON.stringify({ type: 'activity', activity: pathname.endsWith('/wait') ? { startedAt: Date.now(), outputTokens: 12 } : undefined }));
+      if (pathname.endsWith('/cancel')) sockets.get('ui-0').send(JSON.stringify({ type: 'state', running: false }));
+      json = { success: true };
     }
     else if (pathname.endsWith('/chat/settings')) json = { agent: 'codex', model: 'model-a', effort: 'high', skills };
     else if (pathname.match(/\/chat-skills\//)) json = skills;
@@ -392,6 +399,36 @@ try {
   await page.screenshot({ path: path.join(output, 'preview.png') });
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
   const modes = page.getByRole('navigation', { name: 'โหมดทำงาน' });
+  const quietActivity = { startedAt: Date.now() - 700000, outputTokens: 12, quiet: { since: Date.now(), timeoutMs: 600000 } };
+  sockets.get('ui-0').send(JSON.stringify({ type: 'snapshot', chat: { items: [
+    { id: 'old-user', kind: 'user', text: 'previous round', at: 0 },
+    { id: 'old-timeout', kind: 'error', text: 'Antigravity ไม่มีข้อมูลใหม่ติดต่อกัน 10 นาที จึงหยุดรอบนี้ ตรวจสถานะใน Terminal', at: 0 },
+    ...chatItems('ui-0'),
+  ], running: true, activity: quietActivity } }));
+  const quietWarning = pane.getByRole('status', { name: 'รอข้อมูลจากงานปัจจุบัน', exact: true });
+  await quietWarning.waitFor();
+  check((await quietWarning.innerText()).includes('โปรแกรมยังไม่หยุดงาน') && (await pane.locator('.chat-working').innerText()).includes('รอข้อมูล'), 'quiet work shows uncertainty rather than claiming termination or live progress');
+  check((await pane.locator('.chat-notice').innerText()).includes('รอบก่อนถูกหยุด') && await pane.locator('.chat-error').count() === 0, 'historical idle termination is labeled as a previous round');
+  const sentBeforeWait = sent.length;
+  await quietWarning.getByRole('button', { name: 'รอต่อ', exact: true }).click();
+  await quietWarning.waitFor({ state: 'hidden' });
+  check(quietActions.at(-1) === '/api/terminals/ui-0/chat/wait' && sent.length === sentBeforeWait, 'Wait acknowledges the selected session without sending another prompt');
+  sockets.get('ui-0').send(JSON.stringify({ type: 'activity', activity: quietActivity }));
+  await quietWarning.waitFor();
+  sockets.get('ui-0').send(JSON.stringify({ type: 'activity', activity: { startedAt: quietActivity.startedAt, outputTokens: 20 } }));
+  await quietWarning.waitFor({ state: 'hidden' });
+  check(true, 'fresh CLI progress clears the current quiet warning');
+  sockets.get('ui-0').send(JSON.stringify({ type: 'activity', activity: quietActivity }));
+  await quietWarning.waitFor();
+  await page.screenshot({ path: path.join(output, 'quiet-work-warning.png') });
+  await quietWarning.getByRole('button', { name: 'ดูไฟล์ที่เปลี่ยน', exact: true }).click();
+  await page.getByRole('dialog').waitFor();
+  check(quietActions.length === 1 && sent.length === sentBeforeWait, 'inspecting changed files does not stop or resend the quiet task');
+  await page.keyboard.press('Escape');
+  await quietWarning.getByRole('button', { name: 'หยุดงาน', exact: true }).click();
+  await quietWarning.waitFor({ state: 'hidden' });
+  check(quietActions.at(-1) === '/api/terminals/ui-0/chat/cancel', 'Stop uses the originating session cancellation route');
+  sockets.get('ui-0').send(JSON.stringify({ type: 'snapshot', chat: { items: chatItems('ui-0'), running: false } }));
   // Team settings are a separate task, with pending edits isolated from live teams.
   const teamDialog = page.locator('dialog.team-settings');
   const openTeam = async mode => {
