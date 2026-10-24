@@ -127,6 +127,13 @@ export function ChangesPanel({ workspaceId, onPreview }: { workspaceId: string; 
 
   return (
     <div className="changes-panel">
+      {mergeNotice && (
+        <div className={`worktree-alert ${mergeNotice.type}`} style={{ margin: '0 0 12px 0' }}>
+          {mergeNotice.type === 'success' ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+          <span>{mergeNotice.message}</span>
+        </div>
+      )}
+
       {/* Smart Merge Banner when working inside a worktree */}
       {isCurrentWorktree && worktreeInfo?.current && (
         <aside className="worktree-smart-merge-banner" aria-label="แถบรวมโค้ด Worktree เข้า main">
@@ -158,12 +165,6 @@ export function ChangesPanel({ workspaceId, onPreview }: { workspaceId: string; 
               <span>รวมโค้ดเข้า main ทันที (Merge)</span>
             </button>
           </div>
-          {mergeNotice && (
-            <div className={`worktree-alert ${mergeNotice.type}`} style={{ margin: '8px 0 0 0' }}>
-              {mergeNotice.type === 'success' ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
-              <span>{mergeNotice.message}</span>
-            </div>
-          )}
         </aside>
       )}
 
