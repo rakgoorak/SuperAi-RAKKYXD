@@ -787,60 +787,7 @@ summary:focus-visible {
   }
 }
 
-/* Suggested Action Chips bar */
-.suggested-chips-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  margin-bottom: 6px;
-  background: rgba(33, 33, 30, 0.7);
-  border: 1px solid rgba(217, 119, 87, 0.25);
-  border-radius: 9px;
-  font-size: 12px;
-}
-.suggested-chips-bar .chips-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--dim);
-  font-weight: 500;
-  white-space: nowrap;
-}
-.chips-scroll {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  white-space: nowrap;
-  padding: 2px 0;
-  scrollbar-width: thin;
-}
-.chip-action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  background: #232320;
-  border: 1px solid #383834;
-  color: #dcdad5;
-  border-radius: 9999px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  user-select: none;
-}
-.chip-action-btn:hover:not(:disabled) {
-  background: #2e2e2a;
-  border-color: #d97757;
-  color: #ffffff;
-  transform: translateY(-1px);
-}
-.chip-action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Dual-layer Ghost Text Composer */
+/* Input layering for composer controls. */
 .composer-input-container {
   position: relative;
   width: 100%;
@@ -850,38 +797,6 @@ summary:focus-visible {
   z-index: 2;
   background: transparent !important;
 }
-.composer-ghost-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 13px 14px 6px;
-  pointer-events: none;
-  font-family: inherit;
-  font-size: 14.5px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow: hidden;
-  color: rgba(180, 178, 172, 0.45);
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  z-index: 1;
-}
-.composer-ghost-layer .tab-badge {
-  display: inline-flex;
-  align-items: center;
-  font-size: 10px;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(217, 119, 87, 0.18);
-  border: 1px solid rgba(217, 119, 87, 0.35);
-  color: #e28a6c;
-  margin-left: 6px;
-  user-select: none;
-}
 .composer-bottom,
 .compact-code .composer-bottom {
   position: relative;
@@ -889,9 +804,6 @@ summary:focus-visible {
 }
 .compact-code .composer-bottom {
   position: absolute;
-}
-.compact-code .suggested-chips-bar {
-  display: none;
 }
 
 /* Keep work visible at laptop sizes; all settings remain expandable. */
@@ -921,10 +833,6 @@ summary:focus-visible {
   display: block;
   overflow: hidden;
   max-width: 40vw;
-}
-.agent-mode .mission-brief {
-  padding: 4px 0 !important;
-  margin-bottom: 6px !important;
 }
 .agent-mode .mission-view-switch {
   margin-bottom: 4px;
@@ -959,30 +867,11 @@ summary:focus-visible {
 .agent-mode .composer-context {
   margin-bottom: 4px;
 }
-.composer-suggestions > summary {
-  display: none;
-}
-.agent-mode .composer-suggestions > summary {
-  display: block;
-  cursor: pointer;
-  color: var(--dim);
-  font-size: 12px;
-  padding: 5px 12px;
-}
-.agent-mode .composer-suggestions > summary::before {
-  content: '＋ ';
-}
-.agent-mode .composer-suggestions[open] > summary::before {
-  content: '− ';
-}
 .agent-mode .composer-box textarea {
   height: 48px;
   min-height: 48px;
   max-height: 160px;
   display: block;
-  padding: 8px 12px;
-}
-.agent-mode .composer-ghost-layer {
   padding: 8px 12px;
 }
 .agent-mode .composer-bottom {

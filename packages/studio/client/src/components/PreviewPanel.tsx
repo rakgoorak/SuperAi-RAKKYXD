@@ -13,24 +13,32 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { BrowserState } from "../desktop";
+import { parsePreviewTarget, type PreviewRequest } from '../previewLinks';
+import { ProjectFilePreview, type FilePreviewRequest } from './ProjectFilePreview';
 interface Props {
+  request?: PreviewRequest;
+  workspaceId?: string;
   embedded?: boolean;
   onClose: () => void;
   suspended: boolean;
   onError: (text: string) => void;
 }
-export function PreviewPanel({ onClose, suspended, onError, embedded = false }: Props) {
+export function PreviewPanel({ onClose, suspended, onError, embedded = false, request, workspaceId }: Props) {
   const [state, setState] = useState<BrowserState>({ activeId: "", tabs: [] });
   const [url, setUrl] = useState("http://localhost:3000");
   const [width, setWidth] = useState(440);
   const [webUrl, setWebUrl] = useState("");
   const [revision, setRevision] = useState(0);
+  const [fileRequest, setFileRequest] = useState<FilePreviewRequest>();
   const area = useRef<HTMLDivElement>(null);
   const native = window.superai;
   const tab = state.tabs.find((t) => t.id === state.activeId);
+  const currentTab = useRef(tab);
+  currentTab.current = tab;
   const action = useCallback(
     async (name: string, payload?: Record<string, unknown>) => {
       try {
+        if (name !== 'bounds' && name !== 'state') setFileRequest(undefined);
         if (native) setState(await native.browser(name, payload));
       } catch (e) {
         onError((e as Error).message);
@@ -38,6 +46,17 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false }: 
     },
     [native, onError],
   );
+  useEffect(() => {
+    if (!request) return;
+    if (request.target.kind === 'file') {
+      setUrl(request.target.path);
+      setFileRequest({ id: request.id, workspaceId: request.workspaceId, target: request.target });
+    } else {
+      setFileRequest(undefined); setUrl(request.target.url);
+      if (native) void action(currentTab.current ? 'navigate' : 'create', { url: request.target.url });
+      else { setWebUrl(request.target.url); setRevision(value => value + 1); }
+    }
+  }, [request, native, action]);
   useEffect(() => {
     if (!native) return;
     native
@@ -47,8 +66,8 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false }: 
     return native.onBrowser(setState);
   }, [native, onError]);
   useEffect(() => {
-    if (tab?.url) setUrl(tab.url);
-  }, [tab?.url, tab?.id]);
+    if (tab?.url && !fileRequest) setUrl(tab.url);
+  }, [tab?.url, tab?.id, fileRequest]);
   useEffect(() => {
     if (!native || !area.current) return;
     const update = () => {
@@ -60,7 +79,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false }: 
             y: r.y,
             width: r.width,
             height: r.height,
-            visible: !suspended && !!tab && !tab.error,
+            visible: !suspended && !fileRequest && !!tab && !tab.error,
           })
           .catch(() => {});
     };
@@ -73,9 +92,16 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false }: 
       window.removeEventListener("resize", update);
       void native.browser("bounds", { visible: false }).catch(() => {});
     };
-  }, [native, suspended, tab?.id, tab?.error, width]);
+  }, [native, suspended, tab?.id, tab?.error, width, fileRequest]);
   const navigate = (event?: React.FormEvent) => {
     event?.preventDefault();
+    if (/^(?:file:|\/|[a-z]:[\\/]|\.{1,2}[\\/])/i.test(url.trim()) || fileRequest?.target.path === url.trim()) {
+      try {
+        const target = parsePreviewTarget(url);
+        if (target.kind === 'file') { setFileRequest({ id: crypto.randomUUID(), workspaceId, target }); return; }
+      } catch (error) { onError((error as Error).message); return; }
+    }
+    setFileRequest(undefined);
     if (native) void action(tab ? "navigate" : "create", { url });
     else {
       try {
@@ -226,18 +252,19 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false }: 
           type="button"
           className="icon-button"
           title="เปิดใน browser ภายนอก"
+          disabled={!!fileRequest}
           onClick={external}
         >
           <ExternalLink size={14} />
         </button>
       </form>
-      {!native && (
+      {!native && !fileRequest && (
         <div className="browser-note">
           โหมดเว็บใช้ iframe บางเว็บไซต์อาจไม่อนุญาตให้แสดง กดเปิดภายนอกได้
         </div>
       )}
       <div className="browser-canvas" ref={area}>
-        {native ? (
+        {fileRequest ? <ProjectFilePreview request={fileRequest} /> : native ? (
           tab?.error ? (
             <div className="preview-empty">
               <AlertTriangle size={30} />
@@ -291,7 +318,8 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false }: 
       </div>
       <div className="preview-footer">
         <span className={`status-dot ${tab?.loading ? "pending" : ""}`} />
-        {tab?.loading
+        {fileRequest ? 'ไฟล์ในโปรเจกต์ · Preview'
+          : tab?.loading
           ? "กำลังโหลดเว็บไซต์…"
           : tab
             ? "Browser ภายในพร้อมใช้งาน"

@@ -1,0 +1,23 @@
+import { ArrowUpRight, MessageSquare, Users } from 'lucide-react';
+import type { Cli } from '../api';
+
+export function WorkspaceWelcome({ clis, openSession, onMode }: {
+  clis: Cli[]; openSession: (type?: string) => void; onMode: (mode: 'agent' | 'chat') => void;
+}) {
+  return <div className="workspace-welcome">
+    <img className="welcome-mark" src="/brand/mark.png" alt="" />
+    <h2>วันนี้อยากทำอะไร?</h2>
+    <p>เลือกผู้ช่วยเพื่อเริ่มทำงานในโปรเจกต์นี้<br />คุย วางแผน และเขียนโค้ดได้ในพื้นที่เดียว</p>
+    <div className="welcome-providers" aria-label="เลือกผู้ช่วย AI">
+      {clis.filter(cli => cli.id !== 'terminal').map(cli => <button key={cli.id} onClick={() => openSession(cli.id)}>
+        <span className={`status-dot ${cli.available ? '' : 'offline'}`} />
+        <span>{cli.name}</span>{!cli.available && <small>ติดตั้ง</small>}<ArrowUpRight size={13} />
+      </button>)}
+      <button onClick={() => openSession('terminal')}>เปิด Terminal<ArrowUpRight size={13} /></button>
+    </div>
+    <div className="welcome-workflows">
+      <button onClick={() => onMode('agent')}><Users size={18} /><span><strong>ให้ทีม AI ช่วยลงมือทำ</strong><small>แบ่งงานให้ผู้ช่วยหลายตัว แล้วติดตามผลในหน้าเดียว</small></span></button>
+      <button onClick={() => onMode('chat')}><MessageSquare size={18} /><span><strong>คุยและเปรียบเทียบคำตอบ</strong><small>ถามหลาย AI พร้อมกัน แล้วเลือกแนวทางที่เหมาะ</small></span></button>
+    </div>
+  </div>;
+}

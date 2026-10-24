@@ -1,8 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AlertTriangle, Check, ChevronRight, Copy, FilePen, FileText, Globe, ListChecks, Loader2, Paperclip, Search, Terminal as TerminalIcon, Wrench } from 'lucide-react';
+import { AlertTriangle, ChevronRight, FilePen, FileText, Globe, ListChecks, Loader2, Paperclip, Search, Terminal as TerminalIcon, Wrench } from 'lucide-react';
 import { Markdown } from './Markdown';
 import { post } from '../api';
 import { prepareMessage, recoveryHint, showChanges } from '../recovery';
+import { getSuggestions } from '../suggestions';
+import { NextSteps } from './NextSteps';
+import { ResponseActions } from './ResponseActions';
 
 // Mirrors server/CliChat.ts.
 type ToolKind = 'command' | 'read' | 'edit' | 'search' | 'web' | 'plan' | 'other';
@@ -68,18 +71,6 @@ function ToolGroup({ tools }: { tools: ToolItem[] }) {
   );
 }
 
-function AssistantMessage({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="chat-assistant">
-      <Markdown text={text} />
-      <button className="chat-copy" title="คัดลอกคำตอบ" onClick={() => {
-        navigator.clipboard?.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }, () => {});
-      }}>{copied ? <Check size={12} /> : <Copy size={12} />}</button>
-    </div>
-  );
-}
-
 /**
  * Claude-style view of a Code session: messages and folded tool calls from the CLI's JSON stream.
  * Typing, files, Model/Effort, /skills and sign-in live in the bottom composer.
@@ -109,6 +100,14 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
   const [problem, setProblem] = useState('');
   const [search, setSearch] = useState('');
   const lastUser = [...items].reverse().find(item => item.kind === 'user');
+  const lastReply = [...items].reverse().find(item => item.kind === 'assistant');
+  const replyIndex = lastReply ? items.indexOf(lastReply) : -1;
+  const turnItems = lastUser ? items.slice(items.indexOf(lastUser) + 1) : [];
+  const turnFailed = turnItems.some(item => item.kind === 'error');
+  const turnEdited = turnItems.some(item => item.kind === 'tool' && item.tool === 'edit');
+  const canSuggest = !running && !pending && !offline && !search.trim() && lastReply && lastUser
+    && replyIndex > items.indexOf(lastUser) && !items.slice(items.indexOf(lastUser) + 1).some(item => item.kind === 'error');
+  const nextSteps = canSuggest ? getSuggestions({ mode: 'code', lastRun: { status: 'completed', output: lastReply.text } }) : [];
   const retry = async () => {
     if (!lastUser || lastUser.kind !== 'user') return;
     setPending(true); setProblem('');
@@ -202,7 +201,18 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
                   </div>
                 </div>
               );
-            if (block.kind === 'assistant') return <AssistantMessage key={block.id} text={block.text} />;
+            if (block.kind === 'assistant') {
+              const latest = block.id === lastReply?.id && !!lastUser && replyIndex > items.indexOf(lastUser);
+              const currentTurn = !!lastUser && items.indexOf(block) > items.indexOf(lastUser);
+              return <div key={block.id} data-message-id={block.id}>
+                <div className="chat-assistant"><Markdown text={block.text} /></div>
+                {!(running && currentTurn) && <ResponseActions text={block.text} disabled={pending || offline || running}
+                  onRetry={latest && !turnFailed && !search.trim() && (lastUser?.request || !lastUser?.attachments?.length) ? () => void retry() : undefined}
+                  onEdit={latest ? () => { prepareMessage(lastUser!.text, sessionId, { expand: false }); if (lastUser!.attachments?.length) setProblem('กรุณาแนบไฟล์เดิมอีกครั้งก่อนส่งข้อความที่แก้ไข'); } : undefined}
+                  onChanges={latest && turnEdited ? () => showChanges(sessionId) : undefined} />}
+                {block.id === lastReply?.id && <NextSteps items={nextSteps} sessionId={sessionId} />}
+              </div>;
+            }
             if (block.kind === 'tools') return <ToolGroup key={block.id} tools={block.tools} />;
             if (block.kind === 'error') return <div key={block.id} role="alert" className="chat-error"><AlertTriangle size={14} /><span>{block.text}</span></div>;
             return <div key={block.id} className="chat-notice">{block.text}</div>;
@@ -213,7 +223,7 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
               <span>{name} กำลังทำงาน · {seconds} วิ · กดหยุดได้ที่ช่องคำสั่งด้านล่าง</span>
             </div>
           )}
-          {!running && lastUser && <div className="recovery-actions"><button disabled={pending || offline || (!lastUser.request && !!lastUser.attachments?.length)} onClick={() => void retry()}>ลองใหม่</button><button onClick={() => showChanges(sessionId)}>ไฟล์ที่เปลี่ยน / Preview</button></div>}
+          {!running && lastUser && turnFailed && <div className="recovery-actions"><button disabled={pending || offline || (!lastUser.request && !!lastUser.attachments?.length)} onClick={() => void retry()}>ลองส่งอีกครั้ง</button></div>}
           {problem && <div role="alert" className="chat-error">{recoveryHint(problem)}<br />{problem}</div>}
           {items.at(-1)?.kind === 'error' && <p className="recovery-note">{recoveryHint((items.at(-1) as { text: string }).text)} <button onClick={() => window.dispatchEvent(new Event('superai:open-setup'))}>ตรวจบัญชีและเครื่องมือ</button></p>}
           {offline && <div className="chat-notice">ขาดการเชื่อมต่อ กำลังเชื่อมต่อใหม่…</div>}

@@ -1,13 +1,25 @@
 import type { ReactNode } from "react";
+import { openPreviewLink, parsePreviewTarget } from '../previewLinks';
+
+function link(label: string, href: string, key: string): ReactNode {
+  try {
+    const target = parsePreviewTarget(href);
+    return <a key={key} className="md-link" href={target.kind === 'web' ? target.url : '#preview-file'} title={`เปิดใน Preview: ${href}`}
+      onClick={event => { event.preventDefault(); openPreviewLink(href); }}
+      onAuxClick={event => { if (event.button === 1) { event.preventDefault(); openPreviewLink(href); } }}>{label}</a>;
+  } catch { return <span key={key} title="ลิงก์ชนิดนี้ไม่รองรับ">{label}</span>; }
+}
 
 /** Minimal, safe Markdown for AI answers: headings, lists, tables, code blocks, bold, inline code and links. No HTML. */
 function inline(text: string, key: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]\n]+\]\([^)\s]+\))/g).map((part, i) =>
-    // Links show their label only; CLIs link local files, which the app cannot open from here.
-    /^\[[^\]\n]+\]\([^)\s]+\)$/.test(part) ? (
-      <span key={`${key}-${i}`} className="md-link" title={part.slice(part.indexOf("](") + 2, -1)}>{part.slice(1, part.indexOf("]("))}</span>
-    ) : part.startsWith("**") && part.endsWith("**") && part.length > 4 ? (
-      <strong key={`${key}-${i}`}>{part.slice(2, -2)}</strong>
+  return text.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]\n]+\]\((?:<[^>\n]+>|[^)\n]+)\)|(?:https?:\/\/|www\.)[^\s<>]+)/g).map((part, i) =>
+    /^\[[^\]\n]+\]\((?:<[^>\n]+>|[^)\n]+)\)$/.test(part) ? (
+      link(part.slice(1, part.indexOf("](")), part.slice(part.indexOf("](") + 2, -1), `${key}-${i}`)
+    ) : /^(?:https?:\/\/|www\.)/i.test(part) ? (() => {
+      const href = part.replace(/[.,;!?\u3002\uff0c\uff1b\uff01\uff1f]+$/, '');
+      return <span key={`${key}-${i}`}>{link(href, href, `${key}-${i}-url`)}{part.slice(href.length)}</span>;
+    })() : part.startsWith("**") && part.endsWith("**") && part.length > 4 ? (
+      <strong key={`${key}-${i}`}>{inline(part.slice(2, -2), `${key}-${i}-bold`)}</strong>
     ) : part.startsWith("`") && part.endsWith("`") && part.length > 2 ? (
       <code key={`${key}-${i}`}>{part.slice(1, -1)}</code>
     ) : (

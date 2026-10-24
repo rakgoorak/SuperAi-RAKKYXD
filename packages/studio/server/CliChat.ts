@@ -261,6 +261,7 @@ export class CliChatManager {
   onChange?: (id: string) => void;
   /** `dir` keeps each chat as <id>.json so it survives an app restart. */
   constructor(private spawner: Spawner = spawn, private dir?: string, private launcher: typeof cliLaunch = cliLaunch,
+    // `turn` is the maximum silence after activity, not the total task duration.
     private timeouts = { startup: 90000, turn: 600000 }) {}
 
   private file(id: string): string | undefined {
@@ -371,14 +372,15 @@ export class CliChatManager {
     const parse = chatParser(agent, prefix);
     let proc: ChildProcess;
     let pending = "", errors = "", failed = false, finished = false;
-    let startupTimer: NodeJS.Timeout | undefined, turnTimer: NodeJS.Timeout | undefined, timedOut = false;
+    let startupTimer: NodeJS.Timeout | undefined, idleTimer: NodeJS.Timeout | undefined;
+    let timeoutReason: 'startup' | 'idle' | undefined;
     const finish = (problem?: string) => {
       if (finished) return;
       finished = true;
-      clearTimeout(startupTimer); clearTimeout(turnTimer);
+      clearTimeout(startupTimer); clearTimeout(idleTimer);
       chat.proc = undefined;
       for (const item of chat.items)
-        if (item.kind === "tool" && item.status === "running" && item.id.startsWith(`${prefix}-`)) this.put(id, chat, { ...item, status: chat.cancelled ? "failed" : "done" });
+        if (item.kind === "tool" && item.status === "running" && item.id.startsWith(`${prefix}-`)) this.put(id, chat, { ...item, status: chat.cancelled || problem || failed ? "failed" : "done" });
       if (chat.cancelled) this.put(id, chat, { id: `${prefix}-stopped`, kind: "notice", text: "หยุดแล้ว" });
       else if (problem && !failed) this.put(id, chat, { id: `${prefix}-error`, kind: "error", text: problem });
       chat.running = false;
@@ -388,7 +390,6 @@ export class CliChatManager {
     };
     const apply = (line: string) => {
       const update = parse(line);
-      if (Object.keys(update).length) clearTimeout(startupTimer);
       if (update.conversationId && update.conversationId !== chat.conversationId) {
         chat.conversationId = update.conversationId;
         this.onChange?.(id);
@@ -413,30 +414,47 @@ export class CliChatManager {
       return;
     }
     chat.proc = proc;
-    const timeout = () => {
-      timedOut = true;
+    const timeout = (reason: 'startup' | 'idle') => {
+      if (finished || timeoutReason || chat.cancelled) return;
+      timeoutReason = reason;
+      clearTimeout(startupTimer); clearTimeout(idleTimer);
       // Keep the turn occupied until close confirms that the child stopped.
       if (process.platform === "win32" && proc.pid) execFile("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true }, () => {});
       else if (proc.pid) { try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill(); } }
       else proc.kill();
     };
-    startupTimer = setTimeout(timeout, this.timeouts.startup); startupTimer.unref();
-    turnTimer = setTimeout(timeout, this.timeouts.turn); turnTimer.unref();
+    const activity = () => {
+      if (finished || timeoutReason || chat.cancelled) return;
+      clearTimeout(startupTimer); clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => timeout('idle'), this.timeouts.turn);
+      idleTimer.unref();
+    };
+    startupTimer = setTimeout(() => timeout('startup'), this.timeouts.startup); startupTimer.unref();
     proc.stdin?.on("error", () => {});
     // Codex and Claude Code read the prompt from stdin; the others take it as an argument.
     proc.stdin?.end(agent === "codex" || agent === "claude-code" ? prompt : undefined, "utf8");
     proc.stdout?.setEncoding("utf8");
     proc.stdout?.on("data", (chunk: string) => {
+      if (chunk.length) activity();
       const lines = (pending + chunk).split(/\r?\n/);
       pending = lines.pop() || "";
       for (const line of lines) if (line.trim()) apply(line);
     });
     proc.stderr?.setEncoding("utf8");
-    proc.stderr?.on("data", (chunk: string) => (errors = (errors + chunk).slice(-4000)));
+    proc.stderr?.on("data", (chunk: string) => {
+      if (chunk.length) activity();
+      errors = (errors + chunk).slice(-4000);
+    });
     proc.on("error", (error) => finish(`เปิด ${NAMES[agent]} ไม่สำเร็จ: ${error.message}`));
     proc.on("close", (code) => {
       if (pending.trim()) apply(pending);
-      finish(timedOut ? "CLI ไม่ตอบกลับภายในเวลาที่กำหนด ตรวจบัญชีและการเชื่อมต่อใน Terminal แล้วลองส่งใหม่" : code === 0 ? undefined : cliFailure(agent, request.model || "", errors, "", code));
+      const duration = (ms: number) => ms >= 60000 ? `${Math.ceil(ms / 60000)} นาที` : `${Math.max(1, Math.ceil(ms / 1000))} วินาที`;
+      const timeoutProblem = timeoutReason === 'startup'
+        ? `${NAMES[agent]} ไม่ส่งข้อมูลเริ่มต้นภายใน ${duration(this.timeouts.startup)} ตรวจบัญชีและการเชื่อมต่อใน Terminal แล้วลองส่งใหม่`
+        : timeoutReason === 'idle'
+          ? `${NAMES[agent]} ไม่มีข้อมูลใหม่ติดต่อกัน ${duration(this.timeouts.turn)} จึงหยุดรอบนี้ ตรวจสถานะใน Terminal และไฟล์ที่เปลี่ยนก่อนลองใหม่`
+          : undefined;
+      finish(timeoutProblem || (code === 0 ? undefined : cliFailure(agent, request.model || "", errors, "", code)));
     });
   }
 

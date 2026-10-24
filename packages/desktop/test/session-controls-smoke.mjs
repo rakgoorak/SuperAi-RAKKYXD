@@ -20,7 +20,8 @@ try {
  await page.route('**/api/terminals', r=>r.fulfill({json:sessions}));
  await page.route('**/api/providers/codex/models',r=>r.fulfill({json:{models:['model-a','model-b'],efforts:['low','high']}}));
  await page.route('**/api/clis/codex/auth*',r=>r.fulfill({json:{id:'codex',status:'authenticated',note:'พร้อม',checkedAt:Date.now(),loginCommand:'codex login'}}));
- await page.route('**/api/terminals/fixture-*/chat/settings',r=>r.fulfill({json:{agent:'codex',model:'model-a',effort:'high',skills:[{id:'test-skill',name:'review',description:'Review files',source:'project',path:'review.md'}]}}));
+ const skills = [{id:'test-skill',name:'review',description:'Review files',source:'project',path:'review.md'}, ...Array.from({length:100},(_,i)=>({id:`skill-${i}`,name:`workspace-skill-${i}`,description:'A long provider skill description for searching and inspecting changes across this workspace. '.repeat(4),source:'project',path:`skill-${i}.md`}))];
+ await page.route('**/api/terminals/fixture-*/chat/settings',r=>r.fulfill({json:{agent:'codex',model:'model-a',effort:'high',skills}}));
  await page.route('**/api/terminals/fixture-*/chat',r=>{if(r.request().method()==='GET')return r.fulfill({json:{items:chatItems('fixture-0'),running:false}});sent.push({url:r.request().url(),...r.request().postDataJSON()});return r.fulfill({json:{success:true}});});
  await page.reload({waitUntil:'domcontentloaded'});
  await page.waitForSelector('.app-shell');
@@ -40,6 +41,9 @@ try {
  await composer.fill('/');
  const slashList=page.getByRole('listbox',{name:'เลือก skill หรือคำสั่ง'});
  await slashList.getByRole('option').filter({hasText:'review'}).waitFor();
+ const popupGeometry = await page.locator('.slash-menu').evaluate(el => { const r=el.getBoundingClientRect(); const input=document.querySelector('textarea[aria-label="คำสั่ง"]').getBoundingClientRect(); return {height:r.height,top:r.top,bottom:r.bottom,inputTop:input.top,viewport:innerHeight,position:getComputedStyle(el).position}; });
+ steps.log(JSON.stringify(popupGeometry));
+ assert.ok(popupGeometry.height<=322 && popupGeometry.top>=0 && popupGeometry.bottom<=popupGeometry.inputTop, 'slash picker stays above the composer and within 320px: '+JSON.stringify(popupGeometry));
  await page.locator('.slash-menu').screenshot({path:path.join(data,'slash-menu.png')});
  await composer.fill('/rev');
  await slashList.getByRole('option').filter({hasText:'review'}).waitFor();
@@ -73,7 +77,7 @@ try {
  await firstChat.getByRole('button',{name:'แก้ข้อความแล้วส่งใหม่',exact:true}).click();
  assert.equal(await page.getByLabel('คำสั่ง',{exact:true}).inputValue(),'previous fixture-0');
  const beforeRetry=sent.length;
- await firstChat.getByRole('button',{name:'ลองใหม่',exact:true}).click();
+ await firstChat.getByRole('button',{name:'สร้างคำตอบใหม่',exact:true}).click();
  for(let i=0;i<30&&sent.length===beforeRetry;i++)await page.waitForTimeout(100);
  assert.equal(sent.at(-1).model,'original-model');assert.equal(sent.at(-1).text,'previous fixture-0');
  await target.selectOption('fixture-1');
@@ -99,4 +103,5 @@ try {
  await page.locator('.composer-area').screenshot({path:path.join(data,'composer-narrow.png')});
 
  console.log(JSON.stringify({passed:['per-message model effort skill','slash after text','slash without /skill prefix','session isolation','CLI default reset survives switching','retry original message settings','edit message to draft','selected session, model and scroll restored after reload'],screenshot:path.join(data,'composer.png')}));
-} finally { await closeApp(app,steps); }
+} catch (error) { steps.log(error.stack || String(error)); throw error; }
+finally { try { await closeApp(app,steps); } catch (error) { steps.log('cleanup: '+error.message); } }

@@ -199,14 +199,14 @@ else {
         minHeight: 680,
         title: "SuperAi & RAKKYXD",
         icon: path.join(directory, "assets", process.platform === "win32" ? "icon.ico" : "icon.png"),
-        backgroundColor: "#111519",
+        backgroundColor: "#222220",
         show: false,
         autoHideMenuBar: true,
         titleBarStyle: "hidden",
         titleBarOverlay: {
-          color: "#111519",
-          symbolColor: "#dce7ef",
-          height: 39,
+          color: "#1c1c1a",
+          symbolColor: "#eeede7",
+          height: 53,
         },
         webPreferences: {
           preload: path.join(directory, "preload.cjs"),

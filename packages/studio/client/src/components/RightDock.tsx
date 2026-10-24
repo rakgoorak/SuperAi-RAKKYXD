@@ -3,10 +3,12 @@ import { Activity, Check, ClipboardList, Globe, MessageSquare, Play, Plus, Searc
 import type { Run, Session, Workspace } from '../api';
 import { post } from '../api';
 import { PreviewPanel } from './PreviewPanel';
+import type { PreviewRequest } from '../previewLinks';
 
 export type DockView = 'dashboard' | 'tasks' | 'prompts' | 'browser';
 interface SavedItem { id: string; wsId: string; title: string; text: string; state: 'todo' | 'sent' | 'done'; sessionId?: string; }
 interface Props {
+  previewRequest?: PreviewRequest;
   open: boolean; view: DockView; setView: (view: DockView) => void; close: () => void;
   suspended: boolean; workspace?: Workspace; workspaces: Workspace[]; sessions: Session[]; runs: Run[]; selected: string;
   onSelect: (session: Session) => void; onPrompt: (text: string) => void; onError: (message: string) => void;
@@ -16,7 +18,7 @@ function loadItems(key: string): SavedItem[] {
     return Array.isArray(value) ? value.filter(x => x && typeof x.id === 'string' && typeof x.wsId === 'string' && typeof x.title === 'string' && typeof x.text === 'string' && ['todo', 'sent', 'done'].includes(x.state)) : [];
   } catch { return []; }
 }
-export function RightDock({ open, view, setView, close, suspended, workspace, workspaces, sessions, runs, selected, onSelect, onPrompt, onError }: Props) {
+export function RightDock({ open, view, setView, close, suspended, workspace, workspaces, sessions, runs, selected, onSelect, onPrompt, onError, previewRequest }: Props) {
   const [width, setWidth] = useState(() => {
     try { const n = Number(localStorage.getItem('superai-dock-width')); return Number.isFinite(n) && n >= 320 ? Math.min(n, innerWidth * .6) : 420; } catch { return 420; }
   });
@@ -76,7 +78,7 @@ export function RightDock({ open, view, setView, close, suspended, workspace, wo
       <button className="icon-button" title="ปิดแผงด้านขวา" onClick={close}><X size={14} /></button>
     </nav>
     <div className={`dock-browser ${view === 'browser' ? '' : 'not-visible'}`}>
-      <PreviewPanel embedded onClose={close} suspended={!open || view !== 'browser' || suspended || resizing} onError={onError} />
+      <PreviewPanel embedded onClose={close} suspended={!open || view !== 'browser' || suspended || resizing} onError={onError} request={previewRequest} workspaceId={workspace?.id} />
     </div>
     {view !== 'browser' && <div className="dock-content">
       {view === 'dashboard' ? <>

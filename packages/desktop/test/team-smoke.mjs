@@ -82,21 +82,20 @@ try{
    return [...el.querySelectorAll('.inspect-agent')].every(button => button.getBoundingClientRect().bottom <= bottom);
  });
  assert.ok(teamVisible, 'all three team detail buttons must fit above the composer at 1100x760');
- await page.locator('.composer-suggestions > summary').click();
- await page.getByRole('group', { name: 'ตัวเลือกแนะนำด่วน' }).waitFor();
- await page.locator('.composer-suggestions > summary').click();
+ assert.equal(await page.locator('.composer-suggestions').count(),0,'generic suggestions must not return to the composer');
  await page.getByRole('button', {name: 'ดูรายละเอียด Sub-agent 1', exact:true}).click();
  await page.getByRole('complementary',{name:'รายละเอียด Sub-agent 1'}).getByText('CODER_RESULT_ACTUAL',{exact:true}).waitFor();
  await page.keyboard.press('Escape');
  assert.equal(await page.locator('.mission-inspector').count(),0);
  await page.locator('.conversation-scroll').evaluate(el=>el.scrollTop=0);
- passed.push('team details visible on laptop, expandable suggestions and inspector close');
+ passed.push('team details visible on laptop, quiet composer and inspector close');
  await page.screenshot({path:path.join(data,'agent-desktop.png')});
  const firstRun=page.locator('.conversation-run').first();
- await firstRun.getByRole('button',{name:'ลองใหม่',exact:true}).click();
+ await firstRun.getByRole('button',{name:'สร้างคำตอบใหม่',exact:true}).click();
  await page.waitForFunction(()=>document.querySelectorAll('.conversation-run').length===2);
  await page.waitForFunction(()=>[...document.querySelectorAll('.run-stage')].filter(el=>el.textContent.includes('ทีมทำงานเสร็จแล้ว')).length===2);
- await page.locator('.conversation-run').last().getByRole('button',{name:'แก้ข้อความแล้วส่งใหม่',exact:true}).click();
+ await page.locator('.conversation-run').last().getByRole('button',{name:'ตัวเลือกคำตอบ',exact:true}).click();
+ await page.locator('.conversation-run').last().getByRole('button',{name:'แก้ไขข้อความต้นฉบับ',exact:true}).click();
  assert.equal(await page.getByLabel('คำสั่ง',{exact:true}).inputValue(),'สร้างและตรวจงานทดสอบ');
  await page.getByRole('button',{name:'ค้นหาประวัติ',exact:true}).click();
  const history=page.getByRole('dialog',{name:'ค้นหาประวัติบทสนทนา'});
@@ -105,7 +104,8 @@ try{
  await page.screenshot({path:path.join(data,'history.png')});
  await history.locator('.history-results button').first().click();
  await history.waitFor({state:'hidden'});
- await page.locator('.conversation-run').last().getByRole('button',{name:'ไฟล์ที่เปลี่ยน / Preview',exact:true}).click();
+ // This read-only team did not edit files. Inspect the fixture's own project changes separately.
+ await page.evaluate(()=>window.dispatchEvent(new CustomEvent('superai:show-changes')));
  const changes=page.getByRole('dialog',{name:'ไฟล์ที่เปลี่ยนและผลงาน'});
  await changes.getByRole('button',{name:'sample.txt',exact:true}).click();
  await changes.getByText('+after',{exact:false}).waitFor();

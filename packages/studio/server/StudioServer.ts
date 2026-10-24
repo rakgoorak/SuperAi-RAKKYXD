@@ -1,4 +1,5 @@
 import { projectChanges, projectFile } from "./ProjectChanges.js";
+import { readPreviewFile } from './PreviewFiles.js';
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -266,6 +267,20 @@ export class StudioServer {
       if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
       try { res.json(await projectFile(ws.rootPath, String(req.query.path || ''))); }
       catch (error) { res.status(400).json({ error: (error as Error).message }); }
+    });
+    this.app.get('/api/workspaces/:wsId/preview-file', async (req, res) => {
+      const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!workspace) return res.status(404).json({ error: 'ไม่พบโปรเจกต์สำหรับเปิดไฟล์นี้' });
+      try {
+        const file = await readPreviewFile(workspace.rootPath, String(req.query.path || ''));
+        res.setHeader('Content-Type', file.contentType);
+        res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox; style-src 'unsafe-inline'");
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(file.content);
+      } catch (error) {
+        const missing = (error as NodeJS.ErrnoException).code === 'ENOENT';
+        res.status(missing ? 404 : 400).json({ error: missing ? 'ไม่พบไฟล์นี้แล้ว ตรวจที่อยู่ไฟล์หรือให้ AI สร้างไฟล์ใหม่' : (error as Error).message });
+      }
     });
     this.app.get("/api/conversations/:wsId", (req, res) =>
       res.json(this.agentRuns.list(String(req.params.wsId))),
