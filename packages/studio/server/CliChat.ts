@@ -37,7 +37,7 @@ type NewItem = ChatItem extends infer T ? (T extends ChatItem ? Omit<T, "at"> : 
 /** What one line of a CLI's JSON stream changes. `outputTokens` is added to the turn's count. */
 export interface ChatUpdate { items?: NewItem[]; conversationId?: string; error?: string; done?: boolean; outputTokens?: number }
 /** The turn in progress: when it started and how many tokens the CLI has written so far. */
-export interface ChatActivity { startedAt: number; outputTokens: number }
+export interface ChatActivity { startedAt: number; outputTokens: number; quiet?: { since: number; timeoutMs: number } }
 export interface QueuedChat { id: string; text: string; attachments?: string[] }
 export interface ChatSnapshot { items: ChatItem[]; running: boolean; conversationId?: string; activity?: ChatActivity; queued: QueuedChat[] }
 export type ChatMessage =
@@ -329,7 +329,7 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
 
 type Spawner = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
 interface QueuedRequest extends QueuedChat { request: ChatRequest }
-interface Chat extends Omit<ChatSnapshot, "queued"> { turns: number; proc?: ChildProcess; cancelled?: boolean; listeners: Set<(m: ChatMessage) => void>; saveTimer?: NodeJS.Timeout; queue: QueuedRequest[] }
+interface Chat extends Omit<ChatSnapshot, "queued"> { turns: number; proc?: ChildProcess; cancelled?: boolean; wait?: () => void; listeners: Set<(m: ChatMessage) => void>; saveTimer?: NodeJS.Timeout; queue: QueuedRequest[] }
 export interface ChatRequest { agent: string; cwd: string; text: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission }
 
 export class CliChatManager {
@@ -338,7 +338,7 @@ export class CliChatManager {
   onChange?: (id: string) => void;
   /** `dir` keeps each chat as <id>.json so it survives an app restart. */
   constructor(private spawner: Spawner = spawn, private dir?: string, private launcher: typeof cliLaunch = cliLaunch,
-    // `turn` is the maximum silence after activity, not the total task duration.
+    // `turn` is the silence warning threshold; only startup silence terminates the CLI.
     private timeouts = { startup: 90000, turn: 600000 }) {}
 
   private file(id: string): string | undefined {
@@ -462,12 +462,13 @@ export class CliChatManager {
     let proc: ChildProcess;
     let pending = "", errors = "", failed = false, finished = false;
     let startupTimer: NodeJS.Timeout | undefined, idleTimer: NodeJS.Timeout | undefined;
-    let timeoutReason: 'startup' | 'idle' | undefined;
+    let timeoutReason: 'startup' | undefined;
     const finish = (problem?: string) => {
       if (finished) return;
       finished = true;
       clearTimeout(startupTimer); clearTimeout(idleTimer);
       chat.proc = undefined;
+      chat.wait = undefined;
       for (const item of chat.items)
         if (item.kind === "tool" && item.status === "running" && item.id.startsWith(`${prefix}-`)) this.put(id, chat, { ...item, status: chat.cancelled || problem || failed ? "failed" : "done" });
       if (chat.cancelled) this.put(id, chat, { id: `${prefix}-stopped`, kind: "notice", text: "หยุดแล้ว" });
@@ -511,21 +512,32 @@ export class CliChatManager {
       return "sent";
     }
     chat.proc = proc;
-    const timeout = (reason: 'startup' | 'idle') => {
+    const timeout = (reason: 'startup') => {
       if (finished || timeoutReason || chat.cancelled) return;
       timeoutReason = reason;
       clearTimeout(startupTimer); clearTimeout(idleTimer);
       // Keep the turn occupied until close confirms that the child stopped.
       if (process.platform === "win32" && proc.pid) execFile("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true }, () => {});
       else if (proc.pid) { try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill(); } }
-      else proc.kill();
+      else proc.kill?.();
     };
     const activity = () => {
       if (finished || timeoutReason || chat.cancelled) return;
       clearTimeout(startupTimer); clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => timeout('idle'), this.timeouts.turn);
+      if (chat.activity?.quiet) {
+        const { quiet: _quiet, ...current } = chat.activity;
+        chat.activity = current;
+        this.emit(chat, { type: "activity", activity: chat.activity });
+      }
+      idleTimer = setTimeout(() => {
+        if (finished || timeoutReason || chat.cancelled || !chat.activity) return;
+        // A long-running tool or Sub-agent can be silent. Report uncertainty, never kill it.
+        chat.activity = { ...chat.activity, quiet: { since: Date.now(), timeoutMs: this.timeouts.turn } };
+        this.emit(chat, { type: "activity", activity: chat.activity });
+      }, this.timeouts.turn);
       idleTimer.unref();
     };
+    chat.wait = () => { if (chat.activity?.quiet) activity(); };
     startupTimer = setTimeout(() => timeout('startup'), this.timeouts.startup); startupTimer.unref();
     proc.stdin?.on("error", () => {});
     // Codex and Claude Code read the prompt from stdin; the others take it as an argument.
@@ -548,9 +560,7 @@ export class CliChatManager {
       const duration = (ms: number) => ms >= 60000 ? `${Math.ceil(ms / 60000)} นาที` : `${Math.max(1, Math.ceil(ms / 1000))} วินาที`;
       const timeoutProblem = timeoutReason === 'startup'
         ? `${NAMES[agent]} ไม่ส่งข้อมูลเริ่มต้นภายใน ${duration(this.timeouts.startup)} ตรวจบัญชีและการเชื่อมต่อใน Terminal แล้วลองส่งใหม่`
-        : timeoutReason === 'idle'
-          ? `${NAMES[agent]} ไม่มีข้อมูลใหม่ติดต่อกัน ${duration(this.timeouts.turn)} จึงหยุดรอบนี้ ตรวจสถานะใน Terminal และไฟล์ที่เปลี่ยนก่อนลองใหม่`
-          : undefined;
+        : undefined;
       finish(timeoutProblem || (code === 0 ? undefined : cliFailure(agent, request.model || "", errors, "", code)));
     });
     return "sent";
@@ -558,6 +568,14 @@ export class CliChatManager {
 
   private emitQueue(chat: Chat) {
     this.emit(chat, { type: "queue", queued: chat.queue.map(({ id, text, attachments }) => ({ id, text, attachments })) });
+  }
+
+  /** Acknowledge silence and wait again without sending another prompt or starting a process. */
+  wait(id: string): boolean {
+    const chat = this.chats.get(id);
+    if (!chat?.running || chat.cancelled || !chat.wait || !chat.activity?.quiet) return false;
+    chat.wait();
+    return true;
   }
 
   /** Send the oldest queued message (or the one asked for) now; a failure is shown in the chat. */
@@ -593,6 +611,7 @@ export class CliChatManager {
     chat.cancelled = true;
     if (process.platform === "win32" && proc.pid) execFile("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true }, () => {});
     else if (proc.pid) { try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill(); } }
+    else proc.kill?.();
     return true;
   }
 

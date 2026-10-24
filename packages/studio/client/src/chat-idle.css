@@ -1,0 +1,7 @@
+.chat-idle-warning { margin: 20px 0 12px; padding: 16px; background: var(--surface); border: 1px solid var(--control-border); border-radius: 10px; color: var(--text); }
+.chat-idle-warning > div:first-child { display: flex; align-items: flex-start; gap: 9px; }
+.chat-idle-warning strong { font-size: 13px; line-height: 1.7; font-weight: 500; }
+.chat-idle-warning svg { flex-shrink: 0; margin-top: 3px; color: var(--accent); }
+.chat-idle-warning p { margin: 8px 0 14px; font-size: 12px; line-height: 1.8; color: var(--text-secondary); }
+.chat-idle-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#root .chat-idle-actions button { min-height: 36px; padding: 7px 12px; font-size: 12px; }
