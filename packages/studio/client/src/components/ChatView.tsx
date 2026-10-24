@@ -385,6 +385,8 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
               return <div key={block.id} data-message-id={block.id}>
                 <div className="chat-assistant"><Markdown text={block.text} /></div>
                 {!(running && currentTurn) && <ResponseActions text={block.text} at={block.at} now={now} disabled={pending || offline || running}
+                  agentName={name}
+                  currentSessionId={sessionId}
                   onRetry={latest && !turnFailed && !search.trim() && (lastUser?.request || !lastUser?.attachments?.length) ? () => void retry() : undefined}
                   onEdit={latest ? () => { prepareMessage(lastUser!.text, sessionId, { expand: false }); if (lastUser!.attachments?.length) setProblem('กรุณาแนบไฟล์เดิมอีกครั้งก่อนส่งข้อความที่แก้ไข'); } : undefined}
                   onChanges={latest && turnEdited ? () => showChanges(sessionId) : undefined} />}
