@@ -1,13 +1,98 @@
-import type { ReactNode } from "react";
-import { openPreviewLink, parsePreviewTarget } from '../previewLinks';
+import { useState, type ReactNode } from "react";
+import { Sparkles, Copy, Check } from "lucide-react";
+import { openPreviewLink, openArtifact, parsePreviewTarget } from '../previewLinks';
+import { ThinkingAccordion } from './ThinkingAccordion';
 
 function link(label: string, href: string, key: string): ReactNode {
   try {
     const target = parsePreviewTarget(href);
-    return <a key={key} className="md-link" href={target.kind === 'web' ? target.url : '#preview-file'} title={`เปิดใน Preview: ${href}`}
-      onClick={event => { event.preventDefault(); openPreviewLink(href); }}
-      onAuxClick={event => { if (event.button === 1) { event.preventDefault(); openPreviewLink(href); } }}>{label}</a>;
-  } catch { return <span key={key} title="ลิงก์ชนิดนี้ไม่รองรับ">{label}</span>; }
+    return (
+      <a
+        key={key}
+        className="md-link"
+        href={target.kind === 'web' ? target.url : '#preview-file'}
+        title={`เปิดใน Preview: ${href}`}
+        onClick={(event) => {
+          event.preventDefault();
+          openPreviewLink(href);
+        }}
+        onAuxClick={(event) => {
+          if (event.button === 1) {
+            event.preventDefault();
+            openPreviewLink(href);
+          }
+        }}
+      >
+        {label}
+      </a>
+    );
+  } catch {
+    return (
+      <span key={key} title="ลิงก์ชนิดนี้ไม่รองรับ">
+        {label}
+      </span>
+    );
+  }
+}
+
+function CodeBlock({ code, language }: { code: string; language: string }) {
+  const [copied, setCopied] = useState(false);
+  const lang = (language || "").toLowerCase().trim();
+  const isArtifact =
+    ['html', 'svg', 'xml', 'mermaid', 'jsx', 'tsx', 'react'].includes(lang) ||
+    (!lang && /^\s*<(!DOCTYPE|html|svg|div|main)/i.test(code));
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback
+    }
+  };
+
+  const handleOpenArtifact = () => {
+    const title = lang ? `${lang.toUpperCase()} Artifact` : 'Interactive Preview';
+    openArtifact(title, lang || 'html', code);
+  };
+
+  return (
+    <div className="md-code-block">
+      <div className="md-code-header">
+        <span className="md-code-lang">{lang ? lang.toUpperCase() : 'CODE'}</span>
+        <div className="md-code-actions">
+          {isArtifact && (
+            <button
+              type="button"
+              className="md-artifact-btn"
+              title="เปิดดูผลลัพธ์สดๆ ในแผง Artifact"
+              onClick={handleOpenArtifact}
+            >
+              <Sparkles size={12} />
+              <span>เปิดใน Artifact</span>
+            </button>
+          )}
+          <button
+            type="button"
+            className="md-copy-btn"
+            title="คัดลอกโค้ด"
+            onClick={copy}
+          >
+            {copied ? (
+              <Check size={12} style={{ color: 'var(--running, #91bf9f)' }} />
+            ) : (
+              <Copy size={12} />
+            )}
+            <span>{copied ? 'คัดลอกแล้ว' : 'คัดลอก'}</span>
+          </button>
+        </div>
+      </div>
+      <pre tabIndex={0}>
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
 }
 
 /** Minimal, safe Markdown for AI answers: headings, lists, tables, code blocks, bold, inline code and links. No HTML. */
@@ -29,8 +114,27 @@ function inline(text: string, key: string): ReactNode[] {
 }
 
 export function Markdown({ text }: { text: string }) {
+  const thinkingBlocks: string[] = [];
+  let remainingText = text;
+
+  const thinkingRegex = /<(?:thinking|thought)>([\s\S]*?)<\/(?:thinking|thought)>/gi;
+  let match;
+  while ((match = thinkingRegex.exec(text)) !== null) {
+    if (match[1]?.trim()) {
+      thinkingBlocks.push(match[1].trim());
+    }
+  }
+
+  if (thinkingBlocks.length > 0) {
+    remainingText = text.replace(thinkingRegex, '').trim();
+  }
+
   const out: ReactNode[] = [];
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  thinkingBlocks.forEach((thought, idx) => {
+    out.push(<ThinkingAccordion key={`thought-${idx}`} thought={thought} />);
+  });
+
+  const lines = remainingText.replace(/\r\n/g, "\n").split("\n");
   let list: { ordered: boolean; items: string[] } | null = null;
   const flush = () => {
     if (!list) return;
@@ -38,13 +142,16 @@ export function Markdown({ text }: { text: string }) {
     out.push(list.ordered ? <ol key={out.length}>{items}</ol> : <ul key={out.length}>{items}</ul>);
     list = null;
   };
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line.startsWith("```")) {
       flush();
+      const match = line.match(/^```(\w+)?/);
+      const language = match?.[1] || "";
       const code: string[] = [];
       for (i++; i < lines.length && !lines[i].startsWith("```"); i++) code.push(lines[i]);
-      out.push(<pre key={out.length}>{code.join("\n")}</pre>);
+      out.push(<CodeBlock key={out.length} code={code.join("\n")} language={language} />);
       continue;
     }
     const row = /^\s*\|.*\|\s*$/;

@@ -17,6 +17,13 @@ if (process.env.SUPERAI_DATA_DIR)
   app.setPath("userData", process.env.SUPERAI_DATA_DIR);
 // Multithreaded on-device speech recognition (speak-to-type) needs SharedArrayBuffer.
 app.commandLine.appendSwitch("enable-features", "SharedArrayBuffer");
+// Avoid GPU process crash loops / device contention in automated tests and headless environments
+if (process.env.SUPERAI_TEST_MODE === "1" || process.argv.includes("--disable-gpu")) {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch("disable-gpu");
+  app.commandLine.appendSwitch("disable-software-rasterizer");
+}
+app.commandLine.appendSwitch("disable-gpu-process-crash-limit");
 let window, server, browser;
 const updater = new Updater({
   currentVersion: app.getVersion(),

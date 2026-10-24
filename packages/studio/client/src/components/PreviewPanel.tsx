@@ -15,6 +15,13 @@ import {
 import type { BrowserState } from "../desktop";
 import { parsePreviewTarget, type PreviewRequest } from '../previewLinks';
 import { ProjectFilePreview, type FilePreviewRequest } from './ProjectFilePreview';
+import { ArtifactPreview } from './ArtifactPreview';
+
+interface ArtifactState {
+  title: string;
+  language: string;
+  content: string;
+}
 interface Props {
   request?: PreviewRequest;
   workspaceId?: string;
@@ -30,6 +37,14 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
   const [webUrl, setWebUrl] = useState("");
   const [revision, setRevision] = useState(0);
   const [fileRequest, setFileRequest] = useState<FilePreviewRequest>();
+  const [artifact, setArtifact] = useState<ArtifactState | null>(null);
+  const [imageOverlay, setImageOverlay] = useState(false);
+  useEffect(() => {
+    const update = (event: Event) => setImageOverlay((event as CustomEvent<boolean>).detail);
+    setImageOverlay(!!document.querySelector('dialog.message-image-preview[open]'));
+    window.addEventListener('superai:image-overlay', update);
+    return () => window.removeEventListener('superai:image-overlay', update);
+  }, []);
   const area = useRef<HTMLDivElement>(null);
   const native = window.superai;
   const tab = state.tabs.find((t) => t.id === state.activeId);
@@ -48,11 +63,19 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
   );
   useEffect(() => {
     if (!request) return;
-    if (request.target.kind === 'file') {
+    if (request.target.kind === 'artifact') {
+      setFileRequest(undefined);
+      setArtifact({
+        title: request.target.title,
+        language: request.target.language,
+        content: request.target.content,
+      });
+      setUrl(`artifact:${request.target.language}`);
+    } else if (request.target.kind === 'file') {
       setUrl(request.target.path);
       setFileRequest({ id: request.id, workspaceId: request.workspaceId, target: request.target });
     } else {
-      setFileRequest(undefined); setUrl(request.target.url);
+      setArtifact(null); setFileRequest(undefined); setUrl(request.target.url);
       if (native) void action(currentTab.current ? 'navigate' : 'create', { url: request.target.url });
       else { setWebUrl(request.target.url); setRevision(value => value + 1); }
     }
@@ -79,7 +102,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
             y: r.y,
             width: r.width,
             height: r.height,
-            visible: !suspended && !fileRequest && !!tab && !tab.error,
+            visible: !suspended && !imageOverlay && !fileRequest && !artifact && !!tab && !tab.error,
           })
           .catch(() => {});
     };
@@ -92,7 +115,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
       window.removeEventListener("resize", update);
       void native.browser("bounds", { visible: false }).catch(() => {});
     };
-  }, [native, suspended, tab?.id, tab?.error, width, fileRequest]);
+  }, [native, suspended, imageOverlay, tab?.id, tab?.error, width, fileRequest, artifact]);
   const navigate = (event?: React.FormEvent) => {
     event?.preventDefault();
     if (/^(?:file:|\/|[a-z]:[\\/]|\.{1,2}[\\/])/i.test(url.trim()) || fileRequest?.target.path === url.trim()) {
@@ -258,13 +281,13 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
           <ExternalLink size={14} />
         </button>
       </form>
-      {!native && !fileRequest && (
+      {!native && !fileRequest && !artifact && (
         <div className="browser-note">
           โหมดเว็บใช้ iframe บางเว็บไซต์อาจไม่อนุญาตให้แสดง กดเปิดภายนอกได้
         </div>
       )}
       <div className="browser-canvas" ref={area}>
-        {fileRequest ? <ProjectFilePreview request={fileRequest} /> : native ? (
+        {artifact ? <ArtifactPreview title={artifact.title} language={artifact.language} content={artifact.content} onClose={() => setArtifact(null)} /> : fileRequest ? <ProjectFilePreview request={fileRequest} /> : native ? (
           tab?.error ? (
             <div className="preview-empty">
               <AlertTriangle size={30} />
@@ -318,7 +341,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
       </div>
       <div className="preview-footer">
         <span className={`status-dot ${tab?.loading ? "pending" : ""}`} />
-        {fileRequest ? 'ไฟล์ในโปรเจกต์ · Preview'
+        {artifact ? `Artifact · ${artifact.title} (${artifact.language.toUpperCase()})` : fileRequest ? 'ไฟล์ในโปรเจกต์ · Preview'
           : tab?.loading
           ? "กำลังโหลดเว็บไซต์…"
           : tab

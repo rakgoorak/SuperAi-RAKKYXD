@@ -1,0 +1,268 @@
+import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  Search,
+  Folder,
+  Terminal,
+  MessageSquare,
+  Plus,
+  Settings,
+  History,
+  GitBranch,
+  Globe,
+  BookOpen,
+  X,
+} from 'lucide-react';
+import type { Session, Workspace } from '../api';
+
+interface CommandItem {
+  id: string;
+  category: 'คำสั่งด่วน' | 'เซสชัน' | 'โปรเจกต์';
+  title: string;
+  subtitle?: string;
+  icon: React.ReactNode;
+  action: () => void;
+}
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  workspaces: Workspace[];
+  activeWs: string;
+  onSelectWorkspace: (id: string) => void;
+  sessions: Session[];
+  selectedSession: string;
+  onSelectSession: (id: string) => void;
+  onAction: (actionName: string) => void;
+}
+
+export function CommandPalette({
+  open,
+  onClose,
+  workspaces,
+  activeWs,
+  onSelectWorkspace,
+  sessions,
+  selectedSession,
+  onSelectSession,
+  onAction,
+}: Props) {
+  const id = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    if (open) {
+      setQuery('');
+      setActiveIndex(0);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const items: CommandItem[] = [
+    // Quick Actions
+    {
+      id: 'act-new-session',
+      category: 'คำสั่งด่วน',
+      title: 'เปิด Session ใหม่',
+      subtitle: 'เลือก CLI, Model และจำนวนแท็บ',
+      icon: <Plus size={15} style={{ color: 'var(--accent)' }} />,
+      action: () => {
+        onAction('session');
+        onClose();
+      },
+    },
+    {
+      id: 'act-new-project',
+      category: 'คำสั่งด่วน',
+      title: 'เพิ่มโปรเจกต์ใหม่',
+      subtitle: 'เชื่อมต่อโฟลเดอร์บนเครื่อง',
+      icon: <Folder size={15} style={{ color: 'var(--accent)' }} />,
+      action: () => {
+        onAction('project');
+        onClose();
+      },
+    },
+    {
+      id: 'act-settings',
+      category: 'คำสั่งด่วน',
+      title: 'การตั้งค่าระบบ (Settings)',
+      subtitle: 'จัดการ Model, Effort และเครื่องมือ',
+      icon: <Settings size={15} />,
+      action: () => {
+        onAction('settings');
+        onClose();
+      },
+    },
+    {
+      id: 'act-history',
+      category: 'คำสั่งด่วน',
+      title: 'ประวัติการสนทนา (History)',
+      subtitle: 'ค้นหาข้อความและผลงานเก่า',
+      icon: <History size={15} />,
+      action: () => {
+        onAction('history');
+        onClose();
+      },
+    },
+    {
+      id: 'act-changes',
+      category: 'คำสั่งด่วน',
+      title: 'ตรวจการแก้ไขโค้ด (Git Changes)',
+      subtitle: 'ดูไฟล์ที่เปลี่ยนแปลงและ Diff',
+      icon: <GitBranch size={15} />,
+      action: () => {
+        onAction('changes');
+        onClose();
+      },
+    },
+    {
+      id: 'act-preview',
+      category: 'คำสั่งด่วน',
+      title: 'เปิดหน้าต่าง Preview',
+      subtitle: 'ดูตัวอย่างหน้าเว็บ localhost:3000',
+      icon: <Globe size={15} />,
+      action: () => {
+        onAction('preview');
+        onClose();
+      },
+    },
+    {
+      id: 'act-setup',
+      category: 'คำสั่งด่วน',
+      title: 'คู่มือการติดตั้ง (Setup Guide)',
+      subtitle: 'ตรวจความพร้อมของ Node, Git และ CLIs',
+      icon: <BookOpen size={15} />,
+      action: () => {
+        onAction('setup');
+        onClose();
+      },
+    },
+
+    // Sessions
+    ...sessions.map((s) => ({
+      id: `session-${s.id}`,
+      category: 'เซสชัน' as const,
+      title: s.name,
+      subtitle: `${s.agentType || 'Terminal'} · ${s.id === selectedSession ? 'แท็บปัจจุบัน' : s.status === 'running' ? 'กำลังทำงาน' : 'หยุดแล้ว'}`,
+      icon: s.agentType ? <MessageSquare size={15} /> : <Terminal size={15} />,
+      action: () => {
+        onSelectSession(s.id);
+        onClose();
+      },
+    })),
+
+    // Projects
+    ...workspaces.map((w) => ({
+      id: `ws-${w.id}`,
+      category: 'โปรเจกต์' as const,
+      title: w.name,
+      subtitle: w.rootPath,
+      icon: <Folder size={15} style={{ color: activeWs === w.id ? 'var(--accent)' : 'inherit' }} />,
+      action: () => {
+        onSelectWorkspace(w.id);
+        onClose();
+      },
+    })),
+  ];
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? items.filter(
+        (item) =>
+          item.title.toLowerCase().includes(q) ||
+          (item.subtitle && item.subtitle.toLowerCase().includes(q)) ||
+          item.category.toLowerCase().includes(q)
+      )
+    : items;
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      onClose();
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex((idx) => (filtered.length ? (idx + 1) % filtered.length : 0));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex((idx) => (filtered.length ? (idx - 1 + filtered.length) % filtered.length : 0));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filtered[activeIndex]) {
+        filtered[activeIndex].action();
+      }
+    }
+  };
+
+  return createPortal(
+    <div
+      className="modal-backdrop command-palette-backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="command-palette-dialog" role="dialog" aria-modal="true" aria-label="ค้นหาคำสั่งด่วน">
+        <div className="command-palette-search">
+          <Search size={16} className="command-search-icon" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActiveIndex(0);
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder="ค้นหาเซสชัน, โปรเจกต์ หรือคำสั่งด่วน..."
+            aria-label="ค้นหาคำสั่งด่วน"
+          />
+          <button type="button" className="icon-button" onClick={onClose} title="ปิด (Esc)">
+            <X size={15} />
+          </button>
+        </div>
+
+        <div className="command-palette-list" role="listbox" id={`${id}-list`}>
+          {filtered.length === 0 ? (
+            <div className="command-palette-empty">ไม่พบผลลัพธ์ที่ตรงกับ "{query}"</div>
+          ) : (
+            filtered.map((item, index) => (
+              <button
+                key={item.id}
+                type="button"
+                role="option"
+                aria-selected={activeIndex === index}
+                className={`command-item ${activeIndex === index ? 'active' : ''}`}
+                onMouseEnter={() => setActiveIndex(index)}
+                onClick={() => item.action()}
+              >
+                <span className="command-item-icon">{item.icon}</span>
+                <span className="command-item-content">
+                  <strong className="command-item-title">{item.title}</strong>
+                  {item.subtitle && <small className="command-item-subtitle">{item.subtitle}</small>}
+                </span>
+                <span className="command-item-cat">{item.category}</span>
+              </button>
+            ))
+          )}
+        </div>
+
+        <footer className="command-palette-footer">
+          <span>↑ ↓ นำทาง · Enter เลือก · Esc ปิด</span>
+          <span>
+            คีย์ลัด <kbd>Ctrl</kbd> + <kbd>K</kbd>
+          </span>
+        </footer>
+      </div>
+    </div>,
+    document.body
+  );
+}

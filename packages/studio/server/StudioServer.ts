@@ -1,5 +1,6 @@
 import { projectChanges, projectFile } from "./ProjectChanges.js";
 import { readPreviewFile } from './PreviewFiles.js';
+import { listProjectFiles } from './ProjectFiles.js';
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -268,11 +269,11 @@ export class StudioServer {
       try { res.json(await projectFile(ws.rootPath, String(req.query.path || ''))); }
       catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
-    this.app.get('/api/workspaces/:wsId/preview-file', async (req, res) => {
-      const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!workspace) return res.status(404).json({ error: 'ไม่พบโปรเจกต์สำหรับเปิดไฟล์นี้' });
+    const previewFile = (folder: (req: Request) => string | undefined) => async (req: Request, res: Response) => {
+      const root = folder(req);
+      if (!root) return res.status(404).json({ error: 'ไม่พบโปรเจกต์หรือ session สำหรับเปิดไฟล์นี้' });
       try {
-        const file = await readPreviewFile(workspace.rootPath, String(req.query.path || ''));
+        const file = await readPreviewFile(root, String(req.query.path || ''));
         res.setHeader('Content-Type', file.contentType);
         res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox; style-src 'unsafe-inline'");
         res.setHeader('Cache-Control', 'no-store');
@@ -280,6 +281,59 @@ export class StudioServer {
       } catch (error) {
         const missing = (error as NodeJS.ErrnoException).code === 'ENOENT';
         res.status(missing ? 404 : 400).json({ error: missing ? 'ไม่พบไฟล์นี้แล้ว ตรวจที่อยู่ไฟล์หรือให้ AI สร้างไฟล์ใหม่' : (error as Error).message });
+      }
+    };
+    this.app.get('/api/workspaces/:wsId/preview-file', previewFile(req => this.workspaceRegistry.getWorkspace(String(req.params.wsId))?.rootPath));
+    this.app.get('/api/terminals/:id/preview-file', previewFile(req => this.terminalManager.getSession(String(req.params.id))?.cwd));
+    
+    this.app.get('/api/workspaces/:wsId/pinned-content', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      const pinned = Array.isArray(ws.pinnedFiles) ? ws.pinnedFiles : [];
+      const files: Array<{ path: string; name: string; content: string; size: number }> = [];
+      for (const rel of pinned) {
+        try {
+          const full = path.resolve(ws.rootPath, rel);
+          if (!full.startsWith(path.resolve(ws.rootPath))) continue;
+          if (!fs.existsSync(full) || !fs.statSync(full).isFile()) continue;
+          const stat = fs.statSync(full);
+          if (stat.size > 256 * 1024) continue;
+          const content = fs.readFileSync(full, 'utf8');
+          files.push({
+            path: rel,
+            name: path.basename(rel),
+            content,
+            size: stat.size,
+          });
+        } catch {}
+      }
+      res.json({ files });
+    });
+
+    this.app.post('/api/workspaces/:wsId/pinned-files/toggle', (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      const target = typeof req.body.filePath === 'string' ? req.body.filePath.trim() : '';
+      if (!target) return res.status(400).json({ error: 'กรุณาระบุพาธไฟล์' });
+      const pinned = new Set(Array.isArray(ws.pinnedFiles) ? ws.pinnedFiles : []);
+      if (pinned.has(target)) {
+        pinned.delete(target);
+      } else {
+        pinned.add(target);
+      }
+      const updated = this.workspaceRegistry.updateWorkspace(ws.id, {
+        pinnedFiles: Array.from(pinned),
+      });
+      res.json(updated);
+    });
+    this.app.get('/api/workspaces/:wsId/files', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      try {
+        const query = typeof req.query.query === 'string' ? req.query.query : '';
+        res.json(await listProjectFiles(ws.rootPath, query));
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
       }
     });
     this.app.get("/api/conversations/:wsId", (req, res) =>
@@ -408,7 +462,7 @@ export class StudioServer {
       try {
         const result = this.workspaceRegistry.updateWorkspace(
           String(req.params.wsId),
-          { name: req.body.name, rootPath: req.body.rootPath },
+          { name: req.body.name, rootPath: req.body.rootPath, instructions: req.body.instructions, pinnedFiles: req.body.pinnedFiles },
         );
         if (!result) return res.status(404).json({ error: "ไม่พบโปรเจกต์" });
         res.json(result);
@@ -452,6 +506,7 @@ export class StudioServer {
       const ws = this.workspaceRegistry.createWorkspace(
         name,
         rootPath || process.cwd(),
+        req.body.instructions,
       );
       res.json(ws);
     });

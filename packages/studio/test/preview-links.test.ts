@@ -6,6 +6,7 @@ import path from 'node:path';
 import { parsePreviewTarget } from '../client/src/previewLinks.js';
 import { readPreviewFile } from '../server/PreviewFiles.js';
 import { StudioServer } from '../server/StudioServer.js';
+import { saveAttachment } from '../server/AttachmentStore.js';
 
 test('preview targets normalize web URLs, Windows links, spaces and source line references', () => {
   assert.deepEqual(parsePreviewTarget('https://example.com/a?q=b'), { kind: 'web', url: 'https://example.com/a?q=b' });
@@ -65,4 +66,37 @@ test('preview endpoint serves registered project bytes with safe content types a
     const crossOrigin = await fetch(url + 'note.html', { headers: { Origin: 'https://other.example' } });
     assert.equal(crossOrigin.status, 403);
   } finally { await server.stop(); await fs.rm(root, { recursive: true, force: true }); }
+});
+
+test('saved session images remain readable in dormant sessions and cannot escape their folder', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'superai-session-images-'));
+  const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'superai-session-images-outside-'));
+  const server = new StudioServer({ port: 0, customWorkspacePath: path.join(root, 'workspaces.json') });
+  try {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    const saved = saveAttachment(root, png);
+    server.getTerminalManager().addDormant({ id: 'image-history', options: { cwd: root, agentType: 'codex' } });
+    await server.start();
+    const base = `http://127.0.0.1:${server.getPort()}`;
+    const url = `${base}/api/terminals/image-history/preview-file?path=`;
+    for (const file of [saved.path, saved.relativePath]) {
+      const response = await fetch(url + encodeURIComponent(file));
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get('content-type') || '', /^image\/png/);
+      assert.match(response.headers.get('content-security-policy') || '', /sandbox/);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      assert.deepEqual(Buffer.from(await response.arrayBuffer()), png);
+    }
+    assert.equal((await fetch(`${base}/api/terminals/missing/preview-file?path=x.png`)).status, 404);
+    assert.equal((await fetch(url + encodeURIComponent('.superai/attachments/missing.png'))).status, 404);
+    await fs.writeFile(path.join(outside, 'private.png'), png);
+    assert.equal((await fetch(url + encodeURIComponent(path.join(outside, 'private.png')))).status, 400);
+    await fs.symlink(outside, path.join(root, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
+    assert.equal((await fetch(url + encodeURIComponent('linked/private.png'))).status, 400);
+    assert.equal((await fetch(url + encodeURIComponent(saved.path), { headers: { Origin: 'https://other.example' } })).status, 403);
+  } finally {
+    await server.stop();
+    await fs.rm(root, { recursive: true, force: true });
+    await fs.rm(outside, { recursive: true, force: true });
+  }
 });

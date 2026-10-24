@@ -32,24 +32,27 @@ export class BrowserController {
       this.window.webContents.send("browser:state", this.state());
   }
   layout() {
-    if (this.window.isDestroyed()) return;
-    const [width, height] = this.window.getContentSize();
-    for (const [id, t] of this.tabs) {
-      const b = this.bounds;
-      t.view.setBounds({
-        x: Math.max(0, Math.round(b.x)),
-        y: Math.max(0, Math.round(b.y)),
-        width: Math.max(0, Math.min(width - b.x, Math.round(b.width))),
-        height: Math.max(0, Math.min(height - b.y, Math.round(b.height))),
-      });
-      t.view.setVisible(
-        this.visible &&
-          id === this.activeId &&
-          b.width > 0 &&
-          b.height > 0 &&
-          !t.error,
-      );
-    }
+    if (!this.window || this.window.isDestroyed() || this.forgetting) return;
+    try {
+      const [width, height] = this.window.getContentSize();
+      for (const [id, t] of this.tabs) {
+        if (!t?.view || !t.view.webContents || t.view.webContents.isDestroyed()) continue;
+        const b = this.bounds;
+        t.view.setBounds({
+          x: Math.max(0, Math.round(b.x)),
+          y: Math.max(0, Math.round(b.y)),
+          width: Math.max(0, Math.min(width - b.x, Math.round(b.width))),
+          height: Math.max(0, Math.min(height - b.y, Math.round(b.height))),
+        });
+        t.view.setVisible(
+          this.visible &&
+            id === this.activeId &&
+            b.width > 0 &&
+            b.height > 0 &&
+            !t.error,
+        );
+      }
+    } catch {}
   }
   async action(action, payload = {}) {
     if (this.forgetting) throw new Error("กำลังล้างข้อมูล browser กรุณารอให้เสร็จ");
@@ -197,8 +200,16 @@ export class BrowserController {
     }
   }
   destroy() {
-    for (const { view } of this.tabs.values())
-      if (!view.webContents.isDestroyed()) view.webContents.close();
+    for (const { view } of this.tabs.values()) {
+      try {
+        if (this.window && !this.window.isDestroyed() && this.window.contentView) {
+          this.window.contentView.removeChildView(view);
+        }
+        if (view?.webContents && !view.webContents.isDestroyed()) {
+          view.webContents.close();
+        }
+      } catch {}
+    }
     this.tabs.clear();
   }
 }
