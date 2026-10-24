@@ -2,11 +2,12 @@ import { useState, type ReactNode } from "react";
 import { Sparkles, Copy, Check } from "lucide-react";
 import { openPreviewLink, openArtifact, parsePreviewTarget } from '../previewLinks';
 import { ThinkingAccordion } from './ThinkingAccordion';
+import { MarkdownImage } from './MarkdownImage';
 
 function link(label: string, href: string, key: string): ReactNode {
   try {
     const target = parsePreviewTarget(href);
-    return (
+    const anchor = (
       <a
         key={key}
         className="md-link"
@@ -26,6 +27,8 @@ function link(label: string, href: string, key: string): ReactNode {
         {label}
       </a>
     );
+    return target.kind === 'file' && /\.(png|jpe?g|gif|webp|avif)$/i.test(target.path)
+      ? <MarkdownImage key={`${key}-${target.path}`} path={target.path} label={label} fallback={anchor} /> : anchor;
   } catch {
     return (
       <span key={key} title="ลิงก์ชนิดนี้ไม่รองรับ">
@@ -97,9 +100,9 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
 
 /** Minimal, safe Markdown for AI answers: headings, lists, tables, code blocks, bold, inline code and links. No HTML. */
 function inline(text: string, key: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]\n]+\]\((?:<[^>\n]+>|[^)\n]+)\)|(?:https?:\/\/|www\.)[^\s<>]+)/g).map((part, i) =>
-    /^\[[^\]\n]+\]\((?:<[^>\n]+>|[^)\n]+)\)$/.test(part) ? (
-      link(part.slice(1, part.indexOf("](")), part.slice(part.indexOf("](") + 2, -1), `${key}-${i}`)
+  return text.split(/(\*\*[^*]+\*\*|`[^`]+`|!?\[[^\]\n]+\]\((?:<[^>\n]+>|[^)\n]+)\)|(?:https?:\/\/|www\.)[^\s<>]+)/g).map((part, i) =>
+    /^!?\[[^\]\n]+\]\((?:<[^>\n]+>|[^)\n]+)\)$/.test(part) ? (
+      link(part.slice(part.startsWith('!') ? 2 : 1, part.indexOf("](")), part.slice(part.indexOf("](") + 2, -1), `${key}-${i}`)
     ) : /^(?:https?:\/\/|www\.)/i.test(part) ? (() => {
       const href = part.replace(/[.,;!?\u3002\uff0c\uff1b\uff01\uff1f]+$/, '');
       return <span key={`${key}-${i}`}>{link(href, href, `${key}-${i}-url`)}{part.slice(href.length)}</span>;

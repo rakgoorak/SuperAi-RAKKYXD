@@ -7,6 +7,8 @@ import { getSuggestions } from '../suggestions';
 import { NextSteps } from './NextSteps';
 import { ResponseActions } from './ResponseActions';
 import { MessageAttachments } from './MessageAttachments';
+import { ImageEndpointContext } from './MarkdownImage';
+import { ImageViewer } from './ImageViewer';
 import { timeLabel, tokenLabel } from '../chatFormat';
 import '../chat-idle.css';
 
@@ -56,9 +58,10 @@ function summary(tools: ToolItem[]) {
 
 /** A screenshot from a tool; click to see it full width. */
 function Shot({ src, small = false }: { src: string; small?: boolean }) {
-  const [big, setBig] = useState(false);
-  return <button type="button" className={`chat-shot ${small ? 'thumb' : ''} ${big ? 'big' : ''}`} title={big ? 'ย่อรูป' : 'ดูรูปเต็ม'}
-    onClick={(e) => { e.stopPropagation(); setBig(!big); }}><img src={src} alt="ภาพจากเครื่องมือ" loading="lazy" /></button>;
+  const [open, setOpen] = useState(false);
+  return <><button type="button" className={`chat-shot ${small ? 'thumb' : ''}`} title="ดูรูปและซูม"
+    onClick={(e) => { e.stopPropagation(); setOpen(true); }}><img src={src} alt="ภาพจากเครื่องมือ" loading="lazy" /></button>
+    {open && <ImageViewer image={{ src, name: 'ภาพจากเครื่องมือ' }} onClose={() => setOpen(false)} />}</>;
 }
 
 function ToolRow({ tool }: { tool: ToolItem }) {
@@ -351,7 +354,7 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
   };
 
   return (
-    <div className="chat-view">
+    <ImageEndpointContext.Provider value={`/api/terminals/${encodeURIComponent(sessionId)}/preview-file`}><div className="chat-view">
       <label className="chat-history-search"><Search size={13} /><input aria-label={`ค้นหาในแชต ${name}`} placeholder="ค้นหาในบทสนทนานี้…" value={search} onChange={event => setSearch(event.target.value)} /></label>
       <div className="chat-scroll" ref={scroller} onScroll={(e) => {
         const el = e.currentTarget;
@@ -437,6 +440,6 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
           {offline && <div className="chat-notice">ขาดการเชื่อมต่อ กำลังเชื่อมต่อใหม่…</div>}
         </div>
       </div>
-    </div>
+    </div></ImageEndpointContext.Provider>
   );
 }

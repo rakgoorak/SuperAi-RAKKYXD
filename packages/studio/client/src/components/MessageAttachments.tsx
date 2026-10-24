@@ -1,34 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { ImageOff, Paperclip, X } from 'lucide-react';
+import { useState } from 'react';
+import { ImageOff, Paperclip } from 'lucide-react';
+import { ImageViewer } from './ImageViewer';
 import '../message-attachments.css';
 
 type Image = { src: string; name: string };
-
-function ImagePreview({ image, onClose }: { image: Image; onClose: () => void }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    const trigger = document.activeElement;
-    const element = dialog.current!;
-    element.showModal();
-    window.dispatchEvent(new CustomEvent('superai:image-overlay', { detail: true }));
-    return () => {
-      element.close();
-      window.dispatchEvent(new CustomEvent('superai:image-overlay', { detail: false }));
-      if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true });
-    };
-  }, []);
-  return createPortal(
-    <dialog ref={dialog} className="message-image-preview" aria-label={`ดูรูป ${image.name}`}
-      onCancel={event => { event.preventDefault(); onClose(); }}
-      onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
-      <header><button type="button" aria-label="ปิดรูปภาพ" title="ปิดรูปภาพ (Esc)" onClick={onClose} autoFocus><X size={22} /><span>ปิดรูปภาพ</span><kbd>Esc</kbd></button><span className="message-image-title" title={image.name}>{image.name}</span></header>
-      {failed ? <p role="alert"><ImageOff size={24} />เปิดรูปไม่ได้ ไฟล์อาจถูกย้ายหรือลบ กรุณาแนบรูปอีกครั้ง</p>
-        : <img src={image.src} alt={image.name} onError={() => setFailed(true)} />}
-    </dialog>, document.body,
-  );
-}
 
 function Thumbnail({ image, onOpen }: { image: Image; onOpen: () => void }) {
   const [failed, setFailed] = useState(false);
@@ -53,6 +28,6 @@ export function MessageAttachments({ paths, endpoint }: { paths?: string[]; endp
         return <Thumbnail key={`${endpoint}-${file}-${index}`} image={image} onOpen={() => setSelected(image)} />;
       })}
     </div>}
-    {selected && <ImagePreview image={selected} onClose={() => setSelected(null)} />}
+    {selected && <ImageViewer image={selected} onClose={() => setSelected(null)} />}
   </>;
 }
