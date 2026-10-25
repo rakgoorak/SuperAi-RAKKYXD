@@ -28,6 +28,7 @@ import { trustFolder, repairCodexConfigFile } from "./FolderTrust.js";
 import { CliVersionManager, VERSIONED_CLIS } from "./CliVersions.js";
 import { AttachmentError, MAX_ATTACHMENT_BYTES, resolveAttachments, saveAttachment } from "./AttachmentStore.js";
 import { CliChatManager, CHAT_CLIS, CHAT_PERMISSIONS } from "./CliChat.js";
+import { getProjectRules } from "./ProjectRules.js";
 
 export class StudioServer {
   private agentRuns: AgentRunManager;
@@ -473,6 +474,16 @@ export class StudioServer {
       const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
       if (!workspace) return res.status(404).json({ error: "ไม่พบโปรเจกต์" });
       res.json(chatSkills(workspace.rootPath, String(req.params.provider)));
+    });
+    this.app.get("/api/workspaces/:wsId/rules", (req, res) => {
+      const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!workspace) return res.status(404).json({ error: "ไม่พบโปรเจกต์" });
+      res.json(getProjectRules(workspace.rootPath));
+    });
+    this.app.get("/api/terminals/:id/rules", (req, res) => {
+      const session = this.terminalManager.getSession(String(req.params.id));
+      if (!session) return res.status(404).json({ error: "ไม่พบ session" });
+      res.json(getProjectRules(session.cwd));
     });
     this.app.get("/api/cli-versions", async (req, res) => {
       res.json(await this.versions.all(req.query.refresh === "1"));

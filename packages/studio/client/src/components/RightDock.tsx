@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Activity, Check, ClipboardList, Folder, Forward, Globe, MessageSquare, Play, Plus, Search, Trash2, X } from 'lucide-react';
+import { Activity, Check, ClipboardList, Folder, Forward, Globe, MessageSquare, Play, Plus, Search, Sparkles, Trash2, X } from 'lucide-react';
 import type { Run, Session, Workspace } from '../api';
 import { post } from '../api';
 import { PreviewPanel } from './PreviewPanel';
@@ -245,7 +245,7 @@ export function RightDock({
             ['tasks', 'งาน', ClipboardList],
             ['prompts', 'พรอมป์ต์', MessageSquare],
             ['files', 'ไฟล์', Folder],
-            ['browser', 'Browser', Globe],
+            ['browser', previewRequest?.target?.kind === 'artifact' ? 'Canvas (พรีวิวสด)' : 'Browser', previewRequest?.target?.kind === 'artifact' ? Sparkles : Globe],
           ] as const
         ).map(([value, label, Icon]) => (
           <button key={value} aria-label={label} title={label} aria-pressed={view === value} onClick={() => setView(value)}>

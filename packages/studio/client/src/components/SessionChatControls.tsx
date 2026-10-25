@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { FileText, X } from 'lucide-react';
 import { api, loginProvider } from '../api';
 import { useModels, EFFORT_LABEL } from '../providers';
 import { ModelCombo } from './ModelCombo';
@@ -21,9 +21,16 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
   const [ready, setReady] = useState(false);
   const [problem, setProblem] = useState('');
   const [busy, setBusy] = useState(false);
+  const [rules, setRules] = useState<{ rules: string; files: string[] } | null>(null);
   const { list, error: modelError } = useModels(agent);
   const { auth, checking, error: authError, check } = useProviderAccess(agent);
   const efforts = (model && list?.modelEfforts?.[model]) || list?.efforts || [];
+
+  useEffect(() => {
+    api<{ rules: string; files: string[] }>(`/api/terminals/${sessionId}/rules`)
+      .then(setRules)
+      .catch(() => {});
+  }, [sessionId]);
 
   useEffect(() => {
     let disposed = false;
@@ -86,6 +93,17 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
           <button type="button" className="text-button" disabled={checking || busy || !agent} onClick={() => void check(true)}>ตรวจบัญชีอีกครั้ง</button>
           {auth?.status !== 'authenticated' && auth?.status !== 'not-installed' && <button type="button" className="text-button" disabled={!agent || busy || disabled} onClick={() => void login()}>เข้าสู่ระบบใน Terminal</button>}
         </section>
+        {rules?.files && rules.files.length > 0 && (
+          <section className="composer-option-rules" aria-label="กฎประจำโปรเจกต์" style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, margin: '8px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--accent)' }}>
+              <FileText size={13} />
+              <strong>กฎโปรเจกต์: {rules.files.join(', ')}</strong>
+            </div>
+            <small style={{ color: 'var(--dim)', fontSize: 11, display: 'block', marginTop: 2 }}>
+              ส่งคำสั่งและแนวทางจากไฟล์ให้ AI อัตโนมัติ
+            </small>
+          </section>
+        )}
         {agent && <section className="composer-option-capabilities"><p>{providerIdentity(agent).connection}</p><p>{providerIdentity(agent).attachments}</p><small>ตั้งสิทธิ์ไว้ล่วงหน้า · ยังไม่ถามอนุมัติเป็นรายเครื่องมือ</small></section>}
       </ComposerOptions>
       {modelError && <small className="muted">{modelError} · พิมพ์ชื่อ Model เองได้</small>}

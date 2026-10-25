@@ -7,6 +7,7 @@ import { modelEffortArgs } from "./Providers.js";
 import { cliFailure } from "./CliProvider.js";
 import { cliAuth } from "./CliAuth.js";
 import { skillPrompt } from "./ChatSkills.js";
+import { getProjectRules, formatRulesForPrompt } from "./ProjectRules.js";
 
 // Chat view for Code sessions: each message runs the CLI headless with its JSON event stream and
 // resumes the same conversation, so the client can draw messages and tool calls instead of a TUI.
@@ -443,7 +444,10 @@ export class CliChatManager {
     const attached = agent === "codex" ? files.filter((f) => IMAGE.test(f)) : agent === "opencode" ? files : [];
     const listed = files.filter((f) => !attached.includes(f));
     const selected = skillPrompt(text, request.cwd, agent, request.skillId);
-    const prompt = listed.length ? `${selected}\n\nไฟล์แนบ:\n${listed.map((f) => `- ${f}`).join("\n")}` : selected;
+    const projectRules = getProjectRules(request.cwd);
+    const rulesText = formatRulesForPrompt(projectRules.rules);
+    const combined = rulesText ? `${selected}${rulesText}` : selected;
+    const prompt = listed.length ? `${combined}\n\nไฟล์แนบ:\n${listed.map((f) => `- ${f}`).join("\n")}` : combined;
     if (prompt.length > MAX_PROMPT) throw new Error("ข้อความยาวเกินไป กรุณาแบ่งส่งหรือใส่ไว้ในไฟล์แล้วแนบแทน");
     const args = chatArguments(agent, { prompt, conversationId: chat.conversationId, model: request.model, effort: request.effort, files: attached, permission: request.permission });
 

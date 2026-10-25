@@ -6,7 +6,7 @@ import path from 'node:path';
 import { saveAttachment, resolveAttachments, AttachmentError } from '../server/AttachmentStore.js';
 import { StudioServer } from '../server/StudioServer.js';
 import { attachmentProblem, promptArguments } from '../server/CliProvider.js';
-import { attachMode, formatPath, isSupportedAttachment, isSupportedImage } from '../client/src/attachments.ts';
+import { attachMode, formatPath, isSupportedAttachment, isSupportedImage, pastedFiles } from '../client/src/attachments.ts';
 
 const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -106,4 +106,20 @@ test('terminal panes: each CLI gets files the way it accepts them', () => {
   assert.ok(isSupportedImage({ type: '', name: 'shot.JPG' }));
   assert.ok(!isSupportedImage({ type: 'image/bmp', name: 'shot.bmp' }));
   assert.ok(isSupportedAttachment({ type: 'application/pdf', name: 'spec.pdf' }));
+});
+
+test('pastedFiles extracts image files even when text metadata is present', () => {
+  const fakeFile = { type: 'image/png', name: 'screenshot.png' } as unknown as File;
+  const mockDataTransfer = {
+    items: [
+      { kind: 'string', type: 'text/plain' },
+      { kind: 'file', getAsFile: () => fakeFile },
+    ],
+    files: [fakeFile],
+    getData: (type: string) => (type === 'text/plain' ? 'some metadata' : ''),
+  } as unknown as DataTransfer;
+
+  const result = pastedFiles(mockDataTransfer);
+  assert.equal(result.length, 1);
+  assert.equal(result[0], fakeFile);
 });
