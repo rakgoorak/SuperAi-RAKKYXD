@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Eye, EyeOff, Maximize2, Pencil, Plus, Terminal, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Maximize2, Pencil, Plus, X } from 'lucide-react';
 import { TerminalPane } from './TerminalPane';
 import { SessionEnded } from './SessionEnded';
 import type { Session } from '../api';
 import { paneView, type PaneView } from '../paneView';
+import { ProviderBadge } from './ProviderBadge';
 
 export type CanvasLayout = 'auto' | 'tabs' | 'stack' | 'split' | '3' | '4';
 export function canvasColumns(layout: CanvasLayout, count: number, width: number) {
@@ -118,9 +119,9 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
       }} />;
   });
   return <div className="session-canvas" ref={area}>
-    {!grid && ordered.length > 0 && <div className="session-tabs">
+    {!grid && ordered.length > 1 && <div className="session-tabs">
       {ordered.map(s => <div key={s.id} className={`session-tab ${s.id === selected ? 'active' : ''}`}>
-        <button onClick={() => select(s.id)}><span className={`status-dot ${s.status === 'running' ? '' : 'offline'}`} />{names[s.id] || s.name}</button>
+        <button onClick={() => select(s.id)}><ProviderBadge provider={s.agentType} compact />{names[s.id] || s.name}</button>
         {hide && <button title={`ซ่อน ${s.name} พับเก็บไว้ก่อน (ไม่ลบ)`} aria-label={`ซ่อน ${s.name}`} onClick={() => hide(s.id)}><EyeOff size={12} /></button>}
         <button title={`ลบ ${s.name}`} disabled={busy} onClick={() => remove(s)}><X size={12} /></button>
       </div>)}
@@ -166,7 +167,7 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
                 <button type="submit">บันทึก</button><button type="button" onClick={() => setEditing('')}>ยกเลิก</button>
               </form> : <button className="pane-title" onClick={() => select(s.id)} title={`${names[s.id] || s.name} · ${s.agentType} · ${s.cwd}`}>
                 <span className={`status-dot ${s.status === 'running' ? '' : s.status === 'error' ? 'bad' : 'offline'}`} />
-                <Terminal size={12} /><strong>{names[s.id] || s.name}</strong>
+                <ProviderBadge provider={s.agentType} compact /><strong>{names[s.id] || s.name}</strong>
               </button>}
               <div className="pane-actions">
                 <button className="icon-button secondary-pane-action" title={`เปลี่ยนชื่อ ${s.name}`} onClick={() => { setName(names[s.id] || s.name); setEditing(s.id); }}><Pencil size={11} /></button>

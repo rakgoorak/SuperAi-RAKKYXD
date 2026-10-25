@@ -248,9 +248,8 @@ export function RightDock({
             ['browser', 'Browser', Globe],
           ] as const
         ).map(([value, label, Icon]) => (
-          <button key={value} aria-pressed={view === value} onClick={() => setView(value)}>
-            <Icon size={12} />
-            {label}
+          <button key={value} aria-label={label} title={label} aria-pressed={view === value} onClick={() => setView(value)}>
+            <Icon size={16} />
           </button>
         ))}
         <button className="icon-button" title="ปิดแผงด้านขวา" onClick={close}>

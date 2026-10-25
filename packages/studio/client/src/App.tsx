@@ -48,6 +48,7 @@ import {
   Users,
   Eye,
   EyeOff,
+  ExternalLink,
 } from "lucide-react";
 import { api, post, Workspace, Cli, Session, Run, Seat, togglePinnedFile } from "./api";
 import { paneView } from "./paneView";
@@ -56,7 +57,7 @@ import { SessionChatControls } from "./components/SessionChatControls";
 import { ComposerLocation } from "./components/ComposerLocation";
 import { SessionCanvas, type CanvasLayout } from "./components/SessionCanvas";
 import { RightDock, type DockView } from "./components/RightDock";
-import { parsePreviewTarget, type PreviewRequest } from './previewLinks';
+import { parsePreviewTarget, type PreviewRequest, renderTextWithLinks, findUrlAtPosition, extractUrls, openExternalLink } from './previewLinks';
 import { AgentConfigEditor, AgentRunView, type AgentConfig } from "./components/AgentPanel";
 import { ChatConfigEditor, ChatRunView, type ChatConfig } from "./components/ChatPanel";
 import { SkillsPanel } from "./components/SkillsPanel";
@@ -80,6 +81,11 @@ import { getSuggestions } from "./suggestions";
 import { NextSteps } from "./components/NextSteps";
 import { MessageAttachments } from "./components/MessageAttachments";
 import { WorkspaceWelcome } from "./components/WorkspaceWelcome";
+import { QuickChatControls } from "./components/QuickChatControls";
+import { ProviderBadge } from "./components/ProviderBadge";
+import { providerIdentity } from "./providerIdentity";
+import { firstReady } from "./providers";
+import { loadQuickConversationState, saveQuickConversationState, type PendingQuickConversation } from "./quickConversationState";
 import { composerDraftKey, useComposerDrafts } from "./composerDrafts";
 
 type Mode = "agent" | "code" | "chat";
@@ -115,7 +121,9 @@ export function App() {
   activeWsRef.current = activeWs;
   const [sessions, setSessions] = useState<Session[]>([]);
   const [clis, setClis] = useState<Cli[]>([]);
+  const [quickState] = useState(loadQuickConversationState);
   const [selected, setSelected] = useState(() => initial("superai-selected", ""));
+  const newConversationWorkspace = useRef<string | null>(quickState.pending?.wsId || (quickState.aliases[activeWs] ? activeWs : null));
   useEffect(() => { try { localStorage.setItem("superai-selected", selected); } catch {} }, [selected]);
   const [historyRun, setHistoryRun] = useState("");
   const [mode, setMode] = useState<Mode>(() => {
@@ -123,12 +131,12 @@ export function App() {
     return saved === "agent" || saved === "chat" ? saved : "code";
   });
   const [preview, setPreview] = useState(
-    initial("superai-preview", "true") === "true",
+    initial("superai-preview", "false") === "true",
   );
   const [sidebar, setSidebar] = useState(true);
   const [layout, setLayout] = useState<CanvasLayout>(() => {
-    const saved = initial("superai-canvas-layout-v2", "auto");
-    return ["auto", "tabs", "stack", "split", "3", "4"].includes(saved) ? saved as CanvasLayout : "auto";
+    const saved = initial("superai-canvas-layout-v2", "tabs");
+    return ["auto", "tabs", "stack", "split", "3", "4"].includes(saved) ? saved as CanvasLayout : "tabs";
   });
   const [zoomed, setZoomed] = useState(false);
   const [composerExpanded, setComposerExpanded] = useState(false);
@@ -149,8 +157,22 @@ export function App() {
   const [pty, setPty] = useState(false);
   const [search, setSearch] = useState("");
   const [target, setTarget] = useState<"active" | "all">("active");
-  const draftScope = composerDraftKey(activeWs, mode, selected, target);
+  // Alias only the first app-managed workspace to its originating draft; other projects stay isolated.
+  const starterDraftScopes = useRef(new Map<string, string>(Object.entries(quickState.aliases)));
+  const draftScope = mode === "code" && !selected && target === "active"
+    ? starterDraftScopes.current.get(activeWs) || composerDraftKey(activeWs, mode, selected, target)
+    : composerDraftKey(activeWs, mode, selected, target);
   const { draft, setDraft, setDraftFor } = useComposerDrafts(draftScope);
+  const [quickChoice, setQuickChoice] = useState(() => initial("superai-quick-provider", ""));
+  const quickProvider = clis.some(cli => cli.id === quickChoice && cli.available && HEADLESS.includes(cli.id)) ? quickChoice : firstReady(clis);
+  const sending = useRef(false);
+  const pendingQuick = useRef<PendingQuickConversation | undefined>(quickState.pending);
+  const chooseQuickProvider = (id: string) => {
+    newConversationWorkspace.current = activeWs;
+    setQuickChoice(id);
+    try { localStorage.setItem("superai-quick-provider", id); } catch {}
+    requestAnimationFrame(() => composer.current?.focus());
+  };
   const [launchType, setLaunchType] = useState("claude-code");
   const [count, setCount] = useState(1);
   const launchTotal = launchPlan?.reduce((n, seat) => n + seat.count, 0) || count;
@@ -350,9 +372,9 @@ export function App() {
     setRuns([]);
   }, [activeWs]);
   useEffect(() => {
-    if (visible.length && !visible.some((s) => s.id === selected))
+    if (visible.length && !visible.some((s) => s.id === selected) && (selected || (newConversationWorkspace.current !== activeWs && !starterDraftScopes.current.has(activeWs))))
       setSelected(visible[0].id);
-  }, [visible, selected]);
+  }, [visible, selected, activeWs]);
   useEffect(() => {
     localStorage.setItem("superai-canvas-layout-v2", layout);
   }, [layout]);
@@ -501,6 +523,10 @@ export function App() {
       const result = await post(`/api/terminals/${id}/kill`);
       if (!result.success)
         throw new Error("ปิด session ไม่สำเร็จ กรุณาลองใหม่");
+      if (pendingQuick.current?.session.id === id) {
+        pendingQuick.current = undefined;
+        saveQuickConversationState(starterDraftScopes.current);
+      }
       setHiddenSessions((prev) => prev.filter((item) => item !== id));
       await refresh();
     });
@@ -535,9 +561,44 @@ export function App() {
     if (activeWsRef.current === previous.wsId) setRuns(current => [...current.filter(run => run.id !== created.id), created]);
   });
   /** `queue` (Ctrl+Enter): a chat that is still answering takes the message after its current turn. */
-  const send = (queue = false) =>
-    task(async () => {
+  const send = async (queue = false) => {
+    if (sending.current) return;
+    sending.current = true;
+    try { await task(async () => {
       if (!draft.trim() && !attachments.items.length) return;
+      if (mode === "code" && target === "active" && !composerTarget) {
+        if (!quickProvider) throw new Error("ยังไม่มี AI พร้อมใช้ เปิดเริ่มต้นใช้งานเพื่อติดตั้งและเชื่อมบัญชีก่อน");
+        const ws = workspace || await post<Workspace>("/api/workspaces/quick-chat");
+        if (!workspace) {
+          starterDraftScopes.current.set(ws.id, draftScope);
+          saveQuickConversationState(starterDraftScopes.current, pendingQuick.current);
+        }
+        newConversationWorkspace.current = ws.id;
+        const chosen = seatFor(quickProvider, "");
+        let session = pendingQuick.current?.wsId === ws.id && pendingQuick.current.session.agentType === quickProvider ? pendingQuick.current.session : undefined;
+        if (!session) {
+          session = await post<Session>("/api/terminals/spawn", { agentType: quickProvider, wsId: ws.id,
+            name: draft.trim().split('\n')[0].slice(0, 60) || providerIdentity(quickProvider).label, model: chosen.model, effort: chosen.effort,
+            view: "chat", trustFolder: false });
+          if (session.status === "error") throw new Error(`เปิด ${providerIdentity(quickProvider).label} ไม่สำเร็จ ตรวจการติดตั้งแล้วลองอีกครั้ง`);
+          pendingQuick.current = { session, wsId: ws.id };
+          saveQuickConversationState(starterDraftScopes.current, pendingQuick.current);
+          setChatPrefs(session.id, { model: chosen.model, effort: chosen.effort, permission: "read" });
+        }
+        const files: SavedAttachment[] = [];
+        for (const item of attachments.items) files.push(await uploadAttachment(`/api/workspaces/${ws.id}/attachments`, item.file));
+        await post(`/api/terminals/${session.id}/chat`, { text: draft.trim() || "ดูไฟล์แนบนี้",
+          model: chosen.model, effort: chosen.effort, permission: "read", attachments: files.map(file => file.path) });
+        const created = session;
+        setWorkspaces(current => current.some(item => item.id === ws.id) ? current : [...current, ws]);
+        setSessions(current => current.some(item => item.id === created.id) ? current : [...current, created]);
+        setHiddenSessions(current => current.filter(id => id !== created.id));
+        setActiveWs(ws.id); setSelected(created.id); setTarget("active");
+        setDraft(""); attachments.clear(); pendingQuick.current = undefined; starterDraftScopes.current.delete(ws.id);
+        saveQuickConversationState(starterDraftScopes.current);
+        setNotice(`เริ่มคุยกับ ${providerIdentity(quickProvider).label} แล้ว`);
+        return;
+      }
       let queuedCount = 0;
       if (!workspace) throw new Error("กรุณาสร้างโปรเจกต์ก่อน");
       // Save attached images/PDFs into <project>/.superai/attachments first.
@@ -618,7 +679,8 @@ export function App() {
       }
       setDraft("");
       attachments.clear();
-    });
+    }); } finally { sending.current = false; }
+  };
   useEffect(() => {
     const prepareComposer = (event: Event) => {
       const detail = (event as CustomEvent<{ text: string; mode?: Mode; sessionId?: string; expand?: boolean }>).detail;
@@ -707,7 +769,7 @@ export function App() {
   useEffect(() => { if (historyRun && runs.some(run => run.id === historyRun)) { document.getElementById('run-' + historyRun)?.scrollIntoView({ block: 'start' }); setHistoryRun(''); } }, [historyRun, runs]);
   const openHistoryEntry = (entry: HistoryEntry) => {
     setActiveWs(entry.wsId); setMode(entry.mode); setDialog(null);
-    if (entry.sessionId) { setSelected(entry.sessionId); setTarget("active"); try { localStorage.setItem('superai-jump:' + entry.sessionId, entry.id); window.dispatchEvent(new CustomEvent('superai:jump-message', {detail:entry.sessionId})); } catch {} }
+    if (entry.sessionId) { setHiddenSessions(current => current.filter(id => id !== entry.sessionId)); setSelected(entry.sessionId); setTarget("active"); try { localStorage.setItem('superai-jump:' + entry.sessionId, entry.id); window.dispatchEvent(new CustomEvent('superai:jump-message', {detail:entry.sessionId})); } catch {} }
     else setHistoryRun(entry.id);
   };
   const dropTarget = useWindowDrop(attachToComposer, connected && !dialog);
@@ -828,6 +890,8 @@ export function App() {
                 <button
                   key={m}
                   className={mode === m ? "active" : ""}
+                  aria-label={modeLabels[m]}
+                  aria-pressed={mode === m}
                   title={m === "agent" ? "ให้ทีม AI แบ่งงานและลงมือทำ" : m === "code" ? "คุยกับผู้ช่วย AI และทำงานกับไฟล์" : "ถามหลาย AI แล้วเปรียบเทียบคำตอบ"}
                   onClick={() => { setMode(m); if (m === "agent") setPreview(false); }}
                 >
@@ -838,7 +902,6 @@ export function App() {
                   ) : (
                     <Bot size={15} />
                   )}
-                  <span>{modeLabels[m]}<small aria-hidden="true">{m === "agent" ? "ทีมช่วยทำงาน" : m === "code" ? "คุยกับผู้ช่วย" : "เทียบคำตอบ"}</small></span>
                 </button>
               ))}
             </nav>
@@ -943,8 +1006,8 @@ export function App() {
                                     unhideSession(s.id);
                                   }}
                                 >
-                                  {paneView(s) === "chat" ? <MessageSquare size={13} /> : <Terminal size={13} />}
-                                  <span>{s.name}</span>
+                                  <ProviderBadge provider={s.agentType} compact />
+                                  <span className="sidebar-session-copy"><span>{s.name}</span><small>{providerIdentity(s.agentType).label}{paneView(s) === "terminal" ? ' · Terminal' : ''}</small></span>
                                   {isHidden && <small className="sidebar-hidden-badge">ซ่อนอยู่</small>}
                                   <span
                                     className={`status-dot ${s.status === "running" || paneView(s) === "chat" ? "" : s.status === "error" ? "bad" : "offline"}`}
@@ -988,7 +1051,7 @@ export function App() {
                 })}
               {!workspaces.length && (
                 <p className="sidebar-empty">
-                  เพิ่มโฟลเดอร์โปรเจกต์เพื่อเริ่มทำงาน
+                  บทสนทนาแรกจะปรากฏที่นี่ · เริ่มพิมพ์ได้เลย
                 </p>
               )}
             </div>
@@ -1049,31 +1112,36 @@ export function App() {
               )}
               <Folder size={15} />
               <span>{workspace?.name || "เริ่มต้นใช้งาน"}</span>
-              <ChevronRight size={13} />
-              <span className="dim">{modeLabels[mode]}</span>
+              {mode !== "code" && <><ChevronRight size={13} /><span className="dim">{modeLabels[mode]}</span></>}
+              {mode === "code" && selectedSession && <><ChevronRight size={13} /><ProviderBadge provider={selectedSession.agentType} /><span className="conversation-title">{selectedSession.name}</span></>}
             </div>
 
             <div className="toolbar-actions">
               <UsageButton open={usageOpen} onOpenChange={setUsageOpen} />
-              <button className={`toolbar-button ${preview && dockView === "dashboard" ? "selected" : ""}`} title="เปิดแผงสถานะ" onClick={() => { setDockView("dashboard"); setPreview(true); }}><Activity size={14} /><span>สถานะ</span></button>
-              <button className={`toolbar-button ${preview && dockView === "files" ? "selected" : ""}`} title="เปิดไฟล์และแก้ไขด่วน" onClick={() => { setDockView("files"); setPreview(dockView === "files" ? !preview : true); }}><Folder size={14} /><span>ไฟล์</span></button>
+              <button className={`toolbar-button ${preview && dockView === "dashboard" ? "selected" : ""}`} aria-label="สถานะ" title="เปิดแผงสถานะ" onClick={() => { setDockView("dashboard"); setPreview(true); }}><Activity size={16} /><span>สถานะ</span></button>
+              <button className={`toolbar-button ${preview && dockView === "files" ? "selected" : ""}`} aria-label="ไฟล์" title="เปิดไฟล์และแก้ไขด่วน" onClick={() => { setDockView("files"); setPreview(dockView === "files" ? !preview : true); }}><Folder size={16} /><span>ไฟล์</span></button>
               <button
-                aria-label="Preview" className={`toolbar-button ${preview && dockView === "browser" ? "selected" : ""}`}
+                aria-label="Preview" title="เปิด Preview" className={`toolbar-button ${preview && dockView === "browser" ? "selected" : ""}`}
                 onClick={() => { setDockView("browser"); setPreview(dockView === "browser" ? !preview : true); }}
               >
-                <Globe size={15} />
+                <Globe size={16} />
                 <span>เปิด Preview</span>
               </button>
               <button
-                className="primary compact"
+                className="secondary compact advanced-session-button"
                 aria-label="สร้าง session"
-                title="สร้าง session"
+                title="เปิด Terminal หรือหลายห้อง"
                 disabled={!workspace}
                 onClick={() => openSession()}
               >
-                <Plus size={15} />
-                <span>เพิ่ม session</span>
+                <Terminal size={16} />
+                <span>Terminal / หลายห้อง</span>
               </button>
+              <button className="primary compact" aria-label="บทสนทนาใหม่" title="บทสนทนาใหม่" disabled={busy} onClick={() => {
+                newConversationWorkspace.current = activeWs;
+                setMode("code"); setSelected(""); setTarget("active"); setZoomed(false);
+                requestAnimationFrame(() => composer.current?.focus());
+              }}><Plus size={15} /><span>คุยใหม่</span></button>
             </div>
           </div>
           <div className="canvas-row">
@@ -1097,7 +1165,7 @@ export function App() {
               </button>
             </div>
           )}
-              <div className="canvas-heading">
+              <div className={`canvas-heading ${mode === "code" && (!selectedSession || visible.length <= 1) && !hiddenInWorkspace.length && !zoomed ? "canvas-heading-quiet" : ""}`}>
                 <div>
                   <span className="section-icon">
                     {mode === "code" ? (
@@ -1205,14 +1273,14 @@ export function App() {
               <div
                 className={`code-workspace ${mode !== "code" ? "not-visible" : ""}`}
               >
-                {workspaceSessions.length > 0 ? (
+                {workspaceSessions.length > 0 && selectedSession ? (
                   <SessionCanvas sessions={workspaceSessions} hiddenIds={hiddenSessions} workspaceId={activeWs} selected={selected} layout={layout} zoomed={zoomed} active={mode === "code"} busy={busy}
                     select={setSelected} zoom={id => { setSelected(id); setZoomed(true); }}
                     hide={hideSession} unhide={unhideSession} unhideAll={unhideAllWorkspaceSessions}
                     close={closeSession} restart={restartSession} add={openSession} switchView={switchView}
                     refresh={() => void refresh().catch(() => {})} onError={showError} />
                 ) : (
-                  <WorkspaceWelcome clis={clis} openSession={openSession} onMode={setMode} />
+                  <WorkspaceWelcome clis={clis} openSession={openSession} onMode={setMode} provider={quickProvider} onProvider={chooseQuickProvider} disabled={busy} />
                 )}
               </div>
               {mode !== "code" && (
@@ -1239,7 +1307,7 @@ export function App() {
                               {new Date(run.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}
                             </time>
                           </span>
-                          <p>{run.prompt}</p>
+                          <p>{renderTextWithLinks(run.prompt)}</p>
                           <MessageAttachments paths={run.attachments} endpoint={`/api/workspaces/${encodeURIComponent(run.wsId)}/preview-file`} />
                         </div>
                         {run.mode === "chat" && run.panel ? <ChatRunView run={run} /> : run.main ? <AgentRunView run={run} onFixTools={() => setDialog("setup")} /> : null}
@@ -1420,8 +1488,10 @@ export function App() {
                   </div>
                 </div>}
                 <div className={`composer-box ${chatTarget ? "has-session-controls" : ""}`}>
-                  <div className="composer-leading"><AttachMenu onFiles={attachToComposer} disabled={!workspace} /></div>
+                  <div className="composer-leading"><AttachMenu onFiles={attachToComposer} disabled={busy || (!workspace && mode !== "code")} /></div>
                   {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name.split("·")[0].trim() || chatTarget.name} disabled={busy} />}
+                  {mode === "code" && !composerTarget && target === "active" && <QuickChatControls clis={clis} provider={quickProvider} onProvider={chooseQuickProvider} disabled={busy} onSetup={() => setDialog("setup")} />}
+                  {mode === "code" && composerTarget && !chatTarget && <div className="terminal-provider-context"><ProviderBadge provider={composerTarget.agentType} /><span>{providerIdentity(composerTarget.agentType).connection}</span></div>}
                   <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
                   <div className="composer-input-container">
                     <SlashMenu ref={slashMenu} draft={draft} sessionId={chatTarget?.id} workspaceId={mode === "chat" ? workspace?.id : undefined} providers={mode === "chat" ? [...new Set((chatConfig?.panel || []).filter(seat => seat.provider.startsWith("cli:")).map(seat => seat.provider.slice(4)))] : []} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
@@ -1432,7 +1502,7 @@ export function App() {
                       aria-label="คำสั่ง"
                       placeholder={
                         mode === "code"
-                            ? target === "all" ? `พิมพ์ข้อความถึงทุก session (${running.length})…` : composerTarget ? `พิมพ์ข้อความถึง ${composerTarget.name.split("·")[0].trim()}…` : "คลิกเลือก session ก่อนพิมพ์…"
+                            ? target === "all" ? `พิมพ์ข้อความถึงทุก session (${running.length})…` : composerTarget ? `พิมพ์ข้อความถึง ${composerTarget.name.split("·")[0].trim()}…` : `คุยกับ ${quickProvider ? providerIdentity(quickProvider).label : "AI"} เรื่องอะไรดี…`
                             : mode === "agent"
                               ? "บอกเป้าหมายให้ทีม เช่น ทำหน้าเข้าสู่ระบบพร้อมทดสอบ…"
                               : "ถามคำถามเดียว ส่งให้ทุก AI ที่เลือก…"
@@ -1446,6 +1516,18 @@ export function App() {
                         if (!files.length) return;
                         e.preventDefault();
                         attachToComposer(files);
+                      }}
+                      onClick={(e) => {
+                        if (e.ctrlKey || e.metaKey) {
+                          const textarea = e.currentTarget;
+                          const pos = textarea.selectionStart;
+                          const url = findUrlAtPosition(textarea.value, pos);
+                          if (url) {
+                            e.preventDefault();
+                            openExternalLink(url);
+                            setNotice(`เปิดลิงก์: ${url}`);
+                          }
+                        }
                       }}
                       onKeyDown={(e) => {
                         if (slashMenu.current?.keyDown(e)) return;
@@ -1470,7 +1552,7 @@ export function App() {
                       </button>
                     )}
                     {/* Only worth showing when there is more than one session to send to. */}
-                    {mode === "code" && (running.length > 1 || target !== "active") && (
+                    {mode === "code" && (composerTarget || target === "all") && (running.length > 1 || target !== "active") && (
                       <select
                         className="composer-target"
                         aria-label="เป้าหมายคำสั่ง"
@@ -1531,7 +1613,8 @@ export function App() {
                         disabled={
                           busy ||
                           (!draft.trim() && !attachments.items.length) ||
-                          !workspace ||
+                          (!workspace && mode !== "code") ||
+                          (mode === "code" && !composerTarget && target === "active" && !quickProvider) ||
                           (mode !== "code" && !!activeRun)
                         }
                         onClick={() => send()}
@@ -1554,8 +1637,25 @@ export function App() {
                     if (!item) { item = await post<Workspace>('/api/workspaces', { name: rootPath.split(/[\\/]/).filter(Boolean).pop() || 'Worktree', rootPath }); await refresh(); }
                     setActiveWs(item.id); setTarget('active');
                   }); }} />
+                {extractUrls(draft).length > 0 && (
+                  <div className="composer-detected-links">
+                    <span className="detected-links-label">🔗 ลิงก์ที่พบ:</span>
+                    {extractUrls(draft).map((url, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        className="composer-link-chip"
+                        title={`คลิกหรือ Ctrl+Click ในช่องเพื่อเปิด ${url}`}
+                        onClick={() => openExternalLink(url)}
+                      >
+                        <ExternalLink size={11} />
+                        <span>{url.replace(/^https?:\/\//, '')}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="composer-hint">
-                  <span>Enter ส่ง{mode === "code" ? " · Ctrl+Enter ต่อคิว" : ""} · Shift + Enter ขึ้นบรรทัดใหม่ · Ctrl+U แนบรูปหรือ PDF</span>
+                  <span>Enter ส่ง{mode === "code" ? " · Ctrl+Enter ต่อคิว" : ""} · Shift + Enter ขึ้นบรรทัดใหม่ · Ctrl+Click เพื่อเปิดลิงก์</span>
                   <span>ตรวจคำสั่งก่อนส่งเสมอ</span>
                 </div>
               </div>
@@ -1794,6 +1894,11 @@ export function App() {
             {dialog === "setup" && (
               <>
                 <SetupGuide clis={clis} workspaces={workspaces} workspaceId={activeWs} voice={voiceSettings} refreshClis={checkClis} onStart={startFromSetup}
+                  onGeneralChat={async () => {
+                    const ws = await post<Workspace>("/api/workspaces/quick-chat");
+                    setWorkspaces(current => current.some(item => item.id === ws.id) ? current : [...current, ws]);
+                    setActiveWs(ws.id); return ws;
+                  }}
                   addProject={() => { setReturnToSetup(true); openProject(); }} openSkills={() => setDialog("skills")} />
                 <div className="dialog-footer">
                   <span className="muted">เปิดหน้านี้อีกครั้งได้จากแถบซ้าย “เริ่มต้นใช้งาน”</span>

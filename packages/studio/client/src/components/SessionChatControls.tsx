@@ -5,6 +5,9 @@ import { useModels, EFFORT_LABEL } from '../providers';
 import { ModelCombo } from './ModelCombo';
 import { useProviderAccess } from './ProviderAccess';
 import { chatPrefs, hasChatPrefs, onChatCommand, setChatPrefs, PERMISSION_LABEL, type ChatPermission } from '../chatControls';
+import { permissionDescription, permissionLabel, providerIdentity } from '../providerIdentity';
+import { ProviderBadge } from './ProviderBadge';
+import { ComposerOptions } from './ComposerOptions';
 
 /**
  * Account, Model and Effort of the chat session the bottom composer sends to.
@@ -59,25 +62,32 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
 
   return (
     <div className="session-chat-controls" aria-label={`การตั้งค่าแชท ${name}`}>
-      <details className={`account-menu ${auth?.status || ""}`} onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); event.stopPropagation(); } }}><summary aria-label="บัญชีของ session">{auth?.status === "authenticated" ? "เชื่อมต่อแล้ว" : "บัญชี AI"}</summary><div className={`chat-account ${auth?.status || ''}`}>
-        <small>{authError || auth?.note || (agent ? 'กำลังตรวจบัญชี…' : 'กำลังโหลดการตั้งค่า…')}</small>
-        <button type="button" className="text-button" disabled={checking || busy || !agent} onClick={() => void check(true)}>ตรวจบัญชีอีกครั้ง</button>
-        {auth?.status !== 'authenticated' && auth?.status !== 'not-installed' && <button type="button" className="text-button" disabled={!agent || busy || disabled} onClick={() => void login()}>เข้าสู่ระบบใน Terminal</button>}
-      </div>
-      </details>
+      {agent && <ProviderBadge provider={agent} />}
       {problem && <div className="chat-composer-problem" role="alert">{problem}<button type="button" onClick={() => setProblem('')} aria-label="ปิดข้อความ"><X size={12} /></button></div>}
       <div className="chat-model-controls">
         <label>Model<ModelCombo label={`Model ในแชท ${name}`} value={model} options={list?.models || []} placeholder="ค่าเริ่มต้นของ CLI" disabled={disabled || !ready}
           onChange={(value) => { setModel(value); setEffort(''); }} /></label>
-        <label>Effort<select aria-label={`Effort ในแชท ${name}`} value={effort} disabled={disabled || !efforts.length} onChange={(e) => setEffort(e.target.value)}>
+      </div>
+      <ComposerOptions label="ตัวเลือก AI" attention={!!authError || auth?.status === 'login-required' || auth?.status === 'not-installed'}>
+        <div className="composer-option-fields">
+        <label>ระดับการคิด<select aria-label={`Effort ในแชท ${name}`} value={effort} disabled={disabled || !efforts.length} onChange={(e) => setEffort(e.target.value)}>
           <option value="">ค่าเริ่มต้น</option>{efforts.map((e) => <option key={e} value={e}>{EFFORT_LABEL[e] || e}</option>)}
         </select></label>
         <label>สิทธิ์<select aria-label={`สิทธิ์ของ ${name} ในข้อความถัดไป`} value={permission} disabled={disabled}
           title="CLI ที่ทำงานเบื้องหลังถามก่อนไม่ได้ จึงเลือกไว้ล่วงหน้า: อ่านอย่างเดียว / แก้ไฟล์ในโปรเจกต์ได้ / แก้ไฟล์และรันคำสั่งได้เอง"
           onChange={(e) => { const value = e.target.value as ChatPermission; setPermission(value); setChatPrefs(sessionId, { permission: value }); }}>
-          {(Object.keys(PERMISSION_LABEL) as ChatPermission[]).map((p) => <option key={p} value={p}>{PERMISSION_LABEL[p]}</option>)}
+          {(Object.keys(PERMISSION_LABEL) as ChatPermission[]).map((p) => <option key={p} value={p}>{permissionLabel(agent, p)}</option>)}
         </select></label>
-      </div>
+        </div>
+        {agent && <p className="permission-description">{permissionDescription(agent, permission)}</p>}
+        <section className={`composer-option-account ${auth?.status || ''}`} aria-label="บัญชีของ session">
+          <strong>{auth?.status === 'authenticated' ? 'บัญชีเชื่อมต่อแล้ว' : 'บัญชี AI'}</strong>
+          <p>{authError || auth?.note || (agent ? 'กำลังตรวจบัญชี…' : 'กำลังโหลดการตั้งค่า…')}</p>
+          <button type="button" className="text-button" disabled={checking || busy || !agent} onClick={() => void check(true)}>ตรวจบัญชีอีกครั้ง</button>
+          {auth?.status !== 'authenticated' && auth?.status !== 'not-installed' && <button type="button" className="text-button" disabled={!agent || busy || disabled} onClick={() => void login()}>เข้าสู่ระบบใน Terminal</button>}
+        </section>
+        {agent && <section className="composer-option-capabilities"><p>{providerIdentity(agent).connection}</p><p>{providerIdentity(agent).attachments}</p><small>ตั้งสิทธิ์ไว้ล่วงหน้า · ยังไม่ถามอนุมัติเป็นรายเครื่องมือ</small></section>}
+      </ComposerOptions>
       {modelError && <small className="muted">{modelError} · พิมพ์ชื่อ Model เองได้</small>}
     </div>
   );

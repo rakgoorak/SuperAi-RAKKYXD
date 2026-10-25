@@ -5,15 +5,15 @@
   font-size: 14px;
   font-synthesis: none;
   color-scheme: dark;
-  --base: #222220;
-  --surface: #2b2b28;
-  --raised: #33332f;
-  --selected: #3d3c36;
-  --border: #3b3b35;
-  --control-border: #505048;
-  --text: #eeede7;
-  --text-secondary: #d0cec3;
-  --dim: #aaa89e;
+  --base: #242422;
+  --surface: #2b2b29;
+  --raised: #333331;
+  --selected: #3b3b38;
+  --border: #363633;
+  --control-border: #484844;
+  --text: #e9e8e3;
+  --text-secondary: #c6c5be;
+  --dim: #aaa9a2;
   --accent: #d9a080;
   --accent-hover: #e7b297;
   --on-accent: #28211d;
@@ -966,4 +966,52 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
   justify-content: center;
   gap: 8px;
   margin-top: 6px;
+}
+
+/* User chat bubble & composer links */
+#root .chat-user-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  word-break: break-all;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+#root .chat-user-link:hover {
+  color: var(--accent-hover);
+  text-decoration-color: var(--accent-hover);
+}
+#root .composer-detected-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 14px 2px;
+}
+#root .detected-links-label {
+  font-size: 10px;
+  color: var(--dim);
+}
+#root .composer-link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--raised);
+  border: 1px solid var(--control-border);
+  color: var(--accent);
+  font-size: 11px;
+  max-width: 220px;
+  cursor: pointer;
+}
+#root .composer-link-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#root .composer-link-chip:hover {
+  background: var(--selected);
+  border-color: var(--accent);
+  color: var(--accent-hover);
 }

@@ -36,13 +36,13 @@ try {
  };
  steps.step('select first'); await selectSession('fixture-0');
  const model=page.getByLabel('Model ในแชท One',{exact:true});await model.waitFor();
- await page.getByLabel('บัญชีของ session',{exact:true}).click();
+ await page.locator('.session-chat-controls .composer-options > summary').click();
  await page.getByRole('button',{name:'ตรวจบัญชีอีกครั้ง',exact:true}).waitFor();
  await page.getByRole('button',{name:'ตรวจบัญชีอีกครั้ง',exact:true}).focus();
  await page.keyboard.press('Escape');
  await page.getByRole('button',{name:'ตรวจบัญชีอีกครั้ง',exact:true}).waitFor({state:'hidden'});
  steps.step('model defaults'); await page.waitForFunction(()=>document.querySelector('[aria-label="Model ในแชท One"]')?.value==='model-a',null,{timeout:20000});
- await model.fill('model-b');await page.getByLabel('Effort ในแชท One',{exact:true}).selectOption('low');
+ await model.fill('model-b');await page.locator('.session-chat-controls .composer-options > summary').click();await page.getByLabel('Effort ในแชท One',{exact:true}).selectOption('low');
  const composer = page.getByLabel('คำสั่ง',{exact:true});
  await composer.fill('/');
  const slashList=page.getByRole('listbox',{name:'เลือก skill หรือคำสั่ง'});
@@ -74,7 +74,7 @@ try {
  await selectSession('fixture-1');await page.getByLabel('Model ในแชท Two',{exact:true}).waitFor();
  await selectSession('fixture-0');await page.getByLabel('Model ในแชท One',{exact:true}).waitFor();
  assert.equal(await model.inputValue(),'model-b');
- await model.fill('');await page.getByLabel('Effort ในแชท One',{exact:true}).selectOption('');
+ await model.fill('');await page.locator('.session-chat-controls .composer-options > summary').click();await page.getByLabel('Effort ในแชท One',{exact:true}).selectOption('');
  await selectSession('fixture-1');await page.getByLabel('Model ในแชท Two',{exact:true}).waitFor();
  await selectSession('fixture-0');await model.waitFor();
  await page.waitForTimeout(150);
