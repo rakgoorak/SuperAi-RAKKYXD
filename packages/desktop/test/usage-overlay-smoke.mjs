@@ -67,7 +67,7 @@ try {
       if (close === 'button') await panel.getByTitle('ปิด', { exact: true }).click();
       else if (close === 'escape') await page.keyboard.press('Escape');
       else if (close === 'toggle') await usage.click();
-      else await page.locator('.statusbar').click({ position: { x: 10, y: 5 } });
+      else await page.locator('.app-canvas').click({ position: { x: 10, y: 5 } });
       await panel.waitFor({ state: 'hidden' });
       await expectBrowserVisible(true);
     }

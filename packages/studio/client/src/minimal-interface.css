@@ -178,8 +178,7 @@
 #root .artifact-lang-badge { background: transparent; border: 0; color: var(--dim); }
 #root .md-code-block { border: 1px solid var(--border); border-radius: 9px; box-shadow: none; }
 #root .md-code-header { background: #ffffff03; border-bottom-color: var(--border); }
-#root .statusbar { background: transparent; border-top: 0; color: var(--dim); }
-#root .statusbar .path-text { visibility: hidden; }
+#root .statusbar { display: none !important; }
 @media (max-width: 1200px) {
   #root .project-sidebar { width: 208px; min-width: 208px; }
   #root .workspace-toolbar { padding-inline: 18px; }
