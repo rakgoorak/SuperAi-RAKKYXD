@@ -1,0 +1,71 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { branchChoices, selectBranch } from '../server/BranchSelection.js';
+import { StudioServer } from '../server/StudioServer.js';
+
+test('branch selection lists real local branches, switches clean folders and preserves dirty work', async () => {
+  const base = path.resolve('output/branch-selection-test');
+  await fs.mkdir(base, { recursive: true });
+  const folder = await fs.mkdtemp(path.join(base, 'repo-'));
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: folder, encoding: 'utf8', windowsHide: true });
+  git('init', '-b', 'main');
+  await fs.writeFile(path.join(folder, 'example.txt'), 'base');
+  git('add', 'example.txt');
+  git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-m', 'fixture');
+  git('branch', 'feature/ui');
+  assert.deepEqual((await branchChoices(folder)).branches, ['feature/ui', 'main']);
+  assert.equal((await selectBranch(folder, 'feature/ui')).branch, 'feature/ui');
+  await fs.writeFile(path.join(folder, 'example.txt'), 'unsaved');
+  await assert.rejects(selectBranch(folder, 'main'), /commit/);
+  assert.equal(await fs.readFile(path.join(folder, 'example.txt'), 'utf8'), 'unsaved');
+  assert.equal((await branchChoices(folder)).branch, 'feature/ui');
+  await assert.rejects(selectBranch(folder, '--discard-changes'), /ไม่พบ branch/);
+  await fs.writeFile(path.join(folder, 'example.txt'), 'base');
+  const tree = path.join(base, `tree-${path.basename(folder)}`);
+  git('worktree', 'add', tree, 'main');
+  await assert.rejects(selectBranch(folder, 'main'), /already.*worktree|already checked out/i);
+  assert.equal((await branchChoices(folder)).branch, 'feature/ui');
+  assert.equal((await branchChoices(tree)).branch, 'main');
+  await fs.mkdir(path.join(folder, 'nested'));
+  assert.equal((await selectBranch(path.join(folder, 'nested'), 'feature/ui')).branch, 'feature/ui');
+});
+
+test('branch endpoints resolve registered folders and refuse active work before switching', async () => {
+  const base = path.resolve('output/branch-endpoint-test');
+  await fs.mkdir(base, { recursive: true });
+  const folder = await fs.mkdtemp(path.join(base, 'repo-'));
+  const config = await fs.mkdtemp(path.join(base, 'config-'));
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: folder, encoding: 'utf8', windowsHide: true });
+  git('init', '-b', 'main');
+  await fs.writeFile(path.join(folder, 'readme.txt'), 'base');
+  git('add', 'readme.txt');
+  git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-m', 'fixture');
+  git('branch', 'feature/ui');
+  const registry = path.join(config, 'registry.json');
+  await fs.writeFile(registry, JSON.stringify([{ id: 'fixture', name: 'Fixture', rootPath: folder, threads: [] }]));
+  const server = new StudioServer({ port: 0, customWorkspacePath: registry });
+  try {
+    await server.start();
+    const port = server.getPort();
+    const url = `http://127.0.0.1:${port}/api/workspaces/fixture/branches`;
+    const read = await fetch(url);
+    assert.equal(read.status, 200);
+    assert.deepEqual((await read.json()).branches, ['feature/ui', 'main']);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/api/terminals/missing/branches`)).status, 404);
+    const send = (branch: unknown, cwd = folder) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ branch, cwd }) });
+    assert.equal((await send(1)).status, 400);
+    assert.equal((await send('feature/ui', path.join(folder, 'different'))).status, 409);
+    server.busy = () => ['fixture running'];
+    assert.equal((await send('feature/ui')).status, 409);
+    assert.equal((await branchChoices(folder)).branch, 'main');
+    server.busy = () => [];
+    assert.equal((await send('feature/ui')).status, 200);
+    assert.equal((await branchChoices(folder)).branch, 'feature/ui');
+    await fs.writeFile(path.join(folder, 'readme.txt'), 'keep this');
+    assert.equal((await send('main')).status, 400);
+    assert.equal(await fs.readFile(path.join(folder, 'readme.txt'), 'utf8'), 'keep this');
+  } finally { await server.stop(); }
+});

@@ -1,9 +1,31 @@
-#root .work-canvas .composer-location { display:flex; align-items:center; gap:14px; flex-wrap:wrap; width:100%; max-width:780px; margin:0 auto 8px; padding:0 5px; color:var(--dim); font-size:11px; }
+#root .work-canvas .composer-location { display:flex; align-items:center; gap:8px; flex-wrap:wrap; width:100%; max-width:780px; margin:6px auto 0; padding:0 5px; color:var(--dim); font-size:11px; }
 #root .composer-location>span { display:inline-flex; align-items:center; gap:6px; min-width:0; }
 #root .composer-location svg { flex-shrink:0; }
 #root .composer-location .composer-folder { flex:0 1 auto; max-width:65%; }
 #root .composer-location span>span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #root .composer-location .composer-branch { max-width:100%; }
+#root .composer-location>button { display:inline-flex; align-items:center; justify-content:flex-start; gap:6px; min-width:0; padding:5px 7px; border:0; border-radius:6px; color:var(--text-secondary); background:transparent; font-size:11px; }
+#root .composer-location>button:hover, #root .composer-location>button[aria-expanded=true] { background:var(--raised); }
+#root .composer-location>button>span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.composer-context-popover { position:fixed; z-index:150; display:flex; flex-direction:column; width:min(340px,calc(100vw - 24px)); max-height:min(460px,calc(100dvh - 24px)); border:1px solid var(--control-border); border-radius:12px; padding:6px; color:var(--text); background:var(--raised); box-shadow:0 12px 35px #0005; font:13px 'Noto Sans Thai','Segoe UI',sans-serif; }
+.composer-context-popover header { display:flex; align-items:center; gap:6px; padding:5px 6px 9px; border-bottom:1px solid var(--border); }
+.composer-context-popover header>strong { flex:1; font-size:13px; font-weight:500; }
+.composer-context-popover header button { width:28px; height:28px; border-radius:6px; color:var(--dim); }
+.context-menu-scroll { min-height:0; overflow:auto; overscroll-behavior:contain; }
+.context-menu-caption { margin:10px 9px 6px; color:var(--dim); font-size:11px; line-height:1.7; }
+.composer-context-popover .context-menu-choice { display:flex; align-items:center; justify-content:flex-start; gap:9px; width:100%; padding:9px; border:0; border-radius:7px; background:transparent; text-align:left; }
+.context-menu-choice>span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.context-menu-choice strong { display:block; font-size:13px; font-weight:500; }
+.context-menu-choice small { display:block; color:var(--dim); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:160px; }
+.context-menu-choice svg { flex-shrink:0; }
+.context-menu-choice:hover { background:var(--selected); }
+.context-menu-choice:disabled { opacity:.45; cursor:default; }
+.context-menu-divider { height:1px; margin:6px; background:var(--border); }
+.context-current-path { display:block; padding:6px 9px; font-size:10px; color:var(--dim); overflow-wrap:anywhere; white-space:pre-line; }
+.composer-context-popover input { width:calc(100% - 12px); margin:8px 6px; min-height:34px; padding:7px 9px; background:var(--base); color:var(--text); border:1px solid var(--control-border); border-radius:7px; font:inherit; }
+.context-menu-error { margin:8px; padding:10px; border:1px solid #9a6c56; border-radius:7px; font-size:12px; line-height:1.7; overflow-wrap:anywhere; white-space:pre-line; }
+.context-menu-error button { display:block; margin-top:8px; padding:5px 8px; border:1px solid var(--control-border); border-radius:6px; }
+.composer-context-popover button:focus-visible, .composer-context-popover input:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
 #root .work-canvas .composer-box:has(.composer-leading) { grid-template-columns: auto minmax(0,1fr) auto; }
 #root .work-canvas .composer-leading { grid-column:1; grid-row:3; padding:2px 2px 10px 12px; align-self:end; }
 #root .work-canvas .composer-box .composer-leading .attach-menu { background:transparent; box-shadow:none; border:0; }

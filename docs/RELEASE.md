@@ -1,3 +1,22 @@
+# SuperAi & RAKKYXD v1.0.27
+
+## มีอะไรใหม่ใน v1.0.27 (Git Branch Switcher, Workspace Location Picker & Session Visibility Polish)
+
+- **Interactive Git Branch Selection Strip (`BranchSelection.ts`, `ComposerLocation.tsx`):**
+  - แสดงและสลับ Git Branch จริงของโปรเจกต์ได้โดยตรงจากแถบเหนือช่องพิมพ์คำสั่ง
+  - เมนูค้นหาและเลือก Local Branch พร้อมแสดงสถานะ Branch ปัจจุบัน
+  - ระบบตรวจสอบความปลอดภัย ป้องกันการสลับ branch ขณะมีงาน AI ทำงานอยู่ หรือโฟลเดอร์มี Uncommitted Changes
+  - รองรับการสลับโฟลเดอร์ทำงานของโปรเจกต์โดยคงข้อความคำสั่งเดิมไว้
+- **Session Visibility & Hide Toggle (`SessionCanvas.tsx`, `App.tsx`):**
+  - ปุ่มซ่อนพับเก็บ Session (`EyeOff`) บนหัวหน้าต่างของแต่ละ Session ช่วยจัดพื้นที่ทำงานให้เหลือเฉพาะ Session ที่กำลังใช้งานโดยไม่ลบ Session ไม่ลบประวัติแชต และโปรเซสยังทำงานอยู่ครบ 100%
+  - เปิด Session กลับมาแสดงบนหน้าจอหลักได้ทันทีจาก 2 จุด: คลิกแถบซ้าย (มีป้าย `ซ่อนอยู่`) หรือคลิกชิป `ซ่อนอยู่ X: [👁 ชื่อ session]` บนแถบด้านบน
+  - เพิ่มปุ่ม "ซ่อนไว้ก่อน (ไม่ลบ)" ในหน้าต่างยืนยันลบเซสชัน ป้องกันการเผลอลบข้อมูลผิดพลาด
+- **UI & Workspace State Refinements:**
+  - ปรับปรุงการคำนวณ Grid และ Splitter ให้รองรับกรณีซ่อนเซสชันทั้งหมด พร้อมแสดงการ์ดกู้คืนตรงกลางหน้าจอ
+  - ปรับปรุงการ Broadcast ข้อความในโหมด Code ให้ส่งเฉพาะ Session ที่เปิดแสดงอยู่บนหน้าจอ
+
+---
+
 # SuperAi & RAKKYXD v1.0.26
 
 ## มีอะไรใหม่ใน v1.0.26 (Parallel Git Worktrees, Beginner Experience, Interactive Artifacts & UI Polish)
