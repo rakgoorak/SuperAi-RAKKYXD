@@ -39,32 +39,86 @@ export function parseClaudeUsage(text: string): UsageWindow[] {
   return windows;
 }
 
-/** Codex writes rate limits into its session logs (token_count events). */
+/** Codex writes rate limits into its session logs (token_count events) or rate limit error events. */
 export function parseCodexRateLimits(lines: string[]): { windows: UsageWindow[]; at?: number } | null {
+  let rateLimitEvent: any = null;
+  let usageErrorEvent: { ev: any; message: string } | null = null;
+
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (!lines[i].includes('"rate_limits"')) continue;
-    let event: any;
-    try {
-      event = JSON.parse(lines[i]);
-    } catch {
-      continue;
+    const line = lines[i];
+    if (!rateLimitEvent && line.includes('"rate_limits"')) {
+      try {
+        const ev = JSON.parse(line);
+        const lim = ev?.payload?.rate_limits ?? ev?.payload?.info?.rate_limits ?? ev?.rate_limits;
+        if (lim) rateLimitEvent = ev;
+      } catch {}
     }
-    const limits = event?.payload?.rate_limits ?? event?.payload?.info?.rate_limits ?? event?.rate_limits;
-    if (!limits) continue;
-    const windows: UsageWindow[] = [];
-    for (const key of ["primary", "secondary"]) {
-      const w = limits[key];
-      if (!w || typeof w.used_percent !== "number") continue;
-      const minutes = Number(w.window_minutes) || 0;
-      const label = minutes === 300 ? "5 ชั่วโมง" : minutes === 10080 ? "รายสัปดาห์" : minutes >= 1440 ? `${Math.round(minutes / 1440)} วัน` : `${Math.round(minutes / 60)} ชั่วโมง`;
-      const resetsAt = typeof w.resets_at === "number" ? new Date(w.resets_at * 1000).toISOString() : undefined;
-      // A window that has already reset is back to full, whatever the old log says.
-      const reset = resetsAt && Date.parse(resetsAt) <= Date.now();
-      windows.push({ label, remainingPercent: reset ? 100 : clamp(100 - w.used_percent), resetsAt: reset ? undefined : resetsAt, note: reset ? "รีเซ็ตแล้ว" : undefined });
+    if (!usageErrorEvent && (line.includes('usage_limit_exceeded') || line.includes('usage limit'))) {
+      try {
+        const ev = JSON.parse(line);
+        const errMsg = ev?.payload?.error?.message || ev?.error?.message;
+        if (errMsg && /usage limit/i.test(errMsg)) {
+          usageErrorEvent = { ev, message: errMsg };
+        }
+      } catch {}
     }
-    const at = Date.parse(event.timestamp || "");
-    return windows.length ? { windows, at: Number.isFinite(at) ? at : undefined } : null;
+    if (rateLimitEvent && usageErrorEvent) break;
   }
+
+  const rateLimitTime = rateLimitEvent?.timestamp ? Date.parse(rateLimitEvent.timestamp) : 0;
+  const errorTime = usageErrorEvent?.ev?.timestamp ? Date.parse(usageErrorEvent.ev.timestamp) : 0;
+
+  // If a recent turn failed due to quota limit exceeded after the last token_count:
+  if (usageErrorEvent && errorTime > rateLimitTime) {
+    const match = /try again at ([^.]+)/i.exec(usageErrorEvent.message);
+    let resetsAt: string | undefined = undefined;
+    if (match) {
+      const clean = match[1].replace(/(?:st|nd|rd|th),/i, ',');
+      const d = new Date(clean);
+      if (!Number.isNaN(d.getTime())) resetsAt = d.toISOString();
+    }
+    const windows: UsageWindow[] = [
+      {
+        label: '5 ชั่วโมง',
+        remainingPercent: 0,
+        resetsAt,
+        note: 'โควตาเต็ม รอรอบรีเซ็ต',
+      },
+    ];
+    const limits = rateLimitEvent?.payload?.rate_limits ?? rateLimitEvent?.payload?.info?.rate_limits ?? rateLimitEvent?.rate_limits;
+    if (limits?.secondary && typeof limits.secondary.used_percent === 'number') {
+      const w = limits.secondary;
+      const secResetsAt = typeof w.resets_at === 'number' ? new Date(w.resets_at * 1000).toISOString() : undefined;
+      const reset = secResetsAt && Date.parse(secResetsAt) <= Date.now();
+      windows.push({
+        label: 'รายสัปดาห์',
+        remainingPercent: reset ? 100 : clamp(100 - w.used_percent),
+        resetsAt: reset ? undefined : secResetsAt,
+        note: reset ? 'รีเซ็ตแล้ว' : undefined,
+      });
+    }
+    return { windows, at: Number.isFinite(errorTime) ? errorTime : undefined };
+  }
+
+  if (rateLimitEvent) {
+    const limits = rateLimitEvent?.payload?.rate_limits ?? rateLimitEvent?.payload?.info?.rate_limits ?? rateLimitEvent?.rate_limits;
+    if (limits) {
+      const windows: UsageWindow[] = [];
+      for (const key of ['primary', 'secondary']) {
+        const w = limits[key];
+        if (!w || typeof w.used_percent !== 'number') continue;
+        const minutes = Number(w.window_minutes) || 0;
+        const label = minutes === 300 ? '5 ชั่วโมง' : minutes === 10080 ? 'รายสัปดาห์' : minutes >= 1440 ? `${Math.round(minutes / 1440)} วัน` : `${Math.round(minutes / 60)} ชั่วโมง`;
+        const resetsAt = typeof w.resets_at === 'number' ? new Date(w.resets_at * 1000).toISOString() : undefined;
+        // A window that has already reset is back to full, whatever the old log says.
+        const reset = resetsAt && Date.parse(resetsAt) <= Date.now();
+        windows.push({ label, remainingPercent: reset ? 100 : clamp(100 - w.used_percent), resetsAt: reset ? undefined : resetsAt, note: reset ? 'รีเซ็ตแล้ว' : undefined });
+      }
+      const at = Date.parse(rateLimitEvent.timestamp || '');
+      return windows.length ? { windows, at: Number.isFinite(at) ? at : undefined } : null;
+    }
+  }
+
   return null;
 }
 
@@ -131,7 +185,7 @@ async function newestCodexLog(): Promise<string | null> {
             const buffer = Buffer.alloc(length);
             await fd.read(buffer, 0, length, size - length);
             const text = buffer.toString("utf8");
-            if (text.includes('"rate_limits"')) return text;
+            if (text.includes('"rate_limits"') || text.includes('usage_limit_exceeded') || text.includes('usage limit')) return text;
           } finally {
             await fd.close();
           }

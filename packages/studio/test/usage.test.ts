@@ -29,6 +29,25 @@ test('Codex rate limits come from the newest token_count event and honour resets
   assert.equal(parseCodexRateLimits(['{"type":"x"}']), null);
 });
 
+test('Codex rate limits detect usage_limit_exceeded error events and extract reset time', () => {
+  const errorEvent = JSON.stringify({
+    timestamp: '2026-10-25T15:30:37.676Z',
+    type: 'event_msg',
+    payload: {
+      type: 'task_complete',
+      error: {
+        message: "Error running remote compact task: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at Oct 26th, 2026 12:02 AM.",
+        codex_error_info: 'usage_limit_exceeded'
+      }
+    }
+  });
+  const r = parseCodexRateLimits([errorEvent])!;
+  assert.equal(r.windows[0].remainingPercent, 0);
+  assert.equal(r.windows[0].note, 'โควตาเต็ม รอรอบรีเซ็ต');
+  assert.equal(r.windows[0].resetsAt, '2026-10-25T17:02:00.000Z');
+  assert.equal(r.at, Date.parse('2026-10-25T15:30:37.676Z'));
+});
+
 test('Antigravity /usage rows keep model groups and mark disabled windows', () => {
   const text = [
     'Gemini Models\tWeekly Limit Remaining\t74%\t2026-10-24T01:07:54Z',

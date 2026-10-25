@@ -70,7 +70,7 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 #root .danger-text { color: #edb3a3; }#root .success-text { color: var(--green); }
 #root .text-button { color: var(--text-secondary); border-radius: 6px; }
 #root .count-badge { background: var(--raised); color: var(--dim); border: 0; }
-#root .statusbar { height: 26px; min-height: 26px; background: #1c1c1a; border-top: 1px solid #30302b; color: var(--dim); font-size: 10px; }
+#root .statusbar { display: none !important; }
 #root .status-dot { background: var(--green); box-shadow: none; }#root .status-dot.offline { background: var(--dim); }#root .status-dot.bad { background: #df9b89; }#root .status-dot.pending { background: #d4b97f; }
 
 /* Project and session navigation. */

@@ -1675,19 +1675,10 @@ export function App() {
                 });
               }} onError={showError} />
           </div>
-          <footer className="statusbar">
-            <span className={`status-dot ${connected ? "" : "offline"}`} />
+          <div className="statusbar sr-only" style={{ display: "none" }} aria-hidden="true">
             {connected ? "เชื่อมต่อแล้ว" : "เชื่อมต่อขาดหาย"}
-            <span className="footer-divider" />
-            <span>
-              {pty ? "PTY พร้อมใช้" : "โหมด pipe · CLI บางตัวอาจไม่รองรับ"}
-            </span>
-            <span className="push path-text" title={workspace?.rootPath}>
-              {workspace?.rootPath || "ยังไม่มีโปรเจกต์"}
-            </span>
-            <span className="footer-divider" />
-            <span>ภาษาไทย</span>
-          </footer>
+            {pty ? " · pty" : ""}
+          </div>
         </div>
       </div>
       <CommandPalette
