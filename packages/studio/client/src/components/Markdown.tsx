@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Sparkles, Copy, Check } from "lucide-react";
-import { openPreviewLink, openArtifact, parsePreviewTarget } from '../previewLinks';
+import { openPreviewLink, openArtifact, parsePreviewTarget, openExternalLink } from '../previewLinks';
 import { ThinkingAccordion } from './ThinkingAccordion';
 import { MarkdownImage } from './MarkdownImage';
 
@@ -12,15 +12,19 @@ function link(label: string, href: string, key: string): ReactNode {
         key={key}
         className="md-link"
         href={target.kind === 'web' ? target.url : '#preview-file'}
-        title={`เปิดใน Preview: ${href}`}
+        title={`คลิกเพื่อเปิดใน Preview (Ctrl+Click เพื่อเปิดในเบราว์เซอร์): ${href}`}
         onClick={(event) => {
           event.preventDefault();
-          openPreviewLink(href);
+          if (event.ctrlKey || event.metaKey) {
+            openExternalLink(href);
+          } else {
+            openPreviewLink(href);
+          }
         }}
         onAuxClick={(event) => {
           if (event.button === 1) {
             event.preventDefault();
-            openPreviewLink(href);
+            openExternalLink(href);
           }
         }}
       >

@@ -9,6 +9,7 @@ import { ResponseActions } from './ResponseActions';
 import { MessageAttachments } from './MessageAttachments';
 import { ImageEndpointContext } from './MarkdownImage';
 import { ImageViewer } from './ImageViewer';
+import { renderTextWithLinks } from '../previewLinks';
 import { timeLabel, tokenLabel } from '../chatFormat';
 import '../chat-idle.css';
 
@@ -177,7 +178,7 @@ function UserMessageItem({
     <div key={block.id} data-message-id={block.id} className="chat-user">
       <div className="chat-user-wrap">
         <div className="chat-user-bubble">
-          <div className="chat-user-text">{block.text}</div>
+          <div className="chat-user-text">{renderTextWithLinks(block.text)}</div>
           {block.attachments && block.attachments.length > 0 && (
             <MessageAttachments
               paths={block.attachments}

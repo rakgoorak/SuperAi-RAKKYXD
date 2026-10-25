@@ -601,6 +601,18 @@ export class StudioServer {
       res.json(this.workspaceRegistry.getWorkspaces());
     });
 
+    // General chat uses an app-owned folder, never an arbitrary user project.
+    this.app.post("/api/workspaces/quick-chat", (_req, res) => {
+      try {
+        const rootPath = path.join(path.dirname(this.sessionsFile), "general-chat");
+        fs.mkdirSync(rootPath, { recursive: true });
+        const existing = this.workspaceRegistry.getWorkspaces().find(ws => ws.rootPath === rootPath);
+        res.json(existing || this.workspaceRegistry.createWorkspace("แชตทั่วไป", rootPath));
+      } catch {
+        res.status(500).json({ error: "เตรียมพื้นที่แชตไม่ได้ กรุณาตรวจสิทธิ์เขียนและพื้นที่ว่าง แล้วลองส่งอีกครั้ง" });
+      }
+    });
+
     this.app.post("/api/workspaces", (req: Request, res: Response) => {
       const { name, rootPath } = req.body;
       if (typeof name !== "string" || !name.trim())

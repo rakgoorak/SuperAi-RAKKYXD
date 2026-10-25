@@ -61,7 +61,7 @@ export function UsageButton({ open, onOpenChange: setOpen }: { open: boolean; on
 
   return (
     <div className="usage" ref={root}>
-      <button className={`toolbar-button ${open ? "selected" : ""}`} aria-expanded={open} aria-haspopup="dialog" title="โควตาการใช้งานของแต่ละผู้ให้บริการ" onClick={() => setOpen(!open)}>
+        <button className={`toolbar-button ${open ? "selected" : ""}`} aria-label="Usage" aria-expanded={open} aria-haspopup="dialog" title="โควตาการใช้งานของแต่ละผู้ให้บริการ" onClick={() => setOpen(!open)}>
         <Gauge size={14} />
         <span>Usage</span>
       </button>

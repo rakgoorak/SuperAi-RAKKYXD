@@ -35,9 +35,11 @@ export async function closeApp(app, steps) {
   } catch (error) {
     steps.log(`${error.message}; killing process tree`);
     try {
-      if (process.platform === 'win32') execFileSync('taskkill', ['/PID', String(proc.pid), '/T', '/F'], { stdio: 'ignore' });
+      if (process.platform === 'win32') execFileSync('taskkill', ['/PID', String(proc.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true, timeout: 10000 });
       else proc.kill('SIGKILL');
-    } catch {}
+    } catch (killError) {
+      steps.log(`cleanup failed for owned process ${proc.pid}: ${killError.message}`);
+    }
   }
 }
 

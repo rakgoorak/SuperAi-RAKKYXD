@@ -19,8 +19,9 @@ interface Props {
   clis: Cli[]; workspaces: Workspace[]; workspaceId?: string; voice: VoiceSettings;
   refreshClis: () => Promise<void>; addProject: () => void; openSkills: () => void;
   onStart: (cliId: string, workspaceId: string, draft: string) => Promise<void>;
+  onGeneralChat?: () => Promise<Workspace>;
 }
-export function SetupGuide({ clis, workspaces, workspaceId, voice, refreshClis, addProject, openSkills, onStart }: Props) {
+export function SetupGuide({ clis, workspaces, workspaceId, voice, refreshClis, addProject, openSkills, onStart, onGeneralChat }: Props) {
   const available = clis.filter(c => AI_CLIS.includes(c.id));
   const [assistant, setAssistant] = useState(() => available.find(c => c.available)?.id || available[0]?.id || "codex");
   const [folder, setFolder] = useState(workspaceId || workspaces[0]?.id || "");
@@ -99,7 +100,13 @@ export function SetupGuide({ clis, workspaces, workspaceId, voice, refreshClis, 
     {problem && <div role="alert" className="beginner-problem">{problem}<button className="text-button" disabled={busy} onClick={() => void check()}>ลองตรวจอีกครั้ง</button></div>}
     {step === 0 && <section className="beginner-step" aria-label="เลือกโฟลเดอร์ทำงาน">
       <FolderPlus size={24} /><h3>อยากให้ AI ช่วยทำงานในโฟลเดอร์ไหน?</h3>
-      <p>เลือกที่เก็บไฟล์งานของคุณ โฟลเดอร์นี้เรียกว่า “โปรเจกต์” ในแอป หากยังไม่มีงาน ให้สร้างโฟลเดอร์ว่างไว้ลองใช้ได้เลย</p>
+      <p>เลือกโฟลเดอร์เมื่อต้องการให้ AI ช่วยดูไฟล์งาน หรือเริ่มคุยทั่วไปได้โดยยังไม่เลือกโฟลเดอร์ของคุณ</p>
+      {onGeneralChat && <button className="secondary" disabled={busy} onClick={async () => {
+        setStarting(true); setProblem('');
+        try { const ws = await onGeneralChat(); setFolder(ws.id); setStep(1); }
+        catch (error) { setProblem((error as Error).message || 'เตรียมพื้นที่แชตไม่ได้ ลองอีกครั้ง'); }
+        finally { setStarting(false); }
+      }}><MessageSquare size={15} /> คุยทั่วไปโดยไม่เลือกโฟลเดอร์</button>}
       {workspaces.length > 0 && <label className="beginner-field">โฟลเดอร์ทำงาน<select aria-label="โฟลเดอร์ทำงาน" value={folder} onChange={event => setFolder(event.target.value)}>{workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select><small>{workspace?.rootPath}</small></label>}
       <div className="beginner-actions"><button className={workspace ? "secondary" : "primary"} onClick={addProject}><FolderPlus size={15} /> {workspace ? "เพิ่มโฟลเดอร์อื่น" : "เลือกโฟลเดอร์งาน"}</button>{workspace && <button className="primary" onClick={() => setStep(1)}>ถัดไป: เลือก AI</button>}</div>
     </section>}

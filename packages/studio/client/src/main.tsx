@@ -19,3 +19,5 @@ import "./composer.css";
 import "./minimal-workspace.css";
 
 import "./comparison-arena.css";
+import "./conversation-hub.css";
+import "./minimal-interface.css";

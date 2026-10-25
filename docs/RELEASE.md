@@ -1,3 +1,29 @@
+# SuperAi & RAKKYXD v1.0.28
+
+## มีอะไรใหม่ใน v1.0.28 (New Minimal Interface, Quick Provider Conversation, Unified History & URL Ctrl+Click)
+
+- **New Minimal Interface & Warm Charcoal Design:**
+  - ปรับโฉมดีไซน์ใหม่ทั้งหมดให้เป็นสไตล์ Minimal เรียบหรู สะอาดตา สบายตา ลดความรกรุงรัง (Visual Clutter) และเพิ่มพื้นที่ทำงานสูงสุด
+  - สวิตช์สลับ 3 โหมด (Agent / Code / Chat) กะทัดรัดแบบ 3-Icon Switch เข้าถึงรวดเร็ว มีสถานะเลือกและ Tooltips ชัดเจน
+  - ปรับโครงสร้างธีมสี คอนทราสต์ และไอคอนแถบเครื่องมือให้เรียบแบน สบายตา ไม่ดึงดูดสายตาจากงานหลัก
+- **Unified Provider & Quick Conversation Flow:**
+  - เริ่มบทสนทนากับ AI ได้ทันทีโดยไม่ต้องสร้างโฟลเดอร์หรือตั้งค่าโปรเจกต์ก่อน รองรับ Safe Read-only Quick Chat เพื่อป้องกันการแก้ไขไฟล์โดยไม่ตั้งใจ
+  - เมนู **Composer Options** รวมการตั้งค่าระดับ Effort, สิทธิ์การทำงาน/เขียนไฟล์ และรายละเอียดบัญชี AI ไว้ในจุดเดียว พร้อมปิดด้วยปุ่ม `Escape` หรือคลิกด้านนอก
+  - ป้ายระบุตัวตนผู้ให้บริการ (**Provider Badges**) ชัดเจนใน Sidebar, Session Tab และ Composer
+- **Unified History Panel & Full-Text Search:**
+  - แผงประวัติการสนทนารวมทุกเซสชันของทุก AI เข้าด้วยกันในหน้าจอเดียว
+  - ค้นหาข้อความแบบ Full-Text Search พร้อมตัวกรองตามผู้ให้บริการ AI (Claude, Codex, Antigravity, OpenCode, Freebuff)
+  - คลิกเพื่อสลับกลับมาคุยต่อที่เซสชันเดิมได้ทันที รวมทั้งเซสชันที่ซ่อนอยู่
+- **Ctrl + Click เพื่อเปิด URL ทันที (เหมือน Claude App / VS Code):**
+  - กด **Ctrl + Click** (หรือ **Cmd + Click** บน macOS) บน URL ใดๆ ในช่องพิมพ์ข้อความ (Composer) เพื่อเปิดเว็บในเบราว์เซอร์หลักของระบบทันที
+  - แปลง URL ในข้อความแชทของผู้ใช้ (Chat Bubbles) เป็นลิงก์ที่คลิกเปิดได้อัตโนมัติ
+  - เพิ่ม **🔗 Quick Link Chips** แสดงใต้ช่องพิมพ์เมื่อพบ URL ในข้อความที่กำลังพิมพ์
+- **Session Hide / Restore & Git Worktrees:**
+  - ซ่อนและกู้คืนเซสชันทำงานได้โดยไม่ลบข้อมูล ประวัติ และโปรเซสยังคงทำงานอยู่ครบถ้วน
+  - สลับ Branch และทำงานคู่ขนานผ่าน Git Worktrees พร้อมแถบ Smart Merge Banner
+
+---
+
 # SuperAi & RAKKYXD v1.0.27
 
 ## มีอะไรใหม่ใน v1.0.27 (Git Branch Switcher, Workspace Location Picker & Session Visibility Polish)
