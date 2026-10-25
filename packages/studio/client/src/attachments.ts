@@ -35,13 +35,24 @@ export function formatPath(absolutePath: string): string {
   return /[\s"'&()]/.test(absolutePath) ? `"${absolutePath}" ` : `${absolutePath} `;
 }
 
-/** Image/PDF files from a paste event; text wins so normal text paste is untouched. */
+/** Image/PDF files from a paste event; extracts image/PDF files reliably even if clipboard metadata includes text. */
 export function pastedFiles(data: DataTransfer | null): File[] {
-  if (!data || data.getData('text/plain')) return [];
-  return Array.from(data.items)
-    .filter((item) => item.kind === 'file')
-    .map((item) => item.getAsFile())
-    .filter((file): file is File => !!file && isSupportedAttachment(file));
+  if (!data) return [];
+  const found: File[] = [];
+  if (data.items && data.items.length) {
+    for (const item of Array.from(data.items)) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file && isSupportedAttachment(file)) found.push(file);
+      }
+    }
+  }
+  if (!found.length && data.files && data.files.length) {
+    for (const file of Array.from(data.files)) {
+      if (isSupportedAttachment(file)) found.push(file);
+    }
+  }
+  return found;
 }
 
 export interface SavedAttachment {

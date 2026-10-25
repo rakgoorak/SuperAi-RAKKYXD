@@ -72,12 +72,12 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
           {isArtifact && (
             <button
               type="button"
-              className="md-artifact-btn"
-              title="เปิดดูผลลัพธ์สดๆ ในแผง Artifact"
+              className="md-artifact-btn md-canvas-btn"
+              title="เปิดดูผลลัพธ์สดๆ ใน Canvas (Side-by-Side)"
               onClick={handleOpenArtifact}
             >
               <Sparkles size={12} />
-              <span>เปิดใน Artifact</span>
+              <span>เปิดใน Canvas</span>
             </button>
           )}
           <button
@@ -120,11 +120,31 @@ function inline(text: string, key: string): ReactNode[] {
   );
 }
 
+function ArtifactCard({ title, language, content }: { title: string; language: string; content: string }) {
+  const open = () => openArtifact(title || 'Canvas Artifact', language || 'html', content);
+  return (
+    <div className="md-artifact-card">
+      <div className="md-artifact-card-info">
+        <Sparkles size={16} className="md-artifact-card-sparkle" />
+        <div>
+          <strong>{title || 'Canvas Artifact'}</strong>
+          <small>{language ? language.toUpperCase() : 'INTERACTIVE PREVIEW'}</small>
+        </div>
+      </div>
+      <button type="button" className="md-artifact-btn md-canvas-btn" onClick={open} title="เปิดดูผลลัพธ์สดๆ ใน Canvas">
+        <Sparkles size={12} />
+        <span>เปิดใน Canvas</span>
+      </button>
+    </div>
+  );
+}
+
 export function Markdown({ text }: { text: string }) {
   const thinkingBlocks: string[] = [];
+  const artifactBlocks: { title: string; language: string; content: string }[] = [];
   let remainingText = text;
 
-  const thinkingRegex = /<(?:thinking|thought)>([\s\S]*?)<\/(?:thinking|thought)>/gi;
+  const thinkingRegex = /<(?:thinking|thought|think)>([\s\S]*?)<\/(?:thinking|thought|think)>/gi;
   let match;
   while ((match = thinkingRegex.exec(text)) !== null) {
     if (match[1]?.trim()) {
@@ -136,9 +156,31 @@ export function Markdown({ text }: { text: string }) {
     remainingText = text.replace(thinkingRegex, '').trim();
   }
 
+  const artifactRegex = /<(?:antArtifact|artifact)([\s\S]*?)>([\s\S]*?)<\/(?:antArtifact|artifact)>/gi;
+  let artMatch;
+  while ((artMatch = artifactRegex.exec(remainingText)) !== null) {
+    const attrs = artMatch[1] || '';
+    const content = artMatch[2] || '';
+    const titleMatch = attrs.match(/title="([^"]+)"/i);
+    const typeMatch = attrs.match(/(?:type|language)="([^"]+)"/i);
+    artifactBlocks.push({
+      title: titleMatch ? titleMatch[1] : 'Canvas Artifact',
+      language: typeMatch ? typeMatch[1] : 'html',
+      content: content.trim(),
+    });
+  }
+
+  if (artifactBlocks.length > 0) {
+    remainingText = remainingText.replace(artifactRegex, '').trim();
+  }
+
   const out: ReactNode[] = [];
   thinkingBlocks.forEach((thought, idx) => {
     out.push(<ThinkingAccordion key={`thought-${idx}`} thought={thought} />);
+  });
+
+  artifactBlocks.forEach((art, idx) => {
+    out.push(<ArtifactCard key={`art-${idx}`} title={art.title} language={art.language} content={art.content} />);
   });
 
   const lines = remainingText.replace(/\r\n/g, "\n").split("\n");

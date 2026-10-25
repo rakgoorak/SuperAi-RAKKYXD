@@ -65,6 +65,16 @@ function Shot({ src, small = false }: { src: string; small?: boolean }) {
     {open && <ImageViewer image={{ src, name: 'ภาพจากเครื่องมือ' }} onClose={() => setOpen(false)} />}</>;
 }
 
+const TOOL_BADGES: Record<ToolKind, string> = {
+  command: 'คำสั่ง',
+  read: 'อ่านไฟล์',
+  edit: 'แก้ไขโค้ด',
+  search: 'ค้นหา',
+  web: 'เว็บ',
+  plan: 'แผนงาน',
+  other: 'งาน',
+};
+
 function ToolRow({ tool }: { tool: ToolItem }) {
   const [open, setOpen] = useState(false);
   const Icon = ICONS[tool.tool] || Wrench;
@@ -72,6 +82,7 @@ function ToolRow({ tool }: { tool: ToolItem }) {
     <li className={`chat-tool ${tool.status}`}>
       <button className="chat-tool-row" onClick={() => setOpen(!open)} disabled={!tool.output && !tool.images?.length} aria-expanded={open}>
         {tool.status === 'running' ? <Loader2 size={13} className="spin" /> : <Icon size={13} />}
+        <span className="chat-tool-badge">{TOOL_BADGES[tool.tool] || 'งาน'}</span>
         <code>{tool.title}</code>
         {tool.status === 'failed' && <span className="chat-tool-failed">ไม่สำเร็จ</span>}
       </button>

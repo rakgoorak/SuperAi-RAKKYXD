@@ -763,9 +763,23 @@ export function App() {
         setPaletteOpen((prev) => !prev);
       }
     };
+    const handleGlobalPaste = (e: ClipboardEvent) => {
+      const tag = (document.activeElement?.tagName || '').toLowerCase();
+      if (tag === 'textarea' || tag === 'input') return;
+      const files = pastedFiles(e.clipboardData);
+      if (!files.length) return;
+      e.preventDefault();
+      attachToComposer(files);
+      composer.current?.focus();
+      setNotice(`แนบรูปภาพจากคลิปบอร์ดแล้ว (${files.length} ไฟล์)`);
+    };
     window.addEventListener('keydown', handlePaletteKey);
-    return () => window.removeEventListener('keydown', handlePaletteKey);
-  }, []);
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => {
+      window.removeEventListener('keydown', handlePaletteKey);
+      window.removeEventListener('paste', handleGlobalPaste);
+    };
+  }, [attachToComposer]);
   useEffect(() => { if (historyRun && runs.some(run => run.id === historyRun)) { document.getElementById('run-' + historyRun)?.scrollIntoView({ block: 'start' }); setHistoryRun(''); } }, [historyRun, runs]);
   const openHistoryEntry = (entry: HistoryEntry) => {
     setActiveWs(entry.wsId); setMode(entry.mode); setDialog(null);
@@ -1516,6 +1530,7 @@ export function App() {
                         if (!files.length) return;
                         e.preventDefault();
                         attachToComposer(files);
+                        setNotice(`แนบรูปภาพจากคลิปบอร์ดแล้ว (${files.length} ไฟล์)`);
                       }}
                       onClick={(e) => {
                         if (e.ctrlKey || e.metaKey) {
