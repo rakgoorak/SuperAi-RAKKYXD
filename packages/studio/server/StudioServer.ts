@@ -2,6 +2,7 @@ import { projectChanges, projectFile, stageFile, unstageFile, discardFile, saveP
 import { listWorktrees, createWorktree, mergeWorktree, removeWorktree } from "./GitWorktrees.js";
 import { readPreviewFile } from './PreviewFiles.js';
 import { workingContext } from './WorkingContext.js';
+import { branchChoices, selectBranch } from './BranchSelection.js';
 import { listProjectFiles } from './ProjectFiles.js';
 import http from "node:http";
 import { randomUUID } from "node:crypto";
@@ -46,6 +47,7 @@ export class StudioServer {
   private terminalManager: TerminalSessionManager;
   private workspaceRegistry: WorkspaceRegistry;
   private port: number = 3888;
+  private branchChanging = false;
   /** Open tabs saved right before an in-app update, reopened on the next start. */
   private restoreFile: string;
 
@@ -73,6 +75,7 @@ export class StudioServer {
 
     this.app = express();
     this.app.use((req, res, next) => {
+      if (this.branchChanging && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return res.status(409).json({ error: 'กำลังสลับ branch กรุณารอให้เสร็จก่อน' });
       const origin = req.headers.origin;
       const host = req.headers.host?.split(":")[0];
       if (host && !["localhost", "127.0.0.1", "["].includes(host))
@@ -804,6 +807,27 @@ export class StudioServer {
       }
     });
 
+    const registerBranches = (route: string, directory: (req: Request) => string | undefined) => {
+      this.app.get(route, async (req, res) => {
+        const cwd = directory(req);
+        if (!cwd) return res.status(404).json({ error: 'ไม่พบโฟลเดอร์ที่เลือก' });
+        try { res.json(await branchChoices(cwd)); }
+        catch (error) { res.status(400).json({ error: (error as Error).message }); }
+      });
+      this.app.post(route, async (req, res) => {
+        const cwd = directory(req);
+        if (!cwd) return res.status(404).json({ error: 'ไม่พบโฟลเดอร์ที่เลือก' });
+        if (typeof req.body?.branch !== 'string' || !req.body.branch || req.body.branch.length > 512) return res.status(400).json({ error: 'กรุณาเลือก branch จากรายการ' });
+        if (typeof req.body?.cwd !== 'string' || path.resolve(req.body.cwd) !== path.resolve(cwd)) return res.status(409).json({ error: 'โฟลเดอร์เปลี่ยนไปแล้ว กรุณาเปิดเมนู branch ใหม่' });
+        if (this.branchChanging || this.busy().length) return res.status(409).json({ error: 'รอให้งาน AI เสร็จและปิด Terminal ที่กำลังทำงาน ก่อนสลับ branch' });
+        this.branchChanging = true;
+        try { res.json(await selectBranch(cwd, req.body.branch)); }
+        catch (error) { res.status(400).json({ error: (error as Error).message }); }
+        finally { this.branchChanging = false; }
+      });
+    };
+    registerBranches('/api/workspaces/:wsId/branches', req => this.workspaceRegistry.getWorkspace(String(req.params.wsId))?.rootPath);
+    registerBranches('/api/terminals/:id/branches', req => this.terminalManager.getSession(String(req.params.id))?.cwd);
     this.app.get('/api/workspaces/:wsId/context', async (req, res) => {
       const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
       if (!workspace) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
@@ -845,6 +869,7 @@ export class StudioServer {
         await cliAuth.requireReady(agent);
         if (this.terminalManager.getSession(id) !== session || this.viewOf(id) !== "chat") return res.status(409).json({ error: "session เปลี่ยนไปแล้ว กรุณาลองใหม่" });
         if (session.sleeping || ["running", "stopping"].includes(session.status)) return res.status(409).json({ error: "Terminal ยังปิดไม่เสร็จ กรุณารอก่อนส่งข้อความ" });
+        if (this.branchChanging) return res.status(409).json({ error: 'กำลังสลับ branch กรุณารอก่อนส่งข้อความ' });
         const outcome = this.chats.send(id, {
           agent,
           cwd: session.cwd,

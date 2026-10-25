@@ -1419,7 +1419,6 @@ export function App() {
                     )}
                   </div>
                 </div>}
-                <ComposerLocation workspace={workspace} recipients={mode === 'code' ? target === 'all' ? running : composerTarget ? [composerTarget] : [] : undefined} />
                 <div className={`composer-box ${chatTarget ? "has-session-controls" : ""}`}>
                   <div className="composer-leading"><AttachMenu onFiles={attachToComposer} disabled={!workspace} /></div>
                   {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name.split("·")[0].trim() || chatTarget.name} disabled={busy} />}
@@ -1547,6 +1546,14 @@ export function App() {
                     </div>
                   </div>
                 </div>
+                <ComposerLocation workspace={workspace} workspaces={workspaces} recipients={mode === 'code' ? target === 'all' ? running : composerTarget ? [composerTarget] : [] : undefined}
+                  onSelectWorkspace={id => { setActiveWs(id); setTarget('active'); }} onOpenFolder={() => openProject()}
+                  onSelectWorktree={rootPath => { void task(async () => {
+                    const normalized = (value: string) => value.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+                    let item = workspaces.find(candidate => normalized(candidate.rootPath) === normalized(rootPath));
+                    if (!item) { item = await post<Workspace>('/api/workspaces', { name: rootPath.split(/[\\/]/).filter(Boolean).pop() || 'Worktree', rootPath }); await refresh(); }
+                    setActiveWs(item.id); setTarget('active');
+                  }); }} />
                 <div className="composer-hint">
                   <span>Enter ส่ง{mode === "code" ? " · Ctrl+Enter ต่อคิว" : ""} · Shift + Enter ขึ้นบรรทัดใหม่ · Ctrl+U แนบรูปหรือ PDF</span>
                   <span>ตรวจคำสั่งก่อนส่งเสมอ</span>

@@ -23,15 +23,23 @@ try {
   await page.addInitScript(() => { localStorage.setItem('superai-setup-dismissed', '1'); localStorage.setItem('superai-mode', 'code'); localStorage.setItem('superai-preview', 'false'); });
   const sessions = ['one', 'two'].map((id, i) => ({ id, wsId: 'ws', name: `Codex ${i+1}`, agentType: 'codex', view: 'chat', status: 'running', cwd: i ? 'D:/Project/.worktrees/feature' : 'D:/Project', createdAt: i+1 }));
   await page.routeWebSocket('**/ws/chat/*', socket => socket.send(JSON.stringify({ type: 'snapshot', chat: { items: [], running: false } })));
-  let sends = 0;
+  let sends = 0, chosenBranch = 'main', branchPosts = 0, refuseSwitch = false;
   await page.route('**/api/**', route => {
     const p = new URL(route.request().url()).pathname;
     if (p.endsWith('/chat') && route.request().method() === 'POST') sends++;
     let json = [];
-    if (p === '/api/workspaces') json = [{ id: 'ws', name: 'Project', rootPath: 'D:/Project', threads: [] }];
+    if (p === '/api/workspaces') json = [{ id: 'ws', name: 'Project', rootPath: 'D:/Project', threads: [] }, { id: 'other', name: 'Other project', rootPath: 'E:/Other', threads: [] }];
     else if (p === '/api/terminals') json = sessions;
     else if (p === '/api/clis') json = [{ id: 'codex', available: true, name: 'Codex', command: 'codex' }];
-    else if (p.endsWith('/context')) { const second = p.includes('/two/'); json = { cwd: second ? sessions[1].cwd : sessions[0].cwd, git: 'ready', branch: second ? 'feature/ui' : 'main', commit: null }; }
+    else if (p.endsWith('/context') || p.endsWith('/branches')) {
+      if (p.endsWith('/branches') && route.request().method() === 'POST') {
+        branchPosts++;
+        if (refuseSwitch) return route.fulfill({ status: 409, json: { error: 'มีไฟล์ที่ยังไม่ได้ commit' } });
+        chosenBranch = route.request().postDataJSON().branch;
+      }
+      const second = p.includes('/two/'), other = p.includes('/other/');
+      json = { cwd: other ? 'E:/Other' : second ? sessions[1].cwd : sessions[0].cwd, git: 'ready', branch: other ? 'develop' : second ? 'feature/ui' : chosenBranch, commit: null, branches: ['main', 'feature/search', 'feature/ui'] };
+    }
     else if (p.includes('/chat/settings')) json = { agent: 'codex', model: 'gpt-6.1-sol', effort: 'medium', skills: [] };
     else if (p.endsWith('/chat')) json = { items: [], running: false };
     else if (p.includes('/auth')) json = { status: 'authenticated' };
@@ -42,7 +50,43 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}`, { waitUntil: 'networkidle' });
   const context = page.getByLabel('พื้นที่ทำงานของข้อความนี้');
   await context.getByText('main', { exact: true }).waitFor();
-  check((await context.innerText()).includes('D:/Project'), 'working folder and actual branch are visible near the composer');
+  check((await context.getByLabel('เลือกโฟลเดอร์ทำงาน').getAttribute('title')).includes('D:/Project'), 'working folder and actual branch are visible near the composer');
+  const folderButton = page.getByRole('button', { name: 'เลือกโฟลเดอร์ทำงาน', exact: true });
+  await page.getByLabel('คำสั่ง', { exact: true }).fill('Project draft');
+  await folderButton.click();
+  const folderMenu = page.getByRole('dialog', { name: 'เลือกโฟลเดอร์', exact: true });
+  await folderMenu.waitFor();
+  check(await folderMenu.getByRole('button', { name: /Other project/ }).isVisible(), 'folder button opens a real project picker');
+  await page.screenshot({ path: path.join(output, 'folder-menu.png') });
+  await folderMenu.getByRole('button', { name: /Other project/ }).click();
+  await context.getByText('develop', { exact: true }).waitFor();
+  check(await folderButton.getAttribute('title') === 'E:/Other', 'project selection changes the composer destination');
+  check(await page.getByLabel('คำสั่ง', { exact: true }).inputValue() === '', 'another project does not inherit the original draft');
+  await page.getByLabel('คำสั่ง', { exact: true }).fill('Other draft');
+  await folderButton.click(); await folderMenu.getByRole('button', { name: /Project D:\/Project/ }).click();
+  await context.getByText('main', { exact: true }).waitFor();
+  check(await page.getByLabel('คำสั่ง', { exact: true }).inputValue() === 'Project draft', 'returning through the folder picker restores the original draft');
+  const branchButton = page.getByRole('button', { name: 'เลือก Git branch', exact: true });
+  await branchButton.click();
+  const branchMenu = page.getByRole('dialog', { name: 'เลือก branch', exact: true });
+  await branchMenu.getByRole('button', { name: 'feature/search', exact: true }).waitFor();
+  check(branchPosts === 0, 'opening a branch menu only reads branches');
+  await branchMenu.getByLabel('ค้นหา branch').fill('search');
+  check(await branchMenu.getByRole('button', { name: 'main', exact: true }).count() === 0, 'branch search filters actual choices');
+  await page.screenshot({ path: path.join(output, 'branch-menu.png') });
+  await branchMenu.getByRole('button', { name: 'feature/search', exact: true }).click();
+  await context.getByText('feature/search', { exact: true }).waitFor();
+  check(branchPosts === 1, 'choosing a branch calls the switching endpoint once');
+  check(await page.getByLabel('คำสั่ง', { exact: true }).inputValue() === 'Project draft', 'branch selection preserves the unsent draft');
+  refuseSwitch = true;
+  await branchButton.click(); await branchMenu.getByRole('button', { name: 'main', exact: true }).click();
+  await branchMenu.getByRole('alert').waitFor();
+  check((await context.innerText()).includes('feature/search'), 'refused branch change preserves context and displays its reason');
+  await page.keyboard.press('Escape'); await branchMenu.waitFor({ state: 'hidden' });
+  check(await branchButton.evaluate(button => button === document.activeElement), 'Escape closes the picker and restores focus');
+  refuseSwitch = false; chosenBranch = 'main';
+  await branchButton.click(); await branchMenu.getByRole('button', { name: 'main', exact: true }).click();
+  await context.getByText('main', { exact: true }).waitFor();
   const plus = page.getByRole('button', { name: 'แนบไฟล์', exact: true });
   const settings = page.locator('.session-chat-controls');
   check((await plus.boundingBox()).x < (await settings.boundingBox()).x, 'attachment plus precedes model and account controls');
@@ -52,7 +96,7 @@ try {
   await page.getByLabel('คำสั่ง', { exact: true }).fill('draft remains');
   await page.getByRole('button', { name: /Codex 2/ }).first().click();
   await context.getByText('feature/ui', { exact: true }).waitFor();
-  check((await context.innerText()).includes('.worktrees/feature') && !(await context.innerText()).includes('main'), 'selecting another session switches folder and branch together');
+  check((await folderButton.getAttribute('title')).includes('.worktrees/feature') && !(await context.innerText()).includes('main'), 'selecting another session switches folder and branch together');
   await page.getByLabel('เป้าหมายคำสั่ง').selectOption('all');
   await context.getByText('หลายโฟลเดอร์ (2)', { exact: true }).waitFor();
   check(!(await context.innerText()).includes('feature/ui'), 'broadcast across different folders does not claim one shared branch');
@@ -64,12 +108,21 @@ try {
   const modelBox = await settings.boundingBox(), buttonsBox = await page.locator('.composer-bottom').boundingBox();
   check(buttonsBox.y + buttonsBox.height <= modelBox.y + 2 || modelBox.y + modelBox.height <= buttonsBox.y + 2, 'narrow action row and model controls do not overlap');
   await page.screenshot({ path: path.join(output, 'narrow.png') });
+  await folderButton.click(); await folderMenu.waitFor();
+  check(await folderMenu.evaluate(node => { const box = node.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight; }), 'context popover stays inside a narrow viewport');
+  await page.locator('.project-sidebar').click({ position: { x: 10, y: 10 } }); await folderMenu.waitFor({ state: 'hidden' });
+  check(true, 'outside click dismisses the project picker');
+  await folderButton.click(); await folderMenu.getByRole('button', { name: 'จัดการ Worktree', exact: true }).click();
+  const worktreeDialog = page.getByRole('dialog', { name: 'จัดการ Git Worktrees', exact: true });
+  await worktreeDialog.waitFor();
+  check(true, 'Worktree entry opens the existing functional manager');
+  await worktreeDialog.getByRole('button', { name: 'ปิดหน้าต่าง', exact: true }).click();
   await page.getByRole('button', { name: 'Agent', exact: true }).click();
   await context.getByText('main', { exact: true }).waitFor();
   check(!(await context.innerText()).includes('.worktrees'), 'Agent shows its project folder rather than the selected Code session folder');
   await page.getByRole('button', { name: 'Chat', exact: true }).click();
   await context.getByText('main', { exact: true }).waitFor();
-  check((await context.innerText()).includes('D:/Project'), 'Chat shows its own project context');
+  check(await folderButton.getAttribute('title') === 'D:/Project', 'Chat shows its own project context');
   check(sends === 0, 'switching contexts and opening attachments never sends the draft');
   check(errors.length === 0, 'no renderer errors');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); await fs.writeFile(path.join(output, 'results.json'), JSON.stringify({ checks, errors }, null, 2)); }
