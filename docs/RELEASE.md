@@ -1,3 +1,18 @@
+# SuperAi & RAKKYXD v1.0.30
+
+## มีอะไรใหม่ใน v1.0.30 (Freebuff / TUI Terminal Fix & macOS Compatibility Polish)
+
+- **แก้ไข Freebuff / OpenTUI Terminal ค้างและพิมพ์ไม่ได้:**
+  - แก้ไขปัญหาการ bundle `@xterm/xterm` (`InputHandler.requestMode`) ที่ทำให้เกิด `ReferenceError` เมื่อรับคำสั่ง ANSI DECRQM (`\x1b[?...$p`) จาก Freebuff และ OpenCode TUI ตอนเริ่มทำงาน
+  - ปรับการจัดการโฟกัสของ `TerminalPane` หลังเปิด Session ใหม่ และเมื่อคลิกสลับกลับมาที่กรอบ Terminal ให้พิมพ์แชทโต้ตอบได้ทันที
+- **ปรับปรุงการทำงานบน macOS ให้สมบูรณ์ยิ่งขึ้น:**
+  - ค้นหาพาธของ CLI บน macOS อัตโนมัติ (`~/.freebuff/bin`, `/Applications/Codex.app/Contents/Resources`, Homebrew, NVM ฯลฯ)
+  - ใช้ `zsh` เป็นค่าเริ่มต้นของ Terminal บน macOS พร้อมชุดฟอนต์ `SF Mono`, `Menlo`, `Monaco` และ `Noto Sans Thai`
+  - เพิ่มการลองซ้ำอัตโนมัติเมื่อฐานข้อมูล SQLite ของ OpenCode ถูกล็อกชั่วคราวขณะรันหลายงานพร้อมกัน
+  - ปรับตำแหน่งปุ่มไฟจราจร (Traffic Lights) ของหน้าต่าง macOS และล้าง `quarantine` attribute อัตโนมัติหลังอัปเดตแอป
+
+---
+
 # SuperAi & RAKKYXD v1.0.29
 
 ## มีอะไรใหม่ใน v1.0.29 (Claude-style Chat, Interrupt, Completion Notifications & Next-Message Suggestions)
