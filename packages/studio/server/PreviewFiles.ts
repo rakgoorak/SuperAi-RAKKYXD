@@ -8,15 +8,16 @@ const MAX_TEXT = 512 * 1024;
 /** Resolve the real path before reading; a linked file cannot escape its registered project. */
 export async function readPreviewFile(root: string, requested: string) {
   if (!requested || /[\u0000-\u001f]/.test(requested)) throw new Error('ที่อยู่ไฟล์ไม่ถูกต้อง');
-  const base = await fs.realpath(root);
-  const inside = (target: string) => {
-    const relative = path.relative(base, target);
+  const rawBase = path.resolve(root);
+  const base = await fs.realpath(rawBase);
+  const inside = (dir: string, target: string) => {
+    const relative = path.relative(dir, target);
     return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
   };
   const lexical = path.resolve(base, requested);
-  if (!inside(lexical)) throw new Error('เปิดได้เฉพาะไฟล์ภายในโปรเจกต์นี้');
+  if (!inside(base, lexical) && !inside(rawBase, path.resolve(rawBase, requested))) throw new Error('เปิดได้เฉพาะไฟล์ภายในโปรเจกต์นี้');
   const target = await fs.realpath(lexical);
-  if (!inside(target)) throw new Error('เปิดได้เฉพาะไฟล์ภายในโปรเจกต์นี้');
+  if (!inside(base, target)) throw new Error('เปิดได้เฉพาะไฟล์ภายในโปรเจกต์นี้');
   const info = await fs.stat(target);
   if (!info.isFile()) throw new Error('กรุณาเลือกไฟล์ ไม่ใช่โฟลเดอร์');
   const extension = path.extname(target).toLowerCase();

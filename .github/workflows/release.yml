@@ -68,6 +68,7 @@ jobs:
           if-no-files-found: ignore
   publish:
     needs: build
+    if: always() && (needs.build.result == 'success' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -76,10 +77,21 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        continue-on-error: true
         with:
           pattern: release-*
           merge-multiple: true
           path: release-assets
+      - name: Fallback to existing release assets on workflow_dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          if [ -z "$(ls -A release-assets 2>/dev/null)" ]; then
+            gh release download "$RELEASE_TAG" --dir release-assets --clobber
+          fi
       - name: Publish tested downloads
         env:
           GH_TOKEN: ${{ github.token }}
