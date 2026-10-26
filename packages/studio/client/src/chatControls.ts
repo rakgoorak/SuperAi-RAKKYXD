@@ -2,7 +2,9 @@
  * Per-session chat choices made in the bottom composer (model, effort, picked skill) and the
  * session's account state, so the composer's send can use them for whichever session it targets.
  */
+import type { ResponseStyle } from './responseStyle';
 export interface ChatPrefs {
+  responseStyle: ResponseStyle;
   model: string;
   effort: string;
   /** Skill picked from /skills; only used while the draft still starts with "/skill ". */
@@ -20,7 +22,7 @@ const isPermission = (value: unknown): value is ChatPermission => value === 'rea
 
 const prefs = new Map<string, ChatPrefs>();
 const choices = new Set<string>();
-const EMPTY: ChatPrefs = { model: '', effort: '', skillId: '', blocked: false, note: '', permission: 'auto' };
+const EMPTY: ChatPrefs = { model: '', effort: '', skillId: '', blocked: false, note: '', permission: 'auto', responseStyle: 'normal' };
 
 export function hasChatPrefs(sessionId: string): boolean { chatPrefs(sessionId); return choices.has(sessionId); }
 
@@ -36,7 +38,7 @@ export function chatPrefs(sessionId: string): ChatPrefs {
     try {
       const saved = JSON.parse(localStorage.getItem(`superai-chat-prefs:${sessionId}`) || 'null');
       if (saved && typeof saved.model === 'string' && typeof saved.effort === 'string') {
-        prefs.set(sessionId, { ...EMPTY, model: saved.model, effort: saved.effort, permission: isPermission(saved.permission) ? saved.permission : 'auto' });
+        prefs.set(sessionId, { ...EMPTY, model: saved.model, effort: saved.effort, permission: isPermission(saved.permission) ? saved.permission : 'auto', responseStyle: ['normal', 'concise', 'explanatory'].includes(saved.responseStyle) ? saved.responseStyle : 'normal' });
         choices.add(sessionId);
       }
     } catch {}
@@ -47,8 +49,8 @@ export function chatPrefs(sessionId: string): ChatPrefs {
 export function setChatPrefs(sessionId: string, patch: Partial<ChatPrefs>) {
   if ("model" in patch || "effort" in patch) choices.add(sessionId);
   prefs.set(sessionId, { ...chatPrefs(sessionId), ...patch });
-  if ("model" in patch || "effort" in patch || "permission" in patch) {
-    try { const value = prefs.get(sessionId)!; localStorage.setItem(`superai-chat-prefs:${sessionId}`, JSON.stringify({ model: value.model, effort: value.effort, permission: value.permission })); } catch {}
+  if ("model" in patch || "effort" in patch || "permission" in patch || 'responseStyle' in patch) {
+    try { const value = prefs.get(sessionId)!; localStorage.setItem(`superai-chat-prefs:${sessionId}`, JSON.stringify({ model: value.model, effort: value.effort, permission: value.permission, responseStyle: value.responseStyle })); } catch {}
   }
   listeners.get(sessionId)?.forEach(listener => listener());
 }

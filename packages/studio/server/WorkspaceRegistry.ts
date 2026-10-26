@@ -97,10 +97,11 @@ export class WorkspaceRegistry {
 
   public updateWorkspace(
     id: string,
-    updates: { name?: string; rootPath?: string; instructions?: string; pinnedFiles?: string[] },
+    updates: { name?: string; rootPath?: string; instructions?: string; pinnedFiles?: string[]; favorite?: boolean },
   ): Workspace | undefined {
     const ws = this.workspaces.get(id);
     if (!ws) return undefined;
+    if (updates.favorite !== undefined && typeof updates.favorite !== 'boolean') throw new Error('สถานะโปรเจกต์โปรดไม่ถูกต้อง');
     if (updates.name !== undefined) {
       if (!updates.name.trim()) throw new Error("กรุณาระบุชื่อโปรเจกต์");
       ws.name = updates.name.trim();
@@ -119,6 +120,7 @@ export class WorkspaceRegistry {
     if (updates.pinnedFiles !== undefined) {
       ws.pinnedFiles = Array.isArray(updates.pinnedFiles) ? [...new Set(updates.pinnedFiles)] : [];
     }
+    if (updates.favorite !== undefined) ws.favorite = updates.favorite;
     this.save();
     return ws;
   }

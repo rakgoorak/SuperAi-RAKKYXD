@@ -1,0 +1,18 @@
+/* Notices and errors: one small floating toast at the top of the canvas (Claude-style), never in the layout flow. */
+#root .work-canvas > .message-banner {
+  position: absolute; top: 14px; left: 50%; right: auto; bottom: auto; z-index: 60;
+  transform: translateX(-50%); width: max-content; max-width: min(520px, calc(100% - 48px));
+  display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px 9px 14px;
+  background: var(--raised); color: var(--text); border: 1px solid var(--control-border); border-radius: 12px;
+  box-shadow: var(--popover-shadow); font-size: 13px; line-height: 1.6;
+  animation: toast-in .18s ease-out;
+}
+#root .work-canvas > .message-banner.error { background: var(--raised); border-color: var(--control-border); color: var(--text); }
+#root .work-canvas > .message-banner > svg { flex: none; margin-top: 3px; color: var(--success, #8fbf9f); }
+#root .work-canvas > .message-banner.error > svg { color: var(--error, #e08a76); }
+#root .work-canvas > .message-banner > span { min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+#root .work-canvas > .message-banner .banner-guidance { display: block; margin-top: 2px; color: var(--text-secondary); font-size: 12px; }
+#root .work-canvas > .message-banner .banner-guidance button { margin-left: 8px; padding: 0; border: 0; background: none; color: var(--text); text-decoration: underline; font-size: 12px; }
+#root .work-canvas > .message-banner > .icon-button { flex: none; width: 22px; height: 22px; min-height: 22px; margin-top: 0; color: var(--dim); }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, -6px); } }
+@media (prefers-reduced-motion: reduce) { #root .work-canvas > .message-banner { animation: none; } }

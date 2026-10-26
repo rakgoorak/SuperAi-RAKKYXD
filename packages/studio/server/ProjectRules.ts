@@ -6,7 +6,7 @@ export interface ProjectRulesResult {
   files: string[];
 }
 
-const RULE_FILES = [
+export const RULE_FILES = [
   '.superairules',
   '.cursorrules',
   'CLAUDE.md',

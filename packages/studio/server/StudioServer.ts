@@ -29,6 +29,10 @@ import { CliVersionManager, VERSIONED_CLIS } from "./CliVersions.js";
 import { AttachmentError, MAX_ATTACHMENT_BYTES, resolveAttachments, saveAttachment } from "./AttachmentStore.js";
 import { CliChatManager, CHAT_CLIS, CHAT_PERMISSIONS } from "./CliChat.js";
 import { getProjectRules } from "./ProjectRules.js";
+import { buildProjectContext, readProjectText } from './ProjectContext.js';
+import { responseStyle } from './ResponseStyle.js';
+import { cleanPrediction, nextPromptRequest, predictionSeat } from './NextPrompt.js';
+import { CliProvider } from './CliProvider.js';
 
 export class StudioServer {
   private agentRuns: AgentRunManager;
@@ -398,23 +402,11 @@ export class StudioServer {
     this.app.get('/api/workspaces/:wsId/pinned-content', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
       if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
-      const pinned = Array.isArray(ws.pinnedFiles) ? ws.pinnedFiles : [];
+      const pinned = Array.isArray(ws.pinnedFiles) ? ws.pinnedFiles.filter(file => typeof file === 'string').slice(0, 100) : [];
       const files: Array<{ path: string; name: string; content: string; size: number }> = [];
       for (const rel of pinned) {
-        try {
-          const full = path.resolve(ws.rootPath, rel);
-          if (!full.startsWith(path.resolve(ws.rootPath))) continue;
-          if (!fs.existsSync(full) || !fs.statSync(full).isFile()) continue;
-          const stat = fs.statSync(full);
-          if (stat.size > 256 * 1024) continue;
-          const content = fs.readFileSync(full, 'utf8');
-          files.push({
-            path: rel,
-            name: path.basename(rel),
-            content,
-            size: stat.size,
-          });
-        } catch {}
+        const file = readProjectText(ws.rootPath, rel);
+        if (file.entry.status === 'included' && file.content !== undefined) files.push({ path: rel, name: path.basename(rel), content: file.content, size: file.size! });
       }
       res.json({ files });
     });
@@ -453,7 +445,8 @@ export class StudioServer {
         const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
         if (!workspace) return res.status(404).json({ error: "ไม่พบโปรเจกต์" });
         const attachments = resolveAttachments(workspace.rootPath, req.body.attachments);
-        const body = { ...req.body, prompt: String(req.body.prompt || ""), attachments };
+        const body = { ...req.body, prompt: String(req.body.prompt || ""), attachments,
+          projectContext: buildProjectContext(workspace, workspace.rootPath), responseStyle: responseStyle(req.body.responseStyle) };
         res.json(
           req.body.mode === "agent"
             ? this.agentRuns.startAgent(workspace.id, workspace.rootPath, body)
@@ -581,7 +574,7 @@ export class StudioServer {
       try {
         const result = this.workspaceRegistry.updateWorkspace(
           String(req.params.wsId),
-          { name: req.body.name, rootPath: req.body.rootPath, instructions: req.body.instructions, pinnedFiles: req.body.pinnedFiles },
+          { name: req.body.name, rootPath: req.body.rootPath, instructions: req.body.instructions, pinnedFiles: req.body.pinnedFiles, favorite: req.body.favorite },
         );
         if (!result) return res.status(404).json({ error: "ไม่พบโปรเจกต์" });
         res.json(result);
@@ -871,6 +864,44 @@ export class StudioServer {
     this.app.get("/api/terminals/:id/chat", (req: Request, res: Response) => {
       res.json(this.chats.snapshot(String(req.params.id)));
     });
+    this.app.get('/api/workspaces/:wsId/project-context', (req, res) => {
+      const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!workspace) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      try { res.json(buildProjectContext(workspace, workspace.rootPath)); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); }
+    });
+    this.app.get('/api/terminals/:id/project-context', (req, res) => {
+      const session = this.terminalManager.getSession(String(req.params.id));
+      if (!session) return res.status(404).json({ error: 'ไม่พบห้องคุย' });
+      try { res.json(buildProjectContext(session.wsId ? this.workspaceRegistry.getWorkspace(session.wsId) : undefined, session.cwd)); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); }
+    });
+    this.app.post('/api/terminals/:id/name', (req, res) => {
+      const session = this.terminalManager.getSession(String(req.params.id));
+      if (!session) return res.status(404).json({ error: 'ไม่พบห้องคุย' });
+      const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+      if (!name || name.length > 60) return res.status(400).json({ error: 'ชื่อห้องต้องมี 1–60 ตัวอักษร' });
+      session.name = name; session.restart = { ...session.restart, name }; this.saveSessions();
+      res.json({ ...this.terminalManager.listSessions().find(item => item.id === session.id), view: this.viewOf(session.id) });
+    });
+    this.app.post('/api/terminals/:id/chat/fork', (req: Request, res: Response) => {
+      const source = this.terminalManager.getSession(String(req.params.id));
+      if (!source) return res.status(404).json({ error: 'ไม่พบห้องต้นทาง' });
+      if (!CHAT_CLIS.includes(source.agentType || '') || this.viewOf(source.id) !== 'chat') return res.status(400).json({ error: 'แยกบทสนทนาได้จากห้องแชต AI เท่านั้น' });
+      try {
+        if (typeof req.body?.messageId !== 'string') throw new Error('กรุณาระบุข้อความต้นทาง');
+        if (req.body.selection !== undefined && (typeof req.body.selection !== 'string' || !req.body.selection.trim())) throw new Error('กรุณาเลือกข้อความสำหรับ Side chat');
+        const fork = this.chats.forkData(source.id, req.body.messageId, req.body.selection);
+        const session = this.terminalManager.addDormant({ id: randomUUID(), options: {
+          agentType: source.agentType, cwd: source.cwd, wsId: source.wsId,
+          name: `${req.body.selection !== undefined ? 'Side chat' : 'Fork'} · ${source.name}`.slice(0, 100),
+          model: source.restart?.model, effort: source.restart?.effort, openCodeModel: source.restart?.openCodeModel,
+        } });
+        this.chats.installFork(session.id, fork);
+        this.views.set(session.id, 'chat'); this.saveSessions();
+        res.json({ ...this.terminalManager.listSessions().find(item => item.id === session.id), view: 'chat' });
+      } catch (error: any) { res.status(400).json({ error: error.message }); }
+    });
     this.app.post("/api/terminals/:id/chat", async (req: Request, res: Response) => {
       const id = String(req.params.id);
       const session = this.terminalManager.getSession(id);
@@ -889,6 +920,7 @@ export class StudioServer {
           req.body.effort === undefined ? session.restart?.effort : req.body.effort);
         if (req.body.skillId !== undefined && (typeof req.body.skillId !== "string" || !/^[a-f0-9]{20}$/.test(req.body.skillId))) throw new Error("skill ไม่ถูกต้อง");
         if (req.body.permission !== undefined && !CHAT_PERMISSIONS.includes(req.body.permission)) throw new Error("สิทธิ์ของแชตไม่ถูกต้อง");
+        const style = responseStyle(req.body.responseStyle);
         await cliAuth.requireReady(agent);
         if (this.terminalManager.getSession(id) !== session || this.viewOf(id) !== "chat") return res.status(409).json({ error: "session เปลี่ยนไปแล้ว กรุณาลองใหม่" });
         if (session.sleeping || ["running", "stopping"].includes(session.status)) return res.status(409).json({ error: "Terminal ยังปิดไม่เสร็จ กรุณารอก่อนส่งข้อความ" });
@@ -901,13 +933,40 @@ export class StudioServer {
           skillId: req.body.skillId,
           permission: req.body.permission,
           attachments,
-        }, { queue: req.body.queue === true });
+          projectContext: buildProjectContext(session.wsId ? this.workspaceRegistry.getWorkspace(session.wsId) : undefined, session.cwd),
+          responseStyle: style,
+        // Enter while the chat is answering interrupts it (like Claude); Ctrl+Enter (`queue`) waits instead.
+        }, { queue: req.body.queue === true, interrupt: req.body.queue !== true && req.body.interrupt !== false });
         session.restart = { ...session.restart, ...chosen };
         this.saveSessions();
-        res.json({ success: true, queued: outcome === "queued" });
+        res.json({ success: true, queued: outcome === "queued", interrupted: outcome === "interrupted" });
       } catch (err: any) {
         res.status(/ยังตอบ/.test(err.message) ? 409 : 400).json({ error: err.message });
       }
+    });
+    // Guess the user's next message after a finished turn (grey text in the composer, Tab accepts).
+    this.app.post("/api/terminals/:id/chat/next-prompt", async (req: Request, res: Response) => {
+      const id = String(req.params.id);
+      const session = this.terminalManager.getSession(id);
+      const agent = session?.agentType || "";
+      if (!session || !CHAT_CLIS.includes(agent)) return res.status(404).json({ error: "ไม่พบห้องแชต" });
+      const chat = this.chats.snapshot(id);
+      // Nothing to guess while answering or when a message is already waiting to go (interrupt, queue).
+      if (chat.running || chat.queued.length) return res.json({ text: "" });
+      const prompt = nextPromptRequest(chat.items);
+      if (!prompt) return res.json({ text: "" });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 60_000);
+      res.on("close", () => { if (!res.writableEnded) controller.abort(); });
+      try {
+        await cliAuth.requireReady(agent);
+        const seat = predictionSeat(agent, session.restart?.model || (agent === "opencode" ? session.restart?.openCodeModel : "") || "");
+        const reply = await new CliProvider(`cli:${agent}`, session.cwd, controller.signal, false, seat.model, false, [], seat.effort)
+          .generate([{ role: "user", content: prompt }]);
+        res.json({ text: cleanPrediction(reply.text) });
+      } catch (err: any) {
+        if (!res.headersSent) res.status(400).json({ error: err.message });
+      } finally { clearTimeout(timer); }
     });
     this.app.post("/api/terminals/:id/chat/cancel", (req: Request, res: Response) => {
       res.json({ success: this.chats.cancel(String(req.params.id)) });

@@ -445,7 +445,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
         )}
         {chatting && (
           <div className="absolute inset-0 z-[7]">
-            <ChatView sessionId={tab.sessionId!} name={tab.name.split('·')[0].trim() || tab.name} />
+            <ChatView sessionId={tab.sessionId!} name={tab.name} active={visible && focused} />
           </div>
         )}
         {tab.sessionId && (
@@ -471,13 +471,13 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
             )}
             {chatCapable && (
               <div className="pane-view-switch" role="group" aria-label="มุมมอง session">
-                <button aria-pressed={chatting} onClick={(event) => { event.stopPropagation(); setReading(false); if (!chatting) onSwitchView?.('chat'); }}
+                <button aria-label="มุมมองแชต" aria-pressed={chatting} onClick={(event) => { event.stopPropagation(); setReading(false); if (!chatting) onSwitchView?.('chat'); }}
                   title="คุยแบบแชต · ปิด TUI แล้วคุยต่อจากบทสนทนาเดิม">
-                  <MessageSquare className="w-3 h-3" /> แชต
+                  <MessageSquare className="w-3 h-3" />
                 </button>
-                <button aria-pressed={!chatting} onClick={(event) => { event.stopPropagation(); if (chatting) onSwitchView?.('terminal'); }}
+                <button aria-label="มุมมอง Terminal" aria-pressed={!chatting} onClick={(event) => { event.stopPropagation(); if (chatting) onSwitchView?.('terminal'); }}
                   title="เปิด TUI ของ CLI ต่อจากบทสนทนาเดียวกัน">
-                  <TerminalIcon className="w-3 h-3" /> Terminal
+                  <TerminalIcon className="w-3 h-3" />
                 </button>
               </div>
             )}

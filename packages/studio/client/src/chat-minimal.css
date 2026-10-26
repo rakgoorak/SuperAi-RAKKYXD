@@ -1,0 +1,70 @@
+/* Chat room composer, Claude-style: one pill row (attach · text · mic · send) and a quiet footer under it
+   (permission on the left; AI, model and effort on the right). Only applies while the composer sends to a chat. */
+#root .work-canvas .composer-area.chat-minimal { padding: 8px 28px 14px; }
+#root .work-canvas .chat-minimal .composer-box {
+  grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto auto;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+}
+/* The pill is drawn behind rows 1–2 so the footer can sit outside it while staying in the same grid. */
+#root .work-canvas .chat-minimal .composer-box::before {
+  content: ""; grid-column: 1 / -1; grid-row: 1 / 3;
+  border: 1px solid var(--control-border); border-radius: 22px; background: var(--surface);
+  transition: border-color .15s;
+}
+#root .work-canvas .chat-minimal .composer-box:focus-within::before { border-color: var(--focus); }
+#root .work-canvas .chat-minimal .composer-box > * { position: relative; }
+#root .work-canvas .chat-minimal .attachment-cards,
+#root .work-canvas .chat-minimal .message-context-chips { grid-column: 1 / -1; grid-row: 1; margin: 10px 14px 0; }
+#root .work-canvas .composer-area.chat-minimal .composer-box.has-session-controls .composer-leading { grid-column: 1; grid-row: 2; align-self: end; padding: 0 0 7px 8px; }
+#root .work-canvas .composer-area.chat-minimal .composer-box.has-session-controls .composer-input-container { grid-column: 2; grid-row: 2; }
+#root .work-canvas .chat-minimal .composer-box textarea,
+#root .work-canvas.code-mode .chat-minimal .composer-box textarea,
+#root .work-canvas.code-mode .composer-area.chat-minimal:not(.compact-code) textarea {
+  field-sizing: content; height: auto; min-height: 46px; max-height: min(260px, 36vh);
+  padding: 11px 8px; font-size: 15px; line-height: 1.6;
+}
+#root .work-canvas .composer-area.chat-minimal .composer-box.has-session-controls .composer-bottom {
+  grid-column: 3; grid-row: 2; align-self: end; padding: 0 7px 7px 0; gap: 2px; justify-content: flex-end;
+}
+/* Size toggle and the folder label are not needed in a one-row composer; the send target stays when relevant. */
+#root .work-canvas .chat-minimal .composer-tools > .icon-button,
+#root .work-canvas .chat-minimal .composer-tools > span { display: none; }
+/* Like Claude: while answering with nothing typed, the send button is a stop button; typing turns it back into send (an interrupt). */
+#root .work-canvas .chat-minimal:not(.chat-busy) .composer-stop,
+#root .work-canvas .chat-minimal.chat-busy.has-draft .composer-stop,
+#root .work-canvas .chat-minimal.chat-busy:not(.has-draft) .send-button { display: none; }
+#root .work-canvas .chat-minimal .composer-stop { background: var(--text); color: var(--base); }
+#root .work-canvas .chat-minimal .composer-bottom .send-button {
+  width: 32px; height: 32px; min-width: 32px; min-height: 32px; padding: 0; border-radius: 50%; justify-content: center;
+}
+#root .work-canvas .chat-minimal .composer-bottom .icon-button { width: 32px; height: 32px; min-height: 32px; border-radius: 50%; }
+
+/* Footer under the pill. */
+#root .work-canvas .composer-area.chat-minimal .composer-box.has-session-controls .session-chat-controls {
+  grid-column: 1 / -1; grid-row: 3; display: flex; flex-wrap: nowrap; align-items: center; gap: 2px;
+  padding: 6px 2px 0; border: 0; background: transparent; font-size: 12px;
+}
+#root .work-canvas .chat-minimal .session-chat-controls > .provider-badge { margin-left: auto; }
+#root .work-canvas .chat-minimal .session-chat-controls .chat-model-controls { flex: 0 1 auto; gap: 0; flex-wrap: nowrap; }
+#root .work-canvas .chat-minimal .session-chat-controls select,
+#root .work-canvas .chat-minimal .session-chat-controls input {
+  height: 28px; min-height: 28px; padding: 3px 8px; border: 0; border-radius: 7px; background: transparent;
+  color: var(--text-secondary); font-size: 12px;
+}
+#root .work-canvas .chat-minimal .session-chat-controls select,
+#root .work-canvas .chat-minimal .session-chat-controls input { field-sizing: content; min-width: 0; }
+#root .work-canvas .chat-minimal .session-chat-controls input { padding-right: 26px; max-width: 190px; color: var(--text); }
+#root .work-canvas .chat-minimal .session-chat-controls select:hover,
+#root .work-canvas .chat-minimal .session-chat-controls input:hover { background: var(--raised); }
+#root .work-canvas .chat-minimal .chat-permission-select { width: auto; max-width: 180px; color: var(--text); }
+#root .work-canvas .chat-minimal .chat-effort-select { width: auto; max-width: 120px; }
+#root .work-canvas .chat-minimal .session-chat-controls .chat-composer-problem { flex: 1 1 auto; }
+
+/* Context row above the composer: only visible while working in the composer, unless something is pinned. */
+#root .work-canvas .chat-minimal .composer-context-tags .composer-pin-picker-wrap { opacity: 0; transition: opacity .15s; }
+#root .work-canvas .chat-minimal:hover .composer-context-tags .composer-pin-picker-wrap,
+#root .work-canvas .chat-minimal:focus-within .composer-context-tags .composer-pin-picker-wrap { opacity: 1; }
+#root .work-canvas .chat-minimal .composer-hint { display: none; }
+@container (max-width: 650px) {
+  #root .work-canvas .chat-minimal .composer-box .session-chat-controls { flex-wrap: wrap; }
+}

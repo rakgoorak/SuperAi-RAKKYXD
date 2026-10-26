@@ -1,4 +1,4 @@
-import { recoveryHint } from "./recovery";
+import { toastRecovery } from "./recovery";
 import { ChangesPanel } from "./components/ChangesPanel";
 import { HistoryPanel, type HistoryEntry } from "./components/HistoryPanel";
 import { RunActions } from "./components/RunActions";
@@ -51,6 +51,16 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { api, post, Workspace, Cli, Session, Run, Seat, togglePinnedFile } from "./api";
+import { MessageContextChips } from './components/MessageContextChips';
+import { contextPrompt, saveMessageContexts } from './conversationContext';
+import { useResponseStyle } from './responseStyle';
+import { ResponseStyleSelect } from './components/ResponseStyleSelect';
+import { ComposerOptions } from './components/ComposerOptions';
+import { ProjectContextStatus } from './components/ProjectContextStatus';
+import { ConversationExport } from './components/ConversationExport';
+import { namedSessions, sessionAliases } from './sessionNames';
+import { Star } from 'lucide-react';
+import './usability.css';
 import { paneView } from "./paneView";
 import { chatPrefs, sendChatCommand, setChatPrefs } from "./chatControls";
 import { SessionChatControls } from "./components/SessionChatControls";
@@ -72,6 +82,9 @@ import { HEADLESS, loadDefaults, saveDefaults, seatFor, confirmDefaults } from "
 import { CliInstaller } from "./components/CliInstaller";
 import { LaunchPresets, type LaunchSeat } from "./components/LaunchPresets";
 import { VoiceSettingsPanel } from "./components/VoiceSettingsPanel";
+import { NotifySettingsPanel } from "./components/NotifySettingsPanel";
+import { finishedRuns, notifyDone, onNoticeOpen, runNotice } from "./completionNotify";
+import { onChatRunning, onNextPrompt } from "./nextPrompt";
 import { DictationButton } from "./components/DictationButton";
 import { AttachMenu, AttachmentCards, ComposerDropOverlay, useComposerAttachments, useWindowDrop } from "./components/ComposerAttachments";
 import { attachMode, formatPath, pastedFiles, uploadAttachment, type SavedAttachment } from "./attachments";
@@ -156,6 +169,8 @@ export function App() {
   const [connected, setConnected] = useState(false);
   const [pty, setPty] = useState(false);
   const [search, setSearch] = useState("");
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [answerStyle, setAnswerStyle] = useResponseStyle(mode === 'code' ? 'quick-chat' : `${activeWs}:${mode}`);
   const [target, setTarget] = useState<"active" | "all">("active");
   // Alias only the first app-managed workspace to its originating draft; other projects stay isolated.
   const starterDraftScopes = useRef(new Map<string, string>(Object.entries(quickState.aliases)));
@@ -286,6 +301,12 @@ export function App() {
   // The one chat session the composer sends to gets its Model/Effort/skills/account controls there.
   const composerTarget = target === "all" ? undefined : selectedSession;
   const chatTarget = mode === "code" && composerTarget && paneView(composerTarget) === "chat" ? composerTarget : undefined;
+  const [nextPrompts, setNextPrompts] = useState<Record<string, string>>({});
+  useEffect(() => onNextPrompt((sessionId, text) => setNextPrompts(current => ({ ...current, [sessionId]: text }))), []);
+  const nextPrompt = chatTarget && !draft ? nextPrompts[chatTarget.id] || "" : "";
+  const [chatsRunning, setChatsRunning] = useState<Record<string, boolean>>({});
+  useEffect(() => onChatRunning((sessionId, value) => setChatsRunning(current => current[sessionId] === value ? current : { ...current, [sessionId]: value })), []);
+  const chatBusy = !!chatTarget && !!chatsRunning[chatTarget.id];
   const conversation = runs.filter((r) => r.mode === mode);
   const latestRun = conversation[conversation.length - 1] || null;
   const suggestions = getSuggestions({
@@ -303,7 +324,7 @@ export function App() {
       api<Session[]>("/api/terminals"),
     ]);
     setWorkspaces(w);
-    setSessions(s);
+    setSessions(namedSessions(s));
     setConnected(true);
     setActiveWs((current) =>
       w.some((x) => x.id === current) ? current : w[0]?.id || "",
@@ -411,6 +432,21 @@ export function App() {
       clearInterval(timer);
     };
   }, [activeWs]);
+  const runStatuses = useRef(new Map<string, Run["status"]>());
+  useEffect(() => {
+    for (const run of finishedRuns(runStatuses.current, runs))
+      notifyDone(runNotice(run, workspaces.find(w => w.id === run.wsId)?.name));
+  }, [runs]);
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+  useEffect(() => onNoticeOpen(target => {
+    if (target.kind === "run") { setActiveWs(target.wsId); setMode(target.mode); return; }
+    const session = sessionsRef.current.find(s => s.id === target.id);
+    if (!session) return;
+    if (session.wsId) setActiveWs(session.wsId);
+    setMode("code");
+    setSelected(session.id);
+  }), []);
   useEffect(() => saveVoiceSettings(voiceSettings), [voiceSettings]);
   // First launch: walk new users through Node, Git, CLI, project and login.
   useEffect(() => {
@@ -555,7 +591,7 @@ export function App() {
       mode: previous.mode, prompt: previous.prompt, attachments: previous.attachments || [],
       allowTools: previous.allowTools, main: previous.main, subagents: previous.subagents,
       panel: previous.panel?.map(answer => answer.seat), summarizer: previous.summarizer,
-      summaryStyle: previous.summaryStyle,
+        summaryStyle: previous.summaryStyle, responseStyle: previous.responseStyle,
     });
     // Apply the returned run before releasing shared busy state: all rows and Send stay locked.
     if (activeWsRef.current === previous.wsId) setRuns(current => [...current.filter(run => run.id !== created.id), created]);
@@ -583,12 +619,13 @@ export function App() {
           if (session.status === "error") throw new Error(`เปิด ${providerIdentity(quickProvider).label} ไม่สำเร็จ ตรวจการติดตั้งแล้วลองอีกครั้ง`);
           pendingQuick.current = { session, wsId: ws.id };
           saveQuickConversationState(starterDraftScopes.current, pendingQuick.current);
-          setChatPrefs(session.id, { model: chosen.model, effort: chosen.effort, permission: "read" });
+          setChatPrefs(session.id, { model: chosen.model, effort: chosen.effort, permission: "read", responseStyle: answerStyle });
         }
         const files: SavedAttachment[] = [];
         for (const item of attachments.items) files.push(await uploadAttachment(`/api/workspaces/${ws.id}/attachments`, item.file));
         await post(`/api/terminals/${session.id}/chat`, { text: draft.trim() || "ดูไฟล์แนบนี้",
-          model: chosen.model, effort: chosen.effort, permission: "read", attachments: files.map(file => file.path) });
+          model: chosen.model, effort: chosen.effort, permission: "read", responseStyle: answerStyle, attachments: files.map(file => file.path) });
+        setChatPrefs(session.id, { responseStyle: answerStyle });
         const created = session;
         setWorkspaces(current => current.some(item => item.id === ws.id) ? current : [...current, ws]);
         setSessions(current => current.some(item => item.id === created.id) ? current : [...current, created]);
@@ -599,7 +636,7 @@ export function App() {
         setNotice(`เริ่มคุยกับ ${providerIdentity(quickProvider).label} แล้ว`);
         return;
       }
-      let queuedCount = 0;
+      let queuedCount = 0, interruptedCount = 0;
       if (!workspace) throw new Error("กรุณาสร้างโปรเจกต์ก่อน");
       // Save attached images/PDFs into <project>/.superai/attachments first.
       if (mode === "chat" && /^\/skills?\s*$/.test(draft.trim())) { setNotice("เลือก skill จากรายการเหนือช่องพิมพ์ แล้วระบุงานที่ต้องการ"); return; }
@@ -633,17 +670,22 @@ export function App() {
             if (recipients.length === 1 && /^\/skills?\s*$/.test(text)) { setDialog("skills"); setDraft(""); return; }
             const hasSkill = /(?:^|\s)\/(?:skill\s+)?([\w.:-]+)/.test(text);
             const skillId = prefs.skillId && hasSkill ? prefs.skillId : "";
-            const result = await post<{ queued?: boolean }>(`/api/terminals/${recipient.id}/chat`, {
-              text,
+            // Enter while the chat is answering stops that answer and sends this one at once.
+            const result = await post<{ queued?: boolean; interrupted?: boolean }>(`/api/terminals/${recipient.id}/chat`, {
+              text: contextPrompt(recipient.id, text),
               model: prefs.model,
               effort: prefs.effort,
               permission: prefs.permission,
+              responseStyle: prefs.responseStyle,
               ...(skillId ? { skillId } : {}),
               attachments: saved.map((file) => file.path),
               // Ctrl+Enter: wait behind a running turn instead of being refused.
               ...(queue ? { queue: true } : {}),
             });
             if (result.queued) queuedCount++;
+            if (result.interrupted) interruptedCount++;
+            try { saveMessageContexts(recipient.id, []); }
+            catch { setNotice('ส่งข้อความแล้ว แต่ล้างบริบทที่บันทึกไว้ไม่ได้ กรุณาเอาบริบทออกก่อนส่งครั้งถัดไป'); }
             if (prefs.skillId) setChatPrefs(recipient.id, { skillId: "" });
             continue;
           }
@@ -658,22 +700,24 @@ export function App() {
               `ส่งไป ${recipient.name} ไม่สำเร็จ กรุณาตรวจ session`,
             );
         }
-        setNotice(
-          queuedCount
-            ? "ต่อคิวแล้ว · ส่งเองเมื่องานก่อนหน้าเสร็จ"
+        // A chat shows its own message at once; only say something when the send did more than that.
+        const sentNotice = queuedCount
+          ? "ต่อคิวแล้ว · ส่งเองเมื่องานก่อนหน้าเสร็จ"
+          : interruptedCount
+            ? "หยุดคำตอบเดิม แล้วส่งข้อความใหม่ทันที"
             : target === "all"
               ? `ส่งให้ ${recipients.length} session ในโปรเจกต์นี้แล้ว`
-              : "ส่งคำสั่งแล้ว",
-        );
+              : recipients.every(r => paneView(r) === "chat") ? "" : "ส่งคำสั่งแล้ว";
+        if (sentNotice) setNotice(sentNotice);
       } else {
         const prompt = draft.trim() || "ช่วยดูไฟล์แนบนี้";
         const files = saved.map((file) => file.path);
         if (mode === "agent") {
           if (!agentConfig) throw new Error("กรุณาเลือก Main และ Sub-agent ก่อน");
-          await post(`/api/conversations/${workspace.id}`, { mode, prompt, attachments: files, allowTools, main: agentConfig.main, subagents: agentConfig.subagents });
+          await post(`/api/conversations/${workspace.id}`, { mode, prompt, attachments: files, allowTools, main: agentConfig.main, subagents: agentConfig.subagents, responseStyle: answerStyle });
         } else {
           if (!chatConfig) throw new Error("กรุณาเลือก AI ที่จะถามก่อน");
-          await post(`/api/conversations/${workspace.id}`, { mode, prompt, attachments: files, panel: chatConfig.panel, summarizer: chatConfig.summarizer, summaryStyle: chatConfig.style });
+          await post(`/api/conversations/${workspace.id}`, { mode, prompt, attachments: files, panel: chatConfig.panel, summarizer: chatConfig.summarizer, summaryStyle: chatConfig.style, responseStyle: answerStyle });
         }
         setRuns(await api<Run[]>(`/api/conversations/${workspace.id}`));
       }
@@ -702,14 +746,14 @@ export function App() {
       requestAnimationFrame(() => composer.current?.focus());
     };
     const prepare = (event: Event) => {
-      const detail = (event as CustomEvent<{text: string; sessionId?: string; expand?: boolean}>).detail;
+      const detail = (event as CustomEvent<{text: string; sessionId?: string; expand?: boolean; append?: boolean}>).detail;
       if (detail.sessionId) {
         const session = sessions.find(s => s.id === detail.sessionId);
         if (session?.wsId) setActiveWs(session.wsId);
         setMode("code"); setSelected(detail.sessionId); setTarget("active");
-        setDraftFor(composerDraftKey(session?.wsId || activeWs, "code", detail.sessionId, "active"), detail.text);
+        setDraftFor(composerDraftKey(session?.wsId || activeWs, "code", detail.sessionId, "active"), current => detail.append ? [current, detail.text].filter(Boolean).join('\n\n') : detail.text);
       } else {
-        setDraft(detail.text);
+        setDraft(current => detail.append ? [current, detail.text].filter(Boolean).join('\n\n') : detail.text);
       }
       setComposerExpanded(detail.expand !== false);
       requestAnimationFrame(() => composer.current?.focus());
@@ -721,6 +765,20 @@ export function App() {
       setDialog("changes");
     };
     const setup = () => setDialog("setup");
+    const forkCreated = (event: Event) => {
+      const { session, sourceId, side } = (event as CustomEvent<{ session: Session; sourceId: string; side: boolean }>).detail;
+      const sourcePrefs = chatPrefs(sourceId);
+      setChatPrefs(session.id, { model: sourcePrefs.model, effort: sourcePrefs.effort, permission: sourcePrefs.permission, responseStyle: sourcePrefs.responseStyle });
+      setSessions(current => current.some(item => item.id === session.id) ? current : [...current, session]);
+      if (session.wsId) setActiveWs(session.wsId);
+      setHiddenSessions(current => side
+        ? [...new Set([...current, ...sessions.filter(item => item.wsId === session.wsId && item.id !== sourceId && item.id !== session.id).map(item => item.id)])].filter(id => id !== sourceId && id !== session.id)
+        : current.filter(id => id !== session.id));
+      setSelected(session.id); setTarget('active'); setMode('code'); setZoomed(false);
+      setLayout(side ? 'split' : 'tabs');
+      setNotice(side ? 'เปิด Side chat แล้ว · บริบทพร้อมสำหรับข้อความถัดไป' : 'สร้างห้องแยกพร้อมประวัติแล้ว · ห้องเดิมยังอยู่');
+      requestAnimationFrame(() => composer.current?.focus());
+    };
     const openLink = (event: Event) => {
       try {
         const href = (event as CustomEvent<{ href: string }>).detail.href;
@@ -743,6 +801,7 @@ export function App() {
     window.addEventListener("superai:prepare-message", prepare);
     window.addEventListener("superai:show-changes", changes);
     window.addEventListener("superai:open-setup", setup);
+    window.addEventListener('superai:fork-created', forkCreated);
     window.addEventListener('superai:open-preview-link', openLink);
     window.addEventListener('superai:open-artifact', openArtifactEvent);
     window.addEventListener("superai:refresh-runs", reload);
@@ -751,6 +810,7 @@ export function App() {
       window.removeEventListener("superai:prepare-message", prepare);
       window.removeEventListener("superai:show-changes", changes);
       window.removeEventListener("superai:open-setup", setup);
+      window.removeEventListener('superai:fork-created', forkCreated);
       window.removeEventListener('superai:open-preview-link', openLink);
       window.removeEventListener('superai:open-artifact', openArtifactEvent);
       window.removeEventListener("superai:refresh-runs", reload);
@@ -945,11 +1005,14 @@ export function App() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </label>
+            <button type="button" className="text-button favorite-filter" aria-pressed={favoritesOnly} onClick={() => setFavoritesOnly(value => !value)}><Star size={13} />โปรเจกต์โปรด</button>
             <div className="project-list">
+              {favoritesOnly && !workspaces.some(item => item.favorite) && <p className="muted" style={{ padding: '8px 14px', fontSize: 12 }}>ยังไม่มีโปรเจกต์โปรด เพิ่มได้จากเมนู … ของโปรเจกต์</p>}
               {workspaces
                 .filter((w) =>
-                  w.name.toLowerCase().includes(search.toLowerCase()),
+                  w.name.toLowerCase().includes(search.toLowerCase()) && (!favoritesOnly || w.favorite === true),
                 )
+                .sort((a, b) => Number(b.favorite === true) - Number(a.favorite === true))
                 .map((ws) => {
                   const entries = sessions.filter((s) => s.wsId === ws.id);
                   return (
@@ -972,6 +1035,7 @@ export function App() {
                           )}
                           <Folder size={16} />
                           <span>{ws.name}</span>
+                          {ws.favorite && <Star size={12} className="project-favorite-mark" aria-label="โปรเจกต์โปรด" />}
                           {entries.filter((s) => s.status === "running")
                             .length > 0 && (
                             <small>
@@ -992,6 +1056,10 @@ export function App() {
                       </div>
                       {menu === ws.id && (
                         <div className="project-menu">
+                          <button onClick={() => void task(async () => {
+                            const updated = await api<Workspace>(`/api/workspaces/${ws.id}`, { method: 'PATCH', body: JSON.stringify({ favorite: !ws.favorite }) });
+                            setWorkspaces(current => current.map(item => item.id === ws.id ? updated : item)); setMenu('');
+                          })}><Star size={13} />{ws.favorite ? 'เอาออกจากโปรเจกต์โปรด' : 'เพิ่มในโปรเจกต์โปรด'}</button>
                           <button onClick={() => openProject(ws)}>
                             <Pencil size={13} /> แก้ไขชื่อ / คำสั่งประจำโปรเจกต์
                           </button>
@@ -1165,8 +1233,11 @@ export function App() {
               className={`message-banner ${error ? "error" : ""}`}
               role={error ? "alert" : "status"}
             >
-              {error ? <AlertCircle size={16} /> : <Check size={16} />}
-              <span>{error || notice}{error && <small className="banner-guidance">{recoveryHint(error)}<button onClick={() => {setComposerExpanded(true);requestAnimationFrame(() => composer.current?.focus());}}>กลับไปแก้ข้อความ</button><button onClick={() => setDialog("setup")}>ตรวจบัญชีและเครื่องมือ</button></small>}</span>
+              {error ? <AlertCircle size={15} /> : <Check size={15} />}
+              <span>{error || notice}{error && (() => {
+                const { hint, account } = toastRecovery(error);
+                return (hint || account) && <small className="banner-guidance">{hint}{account && <button onClick={() => setDialog("setup")}>ตรวจบัญชี</button>}</small>;
+              })()}</span>
               <button
                 className="icon-button"
                 title="ปิดข้อความแจ้งเตือน"
@@ -1272,6 +1343,7 @@ export function App() {
                       <button className="text-button" onClick={() => setDialog("skills")} disabled={!workspace} title="ให้ AI เลือก skill ที่จำเป็นต่อโปรเจกต์">
                         <Puzzle size={13} /> Skills
                       </button>
+                      {workspace && <ConversationExport title={`${workspace.name}-${mode}`} workspaceId={workspace.id} mode={mode === 'agent' ? 'agent' : 'chat'} />}
                       <button
                         className="icon-button"
                         title="ล้างประวัติ Agent และ Chat ของโปรเจกต์"
@@ -1289,6 +1361,13 @@ export function App() {
               >
                 {workspaceSessions.length > 0 && selectedSession ? (
                   <SessionCanvas sessions={workspaceSessions} hiddenIds={hiddenSessions} workspaceId={activeWs} selected={selected} layout={layout} zoomed={zoomed} active={mode === "code"} busy={busy}
+                    rename={async (id, name) => {
+                      setError('');
+                      const updated = await post<Session>(`/api/terminals/${id}/name`, { name });
+                      const aliases = sessionAliases(); delete aliases[id];
+                      try { localStorage.setItem('superai-pane-names', JSON.stringify(aliases)); } catch { /* The canonical name is already saved on the server. */ }
+                      setSessions(current => current.map(item => item.id === id ? updated : item));
+                    }}
                     select={setSelected} zoom={id => { setSelected(id); setZoomed(true); }}
                     hide={hideSession} unhide={unhideSession} unhideAll={unhideAllWorkspaceSessions}
                     close={closeSession} restart={restartSession} add={openSession} switchView={switchView}
@@ -1350,8 +1429,9 @@ export function App() {
                   )}
                 </div></ImageEndpointContext.Provider>
               )}
-              <div className={`composer-area ${mode === "code" && !composerExpanded ? "compact-code" : ""}`}>
+              <div className={`composer-area ${mode === "code" && !composerExpanded ? "compact-code" : ""} ${chatTarget ? "chat-minimal" : ""} ${chatBusy ? "chat-busy" : ""} ${draft.trim() || attachments.items.length ? "has-draft" : ""}`}>
                 <div className="composer-context-tags">
+                    {(mode !== 'code' || !composerTarget || chatTarget) && <ProjectContextStatus workspaceId={workspace?.id} sessionId={chatTarget?.id} revision={JSON.stringify([workspace?.instructions, workspace?.pinnedFiles])} />}
                   {workspace?.instructions && (
                     <button
                       type="button"
@@ -1503,10 +1583,12 @@ export function App() {
                 </div>}
                 <div className={`composer-box ${chatTarget ? "has-session-controls" : ""}`}>
                   <div className="composer-leading"><AttachMenu onFiles={attachToComposer} disabled={busy || (!workspace && mode !== "code")} /></div>
-                  {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name.split("·")[0].trim() || chatTarget.name} disabled={busy} />}
-                  {mode === "code" && !composerTarget && target === "active" && <QuickChatControls clis={clis} provider={quickProvider} onProvider={chooseQuickProvider} disabled={busy} onSetup={() => setDialog("setup")} />}
+                  {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name} disabled={busy} />}
+                  {mode === "code" && !composerTarget && target === "active" && <QuickChatControls clis={clis} provider={quickProvider} onProvider={chooseQuickProvider} disabled={busy} onSetup={() => setDialog("setup")} style={answerStyle} onStyle={setAnswerStyle} />}
+                  {mode !== 'code' && <ComposerOptions label="ตัวเลือกคำตอบ"><ResponseStyleSelect value={answerStyle} onChange={setAnswerStyle} disabled={busy || !!activeRun} /></ComposerOptions>}
                   {mode === "code" && composerTarget && !chatTarget && <div className="terminal-provider-context"><ProviderBadge provider={composerTarget.agentType} /><span>{providerIdentity(composerTarget.agentType).connection}</span></div>}
                   <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
+                    {mode === 'code' && chatTarget && <MessageContextChips sessionId={chatTarget.id} />}
                   <div className="composer-input-container">
                     <SlashMenu ref={slashMenu} draft={draft} sessionId={chatTarget?.id} workspaceId={mode === "chat" ? workspace?.id : undefined} providers={mode === "chat" ? [...new Set((chatConfig?.panel || []).filter(seat => seat.provider.startsWith("cli:")).map(seat => seat.provider.slice(4)))] : []} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
                     <MentionMenu ref={mentionMenu} draft={draft} workspaceId={workspace?.id} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
@@ -1515,7 +1597,8 @@ export function App() {
                       rows={mode === "code" && !composerExpanded ? 1 : 3}
                       aria-label="คำสั่ง"
                       placeholder={
-                        mode === "code"
+                        nextPrompt ? `${nextPrompt}   ⇥ Tab`
+                        : mode === "code"
                             ? target === "all" ? `พิมพ์ข้อความถึงทุก session (${running.length})…` : composerTarget ? `พิมพ์ข้อความถึง ${composerTarget.name.split("·")[0].trim()}…` : `คุยกับ ${quickProvider ? providerIdentity(quickProvider).label : "AI"} เรื่องอะไรดี…`
                             : mode === "agent"
                               ? "บอกเป้าหมายให้ทีม เช่น ทำหน้าเข้าสู่ระบบพร้อมทดสอบ…"
@@ -1547,6 +1630,11 @@ export function App() {
                       onKeyDown={(e) => {
                         if (slashMenu.current?.keyDown(e)) return;
                         if (mentionMenu.current?.keyDown(e)) return;
+                        if (e.key === "Tab" && !e.shiftKey && nextPrompt) {
+                          e.preventDefault();
+                          setDraft(nextPrompt);
+                          return;
+                        }
                         if (
                           e.key === "Enter" &&
                           !e.shiftKey &&
@@ -1608,7 +1696,7 @@ export function App() {
                         }}
                       />
                       <button
-                        className="icon-button"
+                        className="icon-button composer-stop"
                         title={
                           mode === "code"
                             ? "หยุดคำสั่ง (Ctrl+C)"
@@ -1670,7 +1758,7 @@ export function App() {
                   </div>
                 )}
                 <div className="composer-hint">
-                  <span>Enter ส่ง{mode === "code" ? " · Ctrl+Enter ต่อคิว" : ""} · Shift + Enter ขึ้นบรรทัดใหม่ · Ctrl+Click เพื่อเปิดลิงก์</span>
+                  <span>Enter ส่ง{chatTarget ? " (ขณะ AI ทำงาน = แทรกทันที) · Ctrl+Enter ต่อคิว" : mode === "code" ? " · Ctrl+Enter ต่อคิว" : ""} · Shift + Enter ขึ้นบรรทัดใหม่ · Ctrl+Click เพื่อเปิดลิงก์</span>
                   <span>ตรวจคำสั่งก่อนส่งเสมอ</span>
                 </div>
               </div>
@@ -2012,7 +2100,7 @@ export function App() {
             {dialog === "settings" && (
               <>
                 <div className="mission-settings">
-<nav className="settings-nav" aria-label="หมวดการตั้งค่า">{[["tools", "เครื่องมือ AI"], ["models", "Model และ Effort"], ["folders", "โฟลเดอร์"], ["voice", "เสียง"]].map(([id, label]) => <button key={id} aria-current={settingsTab === id ? "page" : undefined} onClick={() => setSettingsTab(id)}>{label}</button>)}</nav>
+<nav className="settings-nav" aria-label="หมวดการตั้งค่า">{[["tools", "เครื่องมือ AI"], ["models", "Model และ Effort"], ["folders", "โฟลเดอร์"], ["voice", "เสียง"], ["notify", "แจ้งเตือนและคำแนะนำ"]].map(([id, label]) => <button key={id} aria-current={settingsTab === id ? "page" : undefined} onClick={() => setSettingsTab(id)}>{label}</button>)}</nav>
 <div className="settings-content"><section hidden={settingsTab !== "tools"}>
                   <div className="settings-section-title">
                     <h3>เครื่องมือ CLI</h3>
@@ -2087,7 +2175,7 @@ export function App() {
                       ใส่ในช่องคำสั่ง
                     </button>
                   </div>
-                  </section><section hidden={settingsTab !== "voice"}><VoiceSettingsPanel settings={voiceSettings} onChange={setVoiceSettings} /></section></div>
+                  </section><section hidden={settingsTab !== "voice"}><VoiceSettingsPanel settings={voiceSettings} onChange={setVoiceSettings} /></section><section hidden={settingsTab !== "notify"}><NotifySettingsPanel /></section></div>
                 </div>
                 <div className="dialog-footer">
                   <span className="muted">บันทึกการตั้งค่าอัตโนมัติ</span>

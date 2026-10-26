@@ -327,10 +327,12 @@ try {
   check(true, 'recommendations disappear while the provider is working');
   sockets.get('ui-0').send(JSON.stringify({ type: 'state', running: false }));
   await pane.locator('.answer-next-steps').waitFor();
-  const search = pane.getByLabel('ค้นหาในแชต One');
+  await pane.getByRole('button', { name: 'ค้นหาในบทสนทนา', exact: true }).click();
+  const search = pane.getByLabel('คำค้นหาในบทสนทนา');
   await search.fill('เข้าสู่ระบบ');
   await pane.locator('.answer-next-steps').waitFor({ state: 'hidden' });
   await search.fill('');
+  await search.press('Escape');
   await composer.fill('/');
   const picker = page.locator('.slash-menu');
   await picker.getByRole('option').filter({ hasText: 'workspace-skill-99' }).waitFor({ state: 'attached' });

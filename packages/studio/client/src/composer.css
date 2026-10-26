@@ -219,7 +219,9 @@
 #root .work-canvas.code-mode .composer-box textarea { height: 50px; min-height: 50px; padding: 12px 16px 6px; }
 #root .work-canvas.code-mode .composer-bottom,
 #root .work-canvas.code-mode .session-chat-controls { padding-top: 0; padding-bottom: 4px; }
-#root .work-canvas .composer-target { max-width: min(240px, 30vw); min-height: 30px; padding: 4px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); font-size: 12px; }
+/* The send row keeps its controls whole; the session controls beside it give up the space instead. */
+#root .work-canvas .composer-bottom .composer-tools { min-width: max-content; }
+#root .work-canvas .composer-target { flex: none; max-width: min(240px, 30vw); min-height: 30px; padding: 4px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); font-size: 12px; }
 #root .work-canvas .composer-target:hover { background: var(--raised); }
 #root .work-canvas.code-mode .composer-bottom { min-height: 0; padding-right: 6px; gap: 2px; }
 #root .work-canvas.code-mode .composer-bottom .icon-button,

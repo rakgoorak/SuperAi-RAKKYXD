@@ -3,9 +3,11 @@ import { HEADLESS, loadDefaults } from '../providers';
 import { providerIdentity } from '../providerIdentity';
 import { ProviderBadge } from './ProviderBadge';
 import { ComposerOptions } from './ComposerOptions';
+import { ResponseStyleSelect } from './ResponseStyleSelect';
+import type { ResponseStyle } from '../responseStyle';
 
-export function QuickChatControls({ clis, provider, onProvider, disabled, onSetup }: {
-  clis: Cli[]; provider: string; onProvider: (id: string) => void; disabled: boolean; onSetup: () => void;
+export function QuickChatControls({ clis, provider, onProvider, disabled, onSetup, style = 'normal', onStyle }: {
+  clis: Cli[]; provider: string; onProvider: (id: string) => void; disabled: boolean; onSetup: () => void; style?: ResponseStyle; onStyle?: (value: ResponseStyle) => void;
 }) {
   const ready = clis.filter(cli => cli.available && HEADLESS.includes(cli.id));
   const defaults = loadDefaults()[provider];
@@ -17,6 +19,7 @@ export function QuickChatControls({ clis, provider, onProvider, disabled, onSetu
     </select></label>
     <span className="quick-chat-model" title="ใช้รุ่นและระดับการคิดจากการตั้งค่าของคุณ">{defaults?.model || 'ใช้รุ่นที่ตั้งไว้'}</span>
     <ComposerOptions label="ตัวเลือกบทสนทนาใหม่">
+      {onStyle && <ResponseStyleSelect value={style} onChange={onStyle} disabled={disabled} />}
       {provider && <><strong>{providerIdentity(provider).label}</strong><p>{providerIdentity(provider).connection}</p><p>{providerIdentity(provider).attachments}</p></>}
       <p>เริ่มด้วยสิทธิ์อ่านและวางแผน ปรับสิทธิ์แก้ไฟล์และรันคำสั่งได้ในห้องคุย</p>
       <small>มุมมองนี้ใช้ CLI ความสามารถจึงอาจต่างจากแอป Desktop ของผู้ให้บริการ</small>

@@ -24,8 +24,9 @@ interface Props {
   close: (id: string) => void; restart: (id: string) => void; add: (type?: string) => void; refresh: () => void;
   switchView: (id: string, view: PaneView) => void;
   onError: (message: string) => void;
+  rename: (id: string, name: string) => Promise<void>;
 }
-export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed, active, busy, hiddenIds = [], select, zoom, hide, unhide, unhideAll, close, restart, add, refresh, onError, switchView }: Props) {
+export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed, active, busy, hiddenIds = [], select, zoom, hide, unhide, unhideAll, close, restart, add, refresh, onError, switchView, rename }: Props) {
   // Closing deletes the session for good (it is kept across restarts otherwise), so ask first.
   const remove = (s: Session) => {
     window.dispatchEvent(new CustomEvent("superai:delete-session", { detail: { id: s.id, name: names[s.id] || s.name } }));
@@ -42,6 +43,26 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
   });
   const [editing, setEditing] = useState('');
   const [name, setName] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  useEffect(() => { setEditing(''); setName(''); }, [workspaceId]);
+  const saveName = async (id: string) => {
+    if (renaming) return;
+    setRenaming(true);
+    try {
+      await rename(id, name.trim());
+      setNames(current => { const next = { ...current }; delete next[id]; return next; });
+      setEditing('');
+    } catch (error) { onError((error as Error).message); }
+    finally { setRenaming(false); }
+  };
+  useEffect(() => {
+    const edit = (event: Event) => {
+      const session = sessions.find(item => item.id === (event as CustomEvent<string>).detail);
+      if (session && active) { setName(session.name); setEditing(session.id); }
+    };
+    window.addEventListener('superai:rename-session', edit);
+    return () => window.removeEventListener('superai:rename-session', edit);
+  }, [sessions, active]);
   const [weights, setWeights] = useState<Record<string, number[]>>(() => {
     const value = stored<unknown>('superai-pane-sizes', {});
     return value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).filter(([, v]) => Array.isArray(v) && v.every(n => typeof n === 'number' && Number.isFinite(n) && n > 0 && n < 100))) : {};
@@ -119,14 +140,19 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
       }} />;
   });
   return <div className="session-canvas" ref={area}>
-    {!grid && ordered.length > 1 && <div className="session-tabs">
+    {!grid && (ordered.length > 1 || editing) && <div className="session-tabs">
       {ordered.map(s => <div key={s.id} className={`session-tab ${s.id === selected ? 'active' : ''}`}>
         <button onClick={() => select(s.id)}><ProviderBadge provider={s.agentType} compact />{names[s.id] || s.name}</button>
+        <button className="tab-rename" title={`เปลี่ยนชื่อ ${s.name}`} onClick={() => { setName(s.name); setEditing(s.id); }}><Pencil size={12} /></button>
         {hide && <button title={`ซ่อน ${s.name} พับเก็บไว้ก่อน (ไม่ลบ)`} aria-label={`ซ่อน ${s.name}`} onClick={() => hide(s.id)}><EyeOff size={12} /></button>}
         <button title={`ลบ ${s.name}`} disabled={busy} onClick={() => remove(s)}><X size={12} /></button>
       </div>)}
       <button className="icon-button" title="เพิ่ม session" onClick={() => add()}><Plus size={14} /></button>
     </div>}
+    {!grid && editing && <form className="session-rename-inline" onSubmit={event => { event.preventDefault(); void saveName(editing); }}>
+      <input autoFocus aria-label="ชื่อห้องใหม่" maxLength={60} value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape' && !renaming) setEditing(''); }} />
+      <button disabled={renaming || !name.trim()} type="submit">บันทึกชื่อ</button><button type="button" disabled={renaming} onClick={() => setEditing('')}>ยกเลิก</button>
+    </form>}
     <div className={`tile-surface ${fitted ? 'fitted' : ''}`}>
       {ordered.length === 0 && hiddenList.length > 0 && (
         <div className="hidden-sessions-empty">
@@ -162,9 +188,9 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
             {grid && <div className="terminal-cell-heading" draggable={editing !== s.id}
               onDragStart={e => { dragging.current = s.id; e.dataTransfer.setData('text/plain', s.id); }}
               onDragEnd={() => { dragging.current = ''; }} onDoubleClick={() => zoom(s.id)}>
-              {editing === s.id ? <form className="pane-rename" onSubmit={e => { e.preventDefault(); setNames(current => ({ ...current, [s.id]: name.trim() || s.name })); setEditing(''); }}>
+              {editing === s.id ? <form className="pane-rename" onSubmit={e => { e.preventDefault(); void saveName(s.id); }}>
                 <input autoFocus aria-label="ชื่อ session" value={name} maxLength={60} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setEditing(''); }} />
-                <button type="submit">บันทึก</button><button type="button" onClick={() => setEditing('')}>ยกเลิก</button>
+                <button type="submit" disabled={renaming || !name.trim()}>บันทึก</button><button type="button" disabled={renaming} onClick={() => setEditing('')}>ยกเลิก</button>
               </form> : <button className="pane-title" onClick={() => select(s.id)} title={`${names[s.id] || s.name} · ${s.agentType} · ${s.cwd}`}>
                 <span className={`status-dot ${s.status === 'running' ? '' : s.status === 'error' ? 'bad' : 'offline'}`} />
                 <ProviderBadge provider={s.agentType} compact /><strong>{names[s.id] || s.name}</strong>

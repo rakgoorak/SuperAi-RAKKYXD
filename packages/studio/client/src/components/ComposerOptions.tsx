@@ -24,9 +24,8 @@ export function ComposerOptions({ label, children, attention = false }: { label:
     return () => window.removeEventListener('resize', position);
   }, [open]);
   useEffect(() => {
-    if (!open) return;
     const dismiss = (event: PointerEvent | KeyboardEvent) => {
-      if (!root.current) return;
+      if (!root.current?.open) return;
       if (event instanceof KeyboardEvent) {
         if (event.key !== 'Escape' || event.defaultPrevented) return;
         root.current.open = false;
@@ -37,7 +36,7 @@ export function ComposerOptions({ label, children, attention = false }: { label:
     document.addEventListener('pointerdown', dismiss);
     document.addEventListener('keydown', dismiss);
     return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', dismiss); };
-  }, [open]);
+  }, []);
   return <details ref={root} className={`composer-options ${attention ? 'needs-attention' : ''}`} onToggle={event => setOpen(event.currentTarget.open)}>
     <summary aria-label={label} title={attention ? `${label} · ตรวจบัญชี AI` : label} aria-expanded={open} aria-controls={id}><SlidersHorizontal size={15} />{attention && <span>ตรวจบัญชี</span>}</summary>
     <div ref={popup} className="composer-options-popover" id={id} role="group" aria-label={label}>{children}</div>

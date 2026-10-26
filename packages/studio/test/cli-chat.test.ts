@@ -367,3 +367,31 @@ test('Ctrl+Enter queues behind a running turn; the queue sends in order, can be 
   const user = chats.snapshot('q').items.filter((i) => i.kind === 'user').at(-1) as any;
   assert.equal(user.text, 'รอหลังหยุด');
 });
+
+test('Enter while answering interrupts: the turn stops and the new message goes first, ahead of the queue', async () => {
+  const fake = fakeSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch);
+  chats.send('i', { agent: 'codex', cwd: process.cwd(), text: 'งานยาว' });
+  chats.send('i', { agent: 'codex', cwd: process.cwd(), text: 'ในคิว' }, { queue: true });
+  assert.equal(chats.send('i', { agent: 'codex', cwd: process.cwd(), text: 'เปลี่ยนแผน' }, { interrupt: true }), 'interrupted');
+  assert.deepEqual(chats.snapshot('i').queued.map((q) => q.text), ['เปลี่ยนแผน', 'ในคิว']);
+  fake.calls[0].proc.emit('close', 1);
+  for (let i = 0; i < 100 && fake.calls.length < 2; i++) await settle();
+  assert.equal(fake.calls.length, 2, 'the interrupting message starts as soon as the old turn exits');
+  assert.match(fake.calls[1].stdin, /เปลี่ยนแผน/);
+  assert.ok(chats.snapshot('i').items.some((item) => item.kind === 'notice' && item.text === 'หยุดเพื่อรับข้อความใหม่'));
+  assert.deepEqual(chats.snapshot('i').queued.map((q) => q.text), ['ในคิว']);
+});
+
+test('a stop pressed while an interrupt waits keeps the queue paused', async () => {
+  const fake = fakeSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch);
+  chats.send('j', { agent: 'codex', cwd: process.cwd(), text: 'งานยาว' });
+  chats.send('j', { agent: 'codex', cwd: process.cwd(), text: 'เปลี่ยนแผน' }, { interrupt: true });
+  chats.cancel('j');
+  fake.calls[0].proc.emit('close', 1);
+  await settle(chats, 'j');
+  await settle();
+  assert.equal(fake.calls.length, 1);
+  assert.deepEqual(chats.snapshot('j').queued.map((q) => q.text), ['เปลี่ยนแผน']);
+});
