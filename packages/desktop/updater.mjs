@@ -252,6 +252,7 @@ export class Updater {
         `i=0; while kill -0 ${pid} 2>/dev/null && [ $i -lt 120 ]; do sleep 0.5; i=$((i+1)); done`,
         `rm -rf ${q(target + ".old")}`,
         `if mv ${q(target)} ${q(target + ".old")} && ditto ${q(source)} ${q(target)}; then rm -rf ${q(target + ".old")}; else rm -rf ${q(target)}; mv ${q(target + ".old")} ${q(target)}; fi`,
+        `xattr -cr ${q(target)} 2>/dev/null || true`,
         `open ${q(target)}`,
       ].join("\n"), { mode: 0o755 });
       spawn("/bin/sh", [script], { detached: true, stdio: "ignore" }).unref();
