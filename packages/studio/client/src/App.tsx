@@ -479,7 +479,13 @@ export function App() {
     panel.addEventListener("keydown", keepFocus);
     return () => {
       panel.removeEventListener("keydown", keepFocus);
-      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+      if (
+        previous instanceof HTMLElement &&
+        previous.isConnected &&
+        !document.activeElement?.closest("[data-terminal-pane]")
+      ) {
+        previous.focus();
+      }
     };
   }, [dialog]);
   const loadOpenCodeModels = useCallback(async () => {
@@ -538,6 +544,9 @@ export function App() {
             setSelected(session.id);
             remaining.shift(); opened++;
         }
+        setMode("code");
+        setDialog(null);
+        setLaunchPlan(null);
       } catch (e) {
         const pending = new Map<string, number>();
         remaining.forEach(type => pending.set(type, (pending.get(type) || 0) + 1));
@@ -549,9 +558,6 @@ export function App() {
           setError("อ่านสถานะล่าสุดไม่ได้ กำลังลองเชื่อมต่อใหม่ · session ที่เปิดสำเร็จยังทำงานอยู่");
         });
       }
-      setMode("code");
-      setDialog(null);
-      setLaunchPlan(null);
       setNotice(`เปิดแล้ว ${launchTotal} session`);
     });
   const closeSession = (id: string) =>

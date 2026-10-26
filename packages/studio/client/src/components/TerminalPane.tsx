@@ -343,7 +343,15 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
 
   return (
     <div
-      onMouseDown={onFocus}
+      onMouseDown={(event) => {
+        onFocus();
+        if (!chatting && !reading) {
+          const target = event.target as HTMLElement | null;
+          if (!target?.closest('button, input, select, a, .terminal-reader')) {
+            requestAnimationFrame(() => termRef.current?.focus());
+          }
+        }
+      }}
       data-terminal-pane={tab.sessionId ? '' : undefined}
       onDragEnter={(event) => {
         if (!hasFiles(event)) return;
