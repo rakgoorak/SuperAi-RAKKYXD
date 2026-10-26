@@ -239,6 +239,9 @@ else {
         show: false,
         autoHideMenuBar: true,
         titleBarStyle: "hidden",
+        ...(process.platform === "darwin"
+          ? { trafficLightPosition: { x: 16, y: 19 } }
+          : {}),
         titleBarOverlay: {
           color: "#20201e",
           symbolColor: "#e9e8e3",

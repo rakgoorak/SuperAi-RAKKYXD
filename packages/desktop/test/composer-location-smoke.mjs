@@ -89,7 +89,8 @@ try {
   await context.getByText('main', { exact: true }).waitFor();
   const plus = page.getByRole('button', { name: 'แนบไฟล์', exact: true });
   const settings = page.locator('.session-chat-controls');
-  check((await plus.boundingBox()).x < (await settings.boundingBox()).x, 'attachment plus precedes model and account controls');
+  const modelControls = page.locator('.chat-model-controls');
+  check((await plus.boundingBox()).x < (await modelControls.boundingBox()).x, 'attachment plus precedes model and account controls');
   await plus.click();
   check(await page.getByRole('menu').isVisible(), 'leading attachment button still opens its menu');
   await page.keyboard.press('Escape');

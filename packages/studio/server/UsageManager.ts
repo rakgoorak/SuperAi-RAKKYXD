@@ -155,14 +155,24 @@ export function parseOpenCodeStats(text: string): { label: string; value: string
 
 async function runCli(id: string, args: string[], timeout = 60000) {
   const launch = cliLaunch(id, args);
-  const { stdout } = await promisify(execFile)(launch.command, launch.args, {
-    windowsHide: true,
-    timeout,
-    maxBuffer: 2 * 1024 * 1024,
-    cwd: os.tmpdir(),
-    env: { ...process.env, ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0" },
-  });
-  return stdout.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const { stdout } = await promisify(execFile)(launch.command, launch.args, {
+        windowsHide: true,
+        timeout,
+        maxBuffer: 2 * 1024 * 1024,
+        cwd: os.tmpdir(),
+        env: { ...process.env, ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0" },
+      });
+      return stdout.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
+    } catch (err: any) {
+      if (attempt < 2 && /database is locked|SQLITE_BUSY/i.test(String(err?.message || err))) {
+        await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 async function newestCodexLog(): Promise<string | null> {

@@ -25,7 +25,10 @@ try {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.waitForSelector('.app-shell');
-  await page.evaluate(() => localStorage.setItem('superai-setup-dismissed', '1'));
+  await page.evaluate(() => {
+    localStorage.setItem('superai-setup-dismissed', '1');
+    localStorage.setItem('superai-preview', 'true');
+  });
   await page.reload();
   await page.waitForSelector('.app-shell');
   await page.route('**/api/usage/*', route => route.fulfill({ json: {
@@ -67,7 +70,7 @@ try {
       if (close === 'button') await panel.getByTitle('ปิด', { exact: true }).click();
       else if (close === 'escape') await page.keyboard.press('Escape');
       else if (close === 'toggle') await usage.click();
-      else await page.locator('.app-canvas').click({ position: { x: 10, y: 5 } });
+      else await page.locator('.work-canvas').click({ position: { x: 10, y: 5 } });
       await panel.waitFor({ state: 'hidden' });
       await expectBrowserVisible(true);
     }

@@ -10,7 +10,7 @@
 #root .preview-image.original-size { display: block; }
 #root .preview-image.original-size img { max-width: none; max-height: none; }
 #root .project-file-preview > iframe { flex: 1; width: 100%; min-height: 0; border: 0; background: white; }
-#root .preview-file-text { flex: 1; min-height: 0; overflow: auto; padding: 16px; margin: 0; font: 12px/1.8 Consolas, 'Noto Sans Thai', monospace; white-space: pre; tab-size: 2; }
+#root .preview-file-text { flex: 1; min-height: 0; overflow: auto; padding: 16px; margin: 0; font: 12px/1.8 Consolas, 'SF Mono', Menlo, Monaco, 'Noto Sans Thai', monospace; white-space: pre; tab-size: 2; }
 #root .preview-file-text > span { display: block; min-height: 1.8em; }
 #root .preview-file-text > span.highlighted { background: var(--selected); color: var(--text); }
 #root .markdown a.md-link { color: #e7b99d; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; overflow-wrap: anywhere; }

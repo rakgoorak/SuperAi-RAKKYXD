@@ -295,7 +295,7 @@
 
 .quick-editor-path {
   font-size: 12px;
-  font-family: Consolas, 'Noto Sans Thai', monospace;
+  font-family: Consolas, 'SF Mono', Menlo, Monaco, 'Noto Sans Thai', monospace;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -359,7 +359,7 @@
   background: #181816;
   border-right: 1px solid var(--border, #353531);
   color: #666460;
-  font-family: Consolas, 'Noto Sans Thai', monospace;
+  font-family: Consolas, 'SF Mono', Menlo, Monaco, 'Noto Sans Thai', monospace;
   font-size: 12px;
   line-height: 20px;
   text-align: right;
@@ -380,7 +380,7 @@
   padding: 12px;
   background: transparent;
   color: #ecebec;
-  font-family: Consolas, 'Noto Sans Thai', monospace;
+  font-family: Consolas, 'SF Mono', Menlo, Monaco, 'Noto Sans Thai', monospace;
   font-size: 12px;
   line-height: 20px;
   border: none;
