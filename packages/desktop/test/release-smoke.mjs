@@ -41,6 +41,8 @@ try {
   const result = await request(`/api/terminals/${terminal.id}/input`, {input:'echo RELEASE_PTY_OK\r'}); assert.equal(result.success,true);
   await eventually(async()=> (await request('/api/terminals')).find(s=>s.id===terminal.id)?.bufferedOutput.includes('RELEASE_PTY_OK')); passed.push('PTY command/output');
   steps.step('open preview');
+  // Preview starts closed; open the dock from the toolbar first.
+  if (!await page.getByRole('textbox',{name:'URL เว็บไซต์',exact:true}).isVisible()) await page.getByRole('button',{name:'Preview',exact:true}).click();
   await page.getByRole('textbox',{name:'URL เว็บไซต์',exact:true}).fill(address);
   await page.getByTitle('เปิด URL',{exact:true}).click();
   await eventually(()=>withTimeout(page.evaluate(()=>window.superai.browser('state').then(s=>s.visible&&s.tabs.some(t=>t.title==='Release Preview'&&!t.loading))), 10000, 'browser state'));
