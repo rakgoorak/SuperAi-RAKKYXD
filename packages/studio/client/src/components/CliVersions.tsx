@@ -110,14 +110,15 @@ export function OutdatedNotice({ cliId, onError }: { cliId: string; onError: (m:
   const { versions, update, jobFor } = useCliVersions(onError);
   const v = versions.find((x) => x.id === cliId);
   const job = jobFor(cliId);
-  if (!v || (v.status !== "outdated" && !job)) return null;
+  if (!v || (v.status !== "outdated" && (!job || (v.status === "latest" && job.status === "failed")))) return null;
+  const lastLogLine = job?.status === "failed" ? job.log.trim().split("\n").filter(Boolean).slice(-1)[0] : "";
   return (
     <div className={`outdated-notice ${job?.status || ""}`} role="status">
       <ArrowUpCircle size={16} />
       <span>
         {job?.status === "running" ? `กำลังอัปเดต ${v.name}…`
           : job?.status === "completed" ? `อัปเดต ${v.name} แล้ว${job.after ? ` (v${job.after})` : ""} เปิด session ได้เลย`
-          : job?.status === "failed" ? job.error
+          : job?.status === "failed" ? <>{job.error}{lastLogLine ? <small className="block muted">{lastLogLine}</small> : null}</>
           : <>{v.name} มีเวอร์ชันใหม่ <b>v{v.latest}</b> (ติดตั้งอยู่ v{v.installed}) ถ้าไม่อัปเดตก่อน CLI อาจอัปเดตตัวเองตอนเปิดแท็บแล้วปิดไป</>}
       </span>
       {(!job || job.status === "failed") && <button className="secondary" onClick={() => void update(cliId)}>อัปเดตก่อนเปิด</button>}

@@ -69,6 +69,7 @@ export const cliPath = () => [
  */
 export const cliInstallEnv = (): Record<string, string> => ({
   npm_config_allow_scripts: Object.values(INSTALL_PACKAGES).join(","),
+  npm_config_prefix: managedCliPrefix(),
   // Our own update (`claude update`) must run even though sessions turn auto-updates off.
   DISABLE_AUTOUPDATER: "0",
 });
