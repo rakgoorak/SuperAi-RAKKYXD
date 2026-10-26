@@ -1,10 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
-import { cliLaunch, cliEnv, cliInstallEnv, findExecutable, getCliDefinition } from "./CliCatalog.js";
+import { cliLaunch, cliEnv, cliInstallEnv, findExecutable, getCliDefinition, managedCliPrefix } from "./CliCatalog.js";
 
 /**
  * Installed vs latest version of each AI CLI, and updating it with the CLI's own updater,
@@ -78,6 +80,128 @@ export const CONFIRMED_LATEST = /already (on|using|running|at|have) (the )?(late
 
 const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").replace(/\r(?!\n)/g, "\n");
 
+function npmInstallInvocation(pkg: string): { command: string; args: string[] } | null {
+  const node = findExecutable("node");
+  const npm = findExecutable("npm");
+  if (!node || !npm) return null;
+  try {
+    const real = fs.realpathSync(npm);
+    const entry = [
+      real.endsWith(".js") ? real : "",
+      path.join(path.dirname(real), "node_modules/npm/bin/npm-cli.js"),
+      path.resolve(path.dirname(real), "../lib/node_modules/npm/bin/npm-cli.js"),
+    ].find((p) => p && fs.existsSync(p));
+    const prefix = managedCliPrefix();
+    fs.mkdirSync(prefix, { recursive: true });
+    if (entry) {
+      return {
+        command: node,
+        args: [
+          entry,
+          "install",
+          "--global",
+          "--prefix",
+          prefix,
+          `${pkg}@latest`,
+          "--registry=https://registry.npmjs.org",
+          "--no-fund",
+          "--no-audit",
+        ],
+      };
+    }
+  } catch {}
+  return null;
+}
+
+export function spawnCliUpdate(id: string, args: string[]): ChildProcess {
+  const out = new PassThrough();
+  const err = new PassThrough();
+  const wrapper = new EventEmitter() as unknown as ChildProcess & { stdout: PassThrough; stderr: PassThrough };
+  wrapper.stdout = out;
+  wrapper.stderr = err;
+  let current: ChildProcess | null = null;
+  let killed = false;
+  wrapper.kill = () => {
+    killed = true;
+    current?.kill();
+    return true;
+  };
+
+  const env = { ...process.env, ...cliEnv(), ...cliInstallEnv(), NO_COLOR: "1", FORCE_COLOR: "0", CI: "1" };
+  const runStep = (command: string, stepArgs: string[], onDone: (code: number | null, error?: Error) => void) => {
+    let child: ChildProcess;
+    try {
+      child = spawn(command, stepArgs, {
+        windowsHide: true,
+        cwd: os.tmpdir(),
+        stdio: ["ignore", "pipe", "pipe"],
+        env,
+      });
+    } catch (e: any) {
+      onDone(null, e);
+      return;
+    }
+    current = child;
+    child.stdout?.on("data", (c) => out.write(c));
+    child.stderr?.on("data", (c) => err.write(c));
+    let settled = false;
+    child.on("error", (e) => {
+      if (settled) return;
+      settled = true;
+      onDone(null, e);
+    });
+    child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      onDone(code);
+    });
+  };
+
+  const pkg = NPM_PACKAGE[id];
+  const exe = findExecutable(getCliDefinition(id).command) || "";
+  const isBundledAppBinary = process.platform === "darwin" && exe.startsWith("/Applications/");
+  const npmStep = pkg ? npmInstallInvocation(pkg) : null;
+
+  if (id === "freebuff" && npmStep) {
+    runStep(npmStep.command, npmStep.args, (code, error) => {
+      if (killed || error || code !== 0) {
+        if (error) wrapper.emit("error", error);
+        else wrapper.emit("close", code);
+        return;
+      }
+      const verify = cliLaunch(id, args);
+      runStep(verify.command, verify.args, (vCode, vErr) => {
+        if (vErr) wrapper.emit("error", vErr);
+        else wrapper.emit("close", vCode);
+      });
+    });
+    return wrapper;
+  }
+
+  if (isBundledAppBinary && npmStep) {
+    runStep(npmStep.command, npmStep.args, (code, error) => {
+      if (error) wrapper.emit("error", error);
+      else wrapper.emit("close", code);
+    });
+    return wrapper;
+  }
+
+  const launch = cliLaunch(id, args);
+  runStep(launch.command, launch.args, (code, error) => {
+    if (!killed && (error || code !== 0) && npmStep) {
+      out.write(`\nกำลังอัปเดต ${pkg}@latest ผ่าน npm...\n`);
+      runStep(npmStep.command, npmStep.args, (npmCode, npmErr) => {
+        if (npmErr) wrapper.emit("error", npmErr);
+        else wrapper.emit("close", npmCode);
+      });
+      return;
+    }
+    if (error) wrapper.emit("error", error);
+    else wrapper.emit("close", code);
+  });
+  return wrapper;
+}
+
 const defaultDeps: Deps = {
   installed: (id) => !!findExecutable(getCliDefinition(id).command),
   run: async (id, args, timeout) => {
@@ -94,14 +218,7 @@ const defaultDeps: Deps = {
     const data = await res.json();
     return typeof data?.version === "string" ? data.version : null;
   },
-  spawnUpdate: (id, args) => {
-    const launch = cliLaunch(id, args);
-    return spawn(launch.command, launch.args, {
-      windowsHide: true, cwd: os.tmpdir(), stdio: ["ignore", "pipe", "pipe"],
-      // The CLI's own updater installs itself globally with npm (see cliInstallEnv).
-      env: { ...process.env, ...cliEnv(), ...cliInstallEnv(), NO_COLOR: "1", FORCE_COLOR: "0", CI: "1" },
-    });
-  },
+  spawnUpdate: (id, args) => spawnCliUpdate(id, args),
   confirmedFile: path.join(os.homedir(), ".opencode-multi", "superai-cli-latest.json"),
 };
 
