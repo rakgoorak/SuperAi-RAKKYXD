@@ -8,6 +8,8 @@ import { chatPrefs, hasChatPrefs, onChatCommand, setChatPrefs, PERMISSION_LABEL,
 import { permissionDescription, permissionLabel, providerIdentity } from '../providerIdentity';
 import { ProviderBadge } from './ProviderBadge';
 import { ComposerOptions } from './ComposerOptions';
+import { ResponseStyleSelect } from './ResponseStyleSelect';
+import type { ResponseStyle } from '../responseStyle';
 
 /**
  * Account, Model and Effort of the chat session the bottom composer sends to.
@@ -18,6 +20,7 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
   const [model, setModel] = useState(chatPrefs(sessionId).model);
   const [effort, setEffort] = useState(chatPrefs(sessionId).effort);
   const [permission, setPermission] = useState<ChatPermission>(chatPrefs(sessionId).permission);
+  const [style, setStyle] = useState<ResponseStyle>(chatPrefs(sessionId).responseStyle);
   const [ready, setReady] = useState(false);
   const [problem, setProblem] = useState('');
   const [busy, setBusy] = useState(false);
@@ -69,24 +72,24 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
 
   return (
     <div className="session-chat-controls" aria-label={`การตั้งค่าแชท ${name}`}>
-      {agent && <ProviderBadge provider={agent} />}
+      {/* Claude-style footer: what the AI may do on the left; which AI, model and effort on the right. */}
+      <select className="chat-permission-select" aria-label={`สิทธิ์ของ ${name} ในข้อความถัดไป`} value={permission} disabled={disabled}
+        title={agent ? permissionDescription(agent, permission) : 'CLI ที่ทำงานเบื้องหลังถามก่อนไม่ได้ จึงเลือกไว้ล่วงหน้า'}
+        onChange={(e) => { const value = e.target.value as ChatPermission; setPermission(value); setChatPrefs(sessionId, { permission: value }); }}>
+        {(Object.keys(PERMISSION_LABEL) as ChatPermission[]).map((p) => <option key={p} value={p}>{permissionLabel(agent, p)}</option>)}
+      </select>
       {problem && <div className="chat-composer-problem" role="alert">{problem}<button type="button" onClick={() => setProblem('')} aria-label="ปิดข้อความ"><X size={12} /></button></div>}
+      {agent && <ProviderBadge provider={agent} />}
       <div className="chat-model-controls">
         <label>Model<ModelCombo label={`Model ในแชท ${name}`} value={model} options={list?.models || []} placeholder="ค่าเริ่มต้นของ CLI" disabled={disabled || !ready}
           onChange={(value) => { setModel(value); setEffort(''); }} /></label>
+        {efforts.length > 0 && <select className="chat-effort-select" aria-label={`Effort ในแชท ${name}`} title="ระดับการคิด" value={effort} disabled={disabled} onChange={(e) => setEffort(e.target.value)}>
+          <option value="">Effort เริ่มต้น</option>{efforts.map((e) => <option key={e} value={e}>{EFFORT_LABEL[e] || e}</option>)}
+        </select>}
       </div>
       <ComposerOptions label="ตัวเลือก AI" attention={!!authError || auth?.status === 'login-required' || auth?.status === 'not-installed'}>
-        <div className="composer-option-fields">
-        <label>ระดับการคิด<select aria-label={`Effort ในแชท ${name}`} value={effort} disabled={disabled || !efforts.length} onChange={(e) => setEffort(e.target.value)}>
-          <option value="">ค่าเริ่มต้น</option>{efforts.map((e) => <option key={e} value={e}>{EFFORT_LABEL[e] || e}</option>)}
-        </select></label>
-        <label>สิทธิ์<select aria-label={`สิทธิ์ของ ${name} ในข้อความถัดไป`} value={permission} disabled={disabled}
-          title="CLI ที่ทำงานเบื้องหลังถามก่อนไม่ได้ จึงเลือกไว้ล่วงหน้า: อ่านอย่างเดียว / แก้ไฟล์ในโปรเจกต์ได้ / แก้ไฟล์และรันคำสั่งได้เอง"
-          onChange={(e) => { const value = e.target.value as ChatPermission; setPermission(value); setChatPrefs(sessionId, { permission: value }); }}>
-          {(Object.keys(PERMISSION_LABEL) as ChatPermission[]).map((p) => <option key={p} value={p}>{permissionLabel(agent, p)}</option>)}
-        </select></label>
-        </div>
-        {agent && <p className="permission-description">{permissionDescription(agent, permission)}</p>}
+        <ResponseStyleSelect value={style} disabled={disabled || !ready} onChange={value => { setStyle(value); setChatPrefs(sessionId, { responseStyle: value }); }} />
+        {agent && <p className="permission-description">{permissionLabel(agent, permission)} · {permissionDescription(agent, permission)}</p>}
         <section className={`composer-option-account ${auth?.status || ''}`} aria-label="บัญชีของ session">
           <strong>{auth?.status === 'authenticated' ? 'บัญชีเชื่อมต่อแล้ว' : 'บัญชี AI'}</strong>
           <p>{authError || auth?.note || (agent ? 'กำลังตรวจบัญชี…' : 'กำลังโหลดการตั้งค่า…')}</p>

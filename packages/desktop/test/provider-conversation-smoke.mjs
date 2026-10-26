@@ -125,10 +125,11 @@ try {
   check(sends[1].model === 'saved-codex' && sends[1].effort === 'high' && sends[1].permission === 'read' && sends[1].attachments.length === 1, 'first message uses saved model, effort, read permission and attachment');
   check(await composer.inputValue() === '' && await page.locator('.attachment-cards li').count() === 0, 'accepted send clears only the submitted draft and attachments');
   await page.locator('.session-chat-controls .provider-badge[aria-label="ChatGPT (Codex)"]').waitFor();
-  check(await page.locator('.composer-option-fields:visible').count() === 0, 'provider and model stay visible while effort and permissions remain folded');
+  // Claude-style footer: permission on the left, provider/model/effort on the right, the rest folded.
+  check(await page.locator('.session-chat-controls .chat-permission-select').isVisible() && await page.locator('.session-chat-controls .chat-effort-select').isVisible(), 'permission and effort sit in the footer under the composer');
+  await page.locator('.session-chat-controls .chat-permission-select').selectOption('edit');
+  await page.locator('.session-chat-controls .chat-effort-select').selectOption('low');
   await page.locator('.session-chat-controls .composer-options > summary').click();
-  await page.locator('.composer-option-fields select[aria-label^="สิทธิ์"]').selectOption('edit');
-  await page.locator('.composer-option-fields select[aria-label^="Effort"]').selectOption('low');
   check(await page.locator('.permission-description').innerText().then(text => text.includes('ไม่ได้แยกสิทธิ์')), 'Codex permission explanation states that edit also permits command execution');
   await page.screenshot({ path: path.join(output, 'options-desktop.png') });
   await page.keyboard.press('Escape');

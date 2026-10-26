@@ -11,4 +11,6 @@ contextBridge.exposeInMainWorld('superai', {
   stageClipboardImage: filePath => ipcRenderer.invoke('clipboard:stage-image', filePath),
   update: action => ipcRenderer.invoke('update:action', action),
   onUpdate: callback => listen('update:state', callback),
+  notify: notice => ipcRenderer.invoke('app:notify', notice),
+  onNotifyOpen: callback => listen('notify:open', callback),
 });

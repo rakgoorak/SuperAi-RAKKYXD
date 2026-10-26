@@ -4,7 +4,12 @@ export function recoveryHint(message: string) {
   if (/network|fetch|connect|timeout|timed.?out|ECONN|เชื่อมต่อ/i.test(message)) return 'การเชื่อมต่อขัดข้อง ตรวจเครือข่ายและผู้ให้บริการ แล้วลองใหม่';
   return 'ตรวจรายละเอียดข้อผิดพลาดด้านล่าง แก้ข้อความหรือเครื่องมือก่อนลองใหม่';
 }
-export function prepareMessage(text: string, sessionId?: string, options?: { expand?: boolean }) {
+/** What the user can do about an error, for the compact toast: nothing extra when the error says it all. */
+export function toastRecovery(message: string): { hint: string; account: boolean } {
+  const hint = recoveryHint(message);
+  return /ตรวจรายละเอียด/.test(hint) ? { hint: '', account: false } : { hint, account: /บัญชี|โควตา/.test(hint) };
+}
+export function prepareMessage(text: string, sessionId?: string, options?: { expand?: boolean; append?: boolean }) {
   window.dispatchEvent(new CustomEvent('superai:prepare-message', { detail: { text, sessionId, ...options } }));
 }
 export function showChanges(sessionId?: string) {

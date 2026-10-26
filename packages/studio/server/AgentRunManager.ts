@@ -15,6 +15,8 @@ import { CliProvider, attachmentProblem } from "./CliProvider.js";
 import { cliLaunch } from "./CliCatalog.js";
 import { Seat, validateSeat } from "./Providers.js";
 import { skillPrompt } from "./ChatSkills.js";
+import { contextualPrompt, type ProjectContext } from './ProjectContext.js';
+import type { ResponseStyle } from './ResponseStyle.js';
 
 export function ollamaBase() {
   const value = process.env.SUPERAI_OLLAMA_URL || "http://127.0.0.1:11434";
@@ -105,6 +107,8 @@ export interface Activity {
 }
 
 export interface ConversationRun {
+  projectContext?: ProjectContext;
+  responseStyle?: ResponseStyle;
   id: string;
   wsId: string;
   prompt: string;
@@ -131,6 +135,8 @@ export interface ConversationRun {
 }
 
 export interface ChatRequest {
+  projectContext?: ProjectContext;
+  responseStyle?: ResponseStyle;
   prompt: string;
   panel: unknown;
   summarizer?: unknown;
@@ -138,6 +144,8 @@ export interface ChatRequest {
   attachments?: string[];
 }
 export interface AgentRequest {
+  projectContext?: ProjectContext;
+  responseStyle?: ResponseStyle;
   prompt: string;
   main: unknown;
   subagents: unknown;
@@ -317,7 +325,8 @@ export class AgentRunManager {
   }
 
   /** Run one prompt on a seat. CLIs use their own tools; Ollama gets SuperAi's file tools when allowed. */
-  private async ask(seat: Seat, prompt: string, cwd: string, signal: AbortSignal, opts: { tools: boolean; readTools: boolean; attachments: string[]; onChunk: (t: string) => void }) {
+  private async ask(seat: Seat, prompt: string, cwd: string, signal: AbortSignal, opts: { tools: boolean; readTools: boolean; attachments: string[]; onChunk: (t: string) => void; projectContext?: ProjectContext; responseStyle?: ResponseStyle }) {
+    prompt = contextualPrompt(prompt, opts.projectContext, opts.responseStyle);
     const provider = this.provider(seat, cwd, signal, opts.tools, opts.readTools, opts.attachments);
     if (seat.provider.startsWith("cli:")) {
       const result = await provider.stream([{ role: "user", content: prompt }], opts.onChunk);
@@ -352,7 +361,7 @@ export class AgentRunManager {
     const prompt = this.begin(wsId, String(body.prompt || ""), attachments, summarizer ? [...panel, summarizer] : panel);
     const history = this.history(wsId, "chat");
     const run: ConversationRun = {
-      id: randomUUID(), wsId, prompt, mode: "chat", status: "running", output: "", createdAt: Date.now(), allowTools: false, attachments, activity: [],
+      id: randomUUID(), wsId, prompt, mode: "chat", status: "running", output: "", createdAt: Date.now(), allowTools: false, attachments, activity: [], projectContext: body.projectContext, responseStyle: body.responseStyle,
       panel: panel.map((seat) => ({ seat, status: "running", output: "", startedAt: Date.now() })),
       summarizer, summaryStyle: style, summaryStatus: summarizer ? "pending" : undefined,
     };
@@ -365,7 +374,7 @@ export class AgentRunManager {
             const selected = answer.seat.provider.startsWith("cli:") ? skillPrompt(prompt, cwd, answer.seat.provider.slice(4)) : prompt;
             const question = `${history ? `บทสนทนาก่อนหน้า:\n${history}\n\n` : ""}${selected}`;
             const text = await this.ask(answer.seat, `ตอบเป็นภาษาไทย ให้เหตุผลประกอบ\n\n${question}`, cwd, controller.signal, {
-              tools: false, readTools: true, attachments,
+              tools: false, readTools: true, attachments, projectContext: run.projectContext, responseStyle: run.responseStyle,
               onChunk: (t) => {
                 if (!controller.signal.aborted) {
                   if (!answer.firstChunkAt) answer.firstChunkAt = Date.now();
@@ -417,7 +426,7 @@ ${instructions}
 ## คำแนะนำสุดท้าย`;
       try {
         const text = await this.ask(summarizer, summaryPrompt, cwd, controller.signal, {
-          tools: false, readTools: false, attachments: [],
+          tools: false, readTools: false, attachments: [], projectContext: run.projectContext, responseStyle: run.responseStyle,
           onChunk: (t) => { if (!controller.signal.aborted) run.output += t; },
         });
         run.output = text || run.output;
@@ -441,7 +450,7 @@ ${instructions}
     const prompt = this.begin(wsId, String(body.prompt || ""), attachments, [main, ...subagents]);
     const history = this.history(wsId, "agent");
     const run: ConversationRun = {
-      id: randomUUID(), wsId, prompt, mode: "agent", status: "running", output: "", createdAt: Date.now(), allowTools, attachments, activity: [],
+      id: randomUUID(), wsId, prompt, mode: "agent", status: "running", output: "", createdAt: Date.now(), allowTools, attachments, activity: [], projectContext: body.projectContext, responseStyle: body.responseStyle,
       main, subagents, stage: "planning", tasks: [],
     };
     return this.launch(run, async (controller, note) => {
@@ -462,7 +471,7 @@ ${allowTools ? "Sub-agent แก้ไฟล์และรันคำสั่
 {"note":"แนวทางโดยย่อ (ภาษาไทย)","tasks":[{"id":"t1","title":"ชื่องาน","assignee":1,"instructions":"คำสั่งละเอียด","dependsOn":[]}]}`;
       let planText = "";
       try {
-        planText = await this.ask(main, planPrompt, cwd, signal, { tools: false, readTools: true, attachments, onChunk: () => {} });
+        planText = await this.ask(main, planPrompt, cwd, signal, { tools: false, readTools: true, attachments, projectContext: run.projectContext, onChunk: () => {} });
       } catch (err: any) {
         throw new Error(`Main (${main.name}) วางแผนไม่สำเร็จ: ${err.message}`);
       }
@@ -503,7 +512,7 @@ ${allowTools ? "แก้ไฟล์/รันคำสั่งได้เท
 จบด้วยสรุปสั้นๆ ว่าทำอะไรไปจริง ไฟล์ไหนเปลี่ยน และผลตรวจ/ทดสอบที่ทำจริง`;
             try {
               const text = await this.ask(seat, taskPrompt, cwd, signal, {
-                tools: allowTools, readTools: true, attachments,
+                tools: allowTools, readTools: true, attachments, projectContext: run.projectContext,
                 onChunk: (c) => { if (!signal.aborted) t.output = (t.output + c).slice(-60000); },
               });
               t.output = text || t.output;
@@ -531,7 +540,7 @@ ${allowTools ? "แก้ไฟล์/รันคำสั่งได้เท
 ${report}
 
 ตอบเป็นภาษาไทย สรุปเฉพาะสิ่งที่เกิดขึ้นจริง: ใครทำอะไร ไฟล์ที่เปลี่ยน ผลทดสอบ งานที่ล้มเหลวหรือยังไม่ได้ทำ และขั้นตอนถัดไปที่แนะนำ ห้ามอ้างว่าสำเร็จถ้ามีงานไม่สำเร็จ`, cwd, signal, {
-          tools: false, readTools: true, attachments: [],
+          tools: false, readTools: true, attachments: [], projectContext: run.projectContext, responseStyle: run.responseStyle,
           onChunk: (c) => { if (!signal.aborted) run.output += c; },
         });
         run.output = text || run.output;

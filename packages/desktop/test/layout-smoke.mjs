@@ -40,7 +40,9 @@ try {
       columns: getComputedStyle(document.querySelector('.terminal-layout')).gridTemplateColumns.split(' ').length,
       overflow: document.documentElement.scrollWidth > innerWidth };
   });
-  await page.getByTitle('แบ่งสองคอลัมน์', { exact: true }).click();
+  // The layout buttons are hidden while the project has one session or none: start in split directly.
+  await page.evaluate(() => localStorage.setItem('superai-canvas-layout-v2', 'split'));
+  await page.reload(); await page.waitForSelector('.app-shell');
   const ids = [];
   for (let i = 1; i <= 12; i++) {
     ids.push((await request('/api/terminals/spawn', { wsId: workspace.id, agentType: 'terminal', name: `Terminal ${i}` })).id);

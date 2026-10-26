@@ -94,6 +94,7 @@ export async function deleteWorktree(
 }
 
 export interface Workspace {
+  favorite?: boolean;
   id: string;
   name: string;
   rootPath: string;
@@ -158,6 +159,7 @@ export interface Session {
   createdAt?: number;
 }
 export interface Run {
+  responseStyle?: import('./responseStyle').ResponseStyle;
   id: string;
   wsId: string;
   prompt: string;

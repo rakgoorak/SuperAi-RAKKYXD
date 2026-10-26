@@ -6,11 +6,16 @@ import { prepareMessage, recoveryHint, showChanges } from '../recovery';
 import { getSuggestions } from '../suggestions';
 import { NextSteps } from './NextSteps';
 import { ResponseActions } from './ResponseActions';
+import { ConversationInteractions } from './ConversationInteractions';
+import { ConversationExport } from './ConversationExport';
+import { ArrowDown, Pencil } from 'lucide-react';
 import { MessageAttachments } from './MessageAttachments';
 import { ImageEndpointContext } from './MarkdownImage';
 import { ImageViewer } from './ImageViewer';
 import { renderTextWithLinks } from '../previewLinks';
 import { timeLabel, tokenLabel } from '../chatFormat';
+import { notifyDone, sessionNotice } from '../completionNotify';
+import { loadNextPromptSettings, predictNextPrompt, publishChatRunning, publishNextPrompt } from '../nextPrompt';
 import '../chat-idle.css';
 
 // Mirrors server/CliChat.ts.
@@ -86,7 +91,7 @@ function ToolRow({ tool }: { tool: ToolItem }) {
         <code>{tool.title}</code>
         {tool.status === 'failed' && <span className="chat-tool-failed">ไม่สำเร็จ</span>}
       </button>
-      {open && tool.output && <pre>{tool.output.trimEnd()}</pre>}
+      {open && tool.output && <pre data-search-body>{tool.output.trimEnd()}</pre>}
       {open && tool.images?.length ? <div className="chat-shots">{tool.images.map((src, i) => <Shot key={i} src={src} />)}</div> : null}
     </li>
   );
@@ -148,14 +153,11 @@ function UserMessageItem({
   onProblem: (msg: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const [forked, setForked] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout>>();
-  const forkTimer = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     return () => {
       clearTimeout(copyTimer.current);
-      clearTimeout(forkTimer.current);
     };
   }, []);
 
@@ -178,18 +180,18 @@ function UserMessageItem({
     }
   };
 
-  const handleFork = () => {
-    prepareMessage(block.text, sessionId, { expand: false });
-    setForked(true);
-    clearTimeout(forkTimer.current);
-    forkTimer.current = setTimeout(() => setForked(false), 1500);
+  const handleFork = async () => {
+    try {
+      const session = await post(`/api/terminals/${encodeURIComponent(sessionId)}/chat/fork`, { messageId: block.id });
+      window.dispatchEvent(new CustomEvent('superai:fork-created', { detail: { session, sourceId: sessionId, side: false } }));
+    } catch (error) { onProblem((error as Error).message); }
   };
 
   return (
     <div key={block.id} data-message-id={block.id} className="chat-user">
       <div className="chat-user-wrap">
         <div className="chat-user-bubble">
-          <div className="chat-user-text">{renderTextWithLinks(block.text)}</div>
+          <div className="chat-user-text" data-message-body={block.id}>{renderTextWithLinks(block.text)}</div>
           {block.attachments && block.attachments.length > 0 && (
             <MessageAttachments
               paths={block.attachments}
@@ -232,12 +234,12 @@ function UserMessageItem({
             <button
               type="button"
               className="chat-user-action-btn"
-              aria-label={forked ? 'พร้อมใช้งานในช่องคำสั่ง' : 'แยกแชตใหม่ (Fork)'}
-              title={forked ? 'พร้อมใช้งานในช่องคำสั่ง' : 'แยกข้อความนี้ไปใช้ต่อ (Fork)'}
+              aria-label="แยกแชตใหม่ (Fork)"
+              title="สร้างห้องใหม่พร้อมประวัติถึงข้อความนี้ โดยเก็บห้องเดิมไว้"
               disabled={running || pending}
-              onClick={handleFork}
+              onClick={() => void handleFork()}
             >
-              {forked ? <Check size={13} /> : <GitFork size={13} />}
+              <GitFork size={13} />
             </button>
           </div>
         </div>
@@ -250,7 +252,7 @@ function UserMessageItem({
  * Claude-style view of a Code session: messages and folded tool calls from the CLI's JSON stream.
  * Typing, files, Model/Effort, /skills and sign-in live in the bottom composer.
  */
-export function ChatView({ sessionId, name }: { sessionId: string; name: string }) {
+export function ChatView({ sessionId, name, active = true }: { sessionId: string; name: string; active?: boolean }) {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [running, setRunning] = useState(false);
   const [activity, setActivity] = useState<Activity | undefined>();
@@ -259,6 +261,14 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
   const [now, setNow] = useState(Date.now());
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  const [awayFromLatest, setAwayFromLatest] = useState(false);
+  const [newOutput, setNewOutput] = useState(false);
+  const lastOutput = useRef('');
+  // Turn-finished notification: the previous `running` and the latest tab name for the socket handler.
+  const wasRunning = useRef(false);
+  const nameRef = useRef(name);
+  nameRef.current = name;
+  const [turnsDone, setTurnsDone] = useState(0);
   const jumpToSaved = () => {
     try {
       const id = localStorage.getItem(`superai-jump:${sessionId}`);
@@ -285,6 +295,16 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
   const canSuggest = !running && !pending && !offline && !search.trim() && lastReply && lastUser
     && replyIndex > items.indexOf(lastUser) && !items.slice(items.indexOf(lastUser) + 1).some(item => item.kind === 'error');
   const nextSteps = canSuggest ? getSuggestions({ mode: 'code', lastRun: { status: 'completed', output: lastReply.text } }) : [];
+  // After each finished turn: grey next-message text in the composer. The answer's own next step first,
+  // otherwise a small model's guess (can be turned off in Settings).
+  useEffect(() => {
+    if (!turnsDone || !canSuggest) return;
+    if (nextSteps.length) { publishNextPrompt(sessionId, nextSteps[0].label); return; }
+    if (!loadNextPromptSettings().ai) return;
+    const controller = new AbortController();
+    predictNextPrompt(sessionId, controller.signal).then(text => { if (!controller.signal.aborted) publishNextPrompt(sessionId, text); }).catch(() => {});
+    return () => controller.abort();
+  }, [turnsDone]);
   const retry = async () => {
     if (!lastUser || lastUser.kind !== 'user') return;
     setPending(true); setProblem('');
@@ -310,8 +330,14 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
       socket.onmessage = (event) => {
         let message: Message;
         try { message = JSON.parse(event.data); } catch { return; }
-        if (message.type === 'snapshot') { setItems(message.chat.items); setRunning(message.chat.running); setActivity(message.chat.activity); setQueued(message.chat.queued || []); }
-        else if (message.type === 'state') setRunning(message.running);
+        if (message.type === 'snapshot') { setItems(message.chat.items); setRunning(message.chat.running); wasRunning.current = message.chat.running; publishChatRunning(sessionId, message.chat.running); setActivity(message.chat.activity); setQueued(message.chat.queued || []); }
+        else if (message.type === 'state') {
+          if (wasRunning.current && !message.running) { notifyDone(sessionNotice(sessionId, nameRef.current)); setTurnsDone(n => n + 1); }
+          if (message.running) publishNextPrompt(sessionId, '');
+          publishChatRunning(sessionId, message.running);
+          wasRunning.current = message.running;
+          setRunning(message.running);
+        }
         else if (message.type === 'activity') setActivity(message.activity);
         else if (message.type === 'queue') setQueued(message.queued);
         else if (message.type === 'item') {
@@ -346,6 +372,9 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el || !items.length) return;
+    const signature = `${items.length}:${JSON.stringify(items.at(-1))}`;
+    const changed = !!lastOutput.current && lastOutput.current !== signature;
+    lastOutput.current = signature;
     if (jumpToSaved()) { restored.current = true; return; }
     if (!restored.current) {
       restored.current = true;
@@ -354,7 +383,9 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
         if (saved !== null) { el.scrollTop = Number(saved) || 0; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; return; }
       } catch {}
     }
-    if (stick.current) el.scrollTop = el.scrollHeight;
+    if (stick.current && !search.trim()) el.scrollTop = el.scrollHeight;
+    else if (changed && !search.trim()) setNewOutput(true);
+    setAwayFromLatest(el.scrollHeight - el.scrollTop - el.clientHeight > 80);
   }, [items, running, activity?.quiet]);
 
   const started = activity?.startedAt ?? [...items].reverse().find((i) => i.kind === 'user')?.at ?? now;
@@ -366,12 +397,15 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
   };
 
   return (
-    <ImageEndpointContext.Provider value={`/api/terminals/${encodeURIComponent(sessionId)}/preview-file`}><div className="chat-view">
-      <label className="chat-history-search"><Search size={13} /><input aria-label={`ค้นหาในแชต ${name}`} placeholder="ค้นหาในบทสนทนานี้…" value={search} onChange={event => setSearch(event.target.value)} /></label>
+    <ImageEndpointContext.Provider value={`/api/terminals/${encodeURIComponent(sessionId)}/preview-file`}><ConversationInteractions sessionId={sessionId} active={active} messages={items} revision={items} onSearch={setSearch}><div className="chat-view">
+      <div className="conversation-export-position"><ConversationExport title={name} sessionId={sessionId} /></div>
+      <button type="button" className="conversation-rename-trigger" aria-label="เปลี่ยนชื่อห้อง" title="เปลี่ยนชื่อห้อง" onClick={() => window.dispatchEvent(new CustomEvent('superai:rename-session', { detail: sessionId }))}><Pencil size={13} /></button>
       <div className="chat-scroll" ref={scroller} onScroll={(e) => {
         const el = e.currentTarget;
         try { if (!search.trim()) localStorage.setItem(`superai-scroll:${sessionId}`, String(el.scrollTop)); } catch {}
         stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+        const away = el.scrollHeight - el.scrollTop - el.clientHeight > 80;
+        setAwayFromLatest(away); if (!away) setNewOutput(false);
       }}>
         <div className="chat-column">
           {!items.length && (
@@ -381,7 +415,7 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
               <small>เลือก Model, Effort, /skills และเข้าสู่ระบบได้ที่ช่องคำสั่งด้านล่าง เมื่อเลือก session นี้อยู่</small>
             </div>
           )}
-          {blocks(items).filter(block => !search.trim() || (block.kind === 'tools' ? block.tools.map(t => t.title + ' ' + (t.output || '')).join(' ') : block.kind === 'todos' ? block.todos.map(t => t.text).join(' ') : block.text).toLowerCase().includes(search.trim().toLowerCase())).map((block) => {
+          {blocks(items).map((block) => {
             if (block.kind === 'user')
               return (
                 <UserMessageItem
@@ -398,7 +432,7 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
               const latest = block.id === lastReply?.id && !!lastUser && replyIndex > items.indexOf(lastUser);
               const currentTurn = !!lastUser && items.indexOf(block) > items.indexOf(lastUser);
               return <div key={block.id} data-message-id={block.id}>
-                <div className="chat-assistant"><Markdown text={block.text} /></div>
+                <div className="chat-assistant" data-message-body={block.id}><Markdown text={block.text} /></div>
                 {!(running && currentTurn) && <ResponseActions text={block.text} at={block.at} now={now} disabled={pending || offline || running}
                   agentName={name}
                   currentSessionId={sessionId}
@@ -452,6 +486,7 @@ export function ChatView({ sessionId, name }: { sessionId: string; name: string 
           {offline && <div className="chat-notice">ขาดการเชื่อมต่อ กำลังเชื่อมต่อใหม่…</div>}
         </div>
       </div>
-    </div></ImageEndpointContext.Provider>
+      {awayFromLatest && !search.trim() && <button type="button" className="conversation-latest" aria-label="กลับข้อความล่าสุด" onClick={() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; stick.current = true; setAwayFromLatest(false); setNewOutput(false); }}><ArrowDown size={14} />{newOutput ? 'มีข้อความใหม่ · กลับล่าสุด' : 'กลับข้อความล่าสุด'}</button>}
+    </div></ConversationInteractions></ImageEndpointContext.Provider>
   );
 }

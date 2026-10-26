@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog, clipboard, nativeImage, nativeTheme } from "electron";
+import { app, BrowserWindow, ipcMain, shell, dialog, clipboard, nativeImage, nativeTheme, Notification } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -24,6 +24,8 @@ if (process.env.SUPERAI_TEST_MODE === "1" || process.argv.includes("--disable-gp
   app.commandLine.appendSwitch("disable-software-rasterizer");
 }
 app.commandLine.appendSwitch("disable-gpu-process-crash-limit");
+// Same id as the installer's shortcuts: Windows groups the taskbar button with them and shows our toasts.
+if (process.platform === "win32" && app.isPackaged) app.setAppUserModelId("com.rakgoorak.superai");
 let window, server, browser;
 const updater = new Updater({
   currentVersion: app.getVersion(),
@@ -148,6 +150,31 @@ ipcMain.handle("browser:action", async (e, action, payload) => {
     throw new Error("คำสั่ง browser ไม่ถูกต้อง");
   return browser.action(action, payload);
 });
+// Kept referenced until closed: a garbage-collected Notification loses its click handler.
+const notices = new Set();
+ipcMain.handle("app:notify", async (e, notice) => {
+  trusted(e);
+  if (!window || !notice || typeof notice.title !== "string") return;
+  if (!window.isFocused()) window.flashFrame(true);
+  if (!Notification.isSupported()) return;
+  const shown = new Notification({
+    title: notice.title.slice(0, 120),
+    body: String(notice.body || "").slice(0, 240),
+    icon: path.join(directory, "assets", process.platform === "win32" ? "icon.ico" : "icon.png"),
+  });
+  notices.add(shown);
+  const forget = () => notices.delete(shown);
+  shown.on("close", forget);
+  shown.on("click", () => {
+    forget();
+    if (!window) return;
+    if (window.isMinimized()) window.restore();
+    window.show();
+    window.focus();
+    window.webContents.send("notify:open", notice.target);
+  });
+  shown.show();
+});
 ipcMain.handle("credentials:forget", async (e, service) => {
   trusted(e);
   try {
@@ -246,6 +273,7 @@ else {
         }
       });
       window.on("resize", () => browser.layout());
+      window.on("focus", () => window.flashFrame(false));
       window.on("closed", () => {
         window = null;
         app.quit();

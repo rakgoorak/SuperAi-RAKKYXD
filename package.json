@@ -1,6 +1,6 @@
 {
   "name": "superai-rakkyxd",
-  "version": "1.0.28",
+  "version": "1.0.29",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -17,6 +17,7 @@
     "dev:server": "tsx packages/studio/server/index.ts",
     "test:desktop": "node packages/desktop/test/smoke.mjs",
     "test:layout": "node packages/desktop/test/layout-smoke.mjs",
+    "test:overflow": "node packages/desktop/test/overflow-audit-smoke.mjs",
     "test:usage-overlay": "node packages/desktop/test/usage-overlay-smoke.mjs",
     "test:terminal-render": "node packages/desktop/test/terminal-render-smoke.mjs",
     "test:reference": "node packages/desktop/test/reference-smoke.mjs",
@@ -29,6 +30,8 @@
     "installer:release": "node scripts/build-installer.mjs",
     "test:session-controls": "node packages/desktop/test/session-controls-smoke.mjs",
     "test:conversation-ui": "node packages/desktop/test/conversation-workspace-smoke.mjs",
+    "test:conversation-interactions": "node packages/desktop/test/conversation-interactions-smoke.mjs",
+    "test:project-usability": "node packages/desktop/test/project-usability-smoke.mjs",
     "test:provider-conversation": "node packages/desktop/test/provider-conversation-smoke.mjs"
   },
   "devDependencies": {

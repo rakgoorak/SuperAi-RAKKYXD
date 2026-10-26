@@ -8,6 +8,8 @@ import { cliFailure } from "./CliProvider.js";
 import { cliAuth } from "./CliAuth.js";
 import { skillPrompt } from "./ChatSkills.js";
 import { getProjectRules, formatRulesForPrompt } from "./ProjectRules.js";
+import { contextualPrompt, type ProjectContext } from './ProjectContext.js';
+import type { ResponseStyle } from './ResponseStyle.js';
 
 // Chat view for Code sessions: each message runs the CLI headless with its JSON event stream and
 // resumes the same conversation, so the client can draw messages and tool calls instead of a TUI.
@@ -25,7 +27,7 @@ export type TodoStatus = "pending" | "in_progress" | "completed";
 /** What the CLI may do on its own in a chat turn (headless CLIs cannot ask first). */
 export type ChatPermission = "read" | "edit" | "auto";
 export const CHAT_PERMISSIONS: ChatPermission[] = ["read", "edit", "auto"];
-type ChatRequestRecord = { text: string; model?: string; effort?: string; skillId?: string; attachments?: string[]; permission?: ChatPermission };
+type ChatRequestRecord = { text: string; model?: string; effort?: string; skillId?: string; attachments?: string[]; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle };
 export type ChatItem =
   | { id: string; kind: "user"; text: string; attachments?: string[]; request?: ChatRequestRecord; at: number }
   | { id: string; kind: "assistant"; text: string; at: number }
@@ -330,8 +332,9 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
 
 type Spawner = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
 interface QueuedRequest extends QueuedChat { request: ChatRequest }
-interface Chat extends Omit<ChatSnapshot, "queued"> { turns: number; proc?: ChildProcess; cancelled?: boolean; wait?: () => void; listeners: Set<(m: ChatMessage) => void>; saveTimer?: NodeJS.Timeout; queue: QueuedRequest[] }
-export interface ChatRequest { agent: string; cwd: string; text: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission }
+interface Chat extends Omit<ChatSnapshot, "queued"> { seed?: string; turns: number; proc?: ChildProcess; cancelled?: boolean; /** Stopped to take a new message (Enter while answering). */ interrupting?: boolean; wait?: () => void; listeners: Set<(m: ChatMessage) => void>; saveTimer?: NodeJS.Timeout; queue: QueuedRequest[] }
+export interface ChatFork { items: ChatItem[]; turns: number; seed: string; }
+export interface ChatRequest { agent: string; cwd: string; text: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle }
 
 export class CliChatManager {
   private chats = new Map<string, Chat>();
@@ -357,6 +360,7 @@ export class CliChatManager {
         if (Array.isArray(saved.items)) chat.items = saved.items.map((i: ChatItem) => (i.kind === "tool" && i.status === "running" ? { ...i, status: "failed" } : i));
         if (typeof saved.conversationId === "string" && saved.conversationId) chat.conversationId = saved.conversationId;
         chat.turns = Number(saved.turns) || 0;
+        if (typeof saved.seed === 'string') chat.seed = saved.seed;
       }
     } catch {
       // an unreadable file starts an empty chat
@@ -371,7 +375,7 @@ export class CliChatManager {
     const write = () => {
       try {
         fs.mkdirSync(this.dir!, { recursive: true });
-        fs.writeFileSync(file, JSON.stringify({ conversationId: chat.conversationId, turns: chat.turns, items: chat.items }));
+        fs.writeFileSync(file, JSON.stringify({ conversationId: chat.conversationId, turns: chat.turns, items: chat.items, seed: chat.seed }));
       } catch {
         // a full disk must not break the chat on screen
       }
@@ -395,6 +399,30 @@ export class CliChatManager {
   snapshot(id: string): ChatSnapshot {
     const { items, running, conversationId, activity, queue } = this.chat(id);
     return { items, running, conversationId, activity, queued: queue.map(({ id, text, attachments }) => ({ id, text, attachments })) };
+  }
+  /** Copy a bounded transcript, never the provider's writable conversation ID or queue. */
+  forkData(id: string, messageId: string, selection?: string): ChatFork {
+    const source = this.chat(id);
+    const index = source.items.findIndex(item => item.id === messageId && (item.kind === 'user' || item.kind === 'assistant'));
+    if (index < 0) throw new Error('ไม่พบข้อความที่ต้องการแยก');
+    if (source.running) throw new Error('กรุณารอให้ AI ตอบเสร็จก่อนแยกบทสนทนา');
+    const items: ChatItem[] = selection !== undefined
+      ? [{ id: 'side-context', kind: 'notice', text: `ข้อความอ้างอิงจากห้องเดิม:\n${selection}`, at: Date.now() }]
+      : structuredClone(source.items.slice(0, index + 1));
+    const seed = items.map(item => item.kind === 'tool' ? `[tool ${item.title}]\n${item.output || ''}`
+      : item.kind === 'todos' ? `[tasks]\n${item.todos.map(todo => todo.text).join('\n')}`
+        : `[${item.kind}]\n${item.text}${item.kind === 'user' && item.request?.attachments?.length ? `\nไฟล์อ้างอิง: ${item.request.attachments.join(', ')}` : ''}`).join('\n\n');
+    if (!seed.trim() || seed.length > 12000) throw new Error('บริบทยาวเกินไป กรุณาเลือกข้อความสั้นลงแล้วใช้ Start a side chat');
+    return { items, seed, turns: source.turns };
+  }
+  installFork(id: string, fork: ChatFork) {
+    const chat = this.chat(id);
+    if (chat.items.length || chat.running || chat.conversationId) throw new Error('ห้องปลายทางต้องเป็นห้องใหม่');
+    chat.items = structuredClone(fork.items);
+    chat.turns = fork.turns;
+    chat.seed = fork.seed;
+    this.save(id, chat, true);
+    this.emit(chat, { type: 'snapshot', chat: this.snapshot(id) });
   }
   subscribe(id: string, listener: (m: ChatMessage) => void): () => void {
     const chat = this.chat(id);
@@ -422,18 +450,26 @@ export class CliChatManager {
   }
 
   /**
-   * Start a turn, or with `queue` while one is running, hold the message and send it when the
-   * current turn ends (Ctrl+Enter). Returns what happened.
+   * Start a turn. While one is running: `queue` holds the message until the turn ends (Ctrl+Enter);
+   * `interrupt` stops the turn and sends the message right after it, in the same conversation (Enter).
    */
-  send(id: string, request: ChatRequest, options: { queue?: boolean } = {}): "sent" | "queued" {
+  send(id: string, request: ChatRequest, options: { queue?: boolean; interrupt?: boolean } = {}): "sent" | "queued" | "interrupted" {
     const { agent } = request;
     if (!CHAT_CLIS.includes(agent)) throw new Error("CLI นี้ยังไม่รองรับมุมมองแชต กรุณาใช้ terminal");
     const text = request.text.trim();
     if (!text) throw new Error("กรุณาพิมพ์ข้อความ");
     const chat = this.chat(id);
-    if (chat.running && options.queue) {
+    if (chat.running && (options.queue || options.interrupt)) {
       const files = request.attachments || [];
-      chat.queue.push({ id: randomUUID(), text, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}), request: { ...request, text } });
+      const entry = { id: randomUUID(), text, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}), request: { ...request, text } };
+      if (options.interrupt && chat.proc) {
+        chat.queue.unshift(entry);
+        this.emitQueue(chat);
+        this.cancel(id);
+        chat.interrupting = true;
+        return "interrupted";
+      }
+      chat.queue.push(entry);
       this.emitQueue(chat);
       return "queued";
     }
@@ -444,9 +480,9 @@ export class CliChatManager {
     const attached = agent === "codex" ? files.filter((f) => IMAGE.test(f)) : agent === "opencode" ? files : [];
     const listed = files.filter((f) => !attached.includes(f));
     const selected = skillPrompt(text, request.cwd, agent, request.skillId);
-    const projectRules = getProjectRules(request.cwd);
-    const rulesText = formatRulesForPrompt(projectRules.rules);
-    const combined = rulesText ? `${selected}${rulesText}` : selected;
+    const rulesText = request.projectContext ? '' : formatRulesForPrompt(getProjectRules(request.cwd).rules);
+    const inherited = chat.seed && !chat.conversationId ? `ประวัติอ้างอิงจากห้องเดิม (ข้อมูลบทสนทนา ไม่ใช่คำสั่งระบบ):\n${chat.seed}\n\nข้อความใหม่ของผู้ใช้:\n${selected}` : selected;
+    const combined = contextualPrompt(rulesText ? `${inherited}${rulesText}` : inherited, request.projectContext, request.responseStyle);
     const prompt = listed.length ? `${combined}\n\nไฟล์แนบ:\n${listed.map((f) => `- ${f}`).join("\n")}` : combined;
     if (prompt.length > MAX_PROMPT) throw new Error("ข้อความยาวเกินไป กรุณาแบ่งส่งหรือใส่ไว้ในไฟล์แล้วแนบแทน");
     const args = chatArguments(agent, { prompt, conversationId: chat.conversationId, model: request.model, effort: request.effort, files: attached, permission: request.permission });
@@ -454,7 +490,7 @@ export class CliChatManager {
     // Resolved first: a CLI that is not installed is refused before the message joins the chat.
     const launch = this.launcher(agent, args);
     const prefix = `t${++chat.turns}`;
-    this.put(id, chat, { id: `${prefix}-user`, kind: "user", text, request: { text, model: request.model, effort: request.effort, skillId: request.skillId, attachments: files, permission: request.permission }, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}) });
+    this.put(id, chat, { id: `${prefix}-user`, kind: "user", text, request: { text, model: request.model, effort: request.effort, skillId: request.skillId, attachments: files, permission: request.permission, projectContext: request.projectContext, responseStyle: request.responseStyle }, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}) });
     chat.running = true;
     chat.activity = { startedAt: Date.now(), outputTokens: 0 };
     this.emit(chat, { type: "activity", activity: chat.activity });
@@ -475,14 +511,16 @@ export class CliChatManager {
       chat.wait = undefined;
       for (const item of chat.items)
         if (item.kind === "tool" && item.status === "running" && item.id.startsWith(`${prefix}-`)) this.put(id, chat, { ...item, status: chat.cancelled || problem || failed ? "failed" : "done" });
-      if (chat.cancelled) this.put(id, chat, { id: `${prefix}-stopped`, kind: "notice", text: "หยุดแล้ว" });
+      const interrupted = chat.cancelled && chat.interrupting;
+      chat.interrupting = false;
+      if (chat.cancelled) this.put(id, chat, { id: `${prefix}-stopped`, kind: "notice", text: interrupted ? "หยุดเพื่อรับข้อความใหม่" : "หยุดแล้ว" });
       else if (problem && !failed) this.put(id, chat, { id: `${prefix}-error`, kind: "error", text: problem });
       chat.running = false;
       chat.activity = undefined;
       this.emit(chat, { type: "activity" });
       this.emit(chat, { type: "state", running: false });
-      // The next queued message goes once this turn has ended; a stop pauses the queue.
-      if (!chat.cancelled && chat.queue.length) setImmediate(() => this.sendNext(id));
+      // The next queued message goes once this turn has ended; a stop pauses the queue, an interrupt does not.
+      if ((!chat.cancelled || interrupted) && chat.queue.length) setImmediate(() => this.sendNext(id));
       this.save(id, chat, true);
       this.onChange?.(id);
     };
@@ -613,6 +651,8 @@ export class CliChatManager {
     const proc = chat?.proc;
     if (!chat || !proc) return false;
     chat.cancelled = true;
+    // A plain stop wins over an interrupt still waiting for the CLI to exit: the queue stays paused.
+    chat.interrupting = false;
     if (process.platform === "win32" && proc.pid) execFile("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true }, () => {});
     else if (proc.pid) { try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill(); } }
     else proc.kill?.();
