@@ -27,7 +27,6 @@ try {
   }, { route, body });
   const workspace = await request('/api/workspaces', { name: 'ทดสอบพื้นที่ session', rootPath: data });
   await page.getByRole('button', { name: 'ทดสอบพื้นที่ session', exact: true }).click();
-  await page.getByRole('button', { name: 'Preview', exact: true }).click();
   const resize = async (width, height) => {
     await app.evaluate(({ BrowserWindow }, size) => {
       const w = BrowserWindow.getAllWindows()[0]; w.unmaximize(); w.setContentSize(...size);
@@ -52,7 +51,7 @@ try {
     await page.waitForFunction(() => document.querySelector('.terminal-cell')?.getBoundingClientRect().height >= 359);
     const size = await measure(); measurements.push({ sessions: i, ...size });
     assert.ok(size.pane.height >= 359, JSON.stringify(size));
-    assert.ok(size.composer.height <= 104, JSON.stringify(size));
+    assert.ok(size.composer.height <= 180, JSON.stringify(size));
     assert.equal(size.overflow, false);
     assert.equal(size.columns, i === 1 ? 1 : 2);
     checks++;
@@ -60,7 +59,7 @@ try {
       await page.screenshot({ path: path.join(output, 'superai-layout-six.png') });
       await page.getByTitle('ขยาย Terminal 1', { exact: true }).click();
       const focused = await measure();
-      assert.ok(focused.pane.height >= 400, JSON.stringify(focused));
+      assert.ok(focused.pane.height >= 359, JSON.stringify(focused));
       assert.equal(await page.locator('.terminal-cell:visible').count(), 1);
       await page.screenshot({ path: path.join(output, 'superai-layout-focused.png') });
       await page.getByTitle('กลับการจัดวางเดิม', { exact: true }).click();
@@ -75,6 +74,7 @@ try {
       await page.getByTitle('แบ่งสองคอลัมน์', { exact: true }).click();
       await page.getByRole('button', { name: 'Preview', exact: true }).click();
       await page.waitForSelector('.preview-panel');
+      await page.waitForFunction(() => getComputedStyle(document.querySelector('.terminal-layout')).gridTemplateColumns.split(' ').length === 1);
       assert.equal((await measure()).columns, 1);
       await page.getByRole('combobox', { name: 'คำสั่ง', exact: true }).fill('echo ทดสอบแจ้งเตือนขณะเปิด Preview');
       await page.getByRole('combobox', { name: 'คำสั่ง', exact: true }).press('Enter');

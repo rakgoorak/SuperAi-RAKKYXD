@@ -2047,7 +2047,7 @@ export function App() {
                         aria-label="โฟลเดอร์โปรเจกต์"
                         value={projectPath}
                         onChange={(e) => setProjectPath(e.target.value)}
-                        placeholder="D:\Projects\my-app"
+                        placeholder={window.superai?.platform === "darwin" ? "~/Projects/my-app" : "D:\\Projects\\my-app"}
                         required
                       />
                       {window.superai && (

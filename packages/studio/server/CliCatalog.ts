@@ -12,7 +12,7 @@ export const CLI_DEFINITIONS = [
   {
     id: "terminal",
     name: "Terminal",
-    command: process.platform === "win32" ? "powershell.exe" : "bash",
+    command: process.platform === "win32" ? "powershell.exe" : process.platform === "darwin" ? "zsh" : "bash",
     maxSessions: 12,
   },
   {
@@ -45,7 +45,19 @@ export const cliPath = () => [
     managedNodeBin(),
     ...(process.platform === 'win32' ? [managedGitCmd(), antigravityBin()] : []),
     path.join(os.homedir(), '.local', 'bin'),
+    path.join(os.homedir(), '.claude', 'local'),
+    path.join(os.homedir(), '.config', 'manicode'),
+    path.join(os.homedir(), '.opencode', 'bin'),
     ...(process.env.PATH || '').split(path.delimiter),
+    ...(process.platform === 'darwin'
+      ? [
+          '/opt/homebrew/bin',
+          '/usr/local/bin',
+          '/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin',
+          '/Applications/ChatGPT.app/Contents/Resources/codex-cli/codex-path',
+          '/Applications/Codex.app/Contents/Resources/codex-cli/bin',
+        ]
+      : []),
   ]),
 ].filter(Boolean).join(path.delimiter);
 
@@ -197,15 +209,26 @@ export function listClis() {
 
 export async function listOpenCodeModels(): Promise<string[]> {
   const launch = cliLaunch("opencode", ["models"]);
-  const { stdout } = await promisify(execFile)(launch.command, launch.args, {
-    windowsHide: true,
-    timeout: 20000,
-    maxBuffer: 2 * 1024 * 1024,
-  });
-  return stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => /^[\w.-]+\/[\w./:-]+$/.test(line));
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const { stdout } = await promisify(execFile)(launch.command, launch.args, {
+        windowsHide: true,
+        timeout: 20000,
+        maxBuffer: 2 * 1024 * 1024,
+        env: { ...process.env, ...cliEnv() },
+      });
+      return stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => /^[\w.-]+\/[\w./:-]+$/.test(line));
+    } catch (err: any) {
+      if (attempt < 2 && /database is locked|SQLITE_BUSY/i.test(String(err?.message || err))) {
+        await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 export function cliLaunch(

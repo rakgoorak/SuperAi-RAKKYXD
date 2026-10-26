@@ -132,7 +132,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
 
     const term = new Terminal({
       theme: THEME,
-      fontFamily: '"Cascadia Code", "Cascadia Mono", Consolas, "Noto Sans Thai", monospace',
+      fontFamily: '"Cascadia Code", "Cascadia Mono", Consolas, "SF Mono", Menlo, Monaco, "Noto Sans Thai", monospace',
       fontSize: 15,
       lineHeight: 1.4,
       cursorBlink: true,

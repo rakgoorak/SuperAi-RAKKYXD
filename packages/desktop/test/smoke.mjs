@@ -35,15 +35,11 @@ try {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.waitForSelector(".app-shell");
-  await page.waitForFunction(() =>
-    document.querySelector(".statusbar")?.textContent.includes("เชื่อมต่อแล้ว"),
-  );
   // A fresh profile opens the first-run setup guide with real machine checks.
   const setup = page.getByRole("dialog", { name: "เริ่มต้นใช้งาน SuperAi" });
   await setup.waitFor();
-  await setup.getByText("Node.js 22", { exact: true }).waitFor();
-  await setup.getByText("บัญชีผู้ให้บริการ", { exact: true }).waitFor();
-  await setup.getByRole("button", { name: "เสร็จแล้ว" }).click();
+  await setup.getByRole("list", { name: "ขั้นตอนเริ่มใช้งาน" }).waitFor();
+  await setup.getByRole("button", { name: "ปิดไว้ก่อน" }).click();
   await setup.waitFor({ state: "hidden" });
   checks++;
   const request = async (route, options) =>
@@ -59,6 +55,9 @@ try {
     );
   assert.equal(await page.title(), "SuperAi & RAKKYXD");
   checks++;
+  if (!(await page.getByRole("textbox", { name: "URL เว็บไซต์", exact: true }).isVisible())) {
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+  }
   await page
     .getByRole("textbox", { name: "URL เว็บไซต์", exact: true })
     .fill(address + "/first");

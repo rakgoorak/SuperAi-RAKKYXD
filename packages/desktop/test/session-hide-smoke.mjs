@@ -44,6 +44,7 @@ try {
   await page.addInitScript(() => {
     localStorage.setItem('superai-setup-dismissed', '1');
     localStorage.setItem('superai-mode', 'code');
+    localStorage.setItem('superai-canvas-layout-v2', 'split');
     localStorage.removeItem('superai-hidden-sessions');
   });
 
