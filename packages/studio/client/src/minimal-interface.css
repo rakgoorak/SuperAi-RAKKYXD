@@ -199,3 +199,11 @@
   #root .project-select > svg:first-child { display: none; }
   #root .mode-switch button { width: 28px; min-width: 28px; }
 }
+
+/* Keep inline renaming within the title area, with readable actions and one focus ring. */
+#root .terminal-cell-heading .pane-rename { flex:1 1 420px; max-width:420px; min-width:0; gap:6px; margin-right:auto; }
+#root .terminal-cell-heading .pane-rename input { flex:1 1 auto; width:0; min-width:48px; height:26px; padding:3px 8px; border:1px solid var(--control-border); border-radius:6px; background:var(--surface); color:var(--text); font-size:12px; }
+#root .terminal-cell-heading .pane-rename input:focus { border-color:var(--focus); outline:none; box-shadow:0 0 0 1px var(--focus); }
+#root .terminal-cell-heading .pane-rename button { flex:0 0 auto; height:26px; padding:3px 8px; border-radius:5px; font-size:11px; white-space:nowrap; color:var(--text-secondary); }
+#root .terminal-cell-heading .pane-rename button[type=submit] { background:var(--raised); color:var(--text); }
+#root .terminal-cell-heading .pane-rename button:hover:not(:disabled) { background:var(--raised); color:var(--text); }

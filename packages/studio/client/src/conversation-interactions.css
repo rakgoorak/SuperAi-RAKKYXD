@@ -1,7 +1,7 @@
 .conversation-interactions { position:relative; height:100%; min-height:0; outline:none; }
 #root .pane-view-switch button { width:26px; height:26px; padding:5px; display:grid; place-items:center; }
 .conversation-interactions [data-message-body]::selection, .conversation-interactions [data-message-body] ::selection { background:#4437ac; color:#fff; }
-.conversation-find-trigger { position:absolute; right:80px; top:8px; width:28px; height:28px; display:grid; place-items:center; border:0; border-radius:6px; background:transparent; color:var(--dim); z-index:11; }
+.conversation-find-trigger { position:absolute; right:80px; top:12px; width:28px; height:28px; display:grid; place-items:center; border:0; border-radius:6px; background:transparent; color:var(--dim); z-index:11; }
 .conversation-find { position:absolute; right:80px; top:8px; z-index:15; display:flex; align-items:center; gap:3px; max-width:calc(100% - 88px); width:320px; padding:6px 8px; border:1px solid var(--control-border); border-radius:10px; background:#242423; box-shadow:0 5px 18px #0005; }
 .conversation-find input { min-width:0; flex:1; width:100px; border:0; background:transparent; padding:4px 6px; font-size:13px; }
 .conversation-find span { color:var(--dim); white-space:nowrap; font-size:12px; padding:0 5px; }

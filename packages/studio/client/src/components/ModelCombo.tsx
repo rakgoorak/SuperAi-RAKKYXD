@@ -9,6 +9,7 @@ interface Props {
   placeholder?: string;
   maxLength?: number;
   disabled?: boolean;
+  onOpen?: () => void;
 }
 
 /**
@@ -16,7 +17,7 @@ interface Props {
  * shows names that match what is already typed, so a filled-in field looked like it offered a
  * single model. Here the arrow (or an untouched field) shows every model; typing narrows it.
  */
-export function ModelCombo({ value, options, onChange, label, placeholder, maxLength = 200, disabled }: Props) {
+export function ModelCombo({ value, options, onChange, label, placeholder, maxLength = 200, disabled, onOpen }: Props) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -33,6 +34,7 @@ export function ModelCombo({ value, options, onChange, label, placeholder, maxLe
   }, [open]);
 
   const show = () => {
+    onOpen?.();
     setTyped(false);
     setActive(Math.max(0, options.indexOf(value)));
     setOpen(true);
@@ -76,7 +78,7 @@ export function ModelCombo({ value, options, onChange, label, placeholder, maxLe
         }}
         onBlur={(e) => !root.current?.contains(e.relatedTarget as Node) && setOpen(false)}
       />
-      <button type="button" className="model-combo-toggle" tabIndex={-1} aria-label={`ดูรายชื่อ ${label} ทั้งหมด`} disabled={disabled || !options.length}
+      <button type="button" className="model-combo-toggle" tabIndex={-1} aria-label={`ดูรายชื่อ ${label} ทั้งหมด`} disabled={disabled || (!options.length && !onOpen)}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => {
           root.current?.querySelector('input')?.focus({ preventScroll: true });

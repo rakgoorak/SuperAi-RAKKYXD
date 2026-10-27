@@ -20,7 +20,7 @@ interface Props {
 /** Pick a provider, then a model and an effort level for it. */
 export function SeatPicker({ seat, onChange, clis, ollamaModels, label, named = true, onRemove, disabled, fixedProvider }: Props) {
   const cli = seat.provider.startsWith("cli:") ? seat.provider.slice(4) : "";
-  const { list, error } = useModels(cli);
+  const { list, error, refresh: refreshModels } = useModels(cli);
   const efforts = (seat.model && list?.modelEfforts?.[seat.model]) || list?.efforts || EFFORTS[cli] || [];
   const pickProvider = (value: string) => {
     if (value === "ollama") return onChange({ ...seat, provider: ollamaModels[0] || "", model: "", effort: "" });
@@ -53,7 +53,7 @@ export function SeatPicker({ seat, onChange, clis, ollamaModels, label, named = 
       <label>
         รุ่น AI (Model)
         {cli ? (
-          <ModelCombo label={`model ของ${label}`} value={seat.model} options={list?.models || []} placeholder="ใช้รุ่นเริ่มต้นได้" disabled={disabled}
+          <ModelCombo label={`model ของ${label}`} value={seat.model} options={list?.models || []} onOpen={refreshModels} placeholder="ใช้รุ่นเริ่มต้นได้" disabled={disabled}
             onChange={(model) => onChange({ ...seat, model: model.trim(), effort: efforts.includes(seat.effort) || !seat.effort ? seat.effort : "" })} />
         ) : (
           <ModelCombo label={`model ของ${label}`} value={seat.provider} options={ollamaModels} maxLength={150} placeholder="ชื่อรุ่น Ollama" disabled={disabled}
