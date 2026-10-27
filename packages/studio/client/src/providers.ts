@@ -85,11 +85,14 @@ export function firstReady(clis: Cli[], skip: string[] = []) {
 }
 
 const cache = new Map<string, Promise<ModelList>>();
+const fetchedAt = new Map<string, number>();
+const pending = new Set<string>();
 export function fetchModels(id: string, refresh = false) {
-  if (refresh || !cache.has(id)) {
+  if (!pending.has(id) && (refresh || !cache.has(id) || Date.now() - (fetchedAt.get(id) || 0) > 60_000)) {
+    pending.add(id);
     const request = api<ModelList>(`/api/providers/${id}/models`);
+    request.then(() => { fetchedAt.set(id, Date.now()); pending.delete(id); }, () => { pending.delete(id); cache.delete(id); });
     if (refresh) request.then(() => window.dispatchEvent(new CustomEvent("superai:models-refreshed", { detail: id })), () => {});
-    request.catch(() => cache.delete(id));
     cache.set(id, request);
   }
   return cache.get(id)!;
@@ -115,5 +118,8 @@ export function useModels(id: string) {
       ignore = true;
     };
   }, [id, revision]);
-  return { list, error };
+  const refresh = () => {
+    if (id) void fetchModels(id, true).then(() => setError(''), e => setError((e as Error).message));
+  };
+  return { list, error, refresh };
 }

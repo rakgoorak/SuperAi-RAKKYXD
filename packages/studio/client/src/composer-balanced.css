@@ -1,0 +1,101 @@
+/* The user's reference: one writing surface and one aligned metadata row. */
+#root .work-canvas .composer-area.composer-balanced { padding:10px 24px 12px; background:var(--base); }
+#root .work-canvas .composer-area.composer-balanced .composer-box {
+  display:grid; grid-template-columns:40px minmax(0,1fr) auto; grid-template-rows:auto auto;
+  width:100%; max-width:780px; margin:0 auto; gap:0;
+  border:1px solid var(--control-border); border-radius:16px; background:var(--surface); box-shadow:none;
+}
+#root .work-canvas .composer-area.composer-balanced .composer-box::before { content:none; }
+#root .work-canvas .composer-area.composer-balanced .composer-box:focus-within { border-color:var(--focus); }
+#root .work-canvas .composer-area.composer-balanced .composer-leading { grid-column:1; grid-row:2; align-self:end; padding:10px 0 10px 8px; }
+#root .work-canvas .composer-area.composer-balanced .composer-input-container { grid-column:2; grid-row:2; min-width:0; }
+#root .work-canvas .composer-area.composer-balanced .composer-box textarea {
+  display:block; width:100%; field-sizing:content; height:auto; min-height:52px; max-height:min(220px,30vh);
+  padding:14px 4px; border:0; background:transparent; resize:none; font-size:14px; line-height:24px;
+}
+#root .work-canvas.code-mode .composer-area.composer-balanced:not(.compact-code) .composer-box textarea { min-height:110px; }
+#root .work-canvas .composer-area.composer-balanced .composer-box:has(.composer-leading) .composer-bottom {
+  position:relative; inset:auto; pointer-events:auto; grid-column:3; grid-row:2; display:flex; justify-content:flex-end; align-self:end; padding:10px 9px 10px 5px; gap:3px; min-height:0; margin:0;
+}
+#root .work-canvas .composer-area.composer-balanced .composer-bottom>.inline { gap:3px; flex-wrap:nowrap; }
+#root .work-canvas .composer-area.composer-balanced .composer-leading .icon-button,
+#root .work-canvas .composer-area.composer-balanced .composer-bottom .icon-button,
+#root .work-canvas .composer-area.composer-balanced .composer-bottom .send-button {
+  display:inline-grid; place-items:center; width:32px; min-width:32px; height:32px; min-height:32px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--text-secondary);
+}
+#root .work-canvas .composer-area.composer-balanced .composer-bottom .send-button { background:var(--raised); color:var(--text); }
+#root .work-canvas .composer-area.composer-balanced .composer-bottom .send-button:not(:disabled):hover { background:var(--text); color:var(--base); }
+#root .work-canvas .composer-area.composer-balanced .composer-bottom .send-button:disabled { opacity:.35; }
+#root .work-canvas .composer-area.composer-balanced .composer-bottom .icon-button.composer-stop { display:none; }
+#root .work-canvas .composer-area.composer-balanced.chat-busy:not(.has-draft) .composer-stop { display:inline-grid; background:var(--text); color:var(--base); }
+#root .work-canvas .composer-area.composer-balanced.chat-busy:not(.has-draft) .send-button { display:none; }
+#root .work-canvas .composer-area.composer-balanced .send-label { display:none; }
+#root .work-canvas .composer-area.composer-balanced .composer-attachments-row { grid-column:1/-1; grid-row:1; display:flex; flex-direction:column; gap:6px; padding:10px 12px 0; min-width:0; }
+#root .work-canvas .composer-area.composer-balanced .composer-attachments-row:not(:has(.attachment-card,.message-context-chip,[role="alert"])) { display:none; }
+#root .work-canvas .composer-area.composer-balanced .attachment-cards,
+#root .work-canvas .composer-area.composer-balanced .message-context-chips { margin:0; min-width:0; }
+
+/* Location, permission, recipient and model are siblings, so none need a second footer. */
+#root .work-canvas .composer-area.composer-balanced .composer-meta {
+  display:flex; align-items:center; flex-wrap:wrap; gap:2px 5px; width:100%; max-width:780px; min-height:30px; margin:5px auto 0; padding:0 4px; font-size:12px; color:var(--text-secondary);
+}
+#root .work-canvas .composer-area.composer-balanced .composer-location { order:0; display:flex; flex:0 1 auto; flex-wrap:nowrap; gap:2px; width:auto; max-width:42%; margin:0; padding:0; font-size:12px; }
+#root .work-canvas .composer-area.composer-balanced .composer-location>button { min-height:28px; padding:4px; font-size:12px; }
+#root .work-canvas .composer-area.composer-balanced .composer-location .composer-folder { max-width:150px; }
+#root .work-canvas .composer-area.composer-balanced .composer-location .composer-branch { max-width:120px; }
+#root .work-canvas .composer-area.composer-balanced .session-chat-controls,
+#root .work-canvas .composer-area.composer-balanced .quick-chat-controls { display:contents; }
+#root .work-canvas .composer-area.composer-balanced .chat-permission-select { order:1; field-sizing:content; width:auto; max-width:106px; }
+#root .work-canvas .composer-area.composer-balanced .composer-target { order:2; field-sizing:content; width:auto; max-width:92px; }
+#root .work-canvas .composer-area.composer-balanced .composer-target:has(option[value=all]:checked) { color:var(--accent); background:var(--raised); }
+#root .work-canvas .composer-area.composer-balanced .composer-meta select,
+#root .work-canvas .composer-area.composer-balanced .composer-meta input { height:28px; min-height:28px; padding:3px 5px; border:0; border-radius:6px; background:transparent; font-size:12px; color:var(--text-secondary); }
+#root .work-canvas .composer-area.composer-balanced .composer-meta select:hover,
+#root .work-canvas .composer-area.composer-balanced .composer-meta input:hover { background:var(--raised); }
+#root .work-canvas .composer-area.composer-balanced .session-chat-controls>.provider-badge { order:3; margin-left:auto; flex-shrink:0; gap:4px; font-size:11px; }
+#root .work-canvas .composer-area.composer-balanced .chat-model-controls { order:4; display:flex; flex-wrap:nowrap; flex:0 1 auto; align-items:center; min-width:0; gap:0; margin:0; }
+#root .work-canvas.code-mode .composer-area.composer-balanced .chat-model-controls label:first-child { flex:0 1 auto; min-width:0; }
+#root .work-canvas .composer-area.composer-balanced .chat-model-controls .model-combo { width:clamp(105px,17cqi,160px); min-width:0; flex:0 1 auto; }
+#root .work-canvas .composer-area.composer-balanced .chat-model-controls input { width:100%; max-width:100%; min-width:0; padding-right:23px; color:var(--text); }
+#root .work-canvas .composer-area.composer-balanced .chat-effort-select { field-sizing:content; max-width:92px; width:auto; }
+#root .work-canvas .composer-area.composer-balanced .composer-meta .composer-options { order:5; margin:0; }
+#root .work-canvas .composer-area.composer-balanced .composer-meta .composer-options>summary { width:28px; min-width:28px; height:28px; padding:5px; }
+#root .work-canvas .composer-area.composer-balanced .composer-meta .composer-options.needs-attention>summary { width:auto; gap:4px; white-space:nowrap; }
+#root .work-canvas .composer-area.composer-balanced .chat-composer-problem,
+#root .work-canvas .composer-area.composer-balanced .session-chat-controls>small { order:6; flex:1 0 100%; }
+#root .work-canvas .composer-area.composer-balanced .quick-chat-controls>.provider-badge { display:none; }
+#root .work-canvas .composer-area.composer-balanced .quick-chat-controls>label { order:3; display:flex; align-items:center; margin-left:auto; font-size:0; }
+#root .work-canvas .composer-area.composer-balanced .quick-chat-controls>label select { width:auto; max-width:140px; }
+#root .work-canvas .composer-area.composer-balanced .quick-chat-model { order:4; max-width:170px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:12px; }
+#root .work-canvas .composer-area.composer-balanced .terminal-provider-context { order:3; margin-left:auto; font-size:12px; }
+#root .work-canvas .composer-area.composer-balanced .composer-meta>.composer-options { margin-left:auto; }
+#root .work-canvas .composer-area.composer-balanced .composer-options-popover { right:0; }
+#root .work-canvas .composer-area.composer-balanced .composer-meta .model-combo-list { left:auto; right:0; width:max-content; max-width:min(320px,75vw); min-width:170px; }
+
+/* Project controls are deliberate, visible when opened, and never a ghost pin above the field. */
+#root .work-canvas .composer-area.composer-balanced .composer-project-panel { width:100%; max-width:780px; max-height:min(300px,42vh); overflow:auto; margin:0 auto 8px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); }
+#root .work-canvas .composer-area.composer-balanced .composer-project-panel[hidden] { display:none; }
+#root .work-canvas .composer-area.composer-balanced .composer-project-panel>header { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:7px; font-size:12px; }
+#root .work-canvas .composer-area.composer-balanced .composer-project-panel>header strong { font-weight:500; }
+#root .work-canvas .composer-area.composer-balanced .composer-project-panel>header button { display:grid; place-items:center; width:26px; height:26px; padding:0; border:0; border-radius:5px; background:transparent; }
+#root .work-canvas .composer-area.composer-balanced .composer-context-tags { max-width:none; width:100%; margin:0; }
+#root .work-canvas .composer-area.composer-balanced .composer-pin-picker-wrap { opacity:1; width:100%; }
+#root .work-canvas .composer-area.composer-balanced .composer-pin-dropdown { position:static; width:100%; max-height:220px; margin-top:6px; }
+#root .work-canvas .composer-area.composer-balanced .composer-add-pin-btn span { display:inline; }
+#root .work-canvas .composer-area.composer-balanced .composer-add-pin-btn { width:auto; height:28px; padding:4px 7px; gap:5px; }
+#root .work-canvas .composer-area.composer-balanced .composer-context { margin:8px 0 0; }
+#root .work-canvas .composer-area.composer-balanced .composer-hint { display:none; }
+#root .work-canvas .composer-area.composer-balanced .composer-detected-links { max-height:60px; overflow:auto; margin-top:5px; }
+@container (max-width:740px) {
+  #root .work-canvas .composer-area.composer-balanced .session-chat-controls>.provider-badge>span { display:none; }
+}
+@container (max-width:580px) {
+  #root .work-canvas .composer-area.composer-balanced .composer-location { flex-basis:100%; max-width:100%; }
+  #root .work-canvas .composer-area.composer-balanced .chat-permission-select { margin-right:auto; }
+  #root .work-canvas .composer-area.composer-balanced .session-chat-controls>.provider-badge { margin-left:0; }
+  #root .work-canvas .composer-area.composer-balanced .chat-model-controls .model-combo { width:90px; }
+  #root .work-canvas .composer-area.composer-balanced .composer-target { max-width:68px; }
+}
+@media (max-width:760px) {
+  #root .work-canvas .composer-area.composer-balanced { padding:8px 12px 10px; }
+}

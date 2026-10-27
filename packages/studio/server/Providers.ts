@@ -108,7 +108,7 @@ function codexCachedModels(): { models: string[]; efforts: Record<string, string
     const models: string[] = [];
     for (const m of Array.isArray(data.models) ? data.models : []) {
       const slug = m?.slug;
-      if (typeof slug !== "string" || !SAFE.test(slug)) continue;
+      if (typeof slug !== "string" || !slug || !SAFE.test(slug) || m.visibility === 'hide' || models.includes(slug)) continue;
       models.push(slug);
       const levels = (m.supported_reasoning_levels || []).map((e: any) => e?.effort || e).filter((e: any) => typeof e === "string");
       if (levels.length) efforts[slug] = levels;

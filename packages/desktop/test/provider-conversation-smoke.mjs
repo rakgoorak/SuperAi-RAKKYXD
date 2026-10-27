@@ -178,7 +178,7 @@ try {
   await page.locator('.quick-chat-controls .composer-options > summary').click();
   const optionsBounds = await page.locator('.quick-chat-controls .composer-options-popover').boundingBox();
   const canvasBounds = await page.locator('.work-canvas').boundingBox();
-  check(optionsBounds.x >= canvasBounds.x && optionsBounds.x + optionsBounds.width <= 1024 && optionsBounds.y >= 54, 'options popover stays inside the work canvas on a narrow laptop');
+  check(optionsBounds.x >= canvasBounds.x && optionsBounds.x + optionsBounds.width <= 1024 && optionsBounds.y >= 54, `options popover stays inside the work canvas on a narrow laptop: ${JSON.stringify({ optionsBounds, canvasBounds })}`);
   await page.screenshot({ path: path.join(output, 'options-narrow.png') });
   await page.keyboard.press('Escape');
   check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'narrow laptop viewport has no document overflow');

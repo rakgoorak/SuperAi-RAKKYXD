@@ -21,7 +21,6 @@ import {
   Rows2,
   Activity,
   SlidersHorizontal,
-  Maximize2,
   Minimize2,
   PanelTop,
   PanelLeftClose,
@@ -40,7 +39,6 @@ import {
   RefreshCw,
   AlertCircle,
   Code2,
-  ShieldCheck,
   Layers,
   Rocket,
   Puzzle,
@@ -153,6 +151,8 @@ export function App() {
   });
   const [zoomed, setZoomed] = useState(false);
   const [composerExpanded, setComposerExpanded] = useState(false);
+  const [composerPanelOpen, setComposerPanelOpen] = useState(false);
+  useEffect(() => { setComposerPanelOpen(false); }, [activeWs, selected, mode]);
   const [dockView, setDockView] = useState<DockView>("browser");
   const [previewRequest, setPreviewRequest] = useState<PreviewRequest>();
   const [launchPlan, setLaunchPlan] = useState<LaunchSeat[] | null>(null);
@@ -1435,7 +1435,15 @@ export function App() {
                   )}
                 </div></ImageEndpointContext.Provider>
               )}
-              <div className={`composer-area ${mode === "code" && !composerExpanded ? "compact-code" : ""} ${chatTarget ? "chat-minimal" : ""} ${chatBusy ? "chat-busy" : ""} ${draft.trim() || attachments.items.length ? "has-draft" : ""}`}>
+              <div className={`composer-area composer-balanced ${mode === "code" && !composerExpanded ? "compact-code" : ""} ${chatTarget ? "chat-minimal" : ""} ${chatBusy || mode !== 'code' && activeRun ? "chat-busy" : ""} ${draft.trim() || attachments.items.length ? "has-draft" : ""}`}>
+                <section className="composer-project-panel" aria-label="บริบทและการทำงาน" hidden={!composerPanelOpen} onKeyDown={event => {
+                  if (event.key === 'Escape' && !event.defaultPrevented) {
+                    event.stopPropagation();
+                    if (pinnedPickerOpen) setPinnedPickerOpen(false);
+                    else { setComposerPanelOpen(false); requestAnimationFrame(() => composer.current?.closest('.composer-area')?.querySelector<HTMLButtonElement>('.attach-menu > button')?.focus()); }
+                  }
+                }}>
+                  <header><strong>บริบทและการทำงาน</strong><button type="button" aria-label="ปิดบริบทและการทำงาน" onClick={() => { setComposerPanelOpen(false); requestAnimationFrame(() => composer.current?.closest('.composer-area')?.querySelector<HTMLButtonElement>('.attach-menu > button')?.focus()); }}><X size={14} /></button></header>
                 <div className="composer-context-tags">
                     {(mode !== 'code' || !composerTarget || chatTarget) && <ProjectContextStatus workspaceId={workspace?.id} sessionId={chatTarget?.id} revision={JSON.stringify([workspace?.instructions, workspace?.pinnedFiles])} />}
                   {workspace?.instructions && (
@@ -1587,14 +1595,18 @@ export function App() {
                     )}
                   </div>
                 </div>}
+                </section>
                 <div className={`composer-box ${chatTarget ? "has-session-controls" : ""}`}>
-                  <div className="composer-leading"><AttachMenu onFiles={attachToComposer} disabled={busy || (!workspace && mode !== "code")} /></div>
-                  {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name} disabled={busy} />}
-                  {mode === "code" && !composerTarget && target === "active" && <QuickChatControls clis={clis} provider={quickProvider} onProvider={chooseQuickProvider} disabled={busy} onSetup={() => setDialog("setup")} style={answerStyle} onStyle={setAnswerStyle} />}
-                  {mode !== 'code' && <ComposerOptions label="ตัวเลือกคำตอบ"><ResponseStyleSelect value={answerStyle} onChange={setAnswerStyle} disabled={busy || !!activeRun} /></ComposerOptions>}
-                  {mode === "code" && composerTarget && !chatTarget && <div className="terminal-provider-context"><ProviderBadge provider={composerTarget.agentType} /><span>{providerIdentity(composerTarget.agentType).connection}</span></div>}
+                  <div className="composer-leading"><AttachMenu onFiles={attachToComposer} disabled={busy || (!workspace && mode !== "code")} actions={[
+                    { label: 'บริบทและไฟล์ปักหมุด', selected: composerPanelOpen, onSelect: () => setComposerPanelOpen(value => !value) },
+                    ...(mode === 'code' && running.length || activeRun ? [{ label: 'หยุดงานปัจจุบัน', onSelect: interrupt }] : []),
+                    ...(mode === 'code' ? [{ label: composerExpanded ? 'ย่อช่องพิมพ์' : 'ขยายช่องพิมพ์', selected: composerExpanded, onSelect: () => { setComposerExpanded(value => !value); requestAnimationFrame(() => composer.current?.focus()); } }] : []),
+                    ...(nextPrompt ? [{ label: 'ใช้ข้อความแนะนำ (Tab)', onSelect: () => { setDraft(nextPrompt); requestAnimationFrame(() => composer.current?.focus()); } }] : []),
+                  ]} /></div>
+                  <div className="composer-attachments-row">
                   <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
                     {mode === 'code' && chatTarget && <MessageContextChips sessionId={chatTarget.id} />}
+                  </div>
                   <div className="composer-input-container">
                     <SlashMenu ref={slashMenu} draft={draft} sessionId={chatTarget?.id} workspaceId={mode === "chat" ? workspace?.id : undefined} providers={mode === "chat" ? [...new Set((chatConfig?.panel || []).filter(seat => seat.provider.startsWith("cli:")).map(seat => seat.provider.slice(4)))] : []} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
                     <MentionMenu ref={mentionMenu} draft={draft} workspaceId={workspace?.id} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
@@ -1602,14 +1614,8 @@ export function App() {
                       ref={composer}
                       rows={mode === "code" && !composerExpanded ? 1 : 3}
                       aria-label="คำสั่ง"
-                      placeholder={
-                        nextPrompt ? `${nextPrompt}   ⇥ Tab`
-                        : mode === "code"
-                            ? target === "all" ? `พิมพ์ข้อความถึงทุก session (${running.length})…` : composerTarget ? `พิมพ์ข้อความถึง ${composerTarget.name.split("·")[0].trim()}…` : `คุยกับ ${quickProvider ? providerIdentity(quickProvider).label : "AI"} เรื่องอะไรดี…`
-                            : mode === "agent"
-                              ? "บอกเป้าหมายให้ทีม เช่น ทำหน้าเข้าสู่ระบบพร้อมทดสอบ…"
-                              : "ถามคำถามเดียว ส่งให้ทุก AI ที่เลือก…"
-                      }
+                      placeholder={mode === 'code' ? target === 'all' ? 'ส่งข้อความถึงทุกห้อง…' : 'พิมพ์ข้อความ…' : mode === 'agent' ? 'บอกสิ่งที่ต้องการให้ทีมทำ…' : 'ถาม AI ที่เลือก…'}
+                      title={nextPrompt ? 'มีข้อความแนะนำ: กด Tab เพื่อใช้ หรือเปิดเมนู + เพื่อดูตัวเลือก' : 'Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่'}
                       value={draft}
                       onChange={(e) => {
                         setDraft(e.target.value);
@@ -1653,44 +1659,6 @@ export function App() {
                     />
                   </div>
                   <div className="composer-bottom">
-                    <div className="composer-tools">
-                    {mode === "code" && (
-                      <button className="icon-button" title={composerExpanded ? "ย่อช่องคำสั่ง" : "ขยายช่องคำสั่ง"}
-                        aria-expanded={composerExpanded} onClick={() => setComposerExpanded(!composerExpanded)}>
-                        {composerExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                      </button>
-                    )}
-                    {/* Only worth showing when there is more than one session to send to. */}
-                    {mode === "code" && (composerTarget || target === "all") && (running.length > 1 || target !== "active") && (
-                      <select
-                        className="composer-target"
-                        aria-label="เป้าหมายคำสั่ง"
-                        value={target}
-                        title={target === "all" ? `ส่งถึงทุก session ในโปรเจกต์นี้ (${running.length})` : `ส่งถึง ${selectedSession?.name || "session ที่เลือก"}`}
-                        onChange={(e) => setTarget(e.target.value === "all" ? "all" : "active")}
-                      >
-                        <option value="active">
-                          ที่เลือก
-                        </option>
-                        <option value="all">
-                          ทุก session
-                        </option>
-                      </select>
-                    )}
-                    <span>
-                      {mode === "code" ? (
-                        <>
-                          <Terminal size={12} />
-                          {workspace?.name || "ยังไม่มีโปรเจกต์"}
-                        </>
-                      ) : (
-                        <>
-                          <ShieldCheck size={12} />{" "}
-                          ใช้บัญชีและโควตาของแต่ละ CLI
-                        </>
-                      )}
-                    </span>
-                    </div>
                     <div className="inline">
                       <DictationButton
                         settings={voiceSettings}
@@ -1738,6 +1706,7 @@ export function App() {
                     </div>
                   </div>
                 </div>
+                <div className="composer-meta" aria-label="การตั้งค่าข้อความ">
                 <ComposerLocation workspace={workspace} workspaces={workspaces} recipients={mode === 'code' ? target === 'all' ? running : composerTarget ? [composerTarget] : [] : undefined}
                   onSelectWorkspace={id => { setActiveWs(id); setTarget('active'); }} onOpenFolder={() => openProject()}
                   onSelectWorktree={rootPath => { void task(async () => {
@@ -1746,6 +1715,27 @@ export function App() {
                     if (!item) { item = await post<Workspace>('/api/workspaces', { name: rootPath.split(/[\\/]/).filter(Boolean).pop() || 'Worktree', rootPath }); await refresh(); }
                     setActiveWs(item.id); setTarget('active');
                   }); }} />
+                    {mode === "code" && (composerTarget || target === "all") && (running.length > 1 || target !== "active") && (
+                      <select
+                        className="composer-target"
+                        aria-label="เป้าหมายคำสั่ง"
+                        value={target}
+                        title={target === "all" ? `ส่งถึงทุก session ในโปรเจกต์นี้ (${running.length})` : `ส่งถึง ${selectedSession?.name || "session ที่เลือก"}`}
+                        onChange={(e) => setTarget(e.target.value === "all" ? "all" : "active")}
+                      >
+                        <option value="active">
+                          ที่เลือก
+                        </option>
+                        <option value="all">
+                          ทุก session
+                        </option>
+                      </select>
+                    )}
+                  {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name} disabled={busy} />}
+                  {mode === "code" && !composerTarget && target === "active" && <QuickChatControls clis={clis} provider={quickProvider} onProvider={chooseQuickProvider} disabled={busy} onSetup={() => setDialog("setup")} style={answerStyle} onStyle={setAnswerStyle} />}
+                  {mode !== 'code' && <ComposerOptions label="ตัวเลือกคำตอบ"><ResponseStyleSelect value={answerStyle} onChange={setAnswerStyle} disabled={busy || !!activeRun} /></ComposerOptions>}
+                  {mode === "code" && composerTarget && !chatTarget && <div className="terminal-provider-context"><ProviderBadge provider={composerTarget.agentType} /><span>{providerIdentity(composerTarget.agentType).connection}</span></div>}
+                </div>
                 {extractUrls(draft).length > 0 && (
                   <div className="composer-detected-links">
                     <span className="detected-links-label">🔗 ลิงก์ที่พบ:</span>

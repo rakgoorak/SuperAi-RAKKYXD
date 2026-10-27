@@ -18,8 +18,8 @@ import "./composer.css";
 
 import "./minimal-workspace.css";
 import "./toast.css";
-import "./chat-minimal.css";
 
 import "./comparison-arena.css";
 import "./conversation-hub.css";
 import "./minimal-interface.css";
+import "./composer-balanced.css";

@@ -77,6 +77,8 @@ try {
   await page.getByLabel('เป้าหมายคำสั่ง', { exact: true }).selectOption('active');
   await page.locator('.session-tab').filter({ hasText: 'One' }).locator('button').first().click();
   const contextStatus = page.locator('.project-context-status');
+  await page.getByRole('button', { name: 'แนบไฟล์', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'บริบทและไฟล์ปักหมุด', exact: true }).click();
   await contextStatus.locator('summary').click();
   await contextStatus.getByText('ไม่พบไฟล์', { exact: true }).waitFor();
   check(await contextStatus.innerText().then(text => text.includes('notes.md') && text.includes('พร้อมแนบ') && text.includes('missing.md')), 'project context lists included and missing files instead of claiming all pins are usable');

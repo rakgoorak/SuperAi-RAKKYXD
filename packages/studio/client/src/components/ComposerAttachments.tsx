@@ -80,7 +80,7 @@ export const AttachmentCards: React.FC<{ items: ComposerAttachment[]; onRemove: 
   ) : null;
 
 /** "+" menu at the left of the composer; Ctrl+U opens the same file picker. */
-export const AttachMenu: React.FC<{ onFiles: (files: File[]) => void; disabled?: boolean }> = ({ onFiles, disabled }) => {
+export const AttachMenu: React.FC<{ onFiles: (files: File[]) => void; disabled?: boolean; actions?: { label: string; selected?: boolean; onSelect: () => void }[] }> = ({ onFiles, disabled, actions = [] }) => {
   const [open, setOpen] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -130,6 +130,7 @@ export const AttachMenu: React.FC<{ onFiles: (files: File[]) => void; disabled?:
             <span>เพิ่มไฟล์หรือรูปภาพ</span>
             <kbd>Ctrl+U</kbd>
           </button>
+          {actions.map(action => <button key={action.label} type="button" role="menuitem" aria-pressed={action.selected} onClick={() => { setOpen(false); action.onSelect(); }}><FileText size={13} /><span>{action.label}</span></button>)}
         </div>
       )}
       <input
