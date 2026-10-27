@@ -29,7 +29,7 @@ export function promptArguments(
       ...modelEffortArgs(id, modelOverride, effort),
       // Attached images/PDFs are read with the Read tool, so keep it even in read-only chat.
       ...(allowTools
-        ? ["--permission-mode", "acceptEdits", "--allowedTools", "Bash"]
+        ? ["--permission-mode", "acceptEdits", "--allowedTools", "Bash,WebSearch,WebFetch"]
         : ["--permission-mode", "plan", "--tools", allowReadTools ? "Read,Grep,Glob" : attachments.length ? "Read" : ""]),
     ];
   if (id === "antigravity") {

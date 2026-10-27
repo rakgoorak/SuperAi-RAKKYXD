@@ -5,6 +5,12 @@ import { createHash } from "node:crypto";
 
 export interface ChatSkill { id: string; name: string; description: string; source: string; path: string }
 const PROVIDERS = ["claude-code", "codex", "antigravity", "opencode"];
+export const CLI_PASSTHROUGH_COMMANDS = new Set([
+  "compact", "cost", "doctor", "review", "pr_comments", "init", "clear", "bug", "help",
+  "terminal:setup", "permissions", "memory", "export", "config", "stats", "usage",
+  "summary", "context", "status", "model", "mode", "plan", "reset", "undo", "login",
+  "logout", "settings", "version", "ide", "listen", "tools",
+]);
 
 /** Read only known skill directories. Project skills take precedence over global skills.
  * IDs distinguish duplicate names; clients never supply a file path to execute/read.
@@ -81,6 +87,7 @@ export function skillPrompt(text: string, root: string, provider: string, skillI
   const skill = skillId ? skills.find((s) => s.id === skillId)
     : skills.find((s) => s.name === (parts?.[1] || (!command ? direct?.[1] : inline ? inline[1] : "")));
   if (!skill) {
+    if (direct && CLI_PASSTHROUGH_COMMANDS.has(direct[1].toLowerCase())) return text;
     if (command) throw new Error("ไม่พบ skill ที่เลือก กรุณาเลือก skill จาก /skills แล้วพิมพ์ /skill ชื่อ งานที่ต้องการ");
     if (direct || skillId) throw new Error("ไม่พบ skill นี้สำหรับผู้ให้บริการ กรุณาเปิด /skills เพื่อดูรายการ · คำสั่งของ Terminal ใช้ในหน้า Terminal");
     return text;

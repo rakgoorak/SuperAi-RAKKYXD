@@ -1,0 +1,20 @@
+/* Permission card: Claude asks before using a tool its mode does not cover. */
+#root .chat-permission {
+  margin: 10px 0; padding: 12px 14px; border: 1px solid var(--control-border); border-radius: 12px;
+  background: var(--surface); color: var(--text); font-size: 13px;
+}
+#root .chat-permission.pending { border-color: var(--accent); }
+#root .chat-permission-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#root .chat-permission-head > svg { flex: none; color: var(--accent); }
+#root .chat-permission-head > strong { font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+#root .chat-permission-head > small { margin-left: auto; flex: none; color: var(--dim); font-size: 12px; }
+#root .chat-permission.denied .chat-permission-head > small,
+#root .chat-permission.expired .chat-permission-head > small { color: var(--error, #e08a76); }
+#root .chat-permission pre {
+  margin: 8px 0 0; padding: 8px 10px; max-height: 160px; overflow: auto; border-radius: 8px;
+  background: var(--base); color: var(--text-secondary); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+#root .chat-permission-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+#root .chat-permission-actions button { min-height: 30px; padding: 4px 12px; border-radius: 8px; font-size: 12px; }
+#root .chat-permission > small[role="alert"] { display: block; margin-top: 6px; color: var(--error, #e08a76); }
+#root .chat-permission:not(.pending) { padding: 8px 12px; background: transparent; }

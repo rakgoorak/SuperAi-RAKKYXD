@@ -43,6 +43,8 @@ await fs.writeFile(path.join(data, 'superai-chats', `${session.id}.json`), JSON.
   { id: 't1-user', kind: 'user', text: 'ปรับ UI แชทให้ดู minimal เหมือนแชทของ Claude หน่อย', at },
   { id: 't1-tool', kind: 'tool', tool: 'read', title: 'Read App.tsx', status: 'done', at },
   { id: 't1-answer', kind: 'assistant', text: 'ได้ครับ ช่องพิมพ์จะเหลือแถวเดียว: ปุ่มแนบ ช่องข้อความ ไมค์ และปุ่มส่ง\n\nใต้ช่องพิมพ์มีสิทธิ์ทางซ้าย และ Model กับ Effort ทางขวา', at },
+  { id: 't1-permission-a', kind: 'permission', requestId: 'a', tool: 'Bash', title: 'รันคำสั่ง', detail: 'npm test', status: 'allowed', at },
+  { id: 't1-permission-b', kind: 'permission', requestId: 'b', tool: 'WebFetch', title: 'เปิดเว็บ', detail: 'https://code.claude.com/docs', status: 'pending', at },
 ] }));
 
 app = await launch();
@@ -60,12 +62,18 @@ try {
       permission: rect('.chat-minimal .chat-permission-select'), model: rect('.chat-minimal .chat-model-controls') };
   });
   await page.screenshot({ path: path.join(output, '01-chat.png') });
+  // Permission cards: an open question has its three answers; an answered one only says what was chosen.
+  const open = page.locator('.chat-permission.pending');
+  for (const label of ['อนุญาต', 'อนุญาตตลอดห้องนี้', 'ไม่อนุญาต']) assert.ok(await open.getByRole('button', { name: label, exact: true }).isVisible(), label);
+  assert.equal(await page.locator('.chat-permission.allowed button').count(), 0);
+  assert.match(await page.locator('.chat-permission.allowed').innerText(), /อนุญาตแล้ว/);
+  await open.screenshot({ path: path.join(output, '03-permission.png') });
   for (const key of Object.keys(layout)) assert.ok(layout[key], `${key} is shown`);
   // One row: attach, input and send share a line; the footer sits under it.
   const middle = r => (r.top + r.bottom) / 2;
   assert.ok(Math.abs(middle(layout.attach) - middle(layout.input)) < 12, JSON.stringify(layout));
   assert.ok(Math.abs(middle(layout.send) - middle(layout.input)) < 12, JSON.stringify(layout));
-  assert.ok(layout.footer.top >= layout.input.bottom - 2, 'footer below the input row');
+  assert.ok(layout.permission.top >= layout.input.bottom - 2 && layout.model.top >= layout.input.bottom - 2, `footer controls below the input row ${JSON.stringify(layout)}`);
   assert.ok(layout.permission.left < layout.model.left, 'permission left, model right');
   // A notice is a floating toast: the conversation does not move.
   const before = await page.evaluate(() => document.querySelector('.chat-view').getBoundingClientRect().top);

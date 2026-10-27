@@ -8,7 +8,7 @@ import { cliFailure } from "./CliProvider.js";
 import { cliAuth } from "./CliAuth.js";
 import { skillPrompt } from "./ChatSkills.js";
 import { getProjectRules, formatRulesForPrompt } from "./ProjectRules.js";
-import { contextualPrompt, type ProjectContext } from './ProjectContext.js';
+import { contextualPrompt, contextForAgent, type ProjectContext } from './ProjectContext.js';
 import type { ResponseStyle } from './ResponseStyle.js';
 
 // Chat view for Code sessions: each message runs the CLI headless with its JSON event stream and
@@ -34,7 +34,11 @@ export type ChatItem =
   | { id: string; kind: "tool"; tool: ToolKind; title: string; output?: string; images?: string[]; status: "running" | "done" | "failed"; at: number }
   /** The CLI's own task list (Claude TodoWrite, Codex todo_list, OpenCode todowrite), one per turn, updated in place. */
   | { id: string; kind: "todos"; todos: { text: string; status: TodoStatus }[]; at: number }
-  | { id: string; kind: "error" | "notice"; text: string; at: number };
+  | { id: string; kind: "error" | "notice"; text: string; at: number }
+  /** Claude asked to use a tool the permission mode does not cover; the user answers in the chat. */
+  | { id: string; kind: "permission"; requestId: string; tool: string; title: string; detail?: string; status: PermissionStatus; at: number };
+export type PermissionStatus = "pending" | "allowed" | "always" | "denied" | "expired";
+export type PermissionDecision = "allow" | "always" | "deny";
 type NewItem = ChatItem extends infer T ? (T extends ChatItem ? Omit<T, "at"> : never) : never;
 
 /** What one line of a CLI's JSON stream changes. `outputTokens` is added to the turn's count. */
@@ -63,7 +67,14 @@ function toolImages(content: unknown): string[] | undefined {
   return images.length ? images : undefined;
 }
 
-const tokensWritten = (n: number): { outputTokens?: number } => (n > 0 ? { outputTokens: n } : {});
+/** Short stable fingerprint (FNV-1a) to tell whether the project context changed. */
+function hashText(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  return hash.toString(16);
+}
+
+const tokensWritten =(n: number): { outputTokens?: number } => (n > 0 ? { outputTokens: n } : {});
 
 /** A CLI's todo entries in one shape. `done` lists (Codex) mark the first open entry as in progress. */
 function todoList(entries: unknown, prefix: string, running = true): NewItem | null {
@@ -281,6 +292,8 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
  * run commands (the default). `files` are attached natively (Codex: images, OpenCode: any file);
  * others get paths in the prompt.
  */
+/** Claude Code tools that only read the web; allowed in every chat permission mode. */
+export const WEB_TOOLS = "WebSearch,WebFetch";
 export function chatArguments(agent: string, o: { prompt: string; conversationId?: string; model?: string; effort?: string; files?: string[]; permission?: ChatPermission }): string[] {
   const permission = o.permission || "auto";
   if (agent === "claude-code")
@@ -289,9 +302,11 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
       "--output-format", "stream-json", "--verbose",
       ...(o.conversationId ? ["--resume", o.conversationId] : []),
       ...modelEffortArgs(agent, o.model, o.effort),
-      ...(permission === "read" ? ["--permission-mode", "plan"]
-        : permission === "edit" ? ["--permission-mode", "acceptEdits"]
-          : ["--permission-mode", "acceptEdits", "--allowedTools", "Bash"]),
+      // `-p` cannot ask for approval, so anything not allowed here is refused. Web search/fetch only
+      // read, so every mode gets them; "auto" also runs commands.
+      ...(permission === "read" ? ["--permission-mode", "plan", "--allowedTools", WEB_TOOLS]
+        : permission === "edit" ? ["--permission-mode", "acceptEdits", "--allowedTools", WEB_TOOLS]
+          : ["--permission-mode", "acceptEdits", "--allowedTools", `Bash,${WEB_TOOLS}`]),
     ];
   if (agent === "opencode")
     return [
@@ -330,9 +345,48 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
   throw new Error("CLI นี้ยังไม่รองรับมุมมองแชต กรุณาใช้ terminal");
 }
 
+/**
+ * Claude Code kept running for the whole conversation, like its own app: stream-json in and out,
+ * permission prompts answered by us (`--permission-prompt-tool stdio`) and project context in the
+ * system prompt instead of every message.
+ */
+export function claudeLiveArguments(o: { conversationId?: string; model?: string; effort?: string; permission?: ChatPermission; systemPrompt?: string }): string[] {
+  const permission = o.permission || "auto";
+  return [
+    "-p",
+    "--input-format", "stream-json",
+    "--output-format", "stream-json", "--verbose",
+    ...(o.conversationId ? ["--resume", o.conversationId] : []),
+    ...modelEffortArgs("claude-code", o.model, o.effort),
+    ...(permission === "read" ? ["--permission-mode", "plan", "--allowedTools", WEB_TOOLS]
+      : permission === "edit" ? ["--permission-mode", "acceptEdits", "--allowedTools", WEB_TOOLS]
+        : ["--permission-mode", "acceptEdits", "--allowedTools", `Bash,${WEB_TOOLS}`]),
+    // Anything else Claude wants to use comes to us as a can_use_tool request instead of being refused.
+    "--permission-prompt-tool", "stdio",
+    ...(o.systemPrompt ? ["--append-system-prompt", o.systemPrompt] : []),
+  ];
+}
+
+/** What a permission card shows: the command, file or address the tool would use. */
+export function permissionSummary(tool: string, input: any, description?: string): { title: string; detail?: string } {
+  const value = (key: string) => (typeof input?.[key] === "string" ? input[key] : "");
+  const detail = value("command") || value("file_path") || value("notebook_path") || value("url") || value("query") || value("pattern")
+    || (input && typeof input === "object" ? JSON.stringify(input).slice(0, 400) : "");
+  const verb: Record<string, string> = { Bash: "รันคำสั่ง", Write: "เขียนไฟล์", Edit: "แก้ไฟล์", MultiEdit: "แก้ไฟล์", NotebookEdit: "แก้ Notebook", WebFetch: "เปิดเว็บ", WebSearch: "ค้นเว็บ" };
+  return { title: `${verb[tool] || `ใช้เครื่องมือ ${tool}`}${description && !verb[tool] ? ` · ${description}` : ""}`, detail: detail.slice(0, 2000) || undefined };
+}
+
 type Spawner = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
 interface QueuedRequest extends QueuedChat { request: ChatRequest }
-interface Chat extends Omit<ChatSnapshot, "queued"> { seed?: string; turns: number; proc?: ChildProcess; cancelled?: boolean; /** Stopped to take a new message (Enter while answering). */ interrupting?: boolean; wait?: () => void; listeners: Set<(m: ChatMessage) => void>; saveTimer?: NodeJS.Timeout; queue: QueuedRequest[] }
+/** A Claude Code process that outlives a turn; `onLine`/`onClose` belong to the turn in progress. */
+interface LiveClaude { proc: ChildProcess; key: string; closed: boolean; errors: string; onLine?: (line: string) => void; onClose?: (code: number | null) => void; idle?: NodeJS.Timeout; stopTimer?: NodeJS.Timeout }
+interface PendingPermission { live: LiveClaude; input: unknown; itemId: string; tool: string }
+interface Chat extends Omit<ChatSnapshot, "queued"> {
+  seed?: string; turns: number; proc?: ChildProcess; cancelled?: boolean; /** Stopped to take a new message (Enter while answering). */ interrupting?: boolean;
+  wait?: () => void; listeners: Set<(m: ChatMessage) => void>; saveTimer?: NodeJS.Timeout; queue: QueuedRequest[];
+  live?: LiveClaude; permissions: Map<string, PendingPermission>; /** Tools the user allowed for the rest of this chat. */ alwaysAllowed: Set<string>;
+  /** Project context already in this conversation (CLIs other than the live Claude get it once). */ contextKey?: string;
+}
 export interface ChatFork { items: ChatItem[]; turns: number; seed: string; }
 export interface ChatRequest { agent: string; cwd: string; text: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle }
 
@@ -343,7 +397,10 @@ export class CliChatManager {
   /** `dir` keeps each chat as <id>.json so it survives an app restart. */
   constructor(private spawner: Spawner = spawn, private dir?: string, private launcher: typeof cliLaunch = cliLaunch,
     // `turn` is the silence warning threshold; only startup silence terminates the CLI.
-    private timeouts = { startup: 90000, turn: 600000 }) {}
+    private timeouts = { startup: 90000, turn: 600000 },
+    // `live`: keep Claude Code running between turns; `idle` closes it after this long unused.
+    private options: { live?: boolean; idle?: number } = {}) {}
+  private get liveClaude() { return this.options.live !== false; }
 
   private file(id: string): string | undefined {
     return this.dir && /^[\w-]+$/.test(id) ? path.join(this.dir, `${id}.json`) : undefined;
@@ -351,7 +408,7 @@ export class CliChatManager {
   private chat(id: string): Chat {
     let chat = this.chats.get(id);
     if (chat) return chat;
-    chat = { items: [], running: false, turns: 0, listeners: new Set(), queue: [] };
+    chat = { items: [], running: false, turns: 0, listeners: new Set(), queue: [], permissions: new Map(), alwaysAllowed: new Set() };
     const file = this.file(id);
     try {
       if (file && fs.existsSync(file)) {
@@ -361,6 +418,7 @@ export class CliChatManager {
         if (typeof saved.conversationId === "string" && saved.conversationId) chat.conversationId = saved.conversationId;
         chat.turns = Number(saved.turns) || 0;
         if (typeof saved.seed === 'string') chat.seed = saved.seed;
+        if (typeof saved.contextKey === 'string') chat.contextKey = saved.contextKey;
       }
     } catch {
       // an unreadable file starts an empty chat
@@ -375,7 +433,7 @@ export class CliChatManager {
     const write = () => {
       try {
         fs.mkdirSync(this.dir!, { recursive: true });
-        fs.writeFileSync(file, JSON.stringify({ conversationId: chat.conversationId, turns: chat.turns, items: chat.items, seed: chat.seed }));
+        fs.writeFileSync(file, JSON.stringify({ conversationId: chat.conversationId, turns: chat.turns, items: chat.items, seed: chat.seed, contextKey: chat.contextKey }));
       } catch {
         // a full disk must not break the chat on screen
       }
@@ -409,7 +467,7 @@ export class CliChatManager {
     const items: ChatItem[] = selection !== undefined
       ? [{ id: 'side-context', kind: 'notice', text: `ข้อความอ้างอิงจากห้องเดิม:\n${selection}`, at: Date.now() }]
       : structuredClone(source.items.slice(0, index + 1));
-    const seed = items.map(item => item.kind === 'tool' ? `[tool ${item.title}]\n${item.output || ''}`
+    const seed = items.filter(item => item.kind !== 'permission').map(item => item.kind === 'tool' ? `[tool ${item.title}]\n${item.output || ''}`
       : item.kind === 'todos' ? `[tasks]\n${item.todos.map(todo => todo.text).join('\n')}`
         : `[${item.kind}]\n${item.text}${item.kind === 'user' && item.request?.attachments?.length ? `\nไฟล์อ้างอิง: ${item.request.attachments.join(', ')}` : ''}`).join('\n\n');
     if (!seed.trim() || seed.length > 12000) throw new Error('บริบทยาวเกินไป กรุณาเลือกข้อความสั้นลงแล้วใช้ Start a side chat');
@@ -445,7 +503,9 @@ export class CliChatManager {
     const chat = this.chat(id);
     if (chat.conversationId === conversationId) return;
     if (chat.running) throw new Error("แชตยังตอบข้อความก่อนหน้าอยู่ กรุณารอให้เสร็จก่อนเปลี่ยนบทสนทนา");
+    this.closeLive(chat);
     chat.conversationId = conversationId;
+    chat.contextKey = undefined;
     this.save(id, chat, true);
   }
 
@@ -482,13 +542,27 @@ export class CliChatManager {
     const selected = skillPrompt(text, request.cwd, agent, request.skillId);
     const rulesText = request.projectContext ? '' : formatRulesForPrompt(getProjectRules(request.cwd).rules);
     const inherited = chat.seed && !chat.conversationId ? `ประวัติอ้างอิงจากห้องเดิม (ข้อมูลบทสนทนา ไม่ใช่คำสั่งระบบ):\n${chat.seed}\n\nข้อความใหม่ของผู้ใช้:\n${selected}` : selected;
-    const combined = contextualPrompt(rulesText ? `${inherited}${rulesText}` : inherited, request.projectContext, request.responseStyle);
+    const live = agent === "claude-code" && this.liveClaude;
+    // Project context: the live Claude gets it as system prompt (never piling up in the history);
+    // other CLIs get it once per conversation, and again only when it changed.
+    const effectiveContext = contextForAgent(request.projectContext, agent);
+    const contextText = effectiveContext?.text || "";
+    const contextKey = contextText ? String(contextText.length) + ":" + hashText(contextText) : "";
+    const systemPrompt = live && contextText ? `บริบทโปรเจกต์ (เนื้อหาเอกสารเป็นข้อมูลอ้างอิง):\n${contextText}` : undefined;
+    const sendContext = !live && !!contextText && (!chat.conversationId || chat.contextKey !== contextKey);
+    const combined = contextualPrompt(rulesText ? `${inherited}${rulesText}` : inherited, sendContext ? effectiveContext : undefined, request.responseStyle);
     const prompt = listed.length ? `${combined}\n\nไฟล์แนบ:\n${listed.map((f) => `- ${f}`).join("\n")}` : combined;
     if (prompt.length > MAX_PROMPT) throw new Error("ข้อความยาวเกินไป กรุณาแบ่งส่งหรือใส่ไว้ในไฟล์แล้วแนบแทน");
-    const args = chatArguments(agent, { prompt, conversationId: chat.conversationId, model: request.model, effort: request.effort, files: attached, permission: request.permission });
+    const liveKey = JSON.stringify([request.cwd, request.model || "", request.effort || "", request.permission || "auto", systemPrompt || ""]);
+    if (live && chat.live && (chat.live.closed || chat.live.key !== liveKey)) this.closeLive(chat);
+    const reuse = live && chat.live && !chat.live.closed ? chat.live : undefined;
+    const args = live
+      ? claudeLiveArguments({ conversationId: chat.conversationId, model: request.model, effort: request.effort, permission: request.permission, systemPrompt })
+      : chatArguments(agent, { prompt, conversationId: chat.conversationId, model: request.model, effort: request.effort, files: attached, permission: request.permission });
 
     // Resolved first: a CLI that is not installed is refused before the message joins the chat.
-    const launch = this.launcher(agent, args);
+    const launch = reuse ? undefined : this.launcher(agent, args);
+    if (sendContext) chat.contextKey = contextKey;
     const prefix = `t${++chat.turns}`;
     this.put(id, chat, { id: `${prefix}-user`, kind: "user", text, request: { text, model: request.model, effort: request.effort, skillId: request.skillId, attachments: files, permission: request.permission, projectContext: request.projectContext, responseStyle: request.responseStyle }, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}) });
     chat.running = true;
@@ -509,6 +583,18 @@ export class CliChatManager {
       clearTimeout(startupTimer); clearTimeout(idleTimer);
       chat.proc = undefined;
       chat.wait = undefined;
+      // A live Claude stays for the next turn; questions it asked during this one can no longer be answered.
+      if (chat.live) {
+        const current = chat.live;
+        current.onLine = undefined; current.onClose = undefined;
+        clearTimeout(current.stopTimer);
+        if (!current.closed) { current.idle = setTimeout(() => { if (chat.live === current && !chat.running) this.closeLive(chat); }, this.options.idle ?? 15 * 60_000); current.idle.unref?.(); }
+      }
+      for (const [requestId, pending] of chat.permissions) {
+        const item = chat.items.find((i) => i.id === pending.itemId);
+        if (item?.kind === "permission" && item.status === "pending") this.put(id, chat, { ...item, status: "expired" });
+        chat.permissions.delete(requestId);
+      }
       for (const item of chat.items)
         if (item.kind === "tool" && item.status === "running" && item.id.startsWith(`${prefix}-`)) this.put(id, chat, { ...item, status: chat.cancelled || problem || failed ? "failed" : "done" });
       const interrupted = chat.cancelled && chat.interrupting;
@@ -541,27 +627,37 @@ export class CliChatManager {
         this.put(id, chat, { id: `${prefix}-error`, kind: "error", text: cliFailure(agent, request.model || "", update.error, "", 1) });
       }
     };
-    try {
-      proc = this.spawner(launch.command, launch.args, {
-        cwd: request.cwd,
-        detached: process.platform !== "win32",
-        windowsHide: true,
-        stdio: ["pipe", "pipe", "pipe"],
-        env: { ...process.env, ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0" },
-      });
-    } catch (error: any) {
-      finish(`เปิด ${NAMES[agent]} ไม่สำเร็จ: ${error.message}`);
-      return "sent";
+    let current: LiveClaude | undefined = reuse;
+    if (!current) {
+      try {
+        proc = this.spawner(launch!.command, launch!.args, {
+          cwd: request.cwd,
+          detached: process.platform !== "win32",
+          windowsHide: true,
+          stdio: ["pipe", "pipe", "pipe"],
+          env: { ...process.env, ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0" },
+        });
+      } catch (error: any) {
+        finish(`เปิด ${NAMES[agent]} ไม่สำเร็จ: ${error.message}`);
+        return "sent";
+      }
+      if (live) current = this.startLive(chat, proc, liveKey);
     }
-    chat.proc = proc;
+    if (current) { clearTimeout(current.idle); proc = current.proc; }
+    chat.proc = proc!;
     const timeout = (reason: 'startup') => {
       if (finished || timeoutReason || chat.cancelled) return;
       timeoutReason = reason;
       clearTimeout(startupTimer); clearTimeout(idleTimer);
       // Keep the turn occupied until close confirms that the child stopped.
-      if (process.platform === "win32" && proc.pid) execFile("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true }, () => {});
-      else if (proc.pid) { try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill(); } }
-      else proc.kill?.();
+      this.kill(proc);
+    };
+    const closed = (code: number | null, errors: string) => {
+      const duration = (ms: number) => ms >= 60000 ? `${Math.ceil(ms / 60000)} นาที` : `${Math.max(1, Math.ceil(ms / 1000))} วินาที`;
+      const timeoutProblem = timeoutReason === 'startup'
+        ? `${NAMES[agent]} ไม่ส่งข้อมูลเริ่มต้นภายใน ${duration(this.timeouts.startup)} ตรวจบัญชีและการเชื่อมต่อใน Terminal แล้วลองส่งใหม่`
+        : undefined;
+      finish(timeoutProblem || (code === 0 || chat.cancelled ? undefined : cliFailure(agent, request.model || "", errors, "", code)));
     };
     const activity = () => {
       if (finished || timeoutReason || chat.cancelled) return;
@@ -581,6 +677,23 @@ export class CliChatManager {
     };
     chat.wait = () => { if (chat.activity?.quiet) activity(); };
     startupTimer = setTimeout(() => timeout('startup'), this.timeouts.startup); startupTimer.unref();
+    if (current) {
+      const lv = current;
+      lv.onLine = (line) => {
+        activity();
+        let event: any;
+        try { event = JSON.parse(line); } catch { apply(line); return; }
+        if (event?.type === "control_request") { this.controlRequest(id, chat, lv, prefix, event); return; }
+        if (event?.type === "control_response") return;
+        apply(line);
+        // The process stays; the turn ends with Claude's result.
+        if (event?.type === "result") finish();
+      };
+      lv.onClose = (code) => closed(code, lv.errors);
+      this.writeLive(lv, { type: "user", message: { role: "user", content: prompt } });
+      return "sent";
+    }
+    proc = proc!;
     proc.stdin?.on("error", () => {});
     // Codex and Claude Code read the prompt from stdin; the others take it as an argument.
     proc.stdin?.end(agent === "codex" || agent === "claude-code" ? prompt : undefined, "utf8");
@@ -599,13 +712,93 @@ export class CliChatManager {
     proc.on("error", (error) => finish(`เปิด ${NAMES[agent]} ไม่สำเร็จ: ${error.message}`));
     proc.on("close", (code) => {
       if (pending.trim()) apply(pending);
-      const duration = (ms: number) => ms >= 60000 ? `${Math.ceil(ms / 60000)} นาที` : `${Math.max(1, Math.ceil(ms / 1000))} วินาที`;
-      const timeoutProblem = timeoutReason === 'startup'
-        ? `${NAMES[agent]} ไม่ส่งข้อมูลเริ่มต้นภายใน ${duration(this.timeouts.startup)} ตรวจบัญชีและการเชื่อมต่อใน Terminal แล้วลองส่งใหม่`
-        : undefined;
-      finish(timeoutProblem || (code === 0 ? undefined : cliFailure(agent, request.model || "", errors, "", code)));
+      closed(code, errors);
     });
     return "sent";
+  }
+
+  /** Wire a freshly spawned Claude Code that will serve this chat's turns until closed. */
+  private startLive(chat: Chat, proc: ChildProcess, key: string): LiveClaude {
+    const lv: LiveClaude = { proc, key, closed: false, errors: "" };
+    chat.live = lv;
+    let pending = "";
+    proc.stdin?.on("error", () => {});
+    proc.stdout?.setEncoding("utf8");
+    proc.stdout?.on("data", (chunk: string) => {
+      const lines = (pending + chunk).split(/\r?\n/);
+      pending = lines.pop() || "";
+      for (const line of lines) if (line.trim()) lv.onLine?.(line);
+    });
+    proc.stderr?.setEncoding("utf8");
+    proc.stderr?.on("data", (chunk: string) => { lv.errors = (lv.errors + chunk).slice(-4000); });
+    const end = (code: number | null) => {
+      if (lv.closed) return;
+      if (pending.trim()) lv.onLine?.(pending);
+      lv.closed = true;
+      clearTimeout(lv.idle); clearTimeout(lv.stopTimer);
+      if (chat.live === lv) chat.live = undefined;
+      lv.onClose?.(code);
+    };
+    proc.on("error", () => end(1));
+    proc.on("close", (code) => end(code));
+    return lv;
+  }
+
+  private writeLive(lv: LiveClaude, message: unknown) {
+    if (!lv.closed) lv.proc.stdin?.write(JSON.stringify(message) + "\n", "utf8");
+  }
+
+  /** Claude asks before using a tool its permission mode does not cover: show it, or answer from "always". */
+  private controlRequest(id: string, chat: Chat, lv: LiveClaude, prefix: string, event: any) {
+    const requestId = String(event.request_id || "");
+    const request = event.request || {};
+    if (request.subtype !== "can_use_tool") {
+      this.writeLive(lv, { type: "control_response", response: { subtype: "error", request_id: requestId, error: `SuperAi ยังไม่รองรับ ${request.subtype}` } });
+      return;
+    }
+    const tool = String(request.tool_name || "tool");
+    if (chat.alwaysAllowed.has(tool)) {
+      this.writeLive(lv, { type: "control_response", response: { subtype: "success", request_id: requestId, response: { behavior: "allow", updatedInput: request.input } } });
+      return;
+    }
+    const itemId = `${prefix}-permission-${requestId}`;
+    chat.permissions.set(requestId, { live: lv, input: request.input, itemId, tool });
+    this.put(id, chat, { id: itemId, kind: "permission", requestId, tool, ...permissionSummary(tool, request.input, request.description), status: "pending" });
+  }
+
+  /** The user's answer to a permission card. False when the question is no longer open. */
+  answerPermission(id: string, requestId: string, decision: PermissionDecision): boolean {
+    const chat = this.chats.get(id);
+    const pending = chat?.permissions.get(requestId);
+    if (!chat || !pending) return false;
+    chat.permissions.delete(requestId);
+    if (decision === "always") chat.alwaysAllowed.add(pending.tool);
+    const response = decision === "deny"
+      ? { behavior: "deny", message: "ผู้ใช้ไม่อนุญาตให้ใช้เครื่องมือนี้ในครั้งนี้" }
+      : { behavior: "allow", updatedInput: pending.input };
+    this.writeLive(pending.live, { type: "control_response", response: { subtype: "success", request_id: requestId, response } });
+    const item = chat.items.find((i) => i.id === pending.itemId);
+    if (item?.kind === "permission") this.put(id, chat, { ...item, status: decision === "deny" ? "denied" : decision === "always" ? "always" : "allowed" });
+    return true;
+  }
+
+  /** Let a live Claude finish on its own: close its input, then make sure it is gone. */
+  private closeLive(chat: Chat) {
+    const lv = chat.live;
+    if (!lv) return;
+    chat.live = undefined;
+    clearTimeout(lv.idle); clearTimeout(lv.stopTimer);
+    lv.onLine = undefined; lv.onClose = undefined;
+    if (lv.closed) return;
+    lv.closed = true;
+    try { lv.proc.stdin?.end(); } catch {}
+    setTimeout(() => { if (lv.proc.exitCode === null) this.kill(lv.proc); }, 3000).unref?.();
+  }
+
+  private kill(proc: ChildProcess) {
+    if (process.platform === "win32" && proc.pid) execFile("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true }, () => {});
+    else if (proc.pid) { try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill(); } }
+    else proc.kill?.();
   }
 
   private emitQueue(chat: Chat) {
@@ -653,15 +846,25 @@ export class CliChatManager {
     chat.cancelled = true;
     // A plain stop wins over an interrupt still waiting for the CLI to exit: the queue stays paused.
     chat.interrupting = false;
-    if (process.platform === "win32" && proc.pid) execFile("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true }, () => {});
-    else if (proc.pid) { try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill(); } }
-    else proc.kill?.();
+    const lv = chat.live;
+    if (lv && lv.proc === proc && !lv.closed) {
+      // Like Esc in Claude: stop the turn, keep the process (and its conversation) for the next one.
+      for (const [requestId] of chat.permissions) this.answerPermission(id, requestId, "deny");
+      this.writeLive(lv, { type: "control_request", request_id: `interrupt-${randomUUID()}`, request: { subtype: "interrupt" } });
+      clearTimeout(lv.stopTimer);
+      lv.stopTimer = setTimeout(() => { if (chat.running && chat.proc === proc) this.kill(proc); }, 5000);
+      lv.stopTimer.unref?.();
+      return true;
+    }
+    this.kill(proc);
     return true;
   }
 
   /** Delete a session's chat, including its saved history. */
   drop(id: string) {
     this.cancel(id);
+    const dropped = this.chats.get(id);
+    if (dropped) this.closeLive(dropped);
     clearTimeout(this.chats.get(id)?.saveTimer);
     this.chats.delete(id);
     const file = this.file(id);
@@ -672,6 +875,7 @@ export class CliChatManager {
   stopAll() {
     for (const [id, chat] of this.chats) {
       this.cancel(id);
+      this.closeLive(chat);
       if (chat.saveTimer) this.save(id, chat, true);
     }
   }

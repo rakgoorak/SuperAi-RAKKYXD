@@ -15,7 +15,7 @@ import { CliProvider, attachmentProblem } from "./CliProvider.js";
 import { cliLaunch } from "./CliCatalog.js";
 import { Seat, validateSeat } from "./Providers.js";
 import { skillPrompt } from "./ChatSkills.js";
-import { contextualPrompt, type ProjectContext } from './ProjectContext.js';
+import { contextualPrompt, contextForAgent, type ProjectContext } from './ProjectContext.js';
 import type { ResponseStyle } from './ResponseStyle.js';
 
 export function ollamaBase() {
@@ -326,7 +326,8 @@ export class AgentRunManager {
 
   /** Run one prompt on a seat. CLIs use their own tools; Ollama gets SuperAi's file tools when allowed. */
   private async ask(seat: Seat, prompt: string, cwd: string, signal: AbortSignal, opts: { tools: boolean; readTools: boolean; attachments: string[]; onChunk: (t: string) => void; projectContext?: ProjectContext; responseStyle?: ResponseStyle }) {
-    prompt = contextualPrompt(prompt, opts.projectContext, opts.responseStyle);
+    const seatContext = contextForAgent(opts.projectContext, seat.provider);
+    prompt = contextualPrompt(prompt, seatContext, opts.responseStyle);
     const provider = this.provider(seat, cwd, signal, opts.tools, opts.readTools, opts.attachments);
     if (seat.provider.startsWith("cli:")) {
       const result = await provider.stream([{ role: "user", content: prompt }], opts.onChunk);

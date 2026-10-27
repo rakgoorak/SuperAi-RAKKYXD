@@ -15,6 +15,9 @@ export function providerIdentity(id: string) {
 }
 
 export function permissionDescription(provider: string, permission: ChatPermission) {
+  if (provider === 'claude-code') return permission === 'read' ? 'อ่าน ค้นเว็บ และวางแผน โดยไม่ให้แก้ไฟล์'
+    : permission === 'edit' ? 'แก้ไฟล์และค้นเว็บได้ทันที การรันคำสั่งหรือเครื่องมืออื่นจะขออนุญาตในแชทก่อน'
+      : 'แก้ไฟล์ รันคำสั่ง และค้นเว็บได้เอง เครื่องมืออื่น (เช่น MCP) จะขออนุญาตในแชทก่อน';
   if (permission === 'read') return 'อ่านและวางแผน โดยไม่ให้แก้ไฟล์';
   if (provider === 'codex') return 'Codex อนุญาตทั้งแก้ไฟล์และรันคำสั่งในพื้นที่โปรเจกต์ ตัวเลือกนี้ไม่ได้แยกสิทธิ์สองอย่างออกจากกัน';
   if (provider === 'opencode') return 'OpenCode ใช้ agent ที่ตั้งค่าไว้ สิทธิ์แก้ไฟล์และรันคำสั่งขึ้นอยู่กับการตั้งค่าของ agent นั้น';
