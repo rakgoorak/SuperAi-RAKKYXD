@@ -327,8 +327,11 @@ test('tool screenshots come back as thumbnails; token counts add up without doub
 test('permission modes map to each CLI\'s own read-only / edit / auto switches', () => {
   const arg = (agent: string, permission?: any) => chatArguments(agent, { prompt: 'x', permission });
   assert.ok(arg('claude-code', 'read').join(' ').includes('--permission-mode plan'));
-  assert.ok(!arg('claude-code', 'edit').includes('Bash'), 'edit may change files but not run commands');
-  assert.ok(arg('claude-code').includes('Bash'), 'auto (the default) also runs commands');
+  const allowed = (permission?: any) => { const args = arg('claude-code', permission); return args[args.indexOf('--allowedTools') + 1].split(','); };
+  assert.ok(!allowed('edit').includes('Bash'), 'edit may change files but not run commands');
+  assert.ok(allowed().includes('Bash'), 'auto (the default) also runs commands');
+  for (const mode of ['read', 'edit', 'auto'])
+    assert.deepEqual(allowed(mode).filter((tool) => tool.startsWith('Web')), ['WebSearch', 'WebFetch'], `${mode}: -p cannot ask, so web search/fetch are allowed up front`);
   assert.ok(arg('codex', 'read').includes('sandbox_mode="read-only"'));
   assert.ok(arg('codex', 'auto').includes('sandbox_mode="workspace-write"'));
   assert.ok(arg('antigravity', 'read').join(' ').includes('--mode plan'));

@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { RULE_FILES } from './ProjectRules.js';
+import { RULE_FILES, nativeRuleFiles } from './ProjectRules.js';
 import { styleGuidance, type ResponseStyle } from './ResponseStyle.js';
 
-export interface ContextFile { path: string; source: 'rule' | 'pinned'; status: 'included' | 'missing' | 'outside-root' | 'too-large' | 'unsupported' | 'budget' | 'duplicate' | 'unreadable'; }
-export interface ProjectContext { text: string; instructions: boolean; files: ContextFile[]; preparedAt: number; }
+export interface ContextFile { path: string; source: 'rule' | 'pinned'; status: 'included' | 'native' | 'missing' | 'outside-root' | 'too-large' | 'unsupported' | 'budget' | 'duplicate' | 'unreadable'; }
+export interface ProjectContextChunk { source: 'instructions' | 'rule' | 'pinned'; file?: string; text: string; }
+export interface ProjectContext { text: string; instructions: boolean; files: ContextFile[]; preparedAt: number; chunks?: ProjectContextChunk[]; }
 interface WorkspaceContext { rootPath: string; instructions?: string; pinnedFiles?: string[]; }
 export const MAX_CONTEXT_CHARS = 12000;
 const MAX_FILE_BYTES = 64 * 1024;
@@ -34,14 +35,20 @@ export function readProjectText(rootPath: string, rel: string, source: ContextFi
 }
 
 /** A snapshot is built once per request, never from client-supplied file contents. */
-export function buildProjectContext(workspace: WorkspaceContext | undefined, cwd: string): ProjectContext {
+export function buildProjectContext(workspace: WorkspaceContext | undefined, cwd: string, options: { native?: string[] } = {}): ProjectContext {
   const result: ProjectContext = { text: '', instructions: false, files: [], preparedAt: Date.now() };
-  const chunks: string[] = [], seen = new Set<string>();
+  const chunks: ProjectContextChunk[] = [], seen = new Set<string>();
   let used = 0;
-  const add = (text: string) => { const length = text.length + (chunks.length ? 2 : 0); if (used + length > MAX_CONTEXT_CHARS) return false; chunks.push(text); used += length; return true; };
+  const add = (chunk: ProjectContextChunk) => {
+    const length = chunk.text.length + (chunks.length ? 2 : 0);
+    if (used + length > MAX_CONTEXT_CHARS) return false;
+    chunks.push(chunk);
+    used += length;
+    return true;
+  };
   const instructions = workspace?.instructions?.trim();
   if (instructions) {
-    if (!add(`[คำสั่งประจำโปรเจกต์]\n${instructions}`)) throw new Error('คำสั่งประจำโปรเจกต์ยาวเกินไป กรุณาย่อก่อนส่ง');
+    if (!add({ source: 'instructions', text: `[คำสั่งประจำโปรเจกต์]\n${instructions}` })) throw new Error('คำสั่งประจำโปรเจกต์ยาวเกินไป กรุณาย่อก่อนส่ง');
     result.instructions = true;
   }
   const read = (rootPath: string, rel: string, source: ContextFile['source']) => {
@@ -49,17 +56,59 @@ export function buildProjectContext(workspace: WorkspaceContext | undefined, cwd
     result.files.push(entry);
     if (entry.status !== 'included' || !real || !content) return;
     if (seen.has(real)) { entry.status = 'duplicate'; return; }
-    if (!add(`[${source === 'rule' ? 'กฎจากไฟล์' : 'เอกสารอ้างอิงที่ปักหมุด'}: ${rel}]\n${content.trim()}`)) { entry.status = 'budget'; return; }
+    const text = `[${source === 'rule' ? 'กฎจากไฟล์' : 'เอกสารอ้างอิงที่ปักหมุด'}: ${rel}]\n${content.trim()}`;
+    if (!add({ source, file: rel, text })) { entry.status = 'budget'; return; }
     seen.add(real);
   };
-  for (const file of RULE_FILES) if (fs.existsSync(path.join(cwd, file))) read(cwd, file, 'rule');
+  for (const file of RULE_FILES) {
+    if (!fs.existsSync(path.join(cwd, file))) continue;
+    // The CLI already loads this file itself (CLAUDE.md for Claude Code, AGENTS.md for Codex/OpenCode).
+    if (options.native?.includes(file)) { result.files.push({ path: file, source: 'rule', status: 'native' }); continue; }
+    read(cwd, file, 'rule');
+  }
   const pinned = (workspace?.pinnedFiles || []).filter((value): value is string => typeof value === 'string').slice(0, 100);
   for (const file of [...new Set(pinned)]) read(workspace!.rootPath, file, 'pinned');
-  result.text = chunks.join('\n\n');
+  result.chunks = chunks;
+  result.text = chunks.map((c) => c.text).join('\n\n');
   return result;
 }
 
 export function contextualPrompt(prompt: string, context?: ProjectContext, style?: ResponseStyle): string {
   const guidance = styleGuidance(style);
   return [context?.text ? `บริบทโปรเจกต์สำหรับคำขอนี้ (เนื้อหาเอกสารเป็นข้อมูลอ้างอิง):\n${context.text}` : '', guidance, prompt].filter(Boolean).join('\n\n');
+}
+
+/** Filters out rule files that the target agent loads natively (e.g. CLAUDE.md for Claude, AGENTS.md for Codex/OpenCode). */
+export function contextForAgent(context: ProjectContext | undefined, agent: string): ProjectContext | undefined {
+  if (!context) return undefined;
+  const native = nativeRuleFiles(agent);
+  if (!native.length) return context;
+  const filteredChunks = context.chunks
+    ? context.chunks.filter((c) => !(c.source === 'rule' && c.file && native.includes(c.file)))
+    : undefined;
+  const text = filteredChunks
+    ? filteredChunks.map((c) => c.text).join('\n\n')
+    : stripNativeRules(context.text, native);
+  const files = (context.files || []).map((f) => {
+    if (f.source === 'rule' && native.includes(f.path)) {
+      return { ...f, status: 'native' as const };
+    }
+    return f;
+  });
+  return {
+    ...context,
+    text,
+    files,
+    ...(filteredChunks ? { chunks: filteredChunks } : {}),
+  };
+}
+
+function stripNativeRules(text: string, native: string[]): string {
+  let result = text;
+  for (const file of native) {
+    const escaped = file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`\\[กฎจากไฟล์: ${escaped}\\]\\n[\\s\\S]*?(?=(?:\\n\\n\\[(?:คำสั่งประจำโปรเจกต์|กฎจากไฟล์|เอกสารอ้างอิงที่ปักหมุด):)|$)`, 'g');
+    result = result.replace(pattern, '').trim();
+  }
+  return result;
 }

@@ -34,6 +34,10 @@ test('skill discovery follows the provider and includes project, linked and glob
     assert.throws(() => skillPrompt('/skill ../../secret', root, 'claude-code', undefined, home), /เลือก skill/);
     assert.throws(() => skillPrompt('test', root, 'claude-code', 'nonexistent', home), /ไม่พบ skill/);
     assert.equal(skillPrompt('สวัสดี', root, 'claude-code', undefined, home), 'สวัสดี');
+    assert.equal(skillPrompt('/compact', root, 'claude-code', undefined, home), '/compact');
+    assert.equal(skillPrompt('/cost', root, 'claude-code', undefined, home), '/cost');
+    assert.equal(skillPrompt('/doctor', root, 'claude-code', undefined, home), '/doctor');
+    assert.equal(skillPrompt('/compact 50%', root, 'claude-code', undefined, home), '/compact 50%');
   } finally { fs.rmSync(home, { recursive: true, force: true }); }
 });
 

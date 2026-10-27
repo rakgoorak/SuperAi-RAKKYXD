@@ -14,6 +14,15 @@ export const RULE_FILES = [
   'AGENTS.md',
 ];
 
+/** Rule files each CLI loads by itself; sending them again would only repeat them in every turn. */
+export function nativeRuleFiles(agent: string): string[] {
+  const id = agent.replace(/^cli:/, '');
+  if (id === 'claude-code' || id === 'claude') return ['CLAUDE.md'];
+  if (id === 'codex' || id === 'opencode') return ['AGENTS.md'];
+  return [];
+}
+
+
 const MAX_TOTAL_CHARS = 12000;
 
 /**

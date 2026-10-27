@@ -107,7 +107,7 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
             </small>
           </section>
         )}
-        {agent && <section className="composer-option-capabilities"><p>{providerIdentity(agent).connection}</p><p>{providerIdentity(agent).attachments}</p><small>ตั้งสิทธิ์ไว้ล่วงหน้า · ยังไม่ถามอนุมัติเป็นรายเครื่องมือ</small></section>}
+        {agent && <section className="composer-option-capabilities"><p>{providerIdentity(agent).connection}</p><p>{providerIdentity(agent).attachments}</p><small>{agent === 'claude-code' ? 'เครื่องมือที่เกินสิทธิ์ที่เลือก Claude จะขออนุญาตในแชทก่อน' : 'ตั้งสิทธิ์ไว้ล่วงหน้า · ยังไม่ถามอนุมัติเป็นรายเครื่องมือ'}</small></section>}
       </ComposerOptions>
       {modelError && <small className="muted">{modelError} · พิมพ์ชื่อ Model เองได้</small>}
     </div>

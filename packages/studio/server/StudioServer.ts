@@ -28,7 +28,7 @@ import { trustFolder, repairCodexConfigFile } from "./FolderTrust.js";
 import { CliVersionManager, VERSIONED_CLIS } from "./CliVersions.js";
 import { AttachmentError, MAX_ATTACHMENT_BYTES, resolveAttachments, saveAttachment } from "./AttachmentStore.js";
 import { CliChatManager, CHAT_CLIS, CHAT_PERMISSIONS } from "./CliChat.js";
-import { getProjectRules } from "./ProjectRules.js";
+import { getProjectRules, nativeRuleFiles } from "./ProjectRules.js";
 import { buildProjectContext, readProjectText } from './ProjectContext.js';
 import { responseStyle } from './ResponseStyle.js';
 import { cleanPrediction, nextPromptRequest, predictionSeat } from './NextPrompt.js';
@@ -873,7 +873,7 @@ export class StudioServer {
     this.app.get('/api/terminals/:id/project-context', (req, res) => {
       const session = this.terminalManager.getSession(String(req.params.id));
       if (!session) return res.status(404).json({ error: 'ไม่พบห้องคุย' });
-      try { res.json(buildProjectContext(session.wsId ? this.workspaceRegistry.getWorkspace(session.wsId) : undefined, session.cwd)); }
+      try { res.json(buildProjectContext(session.wsId ? this.workspaceRegistry.getWorkspace(session.wsId) : undefined, session.cwd, { native: nativeRuleFiles(session.agentType || "") })); }
       catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
     this.app.post('/api/terminals/:id/name', (req, res) => {
@@ -933,7 +933,7 @@ export class StudioServer {
           skillId: req.body.skillId,
           permission: req.body.permission,
           attachments,
-          projectContext: buildProjectContext(session.wsId ? this.workspaceRegistry.getWorkspace(session.wsId) : undefined, session.cwd),
+          projectContext: buildProjectContext(session.wsId ? this.workspaceRegistry.getWorkspace(session.wsId) : undefined, session.cwd, { native: nativeRuleFiles(agent) }),
           responseStyle: style,
         // Enter while the chat is answering interrupts it (like Claude); Ctrl+Enter (`queue`) waits instead.
         }, { queue: req.body.queue === true, interrupt: req.body.queue !== true && req.body.interrupt !== false });
@@ -943,6 +943,13 @@ export class StudioServer {
       } catch (err: any) {
         res.status(/ยังตอบ/.test(err.message) ? 409 : 400).json({ error: err.message });
       }
+    });
+    // The user's answer to a permission card (Claude asked to use a tool its mode does not cover).
+    this.app.post("/api/terminals/:id/chat/permission", (req: Request, res: Response) => {
+      const decision = req.body?.decision;
+      if (typeof req.body?.requestId !== "string" || !["allow", "always", "deny"].includes(decision)) return res.status(400).json({ error: "คำตอบไม่ถูกต้อง" });
+      if (!this.chats.answerPermission(String(req.params.id), req.body.requestId, decision)) return res.status(409).json({ error: "คำขอนี้หมดอายุแล้ว" });
+      res.json({ success: true });
     });
     // Guess the user's next message after a finished turn (grey text in the composer, Tab accepts).
     this.app.post("/api/terminals/:id/chat/next-prompt", async (req: Request, res: Response) => {

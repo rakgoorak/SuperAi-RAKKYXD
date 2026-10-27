@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AlertTriangle, Check, CheckCheck, CheckCircle2, ChevronRight, Circle, Clock3, Copy, FilePen, FileText, GitFork, Globe, ListChecks, Loader2, Paperclip, RotateCcw, Search, Send, Terminal as TerminalIcon, Wrench, X } from 'lucide-react';
+import { AlertTriangle, ShieldCheck, Check, CheckCheck, CheckCircle2, ChevronRight, Circle, Clock3, Copy, FilePen, FileText, GitFork, Globe, ListChecks, Loader2, Paperclip, RotateCcw, Search, Send, Terminal as TerminalIcon, Wrench, X } from 'lucide-react';
 import { Markdown } from './Markdown';
 import { post } from '../api';
 import { prepareMessage, recoveryHint, showChanges } from '../recovery';
@@ -17,6 +17,7 @@ import { timeLabel, tokenLabel } from '../chatFormat';
 import { notifyDone, sessionNotice } from '../completionNotify';
 import { loadNextPromptSettings, predictNextPrompt, publishChatRunning, publishNextPrompt } from '../nextPrompt';
 import '../chat-idle.css';
+import '../chat-permission.css';
 
 // Mirrors server/CliChat.ts.
 type ToolKind = 'command' | 'read' | 'edit' | 'search' | 'web' | 'plan' | 'other';
@@ -30,7 +31,9 @@ type ChatItem =
   | { id: string; kind: 'assistant'; text: string; at: number }
   | ToolItem
   | TodosItem
-  | { id: string; kind: 'error' | 'notice'; text: string; at: number };
+  | { id: string; kind: 'error' | 'notice'; text: string; at: number }
+  | PermissionItem;
+type PermissionItem = { id: string; kind: 'permission'; requestId: string; tool: string; title: string; detail?: string; status: 'pending' | 'allowed' | 'always' | 'denied' | 'expired'; at: number };
 type Message =
   | { type: 'snapshot'; chat: { items: ChatItem[]; running: boolean; activity?: Activity; queued?: Queued[] } }
   | { type: 'item'; item: ChatItem }
@@ -95,6 +98,33 @@ function ToolRow({ tool }: { tool: ToolItem }) {
       {open && tool.images?.length ? <div className="chat-shots">{tool.images.map((src, i) => <Shot key={i} src={src} />)}</div> : null}
     </li>
   );
+}
+
+const PERMISSION_RESULT: Record<PermissionItem['status'], string> = {
+  pending: 'รอคำตอบ',
+  allowed: 'อนุญาตแล้ว', always: 'อนุญาตตลอดห้องนี้', denied: 'ไม่อนุญาต', expired: 'หมดเวลาตอบ',
+};
+/** Claude asks before using a tool its permission mode does not cover, like the prompt in Claude's own app. */
+function PermissionCard({ item, sessionId, name }: { item: PermissionItem; sessionId: string; name: string }) {
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState('');
+  const answer = async (decision: 'allow' | 'always' | 'deny') => {
+    setBusy(true); setProblem('');
+    try { await post(`/api/terminals/${sessionId}/chat/permission`, { requestId: item.requestId, decision }); }
+    catch (error) { setProblem((error as Error).message); }
+    finally { setBusy(false); }
+  };
+  const pending = item.status === 'pending';
+  return <div className={`chat-permission ${item.status}`} role={pending ? 'alertdialog' : undefined} aria-label={`${name} ขออนุญาต${item.title}`}>
+    <div className="chat-permission-head"><ShieldCheck size={15} /><strong>{name} ขออนุญาต{item.title}</strong>{!pending && <small>{PERMISSION_RESULT[item.status]}</small>}</div>
+    {item.detail && <pre>{item.detail}</pre>}
+    {pending && <div className="chat-permission-actions">
+      <button className="primary" disabled={busy} onClick={() => void answer('allow')}>อนุญาต</button>
+      <button className="secondary" disabled={busy} onClick={() => void answer('always')} title={`ไม่ต้องถามอีกสำหรับ ${item.tool} ในห้องนี้`}>อนุญาตตลอดห้องนี้</button>
+      <button className="secondary" disabled={busy} onClick={() => void answer('deny')}>ไม่อนุญาต</button>
+    </div>}
+    {problem && <small role="alert">{problem}</small>}
+  </div>;
 }
 
 /** Folded steps, like Claude's "Resized browser, waited, captured page ▸", with screenshot thumbnails. */
@@ -342,6 +372,9 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
         else if (message.type === 'queue') setQueued(message.queued);
         else if (message.type === 'item') {
           const item = message.item;
+          // A question waits for the user: tell them even when the app is in the background.
+          if (item.kind === 'permission' && item.status === 'pending')
+            notifyDone({ tag: `permission:${item.requestId}`, title: `${nameRef.current} ขออนุญาต${item.title}`, body: item.detail || 'กดเพื่อตอบในห้องแชท', failed: false, target: { kind: 'session', id: sessionId } });
           setItems((current) => {
             const index = current.findIndex((i) => i.id === item.id);
             if (index < 0) return [...current, item];
@@ -443,6 +476,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
               </div>;
             }
             if (block.kind === 'tools') return <ToolGroup key={block.id} tools={block.tools} />;
+            if (block.kind === 'permission') return <PermissionCard key={block.id} item={block} sessionId={sessionId} name={name} />;
             if (block.kind === 'todos') return block === liveTodos ? null : <TaskList key={block.id} item={block} live={false} />;
             if (block.kind === 'error') {
               const oldTimeout = lastUser && items.indexOf(block) < items.indexOf(lastUser) && /ไม่มีข้อมูลใหม่.*จึงหยุดรอบนี้/.test(block.text);
