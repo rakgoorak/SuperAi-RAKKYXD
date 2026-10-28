@@ -33,6 +33,7 @@ import { buildProjectContext, readProjectText } from './ProjectContext.js';
 import { responseStyle } from './ResponseStyle.js';
 import { cleanPrediction, nextPromptRequest, predictionSeat } from './NextPrompt.js';
 import { CliProvider } from './CliProvider.js';
+import { listMcpServers, saveMcpServer, removeMcpServer, toggleMcpServer } from './McpManager.js';
 
 export class StudioServer {
   private agentRuns: AgentRunManager;
@@ -477,6 +478,43 @@ export class StudioServer {
       const session = this.terminalManager.getSession(String(req.params.id));
       if (!session) return res.status(404).json({ error: "ไม่พบ session" });
       res.json(getProjectRules(session.cwd));
+    });
+    this.app.get("/api/mcp/servers", (req, res) => {
+      try {
+        const cwd = req.query.cwd ? String(req.query.cwd) : undefined;
+        res.json({ servers: listMcpServers(cwd) });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+    this.app.post("/api/mcp/servers", (req, res) => {
+      try {
+        const cwd = req.body.cwd ? String(req.body.cwd) : undefined;
+        const server = saveMcpServer(req.body, cwd);
+        res.json({ success: true, server });
+      } catch (err: any) {
+        res.status(400).json({ error: err.message });
+      }
+    });
+    this.app.delete("/api/mcp/servers/:provider/:name", (req, res) => {
+      try {
+        const cwd = req.query.cwd ? String(req.query.cwd) : undefined;
+        const provider = req.params.provider as "claude" | "codex";
+        const removed = removeMcpServer(provider, String(req.params.name), cwd);
+        res.json({ success: removed });
+      } catch (err: any) {
+        res.status(400).json({ error: err.message });
+      }
+    });
+    this.app.post("/api/mcp/servers/:provider/:name/toggle", (req, res) => {
+      try {
+        const cwd = req.body.cwd ? String(req.body.cwd) : undefined;
+        const provider = req.params.provider as "claude" | "codex";
+        const updated = toggleMcpServer(provider, String(req.params.name), req.body.enabled === true, cwd);
+        res.json({ success: updated });
+      } catch (err: any) {
+        res.status(400).json({ error: err.message });
+      }
     });
     this.app.get("/api/cli-versions", async (req, res) => {
       res.json(await this.versions.all(req.query.refresh === "1"));

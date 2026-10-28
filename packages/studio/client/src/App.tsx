@@ -81,6 +81,7 @@ import { CliInstaller } from "./components/CliInstaller";
 import { LaunchPresets, type LaunchSeat } from "./components/LaunchPresets";
 import { VoiceSettingsPanel } from "./components/VoiceSettingsPanel";
 import { NotifySettingsPanel } from "./components/NotifySettingsPanel";
+import { McpManagerPanel } from "./components/McpManagerPanel";
 import { finishedRuns, notifyDone, onNoticeOpen, runNotice } from "./completionNotify";
 import { onChatRunning, onNextPrompt } from "./nextPrompt";
 import { DictationButton } from "./components/DictationButton";
@@ -2096,7 +2097,7 @@ export function App() {
             {dialog === "settings" && (
               <>
                 <div className="mission-settings">
-<nav className="settings-nav" aria-label="หมวดการตั้งค่า">{[["tools", "เครื่องมือ AI"], ["models", "Model และ Effort"], ["folders", "โฟลเดอร์"], ["voice", "เสียง"], ["notify", "แจ้งเตือนและคำแนะนำ"]].map(([id, label]) => <button key={id} aria-current={settingsTab === id ? "page" : undefined} onClick={() => setSettingsTab(id)}>{label}</button>)}</nav>
+<nav className="settings-nav" aria-label="หมวดการตั้งค่า">{[["tools", "เครื่องมือ AI"], ["mcp", "MCP Servers"], ["models", "Model และ Effort"], ["folders", "โฟลเดอร์"], ["voice", "เสียง"], ["notify", "แจ้งเตือนและคำแนะนำ"]].map(([id, label]) => <button key={id} aria-current={settingsTab === id ? "page" : undefined} onClick={() => setSettingsTab(id)}>{label}</button>)}</nav>
 <div className="settings-content"><section hidden={settingsTab !== "tools"}>
                   <div className="settings-section-title">
                     <h3>เครื่องมือ CLI</h3>
@@ -2171,7 +2172,7 @@ export function App() {
                       ใส่ในช่องคำสั่ง
                     </button>
                   </div>
-                  </section><section hidden={settingsTab !== "voice"}><VoiceSettingsPanel settings={voiceSettings} onChange={setVoiceSettings} /></section><section hidden={settingsTab !== "notify"}><NotifySettingsPanel /></section></div>
+                  </section><section hidden={settingsTab !== "mcp"}><McpManagerPanel cwd={workspace?.rootPath} onError={showError} onNotice={setNotice} /></section><section hidden={settingsTab !== "voice"}><VoiceSettingsPanel settings={voiceSettings} onChange={setVoiceSettings} /></section><section hidden={settingsTab !== "notify"}><NotifySettingsPanel /></section></div>
                 </div>
                 <div className="dialog-footer">
                   <span className="muted">บันทึกการตั้งค่าอัตโนมัติ</span>
