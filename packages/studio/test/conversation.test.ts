@@ -49,6 +49,26 @@ test('chat keeps successful answers when one Main fails and works without a summ
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('usage is tracked separately for answers and summary and remains unknown when absent', async t => {
+  const dir = tmp('usage');
+  t.mock.method(globalThis, 'fetch', async (_url: any, options: any) => {
+    const model = JSON.parse(options.body).model;
+    return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }], ...(model === 'a' ? { usage: { prompt_tokens: 120, completion_tokens: 12 } } : {}) }), { status: 200 });
+  });
+  try {
+    const manager = new AgentRunManager(path.join(dir, 'h.json'));
+    const run = manager.startChat('p', dir, { prompt: 'test', panel: [seat('a'), seat('b')], summarizer: seat('judge') });
+    await settle(run);
+    assert.equal(run.status, 'completed');
+    assert.equal(run.usageSteps?.length, 3);
+    assert.deepEqual(run.usageSteps?.[0].calls, [{ input: 120, output: 12 }]);
+    assert.equal(run.usageSteps?.[0].missing, false);
+    assert.equal(run.usageSteps?.[1].missing, true);
+    assert.equal(run.usageSteps?.[2].stage, 'สรุปคำตอบ');
+    assert.equal(new AgentRunManager(path.join(dir, 'h.json')).list('p')[0].usageSteps?.length, 3);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('cancel aborts every Main and reports cancelled', async t => {
   const dir = tmp('cancel');
   t.mock.method(globalThis, 'fetch', async (_url: any, options: any) => new Promise((_r, reject) => options.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })));

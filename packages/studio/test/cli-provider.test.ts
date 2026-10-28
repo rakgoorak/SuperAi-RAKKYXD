@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { promptArguments, CliProvider } from '../server/CliProvider.js';
 import fs from 'node:fs/promises';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import { cliAuth } from '../server/CliAuth.js';
 test('CLI chat uses read-only agents by default and requires explicit tool permission',()=>{
  const prompt="คำถาม ' quoted $value `token`";
  assert.ok(promptArguments('claude-code',false).includes('plan'));
@@ -59,4 +62,33 @@ test('CLI failures surface the provider message and a model hint instead of raw 
  assert.match(text, /ลองเลือก model อื่น/);
  assert.ok(!text.includes('WARN noise'));
  assert.equal(cliFailure('cli:claude-code', '', '', '', 2), 'cli:claude-code: exit 2');
+});
+
+test('team CLI parses split JSON events and reports provider usage without leaking event JSON into output', async t => {
+ t.mock.method(cliAuth, 'requireReady', async () => {});
+ const chunks: string[] = [], usage: any[] = [];
+ let args: string[] = [];
+ const dependencies: any = {
+   launch: (_id: string, argv: string[]) => ({ command: 'fixture', args: argv }),
+   spawn: (_command: string, argv: string[]) => {
+     args = argv;
+     const proc: any = new EventEmitter();
+     proc.stdin = new PassThrough(); proc.stdout = new PassThrough(); proc.stderr = new PassThrough();
+     process.nextTick(() => {
+       const events = [
+         { type: 'item.completed', item: { id: 'a', type: 'agent_message', text: 'answer' } },
+         { type: 'turn.completed', usage: { input_tokens: 100, cached_input_tokens: 40, output_tokens: 5 } },
+       ].map(e => JSON.stringify(e)).join('\n');
+       proc.stdout.write(events.slice(0, 17)); proc.stdout.write(events.slice(17));
+       proc.stdout.end(); proc.stderr.end(); proc.emit('close', 0);
+     });
+     return proc;
+   },
+ };
+ const provider = new CliProvider('cli:codex', process.cwd(), new AbortController().signal, false, '', false, [], '', value => usage.push(value), dependencies);
+ const result = await provider.stream([{ role: 'user', content: 'test' }], chunk => chunks.push(chunk));
+ assert.ok(args.includes('--json'));
+ assert.equal(result.text, 'answer');
+ assert.deepEqual(chunks, ['answer']);
+ assert.deepEqual(usage, [{ input: 100, cachedInput: 40, output: 5, inputIncludesCache: true }]);
 });

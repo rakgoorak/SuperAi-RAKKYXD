@@ -6,7 +6,6 @@ import {
   Clock,
   Code2,
   Copy,
-  Hash,
   LoaderCircle,
   Sparkles,
   Timer,
@@ -23,6 +22,7 @@ import {
   formatTokens,
 } from "../comparisonMetrics";
 import { Markdown } from "./Markdown";
+import { RunUsage } from './RunUsage';
 import "../comparison-arena.css";
 
 export { formatLatency, formatTtft, estimateTokenCount, formatTokens };
@@ -107,6 +107,7 @@ export function ComparisonArena({ run }: { run: Run }) {
 
   return (
     <section className="comparison-arena" aria-label="สนามประลอง AI (Comparison Arena)">
+      <RunUsage steps={run.usageSteps} />
       <div className="arena-header">
         <div className="arena-title-wrap">
           <Sparkles size={16} />
@@ -124,7 +125,6 @@ export function ComparisonArena({ run }: { run: Run }) {
           const isHandoff = handoffIndex === index;
           const latency = formatLatency(answer);
           const ttft = formatTtft(answer);
-          const tokens = formatTokens(answer);
 
           return (
             <article
@@ -172,7 +172,7 @@ export function ComparisonArena({ run }: { run: Run }) {
                 {/* Performance Metrics Pill */}
                 <div
                   className="arena-metrics-pill"
-                  title={`Latency: ${latency} · TTFT: ${ttft} · Tokens: ${tokens}`}
+                  title={`Latency: ${latency} · TTFT: ${ttft}`}
                 >
                   <span className="arena-metric-item" title="ระยะเวลาตอบ">
                     <Timer size={11} /> {latency}
@@ -180,10 +180,6 @@ export function ComparisonArena({ run }: { run: Run }) {
                   <span className="arena-metric-divider">·</span>
                   <span className="arena-metric-item" title="เวลาถึงโทเค็นแรก (TTFT)">
                     <Zap size={11} /> {ttft}
-                  </span>
-                  <span className="arena-metric-divider">·</span>
-                  <span className="arena-metric-item" title="โหมดทีมยังไม่ได้รับข้อมูล token จริงจาก provider">
-                    <Hash size={11} /> {tokens}
                   </span>
                 </div>
 
