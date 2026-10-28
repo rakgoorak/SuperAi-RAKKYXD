@@ -28,3 +28,10 @@ test('project context preference is isolated per session', () => {
   assert.equal(chatPrefs('context-a').includeProjectContext, false);
   assert.equal(chatPrefs('context-b').includeProjectContext, true);
 });
+test('Codex approval choices are stored per session', () => {
+  setChatPrefs('codex-review', { permission: 'review' });
+  setChatPrefs('codex-full', { permission: 'full' });
+  assert.equal(chatPrefs('codex-review').permission, 'review');
+  assert.equal(chatPrefs('codex-full').permission, 'full');
+  assert.equal(chatPrefs('another-session').permission, 'auto');
+});

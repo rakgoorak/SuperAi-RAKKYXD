@@ -25,8 +25,11 @@ const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 export type ToolKind = "command" | "read" | "edit" | "search" | "web" | "plan" | "other";
 export type TodoStatus = "pending" | "in_progress" | "completed";
 /** What the CLI may do on its own in a chat turn (headless CLIs cannot ask first). */
-export type ChatPermission = "read" | "edit" | "auto";
-export const CHAT_PERMISSIONS: ChatPermission[] = ["read", "edit", "auto"];
+export type ChatPermission = "read" | "edit" | "auto" | "review" | "full";
+export const CHAT_PERMISSIONS: ChatPermission[] = ["read", "edit", "auto", "review", "full"];
+export function supportsChatPermission(agent: string, permission: ChatPermission): boolean {
+  return agent === 'codex' || (permission !== 'review' && permission !== 'full');
+}
 type ChatRequestRecord = { text: string; model?: string; effort?: string; skillId?: string; attachments?: string[]; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle };
 export type ChatItem =
   | { id: string; kind: "user"; text: string; attachments?: string[]; request?: ChatRequestRecord; at: number }
@@ -310,6 +313,7 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
 export const WEB_TOOLS = "WebSearch,WebFetch";
 export function chatArguments(agent: string, o: { prompt: string; conversationId?: string; model?: string; effort?: string; files?: string[]; permission?: ChatPermission }): string[] {
   const permission = o.permission || "auto";
+  if (!supportsChatPermission(agent, permission)) throw new Error('สิทธิ์นี้รองรับเฉพาะ Codex ในมุมมองแชต');
   if (agent === "claude-code")
     return [
       "-p",
@@ -341,7 +345,8 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
       "--json",
       "--skip-git-repo-check",
       // Codex has no edit-without-commands mode: "edit" and "auto" both run in the workspace sandbox.
-      "-c", permission === "read" ? 'sandbox_mode="read-only"' : 'sandbox_mode="workspace-write"',
+      ...(permission === 'full' ? ['--dangerously-bypass-approvals-and-sandbox']
+        : ['-c', permission === 'read' ? 'sandbox_mode="read-only"' : 'sandbox_mode="workspace-write"', ...(permission === 'review' ? ['--approve-for-me'] : [])]),
       ...modelEffortArgs(agent, o.model, o.effort),
       ...(o.files || []).map((file) => `--image=${file}`),
       "-",
@@ -530,6 +535,7 @@ export class CliChatManager {
   send(id: string, request: ChatRequest, options: { queue?: boolean; interrupt?: boolean } = {}): "sent" | "queued" | "interrupted" {
     const { agent } = request;
     if (!CHAT_CLIS.includes(agent)) throw new Error("CLI นี้ยังไม่รองรับมุมมองแชต กรุณาใช้ terminal");
+    if (request.permission && (!CHAT_PERMISSIONS.includes(request.permission) || !supportsChatPermission(agent, request.permission))) throw new Error('สิทธิ์นี้ไม่รองรับสำหรับ provider นี้');
     const text = request.text.trim();
     if (!text) throw new Error("กรุณาพิมพ์ข้อความ");
     const chat = this.chat(id);

@@ -15,6 +15,8 @@ export function providerIdentity(id: string) {
 }
 
 export function permissionDescription(provider: string, permission: ChatPermission) {
+  if (permission === 'review') return 'Codex ตรวจคำขออนุมัติที่รองรับโดยอัตโนมัติภายใน sandbox ของโปรเจกต์ ขึ้นอยู่กับการรองรับของบัญชีและ CLI';
+  if (permission === 'full') return 'Codex รันโดยไม่มี sandbox และไม่ขออนุมัติ เข้าถึงไฟล์และเครือข่ายตามสิทธิ์ของโปรเซส';
   if (provider === 'claude-code') return permission === 'read' ? 'อ่าน ค้นเว็บ และวางแผน โดยไม่ให้แก้ไฟล์'
     : permission === 'edit' ? 'แก้ไฟล์และค้นเว็บได้ทันที การรันคำสั่งหรือเครื่องมืออื่นจะขออนุญาตในแชทก่อน'
       : 'แก้ไฟล์ รันคำสั่ง และค้นเว็บได้เอง เครื่องมืออื่น (เช่น MCP) จะขออนุญาตในแชทก่อน';
@@ -25,6 +27,8 @@ export function permissionDescription(provider: string, permission: ChatPermissi
 }
 
 export function permissionLabel(provider: string, permission: ChatPermission) {
+  if (permission === 'review') return 'Approve for me';
+  if (permission === 'full') return 'Full access';
   if (provider === 'codex' && permission !== 'read') return permission === 'edit' ? 'แก้ไฟล์และรันคำสั่ง' : 'อัตโนมัติในโปรเจกต์';
   if (provider === 'opencode' && permission !== 'read') return permission === 'edit' ? 'ตามสิทธิ์ agent' : 'อัตโนมัติตาม agent';
   return { read: 'อ่านอย่างเดียว', edit: 'แก้ไฟล์ได้', auto: 'อัตโนมัติ' }[permission];
