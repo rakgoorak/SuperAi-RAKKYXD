@@ -97,6 +97,21 @@ test('a tool Claude may not use on its own becomes a card; allow, always and den
   chats.stopAll();
 });
 
+test('Claude ask mode delivers a tool request to the user', async () => {
+  const fake = liveSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch);
+  chats.send('ask', claude('แก้ไฟล์', { permission: 'ask' }));
+  const cli = fake.calls[0];
+  assert.equal(cli.args[cli.args.indexOf('--permission-mode') + 1], 'default');
+  cli.say({ type: 'control_request', request_id: 'a1', request: { subtype: 'can_use_tool', tool_name: 'Write', input: { file_path: 'example.txt' } } });
+  await until(() => chats.snapshot('ask').items.some(item => item.kind === 'permission'));
+  assert.equal(chats.answerPermission('ask', 'a1', 'deny'), true);
+  assert.equal(cli.lines().at(-1).response.response.behavior, 'deny');
+  cli.say(result);
+  await until(() => !chats.isRunning('ask'));
+  chats.stopAll();
+});
+
 test('stop interrupts the turn but keeps Claude and its conversation for the next message', async () => {
   const fake = liveSpawner();
   const chats = new CliChatManager(fake.spawner as any, undefined, launch);
@@ -190,6 +205,12 @@ test('rule files a CLI loads by itself are not sent again', () => {
 });
 
 test('live arguments and permission card text', () => {
+  const ask = claudeLiveArguments({ permission: 'ask' });
+  assert.equal(ask[ask.indexOf('--permission-mode') + 1], 'default');
+  assert.equal(ask[ask.indexOf('--permission-prompt-tool') + 1], 'stdio');
+  assert.ok(!ask.includes('--allowedTools'));
+  const full = claudeLiveArguments({ permission: 'full' });
+  assert.equal(full[full.indexOf('--permission-mode') + 1], 'bypassPermissions');
   const read = claudeLiveArguments({ permission: 'read' });
   assert.equal(read[read.indexOf('--permission-mode') + 1], 'plan');
   assert.equal(read[read.indexOf('--allowedTools') + 1], 'WebSearch,WebFetch');

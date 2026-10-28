@@ -15,8 +15,10 @@ export function providerIdentity(id: string) {
 }
 
 export function permissionDescription(provider: string, permission: ChatPermission) {
+  if (permission === 'ask') return 'Claude ขออนุญาตสำหรับเครื่องมือที่ต้องอนุมัติในแชตก่อนทำงาน โดยยังใช้กฎสิทธิ์ที่ตั้งค่าไว้';
+  if (permission === 'approve_all') return provider === 'opencode' ? 'OpenCode อนุมัติคำขออัตโนมัติ แต่กฎที่ตั้งเป็น deny ยังมีผล ต้องใช้ CLI รุ่นที่รองรับ --auto' : 'Antigravity อนุมัติเครื่องมืออัตโนมัติ ขอบเขตไฟล์และ sandbox ยังขึ้นอยู่กับการตั้งค่าของ CLI';
   if (permission === 'review') return 'Codex ตรวจคำขออนุมัติที่รองรับโดยอัตโนมัติภายใน sandbox ของโปรเจกต์ ขึ้นอยู่กับการรองรับของบัญชีและ CLI';
-  if (permission === 'full') return 'Codex รันโดยไม่มี sandbox และไม่ขออนุมัติ เข้าถึงไฟล์และเครือข่ายตามสิทธิ์ของโปรเซส';
+  if (permission === 'full') return provider === 'claude-code' ? 'Claude ข้ามการขออนุญาตเครื่องมือ ภายใต้ข้อจำกัดของระบบและการตั้งค่าที่บังคับใช้' : 'Codex รันโดยไม่มี sandbox และไม่ขออนุมัติ เข้าถึงไฟล์และเครือข่ายตามสิทธิ์ของโปรเซส';
   if (provider === 'claude-code') return permission === 'read' ? 'อ่าน ค้นเว็บ และวางแผน โดยไม่ให้แก้ไฟล์'
     : permission === 'edit' ? 'แก้ไฟล์และค้นเว็บได้ทันที การรันคำสั่งหรือเครื่องมืออื่นจะขออนุญาตในแชทก่อน'
       : 'แก้ไฟล์ รันคำสั่ง และค้นเว็บได้เอง เครื่องมืออื่น (เช่น MCP) จะขออนุญาตในแชทก่อน';
@@ -27,6 +29,8 @@ export function permissionDescription(provider: string, permission: ChatPermissi
 }
 
 export function permissionLabel(provider: string, permission: ChatPermission) {
+  if (permission === 'ask') return 'Ask for approval';
+  if (permission === 'approve_all') return 'อนุมัติเครื่องมืออัตโนมัติ';
   if (permission === 'review') return 'Approve for me';
   if (permission === 'full') return 'Full access';
   if (provider === 'codex' && permission !== 'read') return permission === 'edit' ? 'แก้ไฟล์และรันคำสั่ง' : 'อัตโนมัติในโปรเจกต์';
