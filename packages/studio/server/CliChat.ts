@@ -76,6 +76,15 @@ function hashText(text: string): string {
 
 const tokensWritten =(n: number): { outputTokens?: number } => (n > 0 ? { outputTokens: n } : {});
 
+/** Only report fields supplied by the CLI; absent values are not zero. */
+function usageNotice(prefix: string, usage: any, fields: [string, string][]): NewItem | null {
+  if (!usage || typeof usage !== 'object') return null;
+  const values = fields.flatMap(([key, label]) =>
+    typeof usage[key] === 'number' && Number.isFinite(usage[key]) && usage[key] >= 0
+      ? [`${label} ${usage[key].toLocaleString()}`] : []);
+  return values.length ? { id: `${prefix}-usage`, kind: 'notice', text: `Token จาก provider: ${values.join(' · ')}` } : null;
+}
+
 /** A CLI's todo entries in one shape. `done` lists (Codex) mark the first open entry as in progress. */
 function todoList(entries: unknown, prefix: string, running = true): NewItem | null {
   if (!Array.isArray(entries) || !entries.length) return null;
@@ -198,9 +207,13 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
           }
           return { items };
         }
-        case "result":
+        case "result": {
           if (event.is_error || event.subtype !== "success") return { error: String(event.result || event.subtype || "Claude Code ทำงานไม่สำเร็จ") };
-          return { done: true, items: !answered && typeof event.result === "string" && event.result.trim() ? [{ id: `${prefix}-result`, kind: "assistant", text: event.result }] : undefined };
+          const result: NewItem[] = !answered && typeof event.result === "string" && event.result.trim() ? [{ id: `${prefix}-result`, kind: "assistant", text: event.result }] : [];
+          const usage = usageNotice(prefix, event.usage, [['input_tokens', 'input (ไม่รวม cache)'], ['cache_read_input_tokens', 'cache read'], ['cache_creation_input_tokens', 'cache write'], ['output_tokens', 'output']]);
+          if (usage) result.push(usage);
+          return { done: true, items: result.length ? result : undefined };
+        }
         default: return {};
       }
     }
@@ -245,7 +258,8 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
         case "error": return { error: String(event.message || "Codex ทำงานไม่สำเร็จ") };
         case "turn.completed": {
           const tokens = Number(event.usage?.output_tokens || 0) + Number(event.usage?.reasoning_output_tokens || 0);
-          return { done: true, ...tokensWritten(tokens) };
+          const usage = usageNotice(prefix, event.usage, [['input_tokens', 'input'], ['cached_input_tokens', 'cached input (รวมใน input)'], ['output_tokens', 'output']]);
+          return { done: true, ...tokensWritten(tokens), ...(usage ? { items: [usage] } : {}) };
         }
         default: return {};
       }

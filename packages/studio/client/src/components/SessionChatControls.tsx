@@ -21,6 +21,7 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
   const [effort, setEffort] = useState(chatPrefs(sessionId).effort);
   const [permission, setPermission] = useState<ChatPermission>(chatPrefs(sessionId).permission);
   const [style, setStyle] = useState<ResponseStyle>(chatPrefs(sessionId).responseStyle);
+  const [includeProjectContext, setIncludeProjectContext] = useState(chatPrefs(sessionId).includeProjectContext);
   const [ready, setReady] = useState(false);
   const [problem, setProblem] = useState('');
   const [busy, setBusy] = useState(false);
@@ -28,6 +29,8 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
   const { list, error: modelError, refresh: refreshModels } = useModels(agent);
   const { auth, checking, error: authError, check } = useProviderAccess(agent);
   const efforts = (model && list?.modelEfforts?.[model]) || list?.efforts || [];
+
+  useEffect(() => { setIncludeProjectContext(chatPrefs(sessionId).includeProjectContext); }, [sessionId]);
 
   useEffect(() => {
     api<{ rules: string; files: string[] }>(`/api/terminals/${sessionId}/rules`)
@@ -89,6 +92,8 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
       </div>
       <ComposerOptions label="ตัวเลือก AI" attention={!!authError || auth?.status === 'login-required' || auth?.status === 'not-installed'}>
         <ResponseStyleSelect value={style} disabled={disabled || !ready} onChange={value => { setStyle(value); setChatPrefs(sessionId, { responseStyle: value }); }} />
+        <label><input type="checkbox" checked={includeProjectContext} disabled={disabled} onChange={e => { setIncludeProjectContext(e.target.checked); setChatPrefs(sessionId, { includeProjectContext: e.target.checked }); }} /> แนบบริบทโปรเจกต์จาก SuperAi</label>
+        <small>ปิดเพื่อลดบริบทที่ SuperAi เพิ่มในการส่งครั้งถัดไป CLI อาจอ่านกฎของตัวเองและเก็บบริบทที่ส่งไปแล้วในประวัติ</small>
         {agent && <p className="permission-description">{permissionLabel(agent, permission)} · {permissionDescription(agent, permission)}</p>}
         <section className={`composer-option-account ${auth?.status || ''}`} aria-label="บัญชีของ session">
           <strong>{auth?.status === 'authenticated' ? 'บัญชีเชื่อมต่อแล้ว' : 'บัญชี AI'}</strong>

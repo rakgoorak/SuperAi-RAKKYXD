@@ -958,6 +958,7 @@ export class StudioServer {
           req.body.effort === undefined ? session.restart?.effort : req.body.effort);
         if (req.body.skillId !== undefined && (typeof req.body.skillId !== "string" || !/^[a-f0-9]{20}$/.test(req.body.skillId))) throw new Error("skill ไม่ถูกต้อง");
         if (req.body.permission !== undefined && !CHAT_PERMISSIONS.includes(req.body.permission)) throw new Error("สิทธิ์ของแชตไม่ถูกต้อง");
+        if (req.body.includeProjectContext !== undefined && typeof req.body.includeProjectContext !== 'boolean') throw new Error('การตั้งค่าบริบทโปรเจกต์ไม่ถูกต้อง');
         const style = responseStyle(req.body.responseStyle);
         await cliAuth.requireReady(agent);
         if (this.terminalManager.getSession(id) !== session || this.viewOf(id) !== "chat") return res.status(409).json({ error: "session เปลี่ยนไปแล้ว กรุณาลองใหม่" });
@@ -971,7 +972,7 @@ export class StudioServer {
           skillId: req.body.skillId,
           permission: req.body.permission,
           attachments,
-          projectContext: buildProjectContext(session.wsId ? this.workspaceRegistry.getWorkspace(session.wsId) : undefined, session.cwd, { native: nativeRuleFiles(agent) }),
+          projectContext: req.body.includeProjectContext === false ? { text: '', instructions: false, files: [], preparedAt: Date.now(), chunks: [] } : buildProjectContext(session.wsId ? this.workspaceRegistry.getWorkspace(session.wsId) : undefined, session.cwd, { native: nativeRuleFiles(agent) }),
           responseStyle: style,
         // Enter while the chat is answering interrupts it (like Claude); Ctrl+Enter (`queue`) waits instead.
         }, { queue: req.body.queue === true, interrupt: req.body.queue !== true && req.body.interrupt !== false });

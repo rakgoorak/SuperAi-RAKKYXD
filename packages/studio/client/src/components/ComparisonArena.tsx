@@ -182,7 +182,7 @@ export function ComparisonArena({ run }: { run: Run }) {
                     <Zap size={11} /> {ttft}
                   </span>
                   <span className="arena-metric-divider">·</span>
-                  <span className="arena-metric-item" title="จำนวนโทเค็นโดยประมาณ">
+                  <span className="arena-metric-item" title="โหมดทีมยังไม่ได้รับข้อมูล token จริงจาก provider">
                     <Hash size={11} /> {tokens}
                   </span>
                 </div>

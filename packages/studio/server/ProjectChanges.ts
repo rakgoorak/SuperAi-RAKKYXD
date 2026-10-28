@@ -7,7 +7,7 @@ import { cliEnv, findExecutable } from './CliCatalog.js';
 const exec = promisify(execFile);
 
 async function git(root: string, args: string[]) {
-  return (await exec(findExecutable('git') || 'git', ['--no-pager', ...args], { cwd: root, env: cliEnv(), timeout: 10000, maxBuffer: 2 * 1024 * 1024, windowsHide: true })).stdout;
+  return (await exec(findExecutable('git') || 'git', ['--no-pager', ...args], { cwd: root, env: { ...process.env, ...cliEnv() }, timeout: 10000, maxBuffer: 2 * 1024 * 1024, windowsHide: true })).stdout;
 }
 
 export async function projectChanges(root: string) {

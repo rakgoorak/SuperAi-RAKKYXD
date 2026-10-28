@@ -684,6 +684,7 @@ export function App() {
               effort: prefs.effort,
               permission: prefs.permission,
               responseStyle: prefs.responseStyle,
+              includeProjectContext: prefs.includeProjectContext,
               ...(skillId ? { skillId } : {}),
               attachments: saved.map((file) => file.path),
               // Ctrl+Enter: wait behind a running turn instead of being refused.

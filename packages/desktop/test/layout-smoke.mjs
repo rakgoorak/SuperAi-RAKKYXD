@@ -93,9 +93,10 @@ try {
       assert.equal((await measure()).columns, 2);
       await page.screenshot({ path: path.join(output, 'superai-layout-wide.png') });
       checks++;
-      await page.getByTitle('ขยายช่องคำสั่ง', { exact: true }).click();
+      const plus = page.getByRole('button', { name: 'แนบไฟล์', exact: true });
+      await plus.click(); await page.getByRole('menuitem', { name: 'ขยายช่องพิมพ์', exact: true }).click();
       await page.getByRole('combobox', { name: 'คำสั่ง', exact: true }).fill('บรรทัดที่หนึ่ง\nบรรทัดที่สอง');
-      await page.getByTitle('ย่อช่องคำสั่ง', { exact: true }).click();
+      await plus.click(); await page.getByRole('menuitem', { name: 'ย่อช่องพิมพ์', exact: true }).click();
       assert.equal(await page.getByRole('combobox', { name: 'คำสั่ง', exact: true }).inputValue(), 'บรรทัดที่หนึ่ง\nบรรทัดที่สอง');
       checks++;
       await request(`/api/terminals/${ids[0]}/input`, { input: 'echo LAYOUT_SESSION_PRESERVED\r' });

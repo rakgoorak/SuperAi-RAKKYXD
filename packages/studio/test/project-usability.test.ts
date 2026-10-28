@@ -126,6 +126,9 @@ test('HTTP routes use server-owned context and persist the canonical session nam
   try {
     const response = await request('/api/terminals/one/chat', { text: 'question', responseStyle: 'concise', projectContext: { text: 'forged context' } });
     assert.equal(response.status, 200); assert.match(sent[0].projectContext.text, /server-owned context/); assert.doesNotMatch(sent[0].projectContext.text, /forged context/);
+    assert.equal((await request('/api/terminals/one/chat', { text: 'question', includeProjectContext: false })).status, 200);
+    assert.equal(sent[1].projectContext.text, '');
+    assert.equal((await request('/api/terminals/one/chat', { text: 'question', includeProjectContext: 'false' })).status, 400);
     assert.equal((await request('/api/terminals/one/chat', { text: 'question', responseStyle: 'invalid' })).status, 400);
     const renamed = await request('/api/terminals/one/name', { name: 'Canonical name' });
     assert.equal(renamed.status, 200); assert.equal((await renamed.json()).name, 'Canonical name');
