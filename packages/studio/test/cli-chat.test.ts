@@ -345,6 +345,8 @@ test('permission modes map to each CLI\'s own read-only / edit / auto switches',
   assert.ok(arg('codex', 'review').includes('--approve-for-me'));
   assert.ok(arg('codex', 'review').includes('sandbox_mode="workspace-write"'));
   assert.ok(!arg('codex', 'review').includes('--dangerously-bypass-approvals-and-sandbox'));
+  const resumeReview = chatArguments('codex', { prompt: 'x', permission: 'review', conversationId: 'thread' });
+  assert.ok(resumeReview.indexOf('--approve-for-me') < resumeReview.indexOf('resume'));
   assert.ok(arg('codex', 'full').includes('--dangerously-bypass-approvals-and-sandbox'));
   assert.ok(!arg('codex', 'full').includes('sandbox_mode="workspace-write"'));
   for (const provider of ['claude-code', 'antigravity', 'opencode']) {
