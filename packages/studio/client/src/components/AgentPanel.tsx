@@ -19,7 +19,7 @@ function validSeat(s: any): s is Seat {
 function defaultConfig(clis: Cli[]): AgentConfig {
   const mainCli = firstReady(clis) || HEADLESS[0];
   const subCli = firstReady(clis, [mainCli]) || mainCli;
-  return { main: seatFor(mainCli, "Main"), subagents: [seatFor(subCli, "Sub-agent 1")] };
+  return { main: seatFor(mainCli, "Main"), subagents: [seatFor(subCli, "Sub-agent 1"), seatFor(mainCli, "Sub-agent 2")] };
 }
 
 export function AgentConfigEditor({ workspaceId, clis, ollamaModels, disabled, onChange, onFixTools }: {
