@@ -10,6 +10,7 @@ import {
   formatTtft,
   estimateTokenCount,
   formatTokens,
+  formatArenaError,
 } from '../client/src/comparisonMetrics.js';
 
 const seat = (provider: string, name = provider): Seat => ({
@@ -221,4 +222,18 @@ test('serialization: saved panel metrics survive reloading from JSON', async (t)
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('formatArenaError: cleans up prefixes, quota exhaustion, and server errors', () => {
+  const rawQuota = 'cli:antigravity: error: Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 72h34m49s. status: "RESOURCE_EXHAUSTED", error_code: 429';
+  const cleanedQuota = formatArenaError(rawQuota);
+  assert.equal(cleanedQuota, 'โควตาการใช้งานเต็มแล้ว (รีเซ็ตใน 72h34m49s) กรุณารอหรือสลับไปใช้โมเดลอื่น');
+
+  const rawServer = 'cli:opencode: Unexpected server error. Check server logs for details.';
+  const cleanedServer = formatArenaError(rawServer);
+  assert.equal(cleanedServer, 'เซิร์ฟเวอร์ของผู้ให้บริการมีปัญหาชั่วคราว (Unexpected server error) กรุณาลองใหม่อีกครั้งหรือสลับโมเดล');
+
+  const normalErr = 'cli:codex: error: Network timeout';
+  assert.equal(formatArenaError(normalErr), 'Network timeout');
+  assert.equal(formatArenaError(''), '');
 });

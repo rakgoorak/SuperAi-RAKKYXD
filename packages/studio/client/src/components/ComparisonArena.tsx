@@ -20,12 +20,13 @@ import {
   formatTtft,
   estimateTokenCount,
   formatTokens,
+  formatArenaError,
 } from "../comparisonMetrics";
 import { Markdown } from "./Markdown";
 import { RunUsage } from './RunUsage';
 import "../comparison-arena.css";
 
-export { formatLatency, formatTtft, estimateTokenCount, formatTokens };
+export { formatLatency, formatTtft, estimateTokenCount, formatTokens, formatArenaError };
 
 const STEP_LABELS: Record<StepStatus, string> = {
   pending: "รอ",
@@ -231,7 +232,7 @@ export function ComparisonArena({ run }: { run: Run }) {
                 ) : answer.error ? (
                   <div className="arena-card-status-msg failed">
                     <AlertCircle size={13} />
-                    <span>{answer.error}</span>
+                    <span>{formatArenaError(answer.error)}</span>
                   </div>
                 ) : null}
               </div>

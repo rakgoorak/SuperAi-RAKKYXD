@@ -33,3 +33,18 @@ export function estimateTokenCount(answer: PanelAnswer): number {
 export function formatTokens(answer: PanelAnswer): string {
   return answer.status === "completed" ? "ไม่มีข้อมูล token จริง" : "—";
 }
+
+export function formatArenaError(error: string): string {
+  if (!error) return "";
+  let clean = error.trim();
+  clean = clean.replace(/^(?:cli:[a-z0-9-_]+|[a-z0-9-_]+):\s*(?:error:\s*)?/i, "");
+  if (/RESOURCE_EXHAUSTED|Individual quota reached/i.test(clean)) {
+    const resetMatch = clean.match(/Resets in ([0-9a-zA-Z\s]+?)(?:\.|$|,)/i);
+    const resetInfo = resetMatch ? ` (รีเซ็ตใน ${resetMatch[1].trim()})` : "";
+    return `โควตาการใช้งานเต็มแล้ว${resetInfo} กรุณารอหรือสลับไปใช้โมเดลอื่น`;
+  }
+  if (/Unexpected server error/i.test(clean)) {
+    return "เซิร์ฟเวอร์ของผู้ให้บริการมีปัญหาชั่วคราว (Unexpected server error) กรุณาลองใหม่อีกครั้งหรือสลับโมเดล";
+  }
+  return clean;
+}
