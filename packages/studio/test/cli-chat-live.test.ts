@@ -112,6 +112,92 @@ test('Claude ask mode delivers a tool request to the user', async () => {
   chats.stopAll();
 });
 
+test('a closed input cannot be reported as an accepted permission', async () => {
+  const fake = liveSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch);
+  chats.send('closed', claude('แก้ไฟล์', { permission: 'ask' }));
+  const cli = fake.calls[0];
+  cli.say({ type: 'control_request', request_id: 'a1', request: { subtype: 'can_use_tool', tool_name: 'Write', input: { file_path: 'example.txt' } } });
+  await until(() => chats.snapshot('closed').items.some(item => item.kind === 'permission'));
+  cli.proc.stdin.end();
+  assert.equal(chats.answerPermission('closed', 'a1', 'always'), false);
+  assert.equal(chats.isRunning('closed'), true, 'the failed process retains the turn until it exits');
+  cli.proc.emit('close', 1);
+  assert.equal(chats.isRunning('closed'), false);
+  const items = chats.snapshot('closed').items;
+  assert.equal((items.find(item => item.kind === 'permission') as any).status, 'expired');
+  assert.ok(items.some(item => item.kind === 'error' && item.text.includes('ส่งคำตอบ')));
+  chats.stopAll();
+});
+
+test('an asynchronous write failure reverses the saved approval and reports the error', async () => {
+  const fake = liveSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch);
+  chats.send('write-error', claude('แก้ไฟล์', { permission: 'ask' }));
+  const cli = fake.calls[0];
+  const request = (requestId: string) => cli.say({ type: 'control_request', request_id: requestId, request: { subtype: 'can_use_tool', tool_name: 'Write', input: {} } });
+  request('a1');
+  await until(() => chats.snapshot('write-error').items.some(item => item.kind === 'permission'));
+  const originalWrite = cli.proc.stdin.write;
+  cli.proc.stdin.write = (_data: unknown, _encoding: unknown, callback: (error: Error) => void) => { callback(new Error('pipe closed')); return false; };
+  assert.equal(chats.answerPermission('write-error', 'a1', 'always'), true);
+  cli.proc.stdin.write = originalWrite;
+  await until(() => cli.proc.killed);
+  assert.equal(chats.isRunning('write-error'), true);
+  cli.proc.emit('close', 1);
+  assert.equal(chats.isRunning('write-error'), false);
+  assert.ok(chats.snapshot('write-error').items.some(item => item.kind === 'error'));
+  assert.equal((chats.snapshot('write-error').items.find(item => item.kind === 'permission') as any).status, 'expired');
+  chats.send('write-error', claude('ลองอีกครั้ง', { permission: 'ask' }));
+  const next = fake.calls[1];
+  next.say({ type: 'control_request', request_id: 'a2', request: { subtype: 'can_use_tool', tool_name: 'Write', input: {} } });
+  await until(() => chats.snapshot('write-error').items.filter(item => item.kind === 'permission').length === 2);
+  assert.equal((chats.snapshot('write-error').items.at(-1) as any).status, 'pending');
+  next.say(result); await until(() => !chats.isRunning('write-error')); chats.stopAll();
+});
+
+test('late failure of a previous permission response cannot stop a later turn', async () => {
+  const fake = liveSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch);
+  chats.send('late', claude('งานแรก', { permission: 'ask' }));
+  const cli = fake.calls[0];
+  cli.say({ type: 'control_request', request_id: 'a1', request: { subtype: 'can_use_tool', tool_name: 'Write', input: {} } });
+  const originalWrite = cli.proc.stdin.write;
+  let completeWrite: ((error: Error) => void) | undefined;
+  cli.proc.stdin.write = (_data: unknown, _encoding: unknown, callback: (error: Error) => void) => { completeWrite = callback; return true; };
+  assert.equal(chats.answerPermission('late', 'a1', 'allow'), true);
+  cli.proc.stdin.write = originalWrite;
+  cli.say(result); await until(() => !chats.isRunning('late'));
+  chats.send('late', claude('งานถัดไป', { permission: 'ask' }));
+  completeWrite!(new Error('late pipe error'));
+  await tick();
+  assert.equal(cli.proc.killed, false);
+  assert.equal(chats.isRunning('late'), true);
+  cli.say(result); await until(() => !chats.isRunning('late')); chats.stopAll();
+});
+
+test('a cancelled CLI request expires its card and cannot be approved later', async () => {
+  const fake = liveSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch);
+  chats.send('cancel-permission', claude('แก้ไฟล์', { permission: 'ask' }));
+  const cli = fake.calls[0];
+  cli.say({ type: 'control_request', request_id: 'a1', request: { subtype: 'can_use_tool', tool_name: 'Write', input: {} } });
+  cli.say({ type: 'control_cancel_request', request_id: 'a1' });
+  assert.equal((chats.snapshot('cancel-permission').items.find(item => item.kind === 'permission') as any).status, 'expired');
+  assert.equal(chats.answerPermission('cancel-permission', 'a1', 'allow'), false);
+  cli.say(result); await until(() => !chats.isRunning('cancel-permission')); chats.stopAll();
+});
+
+test('pending permission cards from a previous process are expired after restart', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'superai-permission-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'saved.json'), JSON.stringify({ items: [{ id: 'permission', kind: 'permission', requestId: 'a1', tool: 'Write', title: 'write', status: 'pending', at: 1 }] }));
+    const chats = new CliChatManager(undefined, dir, launch);
+    assert.equal((chats.snapshot('saved').items[0] as any).status, 'expired');
+    assert.equal(chats.answerPermission('saved', 'a1', 'allow'), false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('stop interrupts the turn but keeps Claude and its conversation for the next message', async () => {
   const fake = liveSpawner();
   const chats = new CliChatManager(fake.spawner as any, undefined, launch);

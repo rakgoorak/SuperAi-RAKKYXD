@@ -405,7 +405,7 @@ export function permissionSummary(tool: string, input: any, description?: string
 type Spawner = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
 interface QueuedRequest extends QueuedChat { request: ChatRequest }
 /** A Claude Code process that outlives a turn; `onLine`/`onClose` belong to the turn in progress. */
-interface LiveClaude { proc: ChildProcess; key: string; closed: boolean; errors: string; onLine?: (line: string) => void; onClose?: (code: number | null) => void; idle?: NodeJS.Timeout; stopTimer?: NodeJS.Timeout }
+interface LiveClaude { proc: ChildProcess; key: string; closed: boolean; errors: string; writeProblem?: string; onWriteFailure?: (message: string) => void; onLine?: (line: string) => void; onClose?: (code: number | null) => void; idle?: NodeJS.Timeout; stopTimer?: NodeJS.Timeout }
 interface PendingPermission { live: LiveClaude; input: unknown; itemId: string; tool: string }
 interface Chat extends Omit<ChatSnapshot, "queued"> {
   seed?: string; turns: number; proc?: ChildProcess; cancelled?: boolean; /** Stopped to take a new message (Enter while answering). */ interrupting?: boolean;
@@ -440,7 +440,7 @@ export class CliChatManager {
       if (file && fs.existsSync(file)) {
         const saved = JSON.parse(fs.readFileSync(file, "utf8"));
         // A turn cut off by quitting the app: its unfinished tools did not complete.
-        if (Array.isArray(saved.items)) chat.items = saved.items.map((i: ChatItem) => (i.kind === "tool" && i.status === "running" ? { ...i, status: "failed" } : i));
+        if (Array.isArray(saved.items)) chat.items = saved.items.map((i: ChatItem) => i.kind === "tool" && i.status === "running" ? { ...i, status: "failed" } : i.kind === 'permission' && i.status === 'pending' ? { ...i, status: 'expired' } : i);
         if (typeof saved.conversationId === "string" && saved.conversationId) chat.conversationId = saved.conversationId;
         chat.turns = Number(saved.turns) || 0;
         if (typeof saved.seed === 'string') chat.seed = saved.seed;
@@ -614,7 +614,7 @@ export class CliChatManager {
       // A live Claude stays for the next turn; questions it asked during this one can no longer be answered.
       if (chat.live) {
         const current = chat.live;
-        current.onLine = undefined; current.onClose = undefined;
+        current.onLine = undefined; current.onClose = undefined; current.onWriteFailure = undefined;
         clearTimeout(current.stopTimer);
         if (!current.closed) { current.idle = setTimeout(() => { if (chat.live === current && !chat.running) this.closeLive(chat); }, this.options.idle ?? 15 * 60_000); current.idle.unref?.(); }
       }
@@ -712,13 +712,21 @@ export class CliChatManager {
         let event: any;
         try { event = JSON.parse(line); } catch { apply(line); return; }
         if (event?.type === "control_request") { this.controlRequest(id, chat, lv, prefix, event); return; }
+        if (event?.type === "control_cancel_request") { this.cancelPermission(id, chat, String(event.request_id || '')); return; }
         if (event?.type === "control_response") return;
         apply(line);
         // The process stays; the turn ends with Claude's result.
         if (event?.type === "result") finish();
       };
-      lv.onClose = (code) => closed(code, lv.errors);
-      this.writeLive(lv, { type: "user", message: { role: "user", content: prompt } });
+      lv.onClose = (code) => lv.writeProblem ? finish(lv.writeProblem) : closed(code, lv.errors);
+      lv.onWriteFailure = (message) => {
+        if (finished || lv.closed || lv.writeProblem) return;
+        lv.writeProblem = message;
+        this.kill(lv.proc);
+      };
+      const failTurn = lv.onWriteFailure;
+      const sendFailed = () => failTurn('ส่งข้อความไปยัง Claude ไม่สำเร็จ โปรดลองส่งอีกครั้ง');
+      if (!this.writeLive(lv, { type: "user", message: { role: "user", content: prompt } }, sendFailed)) sendFailed();
       return "sent";
     }
     proc = proc!;
@@ -772,8 +780,21 @@ export class CliChatManager {
     return lv;
   }
 
-  private writeLive(lv: LiveClaude, message: unknown) {
-    if (!lv.closed) lv.proc.stdin?.write(JSON.stringify(message) + "\n", "utf8");
+  private writeLive(lv: LiveClaude, message: unknown, onFailure?: () => void): boolean {
+    const input = lv.proc.stdin;
+    if (lv.closed || !input || input.destroyed || input.writableEnded || !input.writable) return false;
+    try {
+      input.write(JSON.stringify(message) + "\n", "utf8", error => { if (error && onFailure) queueMicrotask(onFailure); });
+      return true;
+    } catch { return false; }
+  }
+
+  private cancelPermission(id: string, chat: Chat, requestId: string) {
+    const pending = chat.permissions.get(requestId);
+    if (!pending) return;
+    chat.permissions.delete(requestId);
+    const item = chat.items.find(i => i.id === pending.itemId);
+    if (item?.kind === 'permission') this.put(id, chat, { ...item, status: 'expired' });
   }
 
   /** Claude asks before using a tool its permission mode does not cover: show it, or answer from "always". */
@@ -786,7 +807,9 @@ export class CliChatManager {
     }
     const tool = String(request.tool_name || "tool");
     if (chat.alwaysAllowed.has(tool)) {
-      this.writeLive(lv, { type: "control_response", response: { subtype: "success", request_id: requestId, response: { behavior: "allow", updatedInput: request.input } } });
+      const failTurn = lv.onWriteFailure;
+      const failed = () => failTurn?.('ส่งคำอนุญาตไปยัง Claude ไม่สำเร็จ โปรดลองส่งอีกครั้ง');
+      if (!this.writeLive(lv, { type: "control_response", response: { subtype: "success", request_id: requestId, response: { behavior: "allow", updatedInput: request.input } } }, failed)) failed();
       return;
     }
     const itemId = `${prefix}-permission-${requestId}`;
@@ -799,12 +822,19 @@ export class CliChatManager {
     const chat = this.chats.get(id);
     const pending = chat?.permissions.get(requestId);
     if (!chat || !pending) return false;
-    chat.permissions.delete(requestId);
-    if (decision === "always") chat.alwaysAllowed.add(pending.tool);
     const response = decision === "deny"
       ? { behavior: "deny", message: "ผู้ใช้ไม่อนุญาตให้ใช้เครื่องมือนี้ในครั้งนี้" }
       : { behavior: "allow", updatedInput: pending.input };
-    this.writeLive(pending.live, { type: "control_response", response: { subtype: "success", request_id: requestId, response } });
+    const failTurn = pending.live.onWriteFailure;
+    const failed = () => {
+      if (decision === 'always') chat.alwaysAllowed.delete(pending.tool);
+      const item = chat.items.find(i => i.id === pending.itemId);
+      if (item?.kind === 'permission') this.put(id, chat, { ...item, status: 'expired' });
+      failTurn?.('ส่งคำตอบไปยัง Claude ไม่สำเร็จ โปรดลองส่งอีกครั้ง');
+    };
+    if (!this.writeLive(pending.live, { type: "control_response", response: { subtype: "success", request_id: requestId, response } }, failed)) { chat.permissions.delete(requestId); failed(); return false; }
+    chat.permissions.delete(requestId);
+    if (decision === "always") chat.alwaysAllowed.add(pending.tool);
     const item = chat.items.find((i) => i.id === pending.itemId);
     if (item?.kind === "permission") this.put(id, chat, { ...item, status: decision === "deny" ? "denied" : decision === "always" ? "always" : "allowed" });
     return true;
@@ -816,7 +846,7 @@ export class CliChatManager {
     if (!lv) return;
     chat.live = undefined;
     clearTimeout(lv.idle); clearTimeout(lv.stopTimer);
-    lv.onLine = undefined; lv.onClose = undefined;
+    lv.onLine = undefined; lv.onClose = undefined; lv.onWriteFailure = undefined;
     if (lv.closed) return;
     lv.closed = true;
     try { lv.proc.stdin?.end(); } catch {}

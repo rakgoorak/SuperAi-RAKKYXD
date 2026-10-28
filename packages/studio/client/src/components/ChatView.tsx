@@ -102,7 +102,7 @@ function ToolRow({ tool }: { tool: ToolItem }) {
 
 const PERMISSION_RESULT: Record<PermissionItem['status'], string> = {
   pending: 'รอคำตอบ',
-  allowed: 'อนุญาตแล้ว', always: 'อนุญาตตลอดห้องนี้', denied: 'ไม่อนุญาต', expired: 'หมดเวลาตอบ',
+  allowed: 'ส่งคำอนุญาตแล้ว', always: 'ส่งคำอนุญาตแล้ว · จำสิทธิ์ในห้องนี้', denied: 'ส่งคำปฏิเสธแล้ว', expired: 'คำขอหมดอายุหรือส่งไม่สำเร็จ',
 };
 /** Claude asks before using a tool its permission mode does not cover, like the prompt in Claude's own app. */
 function PermissionCard({ item, sessionId, name }: { item: PermissionItem; sessionId: string; name: string }) {
@@ -425,6 +425,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   const seconds = Math.max(0, Math.round((now - started) / 1000));
   // The task list of the turn in progress stays pinned above the live counter, like Claude's.
   const liveTodos = running && lastUser ? [...turnItems].reverse().find((item): item is TodosItem => item.kind === 'todos') : undefined;
+  const pendingPermissions = items.filter((item): item is PermissionItem => item.kind === 'permission' && item.status === 'pending');
   const queueAction = (id: string, action: 'send' | 'remove') => {
     post(`/api/terminals/${sessionId}/chat/queue/${id}/${action}`).catch((error) => setProblem((error as Error).message));
   };
@@ -433,6 +434,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
     <ImageEndpointContext.Provider value={`/api/terminals/${encodeURIComponent(sessionId)}/preview-file`}><ConversationInteractions sessionId={sessionId} active={active} messages={items} revision={items} onSearch={setSearch}><div className="chat-view">
       <div className="conversation-export-position"><ConversationExport title={name} sessionId={sessionId} /></div>
       <button type="button" className="conversation-rename-trigger" aria-label="เปลี่ยนชื่อห้อง" title="เปลี่ยนชื่อห้อง" onClick={() => window.dispatchEvent(new CustomEvent('superai:rename-session', { detail: sessionId }))}><Pencil size={13} /></button>
+      {pendingPermissions.length > 0 && <div className="chat-permission-banner" role="status"><span>รอการอนุญาต {pendingPermissions.length} รายการ · งานจะดำเนินต่อหลังตอบ</span><button type="button" className="secondary" onClick={() => scroller.current?.querySelector('.chat-permission.pending')?.scrollIntoView({ block: 'center', behavior: 'smooth' })}>ดูคำขอ</button></div>}
       <div className="chat-scroll" ref={scroller} onScroll={(e) => {
         const el = e.currentTarget;
         try { if (!search.trim()) localStorage.setItem(`superai-scroll:${sessionId}`, String(el.scrollTop)); } catch {}
@@ -485,7 +487,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
             return <div key={block.id} className="chat-notice">{block.text}</div>;
           })}
           {liveTodos && <TaskList key={liveTodos.id} item={liveTodos} live />}
-          {running && activity?.quiet && <div className="chat-idle-warning" role="status" aria-label="รอข้อมูลจากงานปัจจุบัน">
+          {running && activity?.quiet && !pendingPermissions.length && <div className="chat-idle-warning" role="status" aria-label="รอข้อมูลจากงานปัจจุบัน">
             <div><Clock3 size={16} /><strong>ยังไม่ได้รับข้อมูลใหม่ครบ {Math.max(1, Math.ceil(activity.quiet.timeoutMs / 60000))} นาที</strong></div>
             <p>โปรแกรมยังไม่หยุดงาน อาจกำลังรอเครื่องมือหรือ Subagent และยังยืนยันไม่ได้ว่างานค้าง</p>
             <div className="chat-idle-actions">

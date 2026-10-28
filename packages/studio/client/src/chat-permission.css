@@ -1,4 +1,6 @@
 /* Permission card: Claude asks before using a tool its mode does not cover. */
+#root .chat-permission-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 14px; color: var(--text); background: var(--surface); border-bottom: 1px solid var(--control-border); font-size: 12px; }
+#root .chat-permission-banner button { flex: none; }
 #root .chat-permission {
   margin: 10px 0; padding: 12px 14px; border: 1px solid var(--control-border); border-radius: 12px;
   background: var(--surface); color: var(--text); font-size: 13px;
