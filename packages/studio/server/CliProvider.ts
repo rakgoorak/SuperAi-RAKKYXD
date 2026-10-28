@@ -80,6 +80,16 @@ export function cliFailure(provider: string, model: string, errors: string, outp
   const authText = `${errors}\n${output}`.replace(/\x1b\[[0-9;]*m/g, "");
   cliAuth.failure(id, authText);
   if (isAuthFailure(authText)) return `${provider}: บัญชียังไม่พร้อมหรือหมดอายุ กรุณากดเข้าสู่ระบบในหน้าแชต หรือเปิด Terminal ของผู้ให้บริการแล้วเข้าสู่ระบบ จากนั้นกดตรวจอีกครั้ง`;
+
+  if (/Individual quota reached|quota reached|RESOURCE_EXHAUSTED/i.test(raw)) {
+    const resetMatch = raw.match(/Resets in ([0-9a-zA-Z\s]+?)(?:\.|$|,)/i);
+    const resetInfo = resetMatch ? ` (รีเซ็ตใน ${resetMatch[1].trim()})` : "";
+    return `${provider}: โควตาการใช้งานเต็มแล้ว${resetInfo} กรุณารอหรือสลับไปใช้โมเดลอื่น`;
+  }
+  if (/Unexpected server error/i.test(raw)) {
+    return `${provider}: เซิร์ฟเวอร์ของผู้ให้บริการมีปัญหาชั่วคราว (Unexpected server error) กรุณาลองใหม่อีกครั้งหรือสลับโมเดล`;
+  }
+
   const message = [...raw.matchAll(/"message"\s*:\s*"([^"]{3,400})"/g)].at(-1)?.[1];
   const modelProblem = /model.*(not supported|not found|does not exist|unknown)|Model not found/i.test(message || raw);
   const detail = message || raw.trim().split("\n").slice(-6).join("\n") || `exit ${code}`;
