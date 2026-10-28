@@ -88,7 +88,7 @@ test('estimateTokenCount & formatTokens: estimates from output length or uses to
     tokenCount: 142,
   };
   assert.equal(estimateTokenCount(withCount as any), 142);
-  assert.equal(formatTokens(withCount as any), '142 tokens');
+  assert.equal(formatTokens(withCount as any), 'ไม่มีข้อมูล token จริง');
 
   const textOnly: PanelAnswer = {
     seat: seat('antigravity', 'Main 3'),
@@ -96,7 +96,7 @@ test('estimateTokenCount & formatTokens: estimates from output length or uses to
     output: 'A'.repeat(400),
   };
   assert.equal(estimateTokenCount(textOnly as any), 100);
-  assert.equal(formatTokens(textOnly as any), '100 tokens');
+  assert.equal(formatTokens(textOnly as any), 'ไม่มีข้อมูล token จริง');
 
   const emptyAnswer: PanelAnswer = {
     seat: seat('ollama', 'Main 4'),
@@ -217,7 +217,7 @@ test('serialization: saved panel metrics survive reloading from JSON', async (t)
     assert.equal(legacyRun.panel![0].startedAt, undefined);
     assert.equal(legacyRun.panel![0].tokenCount, undefined);
     assert.equal(formatLatency(legacyRun.panel![0] as any), '—');
-    assert.equal(formatTokens(legacyRun.panel![0] as any), `${Math.ceil('คำตอบเดิม'.length / 4)} tokens`);
+    assert.equal(formatTokens(legacyRun.panel![0] as any), 'ไม่มีข้อมูล token จริง');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -27,7 +27,7 @@ export interface MergeWorktreeResult {
 async function git(root: string, args: string[]): Promise<string> {
   const result = await exec(findExecutable('git') || 'git', ['--no-pager', ...args], {
     cwd: root,
-    env: cliEnv(),
+    env: { ...process.env, ...cliEnv() },
     timeout: 15000,
     maxBuffer: 4 * 1024 * 1024,
     windowsHide: true,

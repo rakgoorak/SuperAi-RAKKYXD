@@ -33,6 +33,14 @@ test('Codex events become messages and command cards without the PowerShell wrap
   assert.match(lines('codex', [{ type: 'turn.failed', error: { message: 'quota' } }])[0].error!, /quota/);
 });
 
+test('provider usage is reported only when the CLI supplies actual token counts', () => {
+  const codex = lines('codex', [{ type: 'turn.completed', usage: { input_tokens: 1200, cached_input_tokens: 800, output_tokens: 42 } }])[0];
+  assert.match((codex.items![0] as any).text, /input 1,200.*cached input \(รวมใน input\) 800.*output 42/);
+  const claude = lines('claude-code', [{ type: 'result', subtype: 'success', usage: { input_tokens: 100, cache_read_input_tokens: 50, cache_creation_input_tokens: 20, output_tokens: 10 } }])[0];
+  assert.match((claude.items![0] as any).text, /input \(ไม่รวม cache\) 100.*cache read 50.*cache write 20.*output 10/);
+  assert.equal(lines('codex', [{ type: 'turn.completed' }])[0].items, undefined);
+});
+
 test('Antigravity text deltas join into one message; tools show their main parameter', () => {
   const steps = lines('antigravity', [
     { event: 'init', conversation_id: 'conv-1' },

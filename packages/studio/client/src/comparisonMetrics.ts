@@ -31,6 +31,5 @@ export function estimateTokenCount(answer: PanelAnswer): number {
 }
 
 export function formatTokens(answer: PanelAnswer): string {
-  const count = estimateTokenCount(answer);
-  return count > 0 ? `${count.toLocaleString()} tokens` : "—";
+  return answer.status === "completed" ? "ไม่มีข้อมูล token จริง" : "—";
 }

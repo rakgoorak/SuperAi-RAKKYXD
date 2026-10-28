@@ -22,3 +22,9 @@ test('sessions are isolated and consumed skills notify the mounted controls', ()
   setChatPrefs('one', { skillId: 'new' });
   assert.equal(skill, '');
 });
+test('project context preference is isolated per session', () => {
+  assert.equal(chatPrefs('context-a').includeProjectContext, true);
+  setChatPrefs('context-a', { includeProjectContext: false });
+  assert.equal(chatPrefs('context-a').includeProjectContext, false);
+  assert.equal(chatPrefs('context-b').includeProjectContext, true);
+});

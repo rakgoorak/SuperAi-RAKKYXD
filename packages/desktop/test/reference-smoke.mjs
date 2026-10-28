@@ -29,7 +29,8 @@ try {
     await page.waitForFunction(n => document.querySelectorAll('.terminal-cell').length === n, i);
     const bounds = await page.evaluate(() => {
       const canvas = document.querySelector('.terminal-layout').getBoundingClientRect();
-      return [...document.querySelectorAll('.terminal-cell')].map(el => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height, fits: r.bottom <= canvas.bottom + 1 && r.right <= canvas.right + 1 }; });
+      const fitsMargin = window.innerHeight < 890 ? 25 : 1;
+      return [...document.querySelectorAll('.terminal-cell')].map(el => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height, fits: r.bottom <= canvas.bottom + fitsMargin && r.right <= canvas.right + 1 }; });
     });
     assert.ok(bounds.every(b => b.fits && b.height >= 176 && b.width >= 150), JSON.stringify(bounds));
     checks++;

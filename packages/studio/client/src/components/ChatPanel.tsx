@@ -17,8 +17,8 @@ function validSeat(s: any): s is Seat {
 }
 function defaultConfig(clis: Cli[]): ChatConfig {
   const ready = HEADLESS.filter((id) => clis.some((c) => c.id === id && c.available));
-  const ids = ready.length ? ready.slice(0, 3) : [HEADLESS[0]];
-  return { panel: ids.map((id, i) => seatFor(id, `Main ${i + 1}`)), summarizer: seatFor(ids[0], "ผู้สรุป"), style: "merge" };
+  const id = ready[0] || HEADLESS[0];
+  return { panel: [seatFor(id, "Main 1")], summarizer: null, style: "merge" };
 }
 
 export function ChatConfigEditor({ workspaceId, clis, ollamaModels, disabled, onChange }: {
@@ -40,7 +40,7 @@ export function ChatConfigEditor({ workspaceId, clis, ollamaModels, disabled, on
       summary={`${saved.panel.length} AI · ${saved.summarizer ? "มีผู้สรุป" : "แยกคำตอบ"}`}
       disabled={disabled} onOpen={team.begin} onSave={team.save} onCancel={team.cancel}>
       <section aria-label="AI ที่ร่วมตอบ"><h3>AI ที่ร่วมตอบ</h3>
-      <p className="team-section-description">แต่ละตัวตอบแยกกัน เปรียบเทียบความเห็นได้ในบทสนทนา</p>
+      <p className="team-section-description">แต่ละตัวได้รับคำถามแยกกัน และใช้โควตาของตัวเอง</p>
       {config.panel.map((seat, index) => (
         <div className="seat-row" key={index}>
           <span className="seat-badge">Main {index + 1}</span>
@@ -55,7 +55,7 @@ export function ChatConfigEditor({ workspaceId, clis, ollamaModels, disabled, on
       </button>
       </section>
       <section aria-label="สรุปคำตอบ"><h3>สรุปคำตอบ</h3>
-      <p className="team-section-description">ให้ AI อีกหนึ่งตัวอ่านคำตอบทั้งหมด แล้วสรุปให้คุณ</p>
+      <p className="team-section-description">เรียก AI เพิ่มอีกครั้งเพื่ออ่านคำตอบทั้งหมดและสรุปผล</p>
       <div className="summarizer-row">
         <label className="tool-permission">
           <input type="checkbox" checked={!!config.summarizer} disabled={disabled}

@@ -35,7 +35,7 @@ export async function listProjectFiles(root: string, query = ''): Promise<{ file
     const output = (
       await exec(gitBin, ['--no-pager', 'ls-files', '--cached', '--others', '--exclude-standard', '-z'], {
         cwd: base,
-        env: cliEnv(),
+        env: { ...process.env, ...cliEnv() },
         timeout: 5000,
         maxBuffer: 8 * 1024 * 1024,
         windowsHide: true,
