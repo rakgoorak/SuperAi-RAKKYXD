@@ -350,9 +350,14 @@ test('permission modes map to each CLI\'s own read-only / edit / auto switches',
   assert.ok(arg('codex', 'full').includes('--dangerously-bypass-approvals-and-sandbox'));
   assert.ok(!arg('codex', 'full').includes('sandbox_mode="workspace-write"'));
   for (const provider of ['claude-code', 'antigravity', 'opencode']) {
-    assert.throws(() => arg(provider, 'review'), /เฉพาะ Codex/);
-    assert.throws(() => arg(provider, 'full'), /เฉพาะ Codex/);
+    assert.throws(() => arg(provider, 'review'), /ไม่รองรับ/);
   }
+  assert.ok(arg('claude-code', 'full').includes('bypassPermissions'));
+  assert.throws(() => arg('claude-code', 'ask'), /live/);
+  for (const provider of ['antigravity', 'opencode']) assert.throws(() => arg(provider, 'full'), /ไม่รองรับ/);
+  assert.ok(arg('opencode', 'approve_all').includes('--auto'));
+  assert.ok(arg('antigravity', 'approve_all').includes('--dangerously-skip-permissions'));
+  assert.throws(() => arg('codex', 'approve_all'), /ไม่รองรับ/);
   assert.ok(arg('antigravity', 'read').join(' ').includes('--mode plan'));
   assert.ok(!arg('antigravity', 'edit').includes('--dangerously-skip-permissions'));
   assert.ok(arg('opencode', 'read').join(' ').includes('--agent plan'));

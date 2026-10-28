@@ -17,9 +17,9 @@ export interface ChatPrefs {
   permission: ChatPermission;
 }
 
-export type ChatPermission = 'read' | 'edit' | 'auto' | 'review' | 'full';
-export const PERMISSION_LABEL: Record<ChatPermission, string> = { read: 'อ่านอย่างเดียว', edit: 'แก้ไฟล์ได้', auto: 'อัตโนมัติ', review: 'Approve for me', full: 'Full access' };
-const isPermission = (value: unknown): value is ChatPermission => value === 'read' || value === 'edit' || value === 'auto' || value === 'review' || value === 'full';
+export type ChatPermission = 'read' | 'edit' | 'auto' | 'review' | 'full' | 'ask' | 'approve_all';
+export const PERMISSION_LABEL: Record<ChatPermission, string> = { read: 'อ่านอย่างเดียว', edit: 'แก้ไฟล์ได้', auto: 'อัตโนมัติ', review: 'Approve for me', full: 'Full access', ask: 'Ask for approval', approve_all: 'อนุมัติเครื่องมืออัตโนมัติ' };
+const isPermission = (value: unknown): value is ChatPermission => typeof value === 'string' && Object.prototype.hasOwnProperty.call(PERMISSION_LABEL, value);
 
 const prefs = new Map<string, ChatPrefs>();
 const choices = new Set<string>();

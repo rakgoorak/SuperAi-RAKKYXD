@@ -24,11 +24,15 @@ const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 
 export type ToolKind = "command" | "read" | "edit" | "search" | "web" | "plan" | "other";
 export type TodoStatus = "pending" | "in_progress" | "completed";
-/** What the CLI may do on its own in a chat turn (headless CLIs cannot ask first). */
-export type ChatPermission = "read" | "edit" | "auto" | "review" | "full";
-export const CHAT_PERMISSIONS: ChatPermission[] = ["read", "edit", "auto", "review", "full"];
+/** Permission modes supported by individual CLI integrations. */
+export type ChatPermission = "read" | "edit" | "auto" | "review" | "full" | "ask" | "approve_all";
+export const CHAT_PERMISSIONS: ChatPermission[] = ["read", "edit", "auto", "review", "full", "ask", "approve_all"];
 export function supportsChatPermission(agent: string, permission: ChatPermission): boolean {
-  return agent === 'codex' || (permission !== 'review' && permission !== 'full');
+  if (permission === 'ask') return agent === 'claude-code';
+  if (permission === 'review') return agent === 'codex';
+  if (permission === 'full') return agent === 'codex' || agent === 'claude-code';
+  if (permission === 'approve_all') return agent === 'opencode' || agent === 'antigravity';
+  return true;
 }
 type ChatRequestRecord = { text: string; model?: string; effort?: string; skillId?: string; attachments?: string[]; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle };
 export type ChatItem =
@@ -309,11 +313,12 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
  * run commands (the default). `files` are attached natively (Codex: images, OpenCode: any file);
  * others get paths in the prompt.
  */
-/** Claude Code tools that only read the web; allowed in every chat permission mode. */
+/** Claude Code tools preapproved by the legacy read/edit/auto modes. */
 export const WEB_TOOLS = "WebSearch,WebFetch";
 export function chatArguments(agent: string, o: { prompt: string; conversationId?: string; model?: string; effort?: string; files?: string[]; permission?: ChatPermission }): string[] {
   const permission = o.permission || "auto";
-  if (!supportsChatPermission(agent, permission)) throw new Error('สิทธิ์นี้รองรับเฉพาะ Codex ในมุมมองแชต');
+  if (!supportsChatPermission(agent, permission)) throw new Error('สิทธิ์นี้ไม่รองรับสำหรับ provider นี้');
+  if (permission === 'ask') throw new Error('การขออนุมัติในแชตต้องใช้ Claude แบบ live');
   if (agent === "claude-code")
     return [
       "-p",
@@ -322,7 +327,7 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
       ...modelEffortArgs(agent, o.model, o.effort),
       // `-p` cannot ask for approval, so anything not allowed here is refused. Web search/fetch only
       // read, so every mode gets them; "auto" also runs commands.
-      ...(permission === "read" ? ["--permission-mode", "plan", "--allowedTools", WEB_TOOLS]
+      ...(permission === 'full' ? ['--permission-mode', 'bypassPermissions'] : permission === "read" ? ["--permission-mode", "plan", "--allowedTools", WEB_TOOLS]
         : permission === "edit" ? ["--permission-mode", "acceptEdits", "--allowedTools", WEB_TOOLS]
           : ["--permission-mode", "acceptEdits", "--allowedTools", `Bash,${WEB_TOOLS}`]),
     ];
@@ -333,6 +338,7 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
       ...(o.conversationId ? ["--session", o.conversationId] : []),
       // OpenCode's plan agent only reads; its build agent edits and runs commands.
       ...(permission === "read" ? ["--agent", "plan"] : []),
+      ...(permission === 'approve_all' ? ['--auto'] : []),
       ...modelEffortArgs(agent, o.model, o.effort),
       ...(o.files || []).flatMap((file) => ["--file", file]),
       "--",
@@ -356,7 +362,7 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
     return [
       ...modelEffortArgs(agent, o.model, o.effort),
       ...(o.conversationId ? ["--conversation", o.conversationId] : []),
-      ...(permission === "read" ? ["--mode", "plan"]
+      ...(permission === 'approve_all' ? ['--mode', 'accept-edits', '--dangerously-skip-permissions'] : permission === "read" ? ["--mode", "plan"]
         : permission === "edit" ? ["--mode", "accept-edits"]
           : ["--mode", "accept-edits", "--sandbox", "--dangerously-skip-permissions"]),
       "--output-format", "stream-json",
@@ -378,7 +384,7 @@ export function claudeLiveArguments(o: { conversationId?: string; model?: string
     "--output-format", "stream-json", "--verbose",
     ...(o.conversationId ? ["--resume", o.conversationId] : []),
     ...modelEffortArgs("claude-code", o.model, o.effort),
-    ...(permission === "read" ? ["--permission-mode", "plan", "--allowedTools", WEB_TOOLS]
+    ...(permission === 'ask' ? ['--permission-mode', 'default'] : permission === 'full' ? ['--permission-mode', 'bypassPermissions'] : permission === "read" ? ["--permission-mode", "plan", "--allowedTools", WEB_TOOLS]
       : permission === "edit" ? ["--permission-mode", "acceptEdits", "--allowedTools", WEB_TOOLS]
         : ["--permission-mode", "acceptEdits", "--allowedTools", `Bash,${WEB_TOOLS}`]),
     // Anything else Claude wants to use comes to us as a can_use_tool request instead of being refused.
@@ -537,6 +543,7 @@ export class CliChatManager {
     const { agent } = request;
     if (!CHAT_CLIS.includes(agent)) throw new Error("CLI นี้ยังไม่รองรับมุมมองแชต กรุณาใช้ terminal");
     if (request.permission && (!CHAT_PERMISSIONS.includes(request.permission) || !supportsChatPermission(agent, request.permission))) throw new Error('สิทธิ์นี้ไม่รองรับสำหรับ provider นี้');
+    if (request.permission === 'ask' && !this.liveClaude) throw new Error('การขออนุมัติในแชตต้องใช้ Claude แบบ live');
     const text = request.text.trim();
     if (!text) throw new Error("กรุณาพิมพ์ข้อความ");
     const chat = this.chat(id);
