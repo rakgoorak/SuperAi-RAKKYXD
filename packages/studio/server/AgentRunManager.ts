@@ -17,6 +17,7 @@ import { Seat, validateSeat } from "./Providers.js";
 import { skillPrompt } from "./ChatSkills.js";
 import { contextualPrompt, contextForAgent, type ProjectContext } from './ProjectContext.js';
 import type { ResponseStyle } from './ResponseStyle.js';
+import type { TokenUsage } from './CliRunStream.js';
 
 export function ollamaBase() {
   const value = process.env.SUPERAI_OLLAMA_URL || "http://127.0.0.1:11434";
@@ -59,6 +60,7 @@ export class LocalProvider implements LLMProvider {
     if (!message) throw new Error("Ollama ไม่ส่งข้อความตอบกลับ");
     return {
       text: message.content || "",
+      ...(Number.isFinite(data.usage?.prompt_tokens) && Number.isFinite(data.usage?.completion_tokens) ? { usage: { promptTokens: data.usage.prompt_tokens, completionTokens: data.usage.completion_tokens, totalTokens: data.usage.prompt_tokens + data.usage.completion_tokens } } : {}),
       toolCalls: message.tool_calls?.map((t: any) => ({
         id: t.id || randomUUID(),
         name: t.function.name,
@@ -106,6 +108,8 @@ export interface Activity {
   text: string;
 }
 
+export interface UsageStep { stage: string; seat: string; provider: string; calls: TokenUsage[]; status: 'running' | 'completed' | 'failed'; missing: boolean; }
+
 export interface ConversationRun {
   projectContext?: ProjectContext;
   responseStyle?: ResponseStyle;
@@ -121,6 +125,7 @@ export interface ConversationRun {
   allowTools: boolean;
   attachments?: string[];
   activity: Activity[];
+  usageSteps?: UsageStep[];
   // Chat
   panel?: PanelAnswer[];
   summarizer?: Seat | null;
@@ -310,9 +315,9 @@ export class AgentRunManager {
     return run;
   }
 
-  private provider(seat: Seat, cwd: string, signal: AbortSignal, tools: boolean, readTools: boolean, attachments: string[]): LLMProvider {
+  private provider(seat: Seat, cwd: string, signal: AbortSignal, tools: boolean, readTools: boolean, attachments: string[], onUsage?: (usage: TokenUsage) => void): LLMProvider {
     if (seat.provider.startsWith("cli:")) {
-      return new CliProvider(seat.provider, cwd, signal, tools, seat.model, readTools, attachments, seat.effort);
+      return new CliProvider(seat.provider, cwd, signal, tools, seat.model, readTools, attachments, seat.effort, onUsage);
     }
     const cloud = ["deepseek", "groq", "openrouter", "openai", "anthropic", "gemini", "openai_compatible"];
     if (cloud.includes(seat.provider)) {
@@ -325,14 +330,27 @@ export class AgentRunManager {
   }
 
   /** Run one prompt on a seat. CLIs use their own tools; Ollama gets SuperAi's file tools when allowed. */
-  private async ask(seat: Seat, prompt: string, cwd: string, signal: AbortSignal, opts: { tools: boolean; readTools: boolean; attachments: string[]; onChunk: (t: string) => void; projectContext?: ProjectContext; responseStyle?: ResponseStyle }) {
+  private async ask(seat: Seat, prompt: string, cwd: string, signal: AbortSignal, opts: { tools: boolean; readTools: boolean; attachments: string[]; onChunk: (t: string) => void; projectContext?: ProjectContext; responseStyle?: ResponseStyle; run: ConversationRun; stage: string }) {
+    const record: UsageStep = { stage: opts.stage, seat: seat.name, provider: seat.provider, calls: [], status: 'running', missing: false };
+    (opts.run.usageSteps ||= []).push(record);
     const seatContext = contextForAgent(opts.projectContext, seat.provider);
     prompt = contextualPrompt(prompt, seatContext, opts.responseStyle);
-    const provider = this.provider(seat, cwd, signal, opts.tools, opts.readTools, opts.attachments);
+    const provider = this.provider(seat, cwd, signal, opts.tools, opts.readTools, opts.attachments, usage => record.calls.push(usage));
+    try {
     if (seat.provider.startsWith("cli:")) {
       const result = await provider.stream([{ role: "user", content: prompt }], opts.onChunk);
+      record.missing = !record.calls.length || record.calls.some(call => call.input === undefined || call.output === undefined);
+      record.status = 'completed';
       return result.text;
     }
+    const originalStream = provider.stream.bind(provider);
+    provider.stream = async (...args) => {
+      const response = await originalStream(...args);
+      const u = response.usage;
+      if (u && Number.isFinite(u.promptTokens) && Number.isFinite(u.completionTokens)) record.calls.push({ input: u.promptTokens, output: u.completionTokens });
+      else record.missing = true;
+      return response;
+    };
     const loop = new AgentLoop(
       { id: randomUUID(), name: seat.name, role: "assistant", systemPrompt: "ตอบเป็นภาษาไทย บอกตามจริงเมื่อไม่มีเครื่องมือเข้าถึงไฟล์", maxSteps: 15 },
       provider,
@@ -340,7 +358,9 @@ export class AgentRunManager {
     );
     const result = await loop.run(prompt, { cwd, abortSignal: signal, onStream: opts.onChunk });
     if (!result.success) throw new Error(result.error || "งานไม่สำเร็จ");
+    record.status = 'completed';
     return result.output;
+    } catch (error) { record.status = 'failed'; record.missing = true; throw error; }
   }
 
   private history(wsId: string, mode: "chat" | "agent") {
@@ -375,7 +395,7 @@ export class AgentRunManager {
             const selected = answer.seat.provider.startsWith("cli:") ? skillPrompt(prompt, cwd, answer.seat.provider.slice(4)) : prompt;
             const question = `${history ? `บทสนทนาก่อนหน้า:\n${history}\n\n` : ""}${selected}`;
             const text = await this.ask(answer.seat, `ตอบเป็นภาษาไทย ให้เหตุผลประกอบ\n\n${question}`, cwd, controller.signal, {
-              tools: false, readTools: true, attachments, projectContext: run.projectContext, responseStyle: run.responseStyle,
+              tools: false, readTools: true, attachments, projectContext: run.projectContext, responseStyle: run.responseStyle, run, stage: 'ตอบคำถาม',
               onChunk: (t) => {
                 if (!controller.signal.aborted) {
                   if (!answer.firstChunkAt) answer.firstChunkAt = Date.now();
@@ -427,7 +447,7 @@ ${instructions}
 ## คำแนะนำสุดท้าย`;
       try {
         const text = await this.ask(summarizer, summaryPrompt, cwd, controller.signal, {
-          tools: false, readTools: false, attachments: [], projectContext: run.projectContext, responseStyle: run.responseStyle,
+          tools: false, readTools: false, attachments: [], projectContext: run.projectContext, responseStyle: run.responseStyle, run, stage: 'สรุปคำตอบ',
           onChunk: (t) => { if (!controller.signal.aborted) run.output += t; },
         });
         run.output = text || run.output;
@@ -472,7 +492,7 @@ ${allowTools ? "Sub-agent แก้ไฟล์และรันคำสั่
 {"note":"แนวทางโดยย่อ (ภาษาไทย)","tasks":[{"id":"t1","title":"ชื่องาน","assignee":1,"instructions":"คำสั่งละเอียด","dependsOn":[]}]}`;
       let planText = "";
       try {
-        planText = await this.ask(main, planPrompt, cwd, signal, { tools: false, readTools: true, attachments, projectContext: run.projectContext, onChunk: () => {} });
+        planText = await this.ask(main, planPrompt, cwd, signal, { tools: false, readTools: true, attachments, projectContext: run.projectContext, onChunk: () => {}, run, stage: 'วางแผน' });
       } catch (err: any) {
         throw new Error(`Main (${main.name}) วางแผนไม่สำเร็จ: ${err.message}`);
       }
@@ -513,7 +533,7 @@ ${allowTools ? "แก้ไฟล์/รันคำสั่งได้เท
 จบด้วยสรุปสั้นๆ ว่าทำอะไรไปจริง ไฟล์ไหนเปลี่ยน และผลตรวจ/ทดสอบที่ทำจริง`;
             try {
               const text = await this.ask(seat, taskPrompt, cwd, signal, {
-                tools: allowTools, readTools: true, attachments, projectContext: run.projectContext,
+                tools: allowTools, readTools: true, attachments, projectContext: run.projectContext, run, stage: `งาน: ${t.title}`,
                 onChunk: (c) => { if (!signal.aborted) t.output = (t.output + c).slice(-60000); },
               });
               t.output = text || t.output;
@@ -541,7 +561,7 @@ ${allowTools ? "แก้ไฟล์/รันคำสั่งได้เท
 ${report}
 
 ตอบเป็นภาษาไทย สรุปเฉพาะสิ่งที่เกิดขึ้นจริง: ใครทำอะไร ไฟล์ที่เปลี่ยน ผลทดสอบ งานที่ล้มเหลวหรือยังไม่ได้ทำ และขั้นตอนถัดไปที่แนะนำ ห้ามอ้างว่าสำเร็จถ้ามีงานไม่สำเร็จ`, cwd, signal, {
-          tools: false, readTools: true, attachments: [], projectContext: run.projectContext, responseStyle: run.responseStyle,
+          tools: false, readTools: true, attachments: [], projectContext: run.projectContext, responseStyle: run.responseStyle, run, stage: 'สรุปงาน',
           onChunk: (c) => { if (!signal.aborted) run.output += c; },
         });
         run.output = text || run.output;

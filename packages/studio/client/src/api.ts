@@ -137,6 +137,7 @@ export type StepStatus = "pending" | "running" | "completed" | "failed" | "cance
 export interface PanelAnswer { seat: Seat; status: StepStatus; output: string; error?: string; startedAt?: number; firstChunkAt?: number; completedAt?: number; tokenCount?: number; }
 export interface AgentTask { id: string; title: string; assignee: number; instructions: string; dependsOn: string[]; status: StepStatus; output: string; error?: string; }
 export interface Activity { at: number; who: string; text: string; }
+export interface UsageStep { stage: string; seat: string; provider: string; status: 'running' | 'completed' | 'failed'; missing: boolean; calls: { input?: number; cachedInput?: number; cacheWrite?: number; output?: number; inputIncludesCache?: boolean }[]; }
 export interface SkillInfo { source: string; sourceLabel: string; name: string; description: string; files: string[]; url: string; repo?: string; branch?: string; prefix?: string; installs?: number; reason?: string; }
 export interface InstalledSkill { name: string; source: string; managed: boolean; targets: string[]; }
 export interface Session {
@@ -171,6 +172,7 @@ export interface Run {
   allowTools: boolean;
   attachments?: string[];
   activity: Activity[];
+  usageSteps?: UsageStep[];
   panel?: PanelAnswer[];
   summarizer?: Seat | null;
   summaryStyle?: "merge" | "best";

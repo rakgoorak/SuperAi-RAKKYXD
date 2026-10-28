@@ -8,6 +8,7 @@ import { ConfigShell } from "./ConfigShell";
 import { useTeamDraft } from "./useTeamDraft";
 import { ProviderAccess } from "./ProviderAccess";
 import { Markdown } from "./Markdown";
+import { RunUsage } from './RunUsage';
 
 export interface AgentConfig { main: Seat; subagents: Seat[]; }
 const MAX_SUBAGENTS = 6;
@@ -18,7 +19,7 @@ function validSeat(s: any): s is Seat {
 function defaultConfig(clis: Cli[]): AgentConfig {
   const mainCli = firstReady(clis) || HEADLESS[0];
   const subCli = firstReady(clis, [mainCli]) || mainCli;
-  return { main: seatFor(mainCli, "Main"), subagents: [seatFor(subCli, "Sub-agent 1"), seatFor(mainCli, "Sub-agent 2")] };
+  return { main: seatFor(mainCli, "Main"), subagents: [seatFor(subCli, "Sub-agent 1")] };
 }
 
 export function AgentConfigEditor({ workspaceId, clis, ollamaModels, disabled, onChange, onFixTools }: {
@@ -48,7 +49,7 @@ export function AgentConfigEditor({ workspaceId, clis, ollamaModels, disabled, o
       </div>
       </section>
       <section aria-label="ผู้ร่วมทีม"><h3>ผู้ร่วมทีม</h3>
-      <p className="team-section-description">Sub-agent ทำงานที่ Main มอบหมาย เพิ่มได้สูงสุด {MAX_SUBAGENTS} ตัว</p>
+      <p className="team-section-description">Main วางแผนและสรุปแยกจากงานย่อย แต่ละรอบใช้โควตาของ provider เพิ่มได้ เพิ่ม Sub-agent ได้สูงสุด {MAX_SUBAGENTS} ตัว</p>
       {config.subagents.map((seat, index) => (
         <div className="seat-row" key={index}>
           <span className="seat-badge"><Bot size={13} /> Sub {index + 1}</span>
@@ -89,6 +90,7 @@ export function AgentRunView({ run, onFixTools }: { run: Run; onFixTools: () => 
       <span className="mission-count">{tasks.filter(t => t.status === "completed").length}/{tasks.length} งานเสร็จ</span>
     </div>
     <h3 className="run-stage">{run.status === "running" && <LoaderCircle size={13} className="spin" />}{STAGE[run.stage || run.status] || ""}</h3>
+    <RunUsage steps={run.usageSteps} />
     <div hidden={view !== "overview"}>
       <ol className="mission-stages" aria-label="ขั้นตอนการทำงาน">{[["planning", "วางแผน"], ["working", "ดำเนินการ"], ["summarizing", "ตรวจและสรุป"]].map(([stage, label], index) => <li key={stage} aria-current={run.stage === stage ? "step" : undefined} className={run.status === "completed" ? "stage-complete" : ""}><span>{run.status === "completed" ? "✓" : index + 1}</span>{label}</li>)}</ol>
       <div className={"mission-workspace" + (selected !== null ? " has-inspector" : "")}>

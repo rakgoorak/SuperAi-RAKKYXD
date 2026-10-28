@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptions } from "node:child_process";
 import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -7,6 +7,7 @@ import { LLMProvider, LLMMessage, LLMResponse } from "@superai-rakkyxd/core";
 import { cliLaunch, cliEnv } from "./CliCatalog.js";
 import { modelEffortArgs } from "./Providers.js";
 import { cliAuth, isAuthFailure } from "./CliAuth.js";
+import { createCliRunStream, type TokenUsage } from './CliRunStream.js';
 
 // Windows limits a command line to 32,767 characters; agy only takes the prompt as an argument.
 const INLINE_PROMPT_LIMIT = 24000;
@@ -25,7 +26,7 @@ export function promptArguments(
     return [
       "-p",
       "--output-format",
-      "text",
+      "stream-json", "--verbose",
       ...modelEffortArgs(id, modelOverride, effort),
       // Attached images/PDFs are read with the Read tool, so keep it even in read-only chat.
       ...(allowTools
@@ -46,6 +47,7 @@ export function promptArguments(
   if (id === "codex")
     return [
       "exec",
+      "--json",
       ...modelEffortArgs(id, modelOverride, effort),
       "--skip-git-repo-check",
       "--sandbox",
@@ -111,6 +113,8 @@ export class CliProvider implements LLMProvider {
     private allowReadTools = false,
     private attachments: string[] = [],
     private effort = "",
+    private onUsage?: (usage: TokenUsage) => void,
+    private dependencies: { launch: typeof cliLaunch; spawn: (command: string, args: string[], options: SpawnOptions) => ChildProcessWithoutNullStreams } = { launch: cliLaunch, spawn: (command, args, options) => spawn(command, args, options) as ChildProcessWithoutNullStreams },
   ) {}
   async generate(messages: LLMMessage[]): Promise<LLMResponse> {
     return this.stream(messages, () => {});
@@ -139,7 +143,7 @@ export class CliProvider implements LLMProvider {
       const inline = longInline && inputFile
         ? `Read the full request from the file "${inputFile}" and follow it. Answer in Thai.`
         : prompt;
-      const launch = cliLaunch(
+      const launch = this.dependencies.launch(
         id,
         [
           ...(longInline && temporary ? ["--add-dir", temporary] : []),
@@ -147,7 +151,7 @@ export class CliProvider implements LLMProvider {
         ],
       );
       return await new Promise<LLMResponse>((resolve, reject) => {
-        const proc = spawn(launch.command, launch.args, {
+        const proc = this.dependencies.spawn(launch.command, launch.args, {
           cwd: this.cwd,
           detached: process.platform !== 'win32',
           windowsHide: true,
@@ -160,6 +164,9 @@ export class CliProvider implements LLMProvider {
         proc.stderr.setEncoding("utf8");
         let output = "",
           errors = "";
+        const structured = id === 'codex' || id === 'claude-code';
+        const parser = structured ? createCliRunStream(id, onChunk) : undefined;
+        let pending = '';
         const kill = () => {
           if (process.platform === "win32" && proc.pid)
             execFile(
@@ -176,8 +183,12 @@ export class CliProvider implements LLMProvider {
         proc.stdout.on("data", (chunk) => {
           if (this.signal.aborted) return;
           const text = chunk.toString("utf8");
-          output += text;
-          onChunk(text);
+          if (parser) {
+            pending += text;
+            const lines = pending.split(/\r?\n/);
+            pending = lines.pop() || '';
+            lines.forEach(line => parser.line(line));
+          } else { output += text; onChunk(text); }
         });
         proc.stderr.on(
           "data",
@@ -194,11 +205,16 @@ export class CliProvider implements LLMProvider {
         proc.on("close", (code) => {
           finish();
           if (this.signal.aborted) return reject(new Error("ยกเลิกงานแล้ว"));
+          if (parser && pending.trim()) parser.line(pending);
+          const parsed = parser?.result();
+          if (parsed?.usage) this.onUsage?.(parsed.usage);
+          if (parsed?.error) return reject(new Error(cliFailure(this.model, this.modelOverride, parsed.error, '', code)));
           if (code !== 0)
             return reject(
               new Error(cliFailure(this.model, this.modelOverride, errors, output, code)),
             );
-          resolve({ text: output.replace(/\x1b\[[0-9;]*m/g, "").trim() });
+          if (parsed && !parsed.finished) return reject(new Error(`${this.model}: CLI ไม่ส่งผลลัพธ์ที่สมบูรณ์`));
+          resolve({ text: (parsed?.text ?? output).replace(/\x1b\[[0-9;]*m/g, "").trim() });
         });
       });
     } finally {
