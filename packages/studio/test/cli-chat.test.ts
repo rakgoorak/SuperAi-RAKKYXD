@@ -342,6 +342,15 @@ test('permission modes map to each CLI\'s own read-only / edit / auto switches',
     assert.deepEqual(allowed(mode).filter((tool) => tool.startsWith('Web')), ['WebSearch', 'WebFetch'], `${mode}: -p cannot ask, so web search/fetch are allowed up front`);
   assert.ok(arg('codex', 'read').includes('sandbox_mode="read-only"'));
   assert.ok(arg('codex', 'auto').includes('sandbox_mode="workspace-write"'));
+  assert.ok(arg('codex', 'review').includes('--approve-for-me'));
+  assert.ok(arg('codex', 'review').includes('sandbox_mode="workspace-write"'));
+  assert.ok(!arg('codex', 'review').includes('--dangerously-bypass-approvals-and-sandbox'));
+  assert.ok(arg('codex', 'full').includes('--dangerously-bypass-approvals-and-sandbox'));
+  assert.ok(!arg('codex', 'full').includes('sandbox_mode="workspace-write"'));
+  for (const provider of ['claude-code', 'antigravity', 'opencode']) {
+    assert.throws(() => arg(provider, 'review'), /เฉพาะ Codex/);
+    assert.throws(() => arg(provider, 'full'), /เฉพาะ Codex/);
+  }
   assert.ok(arg('antigravity', 'read').join(' ').includes('--mode plan'));
   assert.ok(!arg('antigravity', 'edit').includes('--dangerously-skip-permissions'));
   assert.ok(arg('opencode', 'read').join(' ').includes('--agent plan'));

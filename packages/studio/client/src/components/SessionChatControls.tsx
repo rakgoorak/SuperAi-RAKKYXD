@@ -79,7 +79,8 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
       <select className="chat-permission-select" aria-label={`สิทธิ์ของ ${name} ในข้อความถัดไป`} value={permission} disabled={disabled}
         title={agent ? permissionDescription(agent, permission) : 'CLI ที่ทำงานเบื้องหลังถามก่อนไม่ได้ จึงเลือกไว้ล่วงหน้า'}
         onChange={(e) => { const value = e.target.value as ChatPermission; setPermission(value); setChatPrefs(sessionId, { permission: value }); }}>
-        {(Object.keys(PERMISSION_LABEL) as ChatPermission[]).map((p) => <option key={p} value={p}>{p === 'auto' ? 'Auto' : permissionLabel(agent, p)}</option>)}
+        {(Object.keys(PERMISSION_LABEL) as ChatPermission[]).filter(p => agent === 'codex' || (p !== 'review' && p !== 'full')).map((p) => <option key={p} value={p}>{p === 'auto' ? 'Auto' : permissionLabel(agent, p)}</option>)}
+        {agent === 'codex' && <option value="ask-unavailable" disabled>Ask for approval (ใช้ใน Terminal)</option>}
       </select>
       {problem && <div className="chat-composer-problem" role="alert">{problem}<button type="button" onClick={() => setProblem('')} aria-label="ปิดข้อความ"><X size={12} /></button></div>}
       {agent && <ProviderBadge provider={agent} />}
@@ -112,7 +113,7 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
             </small>
           </section>
         )}
-        {agent && <section className="composer-option-capabilities"><p>{providerIdentity(agent).connection}</p><p>{providerIdentity(agent).attachments}</p><small>{agent === 'claude-code' ? 'เครื่องมือที่เกินสิทธิ์ที่เลือก Claude จะขออนุญาตในแชทก่อน' : 'ตั้งสิทธิ์ไว้ล่วงหน้า · ยังไม่ถามอนุมัติเป็นรายเครื่องมือ'}</small></section>}
+        {agent && <section className="composer-option-capabilities"><p>{providerIdentity(agent).connection}</p><p>{providerIdentity(agent).attachments}</p><small>{agent === 'claude-code' ? 'เครื่องมือที่เกินสิทธิ์ที่เลือก Claude จะขออนุญาตในแชทก่อน' : agent === 'codex' ? 'Ask for approval แบบกดอนุมัติรายครั้งยังไม่รองรับในมุมมองแชต ใช้ Terminal ของ Codex หากต้องการอนุมัติใน CLI' : 'ตั้งสิทธิ์ไว้ล่วงหน้า · ยังไม่ถามอนุมัติเป็นรายเครื่องมือ'}</small></section>}
       </ComposerOptions>
       {modelError && <small className="muted">{modelError} · พิมพ์ชื่อ Model เองได้</small>}
     </div>

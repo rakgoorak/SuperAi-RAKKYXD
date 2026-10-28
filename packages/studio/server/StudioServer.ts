@@ -27,7 +27,7 @@ import { UsageManager, USAGE_PROVIDERS } from "./UsageManager.js";
 import { trustFolder, repairCodexConfigFile } from "./FolderTrust.js";
 import { CliVersionManager, VERSIONED_CLIS } from "./CliVersions.js";
 import { AttachmentError, MAX_ATTACHMENT_BYTES, resolveAttachments, saveAttachment } from "./AttachmentStore.js";
-import { CliChatManager, CHAT_CLIS, CHAT_PERMISSIONS } from "./CliChat.js";
+import { CliChatManager, CHAT_CLIS, CHAT_PERMISSIONS, supportsChatPermission } from "./CliChat.js";
 import { getProjectRules, nativeRuleFiles } from "./ProjectRules.js";
 import { buildProjectContext, readProjectText } from './ProjectContext.js';
 import { responseStyle } from './ResponseStyle.js';
@@ -958,6 +958,7 @@ export class StudioServer {
           req.body.effort === undefined ? session.restart?.effort : req.body.effort);
         if (req.body.skillId !== undefined && (typeof req.body.skillId !== "string" || !/^[a-f0-9]{20}$/.test(req.body.skillId))) throw new Error("skill ไม่ถูกต้อง");
         if (req.body.permission !== undefined && !CHAT_PERMISSIONS.includes(req.body.permission)) throw new Error("สิทธิ์ของแชตไม่ถูกต้อง");
+        if (req.body.permission !== undefined && !supportsChatPermission(agent, req.body.permission)) throw new Error('สิทธิ์นี้ไม่รองรับสำหรับ provider นี้');
         if (req.body.includeProjectContext !== undefined && typeof req.body.includeProjectContext !== 'boolean') throw new Error('การตั้งค่าบริบทโปรเจกต์ไม่ถูกต้อง');
         const style = responseStyle(req.body.responseStyle);
         await cliAuth.requireReady(agent);
