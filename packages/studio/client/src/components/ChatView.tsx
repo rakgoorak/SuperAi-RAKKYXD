@@ -33,7 +33,7 @@ type ChatItem =
   | TodosItem
   | { id: string; kind: 'error' | 'notice'; text: string; at: number }
   | PermissionItem;
-type PermissionItem = { id: string; kind: 'permission'; requestId: string; tool: string; title: string; detail?: string; status: 'pending' | 'allowed' | 'always' | 'denied' | 'expired'; at: number };
+type PermissionItem = { id: string; kind: 'permission'; requestId: string; tool: string; title: string; detail?: string; canAlways?: boolean; status: 'pending' | 'allowed' | 'always' | 'denied' | 'expired'; at: number };
 type Message =
   | { type: 'snapshot'; chat: { items: ChatItem[]; running: boolean; activity?: Activity; queued?: Queued[] } }
   | { type: 'item'; item: ChatItem }
@@ -105,7 +105,7 @@ const PERMISSION_RESULT: Record<PermissionItem['status'], string> = {
   allowed: 'ส่งคำอนุญาตแล้ว', always: 'ส่งคำอนุญาตแล้ว · จำสิทธิ์ในห้องนี้', denied: 'ส่งคำปฏิเสธแล้ว', expired: 'คำขอหมดอายุหรือส่งไม่สำเร็จ',
 };
 /** Claude asks before using a tool its permission mode does not cover, like the prompt in Claude's own app. */
-function PermissionCard({ item, sessionId, name }: { item: PermissionItem; sessionId: string; name: string }) {
+function PermissionCard({ item, sessionId, name, inPopup = false }: { item: PermissionItem; sessionId: string; name: string; inPopup?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState('');
   const answer = async (decision: 'allow' | 'always' | 'deny') => {
@@ -115,12 +115,12 @@ function PermissionCard({ item, sessionId, name }: { item: PermissionItem; sessi
     finally { setBusy(false); }
   };
   const pending = item.status === 'pending';
-  return <div className={`chat-permission ${item.status}`} role={pending ? 'alertdialog' : undefined} aria-label={`${name} ขออนุญาต${item.title}`}>
+  return <div className={`chat-permission ${item.status}`} role={pending && !inPopup ? 'alertdialog' : undefined} aria-label={`${name} ขออนุญาต${item.title}`}>
     <div className="chat-permission-head"><ShieldCheck size={15} /><strong>{name} ขออนุญาต{item.title}</strong>{!pending && <small>{PERMISSION_RESULT[item.status]}</small>}</div>
     {item.detail && <pre>{item.detail}</pre>}
     {pending && <div className="chat-permission-actions">
       <button className="primary" disabled={busy} onClick={() => void answer('allow')}>อนุญาต</button>
-      <button className="secondary" disabled={busy} onClick={() => void answer('always')} title={`ไม่ต้องถามอีกสำหรับ ${item.tool} ในห้องนี้`}>อนุญาตตลอดห้องนี้</button>
+      {item.canAlways !== false && <button className="secondary" disabled={busy} onClick={() => void answer('always')} title={`ไม่ต้องถามอีกสำหรับ ${item.tool} ในห้องนี้`}>อนุญาตตลอดห้องนี้</button>}
       <button className="secondary" disabled={busy} onClick={() => void answer('deny')}>ไม่อนุญาต</button>
     </div>}
     {problem && <small role="alert">{problem}</small>}
@@ -298,6 +298,9 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   const wasRunning = useRef(false);
   const nameRef = useRef(name);
   nameRef.current = name;
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const [dismissedPermissions, setDismissedPermissions] = useState<string[]>([]);
   const [turnsDone, setTurnsDone] = useState(0);
   const jumpToSaved = () => {
     try {
@@ -374,7 +377,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
           const item = message.item;
           // A question waits for the user: tell them even when the app is in the background.
           if (item.kind === 'permission' && item.status === 'pending')
-            notifyDone({ tag: `permission:${item.requestId}`, title: `${nameRef.current} ขออนุญาต${item.title}`, body: item.detail || 'กดเพื่อตอบในห้องแชท', failed: false, target: { kind: 'session', id: sessionId } });
+            notifyDone({ tag: `permission:${item.requestId}`, title: `${nameRef.current} ขออนุญาต${item.title}`, body: item.detail || 'กดเพื่อตอบในห้องแชท', failed: false, target: { kind: 'session', id: sessionId } }, { inactiveSession: !activeRef.current });
           setItems((current) => {
             const index = current.findIndex((i) => i.id === item.id);
             if (index < 0) return [...current, item];
@@ -426,6 +429,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   // The task list of the turn in progress stays pinned above the live counter, like Claude's.
   const liveTodos = running && lastUser ? [...turnItems].reverse().find((item): item is TodosItem => item.kind === 'todos') : undefined;
   const pendingPermissions = items.filter((item): item is PermissionItem => item.kind === 'permission' && item.status === 'pending');
+  const popupPermission = active && pendingPermissions.find(item => !dismissedPermissions.includes(item.id));
   const queueAction = (id: string, action: 'send' | 'remove') => {
     post(`/api/terminals/${sessionId}/chat/queue/${id}/${action}`).catch((error) => setProblem((error as Error).message));
   };
@@ -435,6 +439,13 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
       <div className="conversation-export-position"><ConversationExport title={name} sessionId={sessionId} /></div>
       <button type="button" className="conversation-rename-trigger" aria-label="เปลี่ยนชื่อห้อง" title="เปลี่ยนชื่อห้อง" onClick={() => window.dispatchEvent(new CustomEvent('superai:rename-session', { detail: sessionId }))}><Pencil size={13} /></button>
       {pendingPermissions.length > 0 && <div className="chat-permission-banner" role="status"><span>รอการอนุญาต {pendingPermissions.length} รายการ · งานจะดำเนินต่อหลังตอบ</span><button type="button" className="secondary" onClick={() => scroller.current?.querySelector('.chat-permission.pending')?.scrollIntoView({ block: 'center', behavior: 'smooth' })}>ดูคำขอ</button></div>}
+      {popupPermission && <div className="chat-permission-overlay" role="presentation">
+        <div className="chat-permission-popup" role="dialog" aria-modal="true" aria-label={`${name} ขออนุญาต`}>
+          <button type="button" autoFocus className="chat-permission-dismiss" onClick={() => setDismissedPermissions(previous => [...previous, popupPermission.id])} aria-label="ปิดหน้าต่างคำขอ">×</button>
+          <PermissionCard item={popupPermission} sessionId={sessionId} name={name} inPopup />
+          <p>ปิดหน้าต่างนี้เพื่อกลับไปตอบจากแถบคำขอในแชทได้</p>
+        </div>
+      </div>}
       <div className="chat-scroll" ref={scroller} onScroll={(e) => {
         const el = e.currentTarget;
         try { if (!search.trim()) localStorage.setItem(`superai-scroll:${sessionId}`, String(el.scrollTop)); } catch {}

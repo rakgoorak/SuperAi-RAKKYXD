@@ -9,6 +9,13 @@ const lines = (agent: string, events: unknown[]) => {
   return events.map((e) => parse(JSON.stringify(e)));
 };
 
+test('OpenCode automatic permission rejection does not claim the user pressed deny', () => {
+  const result = lines('opencode', [{ type: 'tool_use', sessionID: 's', part: { id: 'p', tool: 'bash', state: { status: 'error', input: { command: 'echo test' }, error: 'The user rejected permission to use this specific tool call.' } } }])[0];
+  const item = result.items![0] as any;
+  assert.equal(item.status, 'failed');
+  assert.match(item.output, /OpenCode ปฏิเสธ.*ไม่มีปุ่ม.*Terminal/);
+});
+
 test('Codex events become messages and command cards without the PowerShell wrapper', () => {
   const ps = '"C:\\\\WINDOWS\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe" -Command \'echo hi\'';
   const [thread, , started, done, failed, message, end] = lines('codex', [

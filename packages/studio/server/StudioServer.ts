@@ -985,10 +985,10 @@ export class StudioServer {
       }
     });
     // The user's answer to a permission card (Claude asked to use a tool its mode does not cover).
-    this.app.post("/api/terminals/:id/chat/permission", (req: Request, res: Response) => {
+    this.app.post("/api/terminals/:id/chat/permission", async (req: Request, res: Response) => {
       const decision = req.body?.decision;
       if (typeof req.body?.requestId !== "string" || !["allow", "always", "deny"].includes(decision)) return res.status(400).json({ error: "คำตอบไม่ถูกต้อง" });
-      if (!this.chats.answerPermission(String(req.params.id), req.body.requestId, decision)) return res.status(409).json({ error: "คำขอนี้หมดอายุแล้ว" });
+      if (!await this.chats.answerPermissionAsync(String(req.params.id), req.body.requestId, decision)) return res.status(409).json({ error: "คำขอหมดอายุหรือส่งคำตอบไม่สำเร็จ" });
       res.json({ success: true });
     });
     // Guess the user's next message after a finished turn (grey text in the composer, Tab accepts).

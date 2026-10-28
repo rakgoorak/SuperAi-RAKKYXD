@@ -15,7 +15,7 @@ export function providerIdentity(id: string) {
 }
 
 export function permissionDescription(provider: string, permission: ChatPermission) {
-  if (permission === 'ask') return 'Claude ขออนุญาตสำหรับเครื่องมือที่ต้องอนุมัติในแชตก่อนทำงาน โดยยังใช้กฎสิทธิ์ที่ตั้งค่าไว้';
+  if (permission === 'ask') return provider === 'codex' ? 'Codex ขออนุญาตรันคำสั่งและแก้ไฟล์ในแชท โดยใช้ sandbox และกฎสิทธิ์ของ Codex' : provider === 'opencode' ? 'แสดงคำขออนุญาตที่ OpenCode ส่งมา โดยยังใช้กฎสิทธิ์ของ OpenCode' : 'Claude ขออนุญาตสำหรับเครื่องมือที่ต้องอนุมัติในแชตก่อนทำงาน โดยยังใช้กฎสิทธิ์ที่ตั้งค่าไว้';
   if (permission === 'approve_all') return provider === 'opencode' ? 'OpenCode อนุมัติคำขออัตโนมัติ แต่กฎที่ตั้งเป็น deny ยังมีผล ต้องใช้ CLI รุ่นที่รองรับ --auto' : 'Antigravity อนุมัติเครื่องมืออัตโนมัติ ขอบเขตไฟล์และ sandbox ยังขึ้นอยู่กับการตั้งค่าของ CLI';
   if (permission === 'review') return 'Codex ตรวจคำขออนุมัติที่รองรับโดยอัตโนมัติภายใน sandbox ของโปรเจกต์ ขึ้นอยู่กับการรองรับของบัญชีและ CLI';
   if (permission === 'full') return provider === 'claude-code' ? 'Claude ข้ามการขออนุญาตเครื่องมือ ภายใต้ข้อจำกัดของระบบและการตั้งค่าที่บังคับใช้' : 'Codex รันโดยไม่มี sandbox และไม่ขออนุมัติ เข้าถึงไฟล์และเครือข่ายตามสิทธิ์ของโปรเซส';

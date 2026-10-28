@@ -1,7 +1,8 @@
 import { spawn, execFile, type ChildProcess, type SpawnOptions } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { cliLaunch, cliEnv } from "./CliCatalog.js";
 import { modelEffortArgs } from "./Providers.js";
 import { cliFailure } from "./CliProvider.js";
@@ -28,7 +29,7 @@ export type TodoStatus = "pending" | "in_progress" | "completed";
 export type ChatPermission = "read" | "edit" | "auto" | "review" | "full" | "ask" | "approve_all";
 export const CHAT_PERMISSIONS: ChatPermission[] = ["read", "edit", "auto", "review", "full", "ask", "approve_all"];
 export function supportsChatPermission(agent: string, permission: ChatPermission): boolean {
-  if (permission === 'ask') return agent === 'claude-code';
+  if (permission === 'ask') return agent === 'claude-code' || agent === 'codex' || agent === 'opencode';
   if (permission === 'review') return agent === 'codex';
   if (permission === 'full') return agent === 'codex' || agent === 'claude-code';
   if (permission === 'approve_all') return agent === 'opencode' || agent === 'antigravity';
@@ -43,7 +44,7 @@ export type ChatItem =
   | { id: string; kind: "todos"; todos: { text: string; status: TodoStatus }[]; at: number }
   | { id: string; kind: "error" | "notice"; text: string; at: number }
   /** Claude asked to use a tool the permission mode does not cover; the user answers in the chat. */
-  | { id: string; kind: "permission"; requestId: string; tool: string; title: string; detail?: string; status: PermissionStatus; at: number };
+  | { id: string; kind: "permission"; requestId: string; tool: string; title: string; detail?: string; canAlways?: boolean; status: PermissionStatus; at: number };
 export type PermissionStatus = "pending" | "allowed" | "always" | "denied" | "expired";
 export type PermissionDecision = "allow" | "always" | "deny";
 type NewItem = ChatItem extends infer T ? (T extends ChatItem ? Omit<T, "at"> : never) : never;
@@ -245,8 +246,12 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
             return todos ? { ...conversation, items: [todos] } : conversation;
           }
           const output = typeof state.output === "string" && state.output ? state.output : state.error ? String(state.error) : undefined;
+          // `opencode run` rejects an interactive permission request itself; its error text
+          // says "the user rejected" even though no approval prompt reached our chat UI.
+          const shownOutput = state.status === 'error' && output && /the user rejected permission to use this specific tool call/i.test(output)
+            ? 'OpenCode ปฏิเสธคำขอสิทธิ์ในโหมดแชตโดยไม่มีปุ่มให้ตอบในโปรแกรม ตรวจการตั้งค่าสิทธิ์ของ OpenCode หรือใช้ Terminal เพื่อตอบคำขอ' : output;
           return { ...conversation, items: [{ id: `${prefix}-${part.id || part.callID}`, kind: "tool", tool: toolKind(name),
-            title: typeof state.title === "string" && state.title ? state.title : toolTitle(name, state.input), output,
+            title: typeof state.title === "string" && state.title ? state.title : toolTitle(name, state.input), output: shownOutput,
             status: state.status === "error" ? "failed" : state.status === "completed" ? "done" : "running" }] };
         }
         case "error":
@@ -406,7 +411,7 @@ type Spawner = (command: string, args: string[], options: SpawnOptions) => Child
 interface QueuedRequest extends QueuedChat { request: ChatRequest }
 /** A Claude Code process that outlives a turn; `onLine`/`onClose` belong to the turn in progress. */
 interface LiveClaude { proc: ChildProcess; key: string; closed: boolean; errors: string; writeProblem?: string; onWriteFailure?: (message: string) => void; onLine?: (line: string) => void; onClose?: (code: number | null) => void; idle?: NodeJS.Timeout; stopTimer?: NodeJS.Timeout }
-interface PendingPermission { live: LiveClaude; input: unknown; itemId: string; tool: string }
+interface PendingPermission { live: LiveClaude; input: unknown; itemId: string; tool: string; protocol?: 'codex' | 'opencode'; rpcId?: string | number; reply?: (decision: PermissionDecision) => Promise<void>; answering?: boolean }
 interface Chat extends Omit<ChatSnapshot, "queued"> {
   seed?: string; turns: number; proc?: ChildProcess; cancelled?: boolean; /** Stopped to take a new message (Enter while answering). */ interrupting?: boolean;
   wait?: () => void; listeners: Set<(m: ChatMessage) => void>; saveTimer?: NodeJS.Timeout; queue: QueuedRequest[];
@@ -543,7 +548,7 @@ export class CliChatManager {
     const { agent } = request;
     if (!CHAT_CLIS.includes(agent)) throw new Error("CLI นี้ยังไม่รองรับมุมมองแชต กรุณาใช้ terminal");
     if (request.permission && (!CHAT_PERMISSIONS.includes(request.permission) || !supportsChatPermission(agent, request.permission))) throw new Error('สิทธิ์นี้ไม่รองรับสำหรับ provider นี้');
-    if (request.permission === 'ask' && !this.liveClaude) throw new Error('การขออนุมัติในแชตต้องใช้ Claude แบบ live');
+    if (agent === 'claude-code' && request.permission === 'ask' && !this.liveClaude) throw new Error('การขออนุมัติในแชตต้องใช้ Claude แบบ live');
     const text = request.text.trim();
     if (!text) throw new Error("กรุณาพิมพ์ข้อความ");
     const chat = this.chat(id);
@@ -584,7 +589,11 @@ export class CliChatManager {
     const liveKey = JSON.stringify([request.cwd, request.model || "", request.effort || "", request.permission || "auto", systemPrompt || ""]);
     if (live && chat.live && (chat.live.closed || chat.live.key !== liveKey)) this.closeLive(chat);
     const reuse = live && chat.live && !chat.live.closed ? chat.live : undefined;
-    const args = live
+    const codexAsk = agent === 'codex' && request.permission === 'ask';
+    const openCodeAsk = agent === 'opencode' && request.permission === 'ask';
+    const openCodePort = 30000 + randomBytes(2).readUInt16BE(0) % 30000;
+    const openCodePassword = openCodeAsk ? randomBytes(32).toString('hex') : '';
+    const args = codexAsk ? ['app-server'] : openCodeAsk ? ['serve', '--hostname', '127.0.0.1', '--port', String(openCodePort)] : live
       ? claudeLiveArguments({ conversationId: chat.conversationId, model: request.model, effort: request.effort, permission: request.permission, systemPrompt })
       : chatArguments(agent, { prompt, conversationId: chat.conversationId, model: request.model, effort: request.effort, files: attached, permission: request.permission });
 
@@ -601,7 +610,7 @@ export class CliChatManager {
     this.onChange?.(id);
 
     const parse = chatParser(agent, prefix);
-    let proc: ChildProcess;
+    let proc!: ChildProcess;
     let pending = "", errors = "", failed = false, finished = false;
     let startupTimer: NodeJS.Timeout | undefined, idleTimer: NodeJS.Timeout | undefined;
     let timeoutReason: 'startup' | undefined;
@@ -663,7 +672,7 @@ export class CliChatManager {
           detached: process.platform !== "win32",
           windowsHide: true,
           stdio: ["pipe", "pipe", "pipe"],
-          env: { ...process.env, ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0" },
+          env: { ...process.env, ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0", ...(openCodeAsk ? { OPENCODE_SERVER_PASSWORD: openCodePassword, OPENCODE_SERVER_USERNAME: 'superai' } : {}) },
         });
       } catch (error: any) {
         finish(`เปิด ${NAMES[agent]} ไม่สำเร็จ: ${error.message}`);
@@ -705,6 +714,173 @@ export class CliChatManager {
     };
     chat.wait = () => { if (chat.activity?.quiet) activity(); };
     startupTimer = setTimeout(() => timeout('startup'), this.timeouts.startup); startupTimer.unref();
+    if (openCodeAsk) {
+      const lv: LiveClaude = { proc, key: '', closed: false, errors: '' };
+      const abort = new AbortController();
+      const base = `http://127.0.0.1:${openCodePort}`;
+      const headers = { Authorization: `Basic ${Buffer.from(`superai:${openCodePassword}`).toString('base64')}`, 'Content-Type': 'application/json' };
+      let started = false, completed = false, connected = false, sessionId = chat.conversationId;
+      const sessions = new Set<string>();
+      const countedSteps = new Set<string>();
+      if (sessionId) sessions.add(sessionId);
+      const requestServer = async (route: string, body?: unknown) => {
+        const signal = body === undefined ? abort.signal : AbortSignal.any([abort.signal, AbortSignal.timeout(15000)]);
+        const response = await fetch(base + route, { method: body === undefined ? 'GET' : 'POST', headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal });
+        if (!response.ok) throw new Error(`OpenCode server HTTP ${response.status}`);
+        return response;
+      };
+      const fail = (error: unknown) => {
+        if (finished || completed || chat.cancelled || lv.writeProblem) return;
+        lv.writeProblem = `OpenCode: ${error instanceof Error ? error.message : String(error)}`;
+        this.kill(proc);
+      };
+      lv.onWriteFailure = message => fail(message);
+      const onEvent = (event: any) => {
+        const p = event?.properties || {};
+        if (event.type === 'session.created' && sessions.has(String(p.info?.parentID)) && typeof p.info?.id === 'string') sessions.add(p.info.id);
+        if (!sessions.has(String(p.sessionID))) return;
+        if (event.type === 'permission.asked' && typeof p.id === 'string') {
+          const requestId = p.id, itemId = `${prefix}-permission-${requestId}`, tool = String(p.permission || 'tool');
+          if (chat.permissions.has(requestId)) return;
+          const detail = typeof p.metadata?.command === 'string' ? p.metadata.command : Array.isArray(p.patterns) ? p.patterns.join('\n') : '';
+          chat.permissions.set(requestId, { live: lv, input: undefined, itemId, tool, protocol: 'opencode', reply: async decision => {
+            const response = await requestServer(`/permission/${encodeURIComponent(requestId)}/reply`, { reply: decision === 'deny' ? 'reject' : decision === 'always' ? 'always' : 'once' });
+            if (await response.json() !== true) throw new Error('OpenCode ไม่ยืนยันคำตอบ');
+          } });
+          this.put(id, chat, { id: itemId, kind: 'permission', requestId, tool, title: `ใช้ ${tool}`, ...(detail ? { detail } : {}), canAlways: false, status: 'pending' });
+        } else if (event.type === 'message.part.updated' && p.part) {
+          const part = p.part;
+          if (part.type === 'text') apply(JSON.stringify({ type: 'text', sessionID: sessionId, part }));
+          else if (part.type === 'tool') apply(JSON.stringify({ type: 'tool_use', sessionID: sessionId, part }));
+          else if (part.type === 'step-finish' && typeof part.id === 'string' && !countedSteps.has(part.id)) {
+            countedSteps.add(part.id);
+            apply(JSON.stringify({ type: 'step_finish', sessionID: sessionId, part }));
+          }
+        } else if (event.type === 'session.status' && p.sessionID === sessionId && p.status?.type === 'busy') started = true;
+        else if (p.sessionID === sessionId && (event.type === 'session.idle' || (event.type === 'session.status' && p.status?.type === 'idle')) && started) {
+          // Stop the owned server after its turn, and wait for its exit before freeing the chat.
+          completed = true;
+          this.kill(proc);
+        } else if (event.type === 'session.error') fail(p.error?.data?.message || p.error?.message || 'งานไม่สำเร็จ');
+      };
+      const connect = async () => {
+        try {
+          const eventStream = await requestServer('/event');
+          if (!eventStream.body) throw new Error('ไม่สามารถรับเหตุการณ์จาก OpenCode');
+          const reader = eventStream.body.getReader();
+          const receive = (async () => {
+            const decoder = new TextDecoder(); let buffer = '';
+            while (true) {
+              const next = await reader.read(); if (next.done) break;
+              buffer += decoder.decode(next.value, { stream: true });
+              const events = buffer.split(/\r?\n\r?\n/); buffer = events.pop() || '';
+              for (const block of events) for (const line of block.split(/\r?\n/)) if (line.startsWith('data:')) {
+                try { onEvent(JSON.parse(line.slice(5).trim())); } catch { /* ignore malformed events */ }
+              }
+            }
+            if (!abort.signal.aborted && !finished) fail('การเชื่อมต่อเหตุการณ์ OpenCode ขาดหาย');
+          })();
+          if (!sessionId) {
+            const created: any = await (await requestServer('/session', {})).json();
+            if (!created.id) throw new Error('OpenCode ไม่ส่งรหัสบทสนทนา');
+            sessionId = String(created.id); sessions.add(sessionId); chat.conversationId = sessionId; this.onChange?.(id);
+          }
+          const parts: any[] = [{ type: 'text', text: prompt }];
+          for (const file of attached) parts.push({ type: 'file', mime: IMAGE.test(file) ? `image/${path.extname(file).slice(1).replace('jpg', 'jpeg')}` : file.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'text/plain', filename: path.basename(file), url: pathToFileURL(file).href });
+          const modelParts = request.model?.split('/');
+          const model = modelParts && modelParts.length > 1 ? { providerID: modelParts[0], modelID: modelParts.slice(1).join('/') } : undefined;
+          await requestServer(`/session/${encodeURIComponent(sessionId!)}/prompt_async`, { parts, ...(model ? { model } : {}), ...(request.effort ? { variant: request.effort } : {}) });
+          await receive;
+        } catch (error) { if (!abort.signal.aborted) fail(error); }
+      };
+      proc.stdout?.setEncoding('utf8');
+      proc.stdout?.on('data', (chunk: string) => {
+        if (chunk.length) activity(); pending = (pending + chunk).slice(-4000);
+        if (!connected && pending.includes(`http://127.0.0.1:${openCodePort}`)) { connected = true; void connect(); }
+        else if (!connected && /server listening on http:\/\/[^\s]+/i.test(pending)) fail('server ใช้พอร์ตที่ไม่ตรงกับที่ร้องขอ');
+      });
+      proc.stderr?.setEncoding('utf8');
+      proc.stderr?.on('data', (chunk: string) => { if (chunk.length) activity(); errors = (errors + chunk).slice(-4000); });
+      proc.on('error', error => fail(`เปิด server ไม่สำเร็จ: ${error.message}`));
+      proc.on('close', code => { abort.abort(); lv.closed = true; if (lv.writeProblem) finish(lv.writeProblem); else if (!completed && !chat.cancelled) finish('OpenCode ปิดก่อนงานเสร็จ'); else if (completed && !chat.cancelled) finish(); else closed(code, errors); });
+      return 'sent';
+    }
+    if (codexAsk) {
+      // App-server retains Codex's approval protocol; `codex exec` cannot ask interactively.
+      const lv: LiveClaude = { proc: proc!, key: '', closed: false, errors: '' };
+      let threadId = chat.conversationId;
+      let completed = false;
+      const codexItems = new Map<string, any>();
+      let tokenUsage: any;
+      const fail = (message: string) => {
+        if (finished || lv.writeProblem) return;
+        lv.writeProblem = message;
+        this.kill(proc);
+      };
+      lv.onWriteFailure = fail;
+      const write = (value: unknown) => {
+        if (!this.writeLive(lv, value, () => fail('ส่งข้อมูลไปยัง Codex ไม่สำเร็จ'))) fail('ส่งข้อมูลไปยัง Codex ไม่สำเร็จ');
+      };
+      const threadOptions = { cwd: request.cwd, approvalPolicy: 'untrusted', sandbox: 'workspace-write', ...(request.model ? { model: request.model } : {}) };
+      const onLine = (line: string) => {
+        let event: any;
+        try { event = JSON.parse(line); } catch { return; }
+        if (event.method && event.id !== undefined) {
+          if (event.method === 'item/commandExecution/requestApproval' || event.method === 'item/fileChange/requestApproval') {
+            const requestId = randomUUID();
+            const tool = event.method.includes('commandExecution') ? 'command' : 'edit';
+            const changes = codexItems.get(String(event.params?.itemId))?.changes;
+            const network = event.params?.networkApprovalContext;
+            const detail = [event.params?.command, event.params?.reason, network?.host ? `${network.protocol || 'network'}: ${network.host}` : '', event.params?.grantRoot, ...(Array.isArray(changes) ? changes.map((c: any) => c.path) : [])].filter((s: unknown) => typeof s === 'string' && s.trim()).join('\n');
+            const itemId = `${prefix}-permission-${requestId}`;
+            chat.permissions.set(requestId, { live: lv, input: undefined, itemId, tool, protocol: 'codex', rpcId: event.id });
+            this.put(id, chat, { id: itemId, kind: 'permission', requestId, tool, title: network?.host ? 'เข้าถึงเครือข่าย' : tool === 'command' ? 'รันคำสั่ง' : 'แก้ไขไฟล์', detail: detail || 'Codex ไม่ส่งรายละเอียดของคำขอนี้', canAlways: false, status: 'pending' });
+          } else {
+            // Unsupported requests must not be silently approved or left hanging.
+            this.put(id, chat, { id: `${prefix}-unsupported-${randomUUID()}`, kind: 'notice', text: `Codex ส่งคำขอ ${String(event.method)} ที่แชทยังตอบไม่ได้ กรุณาใช้ Terminal สำหรับคำขอนี้` });
+            write({ id: event.id, error: { code: -32601, message: 'This approval request is not supported by SuperAi' } });
+          }
+          return;
+        }
+        if (event.id !== undefined && event.error) { fail(`Codex app-server: ${String(event.error.message || 'ทำงานไม่สำเร็จ')}`); return; }
+        if (event.id === 1 && event.result) {
+          write({ method: 'initialized', params: {} });
+          write({ id: 2, method: threadId ? 'thread/resume' : 'thread/start', params: { ...threadOptions, ...(threadId ? { threadId } : {}) } });
+        } else if (event.id === 2 && event.result) {
+          threadId = event.result.thread?.id;
+          if (!threadId) { fail('Codex ไม่ส่งรหัสบทสนทนา'); return; }
+          chat.conversationId = threadId; this.onChange?.(id);
+          const input = [{ type: 'text', text: prompt, text_elements: [] }, ...attached.map(file => ({ type: 'localImage', path: file }))];
+          write({ id: 3, method: 'turn/start', params: { threadId, input, ...(request.effort ? { effort: request.effort } : {}) } });
+        } else if (event.method === 'thread/tokenUsage/updated' && event.params?.threadId === threadId) {
+          tokenUsage = event.params?.tokenUsage?.total;
+        } else if (event.method === 'serverRequest/resolved') {
+          for (const [requestId, request] of chat.permissions) if (request.protocol === 'codex' && request.rpcId === event.params?.requestId) this.cancelPermission(id, chat, requestId);
+        } else if (event.method === 'item/started' || event.method === 'item/completed') {
+          const item = event.params?.item;
+          if (!item) return;
+          if (item.id) codexItems.set(String(item.id), item);
+          const types: Record<string, string> = { agentMessage: 'agent_message', commandExecution: 'command_execution', fileChange: 'file_change', mcpToolCall: 'mcp_tool_call' };
+          if (types[item.type]) apply(JSON.stringify({ type: event.method === 'item/started' ? 'item.started' : 'item.completed', item: { ...item, type: types[item.type], status: event.method === 'item/started' ? 'in_progress' : item.status, aggregated_output: item.aggregatedOutput, exit_code: item.exitCode } }));
+        } else if (event.method === 'turn/completed') {
+          completed = true;
+          const turn = event.params?.turn;
+          const usage = usageNotice(prefix, tokenUsage, [['inputTokens', 'input สะสมในบทสนทนา'], ['cachedInputTokens', 'cached input (รวมใน input)'], ['outputTokens', 'output สะสมในบทสนทนา']]);
+          if (usage) this.put(id, chat, usage);
+          if (turn?.status !== 'completed') { failed = true; this.put(id, chat, { id: `${prefix}-error`, kind: 'error', text: String(turn?.error?.message || 'Codex ทำงานไม่สำเร็จหรือถูกขัดจังหวะ') }); }
+          proc.stdin?.end();
+        }
+      };
+      proc.stdout?.setEncoding('utf8');
+      proc.stdout?.on('data', (chunk: string) => { if (chunk.length) activity(); const lines = (pending + chunk).split(/\r?\n/); pending = lines.pop() || ''; for (const line of lines) if (line.trim()) onLine(line); });
+      proc.stderr?.setEncoding('utf8');
+      proc.stderr?.on('data', (chunk: string) => { if (chunk.length) activity(); errors = (errors + chunk).slice(-4000); });
+      proc.stdin?.on('error', () => fail('ช่องส่งข้อมูลไปยัง Codex ปิดแล้ว'));
+      proc.on('error', error => fail(`เปิด Codex ไม่สำเร็จ: ${error.message}`));
+      proc.on('close', code => { lv.closed = true; if (pending.trim()) onLine(pending); if (lv.writeProblem) finish(lv.writeProblem); else if (!completed && !chat.cancelled && code === 0) finish('Codex ปิดก่อนส่งผลการทำงาน'); else closed(code, errors); });
+      write({ id: 1, method: 'initialize', params: { clientInfo: { name: 'superai_rakkyxd', title: 'SuperAi & RAKKYXD', version: '1.0.34' } } });
+      return 'sent';
+    }
     if (current) {
       const lv = current;
       lv.onLine = (line) => {
@@ -818,10 +994,48 @@ export class CliChatManager {
   }
 
   /** The user's answer to a permission card. False when the question is no longer open. */
+  async answerPermissionAsync(id: string, requestId: string, decision: PermissionDecision): Promise<boolean> {
+    const chat = this.chats.get(id);
+    const pending = chat?.permissions.get(requestId);
+    if (!chat || !pending) return false;
+    if (decision === 'always' && pending.protocol) return false;
+    if (pending.protocol !== 'opencode' || !pending.reply) return this.answerPermission(id, requestId, decision);
+    if (pending.answering) return false;
+    pending.answering = true;
+    try {
+      await pending.reply(decision);
+      if (chat.permissions.get(requestId) !== pending) return false;
+      chat.permissions.delete(requestId);
+      const item = chat.items.find(i => i.id === pending.itemId);
+      if (item?.kind === 'permission' && item.status === 'pending') this.put(id, chat, { ...item, status: decision === 'deny' ? 'denied' : decision === 'always' ? 'always' : 'allowed' });
+      return true;
+    } catch {
+      if (chat.permissions.get(requestId) === pending) chat.permissions.delete(requestId);
+      const item = chat.items.find(i => i.id === pending.itemId);
+      if (item?.kind === 'permission' && item.status === 'pending') this.put(id, chat, { ...item, status: 'expired' });
+      pending.live.onWriteFailure?.('ส่งคำตอบสิทธิ์ไม่สำเร็จ');
+      return false;
+    }
+  }
   answerPermission(id: string, requestId: string, decision: PermissionDecision): boolean {
     const chat = this.chats.get(id);
     const pending = chat?.permissions.get(requestId);
     if (!chat || !pending) return false;
+    if (decision === 'always' && pending.protocol) return false;
+    if (pending.protocol === 'opencode') return false;
+    if (pending.protocol === 'codex') {
+      const failed = () => {
+        const item = chat.items.find(i => i.id === pending.itemId);
+        if (item?.kind === 'permission') this.put(id, chat, { ...item, status: 'expired' });
+        pending.live.onWriteFailure?.('ส่งคำตอบไปยัง Codex ไม่สำเร็จ โปรดลองส่งอีกครั้ง');
+      };
+      const answer = decision === 'deny' ? 'decline' : decision === 'always' ? 'acceptForSession' : 'accept';
+      if (!this.writeLive(pending.live, { id: pending.rpcId, result: { decision: answer } }, failed)) { chat.permissions.delete(requestId); failed(); return false; }
+      chat.permissions.delete(requestId);
+      const item = chat.items.find(i => i.id === pending.itemId);
+      if (item?.kind === 'permission') this.put(id, chat, { ...item, status: decision === 'deny' ? 'denied' : decision === 'always' ? 'always' : 'allowed' });
+      return true;
+    }
     const response = decision === "deny"
       ? { behavior: "deny", message: "ผู้ใช้ไม่อนุญาตให้ใช้เครื่องมือนี้ในครั้งนี้" }
       : { behavior: "allow", updatedInput: pending.input };

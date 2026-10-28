@@ -16,6 +16,7 @@
     "dev": "npm --workspace=@superai-rakkyxd/client run dev",
     "dev:server": "tsx packages/studio/server/index.ts",
     "test:desktop": "node packages/desktop/test/smoke.mjs",
+    "test:permission-popup": "node packages/desktop/test/permission-popup-smoke.mjs",
     "test:layout": "node packages/desktop/test/layout-smoke.mjs",
     "test:overflow": "node packages/desktop/test/overflow-audit-smoke.mjs",
     "test:usage-overlay": "node packages/desktop/test/usage-overlay-smoke.mjs",

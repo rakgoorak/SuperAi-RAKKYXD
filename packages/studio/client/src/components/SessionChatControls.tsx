@@ -79,9 +79,8 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
       <select className="chat-permission-select" aria-label={`สิทธิ์ของ ${name} ในข้อความถัดไป`} value={permission} disabled={disabled}
         title={agent ? permissionDescription(agent, permission) : 'CLI ที่ทำงานเบื้องหลังถามก่อนไม่ได้ จึงเลือกไว้ล่วงหน้า'}
         onChange={(e) => { const value = e.target.value as ChatPermission; setPermission(value); setChatPrefs(sessionId, { permission: value }); }}>
-        {(Object.keys(PERMISSION_LABEL) as ChatPermission[]).filter(p => p === 'review' ? agent === 'codex' : p === 'full' ? agent === 'codex' || agent === 'claude-code' : p === 'ask' ? agent === 'claude-code' : p === 'approve_all' ? agent === 'opencode' || agent === 'antigravity' : true).map((p) => <option key={p} value={p}>{p === 'auto' ? 'Auto' : permissionLabel(agent, p)}</option>)}
-        {agent === 'codex' && <option value="ask-unavailable" disabled>Ask for approval (ใช้ใน Terminal)</option>}
-        {(agent === 'opencode' || agent === 'antigravity') && <option value="ask-unavailable" disabled>Ask for approval (ใช้ใน Terminal)</option>}
+        {(Object.keys(PERMISSION_LABEL) as ChatPermission[]).filter(p => p === 'review' ? agent === 'codex' : p === 'full' ? agent === 'codex' || agent === 'claude-code' : p === 'ask' ? agent === 'claude-code' || agent === 'codex' || agent === 'opencode' : p === 'approve_all' ? agent === 'opencode' || agent === 'antigravity' : true).map((p) => <option key={p} value={p}>{p === 'auto' ? 'Auto' : permissionLabel(agent, p)}</option>)}
+        {agent === 'antigravity' && <option value="ask-unavailable" disabled>Ask for approval (ใช้ใน Terminal)</option>}
       </select>
       {problem && <div className="chat-composer-problem" role="alert">{problem}<button type="button" onClick={() => setProblem('')} aria-label="ปิดข้อความ"><X size={12} /></button></div>}
       {agent && <ProviderBadge provider={agent} />}
@@ -114,7 +113,7 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
             </small>
           </section>
         )}
-        {agent && <section className="composer-option-capabilities"><p>{providerIdentity(agent).connection}</p><p>{providerIdentity(agent).attachments}</p><small>{agent === 'claude-code' ? 'เครื่องมือที่เกินสิทธิ์ที่เลือก Claude จะขออนุญาตในแชทก่อน' : agent === 'codex' ? 'Ask for approval แบบกดอนุมัติรายครั้งยังไม่รองรับในมุมมองแชต ใช้ Terminal ของ Codex หากต้องการอนุมัติใน CLI' : 'ตั้งสิทธิ์ไว้ล่วงหน้า · ยังไม่ถามอนุมัติเป็นรายเครื่องมือ'}</small></section>}
+        {agent && <section className="composer-option-capabilities"><p>{providerIdentity(agent).connection}</p><p>{providerIdentity(agent).attachments}</p><small>{agent === 'claude-code' ? 'เครื่องมือที่เกินสิทธิ์ที่เลือก Claude จะขออนุญาตในแชทก่อน' : agent === 'codex' ? 'Ask for approval แสดงคำขอรันคำสั่งและแก้ไฟล์ในแชท คำขอชนิดอื่นอาจต้องใช้ Terminal' : agent === 'opencode' ? 'Ask for approval แสดงคำขอที่ OpenCode ส่งมา โดยยังใช้กฎสิทธิ์ที่ตั้งไว้' : 'ตั้งสิทธิ์ไว้ล่วงหน้า · ยังไม่ถามอนุมัติเป็นรายเครื่องมือ'}</small></section>}
       </ComposerOptions>
       {modelError && <small className="muted">{modelError} · พิมพ์ชื่อ Model เองได้</small>}
     </div>

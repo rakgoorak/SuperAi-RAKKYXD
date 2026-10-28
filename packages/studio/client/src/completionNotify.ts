@@ -65,9 +65,9 @@ function chime(failed: boolean) {
 const open = (target: NoticeTarget) => window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: target }));
 
 /** Shows the notice only when the app is not in front (or `force`, for the settings test button). */
-export function notifyDone(notice: DoneNotice, { force = false } = {}) {
+export function notifyDone(notice: DoneNotice, { force = false, inactiveSession = false } = {}) {
   const settings = loadNotifySettings();
-  if (!force && (!settings.enabled || appFocused())) return;
+  if (!force && (!settings.enabled || (appFocused() && !inactiveSession))) return;
   if (settings.sound) chime(notice.failed);
   if (window.superai?.notify) { void window.superai.notify(notice).catch(() => {}); return; }
   if (!("Notification" in window) || Notification.permission === "denied") return;
