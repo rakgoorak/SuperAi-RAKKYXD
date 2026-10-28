@@ -341,12 +341,13 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
   if (agent === "codex")
     return [
       "exec",
+      ...(permission === 'review' ? ['--approve-for-me'] : []),
       ...(o.conversationId ? ["resume", o.conversationId] : []),
       "--json",
       "--skip-git-repo-check",
       // Codex has no edit-without-commands mode: "edit" and "auto" both run in the workspace sandbox.
       ...(permission === 'full' ? ['--dangerously-bypass-approvals-and-sandbox']
-        : ['-c', permission === 'read' ? 'sandbox_mode="read-only"' : 'sandbox_mode="workspace-write"', ...(permission === 'review' ? ['--approve-for-me'] : [])]),
+        : ['-c', permission === 'read' ? 'sandbox_mode="read-only"' : 'sandbox_mode="workspace-write"']),
       ...modelEffortArgs(agent, o.model, o.effort),
       ...(o.files || []).map((file) => `--image=${file}`),
       "-",
