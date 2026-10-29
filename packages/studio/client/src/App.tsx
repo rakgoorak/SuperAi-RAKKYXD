@@ -277,6 +277,7 @@ export function App() {
       localStorage.setItem("superai-hidden-sessions", JSON.stringify(hiddenSessions));
     } catch {}
   }, [hiddenSessions]);
+  const [showAgentWorkspace, setShowAgentWorkspace] = useState(false);
   const workspaceSessions = sessions.filter((s) => s.wsId === activeWs);
   const visible = workspaceSessions.filter((s) => !hiddenSessions.includes(s.id));
   const hiddenInWorkspace = workspaceSessions.filter((s) => hiddenSessions.includes(s.id));
@@ -1346,7 +1347,16 @@ export function App() {
                   ) : (
                     <>
                       {mode === "agent" ? (
-                        <AgentConfigEditor key={`agent-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} onChange={setAgentConfig} onFixTools={() => openSession()} />
+                        <>
+                          <AgentConfigEditor key={`agent-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} onChange={setAgentConfig} onFixTools={() => openSession()} />
+                          <button
+                            className={`text-button ${!conversation.length || activeRun || showAgentWorkspace ? "active" : ""}`}
+                            onClick={() => setShowAgentWorkspace(prev => !prev)}
+                            title="เปิด/ปิด พื้นที่ทำงาน 3D ของทีม Agent"
+                          >
+                            <Bot size={13} /> ห้องทำงาน 3D
+                          </button>
+                        </>
                       ) : (
                         <ChatConfigEditor key={`chat-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} onChange={setChatConfig} />
                       )}
@@ -1388,7 +1398,7 @@ export function App() {
               </div>
               {mode !== "code" && (
                 <ImageEndpointContext.Provider value={`/api/workspaces/${encodeURIComponent(activeWs)}/preview-file`}><div className="conversation-scroll">
-                  {mode === "agent" && (
+                  {mode === "agent" && (!conversation.length || activeRun?.mode === "agent" || showAgentWorkspace) && (
                     <AgentWorkspace config={agentConfig} run={activeRun?.mode === "agent" ? activeRun : undefined} typing={!!draft.trim()} />
                   )}
                   {!conversation.length ? (
