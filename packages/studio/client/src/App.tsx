@@ -67,6 +67,8 @@ import { SessionCanvas, type CanvasLayout } from "./components/SessionCanvas";
 import { RightDock, type DockView } from "./components/RightDock";
 import { parsePreviewTarget, type PreviewRequest, renderTextWithLinks, findUrlAtPosition, extractUrls, openExternalLink } from './previewLinks';
 import { AgentConfigEditor, AgentRunView, type AgentConfig } from "./components/AgentPanel";
+import { AgentWorkspace } from "./components/AgentWorkspace";
+import { ClarifyCard } from "./components/ClarifyCard";
 import { ChatConfigEditor, ChatRunView, type ChatConfig } from "./components/ChatPanel";
 import { SkillsPanel } from "./components/SkillsPanel";
 import { UpdatePanel, UpdatePrompt, useUpdateState } from "./components/UpdatePanel";
@@ -722,10 +724,10 @@ export function App() {
         const files = saved.map((file) => file.path);
         if (mode === "agent") {
           if (!agentConfig) throw new Error("กรุณาเลือก Main และ Sub-agent ก่อน");
-          await post(`/api/conversations/${workspace.id}`, { mode, prompt, attachments: files, allowTools, main: agentConfig.main, subagents: agentConfig.subagents, responseStyle: answerStyle });
+          await post(`/api/conversations/${workspace.id}`, { mode, prompt, attachments: files, allowTools: agentConfig.allowTools ?? allowTools, main: agentConfig.main, subagents: agentConfig.subagents, responseStyle: answerStyle, clarify: agentConfig.clarify });
         } else {
           if (!chatConfig) throw new Error("กรุณาเลือก AI ที่จะถามก่อน");
-          await post(`/api/conversations/${workspace.id}`, { mode, prompt, attachments: files, panel: chatConfig.panel, summarizer: chatConfig.summarizer, summaryStyle: chatConfig.style, responseStyle: answerStyle });
+          await post(`/api/conversations/${workspace.id}`, { mode, prompt, attachments: files, panel: chatConfig.panel, summarizer: chatConfig.summarizer, summaryStyle: chatConfig.style, responseStyle: answerStyle, clarify: chatConfig.clarify });
         }
         setRuns(await api<Run[]>(`/api/conversations/${workspace.id}`));
       }
@@ -1386,6 +1388,9 @@ export function App() {
               </div>
               {mode !== "code" && (
                 <ImageEndpointContext.Provider value={`/api/workspaces/${encodeURIComponent(activeWs)}/preview-file`}><div className="conversation-scroll">
+                  {mode === "agent" && (
+                    <AgentWorkspace config={agentConfig} run={activeRun?.mode === "agent" ? activeRun : undefined} typing={!!draft.trim()} />
+                  )}
                   {!conversation.length ? (
                     <div className="conversation-empty compact">
                       <div className="empty-command">
@@ -1411,6 +1416,7 @@ export function App() {
                           <p>{renderTextWithLinks(run.prompt)}</p>
                           <MessageAttachments paths={run.attachments} endpoint={`/api/workspaces/${encodeURIComponent(run.wsId)}/preview-file`} />
                         </div>
+                        {run.clarify && <ClarifyCard run={run} onError={showError} />}
                         {run.mode === "chat" && run.panel ? <ChatRunView run={run} /> : run.main ? <AgentRunView run={run} onFixTools={() => setDialog("setup")} /> : null}
                         {(!run.main && (run.mode === "agent" || !run.panel)) && (
                           <div className="assistant-message">

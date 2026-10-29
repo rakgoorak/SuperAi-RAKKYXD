@@ -135,6 +135,138 @@ test('agent skips tasks whose dependency failed and reports failure honestly', a
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+
+const waitFor = async (check: () => boolean) => { for (let i = 0; i < 200 && !check(); i++) await new Promise(r => setTimeout(r, 10)); assert.ok(check()); };
+const questions = JSON.stringify({ intro: 'ต้องรู้ก่อน', questions: [
+  { header: 'ฐานข้อมูล', question: 'ใช้ฐานข้อมูลอะไร?', options: [{ label: 'Postgres', description: 'เชิงสัมพันธ์', recommended: true }, { label: 'Mongo', description: 'เอกสาร' }] },
+  { header: 'ภาษา', question: 'ภาษาไหนบ้าง?', multiSelect: true, options: ['ไทย', 'อังกฤษ', 'จีน'] },
+] });
+
+test('chat: the screener asks multiple-choice questions and every Main gets the answers', async t => {
+  const dir = tmp('chat-ask'); const prompts: Record<string, string> = {};
+  t.mock.method(globalThis, 'fetch', async (_url: any, options: any) => {
+    const body = JSON.parse(options.body); const text = body.messages.map((m: any) => m.content).join('\n');
+    if (text.includes('ตรวจว่าคำถามนี้กำกวม') || text.includes('ผู้ช่วยตรวจคำถาม')) return reply(questions);
+    prompts[body.model] = text;
+    return reply(`คำตอบ ${body.model}`);
+  });
+  try {
+    const manager = new AgentRunManager(path.join(dir, 'h.json'));
+    const run = manager.startChat('p', dir, { prompt: 'ทำระบบสมาชิก', panel: [seat('alpha'), seat('beta')], summarizer: seat('judge'), clarify: true });
+    await waitFor(() => run.clarify?.status === 'waiting');
+    assert.equal(run.clarify!.by, 'judge');
+    assert.deepEqual(run.clarify!.questions.map(q => q.options.length), [2, 3]);
+    assert.equal(run.clarify!.questions[0].options[0].recommended, true);
+    assert.deepEqual(run.panel!.map(a => a.status), ['pending', 'pending']);
+    assert.throws(() => manager.answer(run.id, { answers: { q1: { selected: ['Postgres', 'Mongo'] } } }), /ข้อเดียว/);
+    manager.answer(run.id, { answers: { q1: { selected: ['Postgres'] }, q2: { selected: ['ไทย', 'ปลอม'], other: 'ญี่ปุ่น' } } });
+    assert.throws(() => manager.answer(run.id, { skip: true }), /ไม่ได้รอ/);
+    await settle(run);
+    assert.equal(run.status, 'completed', run.error);
+    assert.deepEqual(run.clarify!.answers, { q1: { selected: ['Postgres'], other: '' }, q2: { selected: ['ไทย'], other: 'ญี่ปุ่น' } });
+    for (const model of ['alpha', 'beta', 'judge']) assert.match(prompts[model], /ใช้ฐานข้อมูลอะไร\?\n  คำตอบ: Postgres[\s\S]*คำตอบ: ไทย, ญี่ปุ่น/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('chat goes straight to answers when the screener asks nothing, and cancel releases a waiting run', async t => {
+  const dir = tmp('chat-noask'); let asking = false;
+  t.mock.method(globalThis, 'fetch', async (_url: any, options: any) => {
+    const text = JSON.parse(options.body).messages.map((m: any) => m.content).join('\n');
+    return reply(text.includes('ตรวจว่าคำถามนี้กำกวม') || text.includes('ผู้ช่วยตรวจคำถาม') ? (asking ? questions : '{"questions":[]}') : 'ตอบ');
+  });
+  try {
+    const manager = new AgentRunManager(path.join(dir, 'h.json'));
+    const clear = manager.startChat('p', dir, { prompt: 'สวัสดี', panel: [seat('a')], clarify: true });
+    await settle(clear);
+    assert.equal(clear.status, 'completed');
+    assert.equal(clear.clarify, undefined);
+    asking = true;
+    const run = manager.startChat('p', dir, { prompt: 'ทำระบบ', panel: [seat('a')], clarify: true });
+    await waitFor(() => run.clarify?.status === 'waiting');
+    manager.cancel(run.id);
+    await settle(run);
+    assert.equal(run.status, 'cancelled');
+    assert.equal(run.clarify!.status, 'cancelled');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('agent: Main may ask before planning, then plans with the answers (skip lets Main decide)', async t => {
+  const dir = tmp('agent-ask'); const mainPrompts: string[] = []; let workerPrompt = '';
+  t.mock.method(globalThis, 'fetch', async (_url: any, options: any) => {
+    const body = JSON.parse(options.body); const text = body.messages.map((m: any) => m.content).join('\n');
+    if (body.model !== 'main') { workerPrompt = text; return reply('ทำแล้ว'); }
+    mainPrompts.push(text);
+    if (mainPrompts.length === 1) return reply(questions);
+    if (mainPrompts.length === 2) return reply(JSON.stringify({ tasks: [{ id: 'a', assignee: 1, instructions: 'ทำ' }] }));
+    return reply('สรุป');
+  });
+  try {
+    const manager = new AgentRunManager(path.join(dir, 'h.json'));
+    const run = manager.startAgent('p', dir, { prompt: 'สร้างระบบ', main: seat('main', 'Main'), subagents: [seat('w')], clarify: true });
+    await waitFor(() => run.stage === 'asking');
+    assert.match(mainPrompts[0], /ถามผู้ใช้กลับ/);
+    manager.answer(run.id, { skip: true });
+    await settle(run);
+    assert.equal(run.status, 'completed', run.error);
+    assert.equal(run.clarify!.status, 'skipped');
+    assert.doesNotMatch(mainPrompts[1], /ถามผู้ใช้กลับ/);
+    assert.match(mainPrompts[1], /คำตอบ: ข้าม/);
+    assert.match(workerPrompt, /ใช้ฐานข้อมูลอะไร/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('agent without clarify never offers Main the chance to ask', async t => {
+  const dir = tmp('agent-noask'); let first = '';
+  t.mock.method(globalThis, 'fetch', async (_url: any, options: any) => {
+    const body = JSON.parse(options.body); const text = body.messages.map((m: any) => m.content).join('\n');
+    if (body.model === 'main' && !first) { first = text; return reply(JSON.stringify([{ assignee: 1, instructions: 'ทำ' }])); }
+    return reply('เสร็จ');
+  });
+  try {
+    const run = new AgentRunManager(path.join(dir, 'h.json')).startAgent('p', dir, { prompt: 'ทำ', main: seat('main'), subagents: [seat('w')] });
+    await settle(run);
+    assert.equal(run.status, 'completed', run.error);
+    assert.doesNotMatch(first, /ถามผู้ใช้กลับ/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('agent respects allowTools: true permits editing and false enforces read-only instructions', async t => {
+  const dir = tmp('agent-allowtools');
+  const mainPrompts: string[] = [];
+  let workerPromptCaptured = '';
+  t.mock.method(globalThis, 'fetch', async (_url: any, options: any) => {
+    const body = JSON.parse(options.body);
+    const text = body.messages.map((m: any) => m.content).join('\n');
+    if (body.model === 'main') {
+      mainPrompts.push(text);
+      if (mainPrompts.length % 2 === 1) {
+        return reply(JSON.stringify([{ id: 't1', assignee: 1, instructions: 'แก้ไฟล์และทดสอบ' }]));
+      }
+      return reply('สรุปผลแล้ว');
+    }
+    workerPromptCaptured = text;
+    return reply('งานเสร็จสิ้น');
+  });
+  try {
+    const manager = new AgentRunManager(path.join(dir, 'h.json'));
+    // 1. With allowTools: false
+    const readOnlyRun = manager.startAgent('p', dir, { prompt: 'สร้างฟีเจอร์', main: seat('main'), subagents: [seat('w')], allowTools: false });
+    await settle(readOnlyRun);
+    assert.equal(readOnlyRun.status, 'completed');
+    assert.equal(readOnlyRun.allowTools, false);
+    assert.match(mainPrompts[0], /Sub-agent อ่านไฟล์ได้อย่างเดียว/);
+    assert.match(workerPromptCaptured, /อ่านไฟล์ได้อย่างเดียว ห้ามแก้ไฟล์/);
+
+    // 2. With allowTools: true
+    const writeRun = manager.startAgent('p', dir, { prompt: 'สร้างฟีเจอร์', main: seat('main'), subagents: [seat('w')], allowTools: true });
+    await settle(writeRun);
+    assert.equal(writeRun.status, 'completed');
+    assert.equal(writeRun.allowTools, true);
+    assert.match(mainPrompts[2], /Sub-agent แก้ไฟล์และรันคำสั่งได้/);
+    assert.match(workerPromptCaptured, /แก้ไฟล์\/รันคำสั่งได้เท่าที่จำเป็น/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('plans that assign unknown Sub-agents or loop forever are rejected', () => {
   assert.throws(() => parsePlan(JSON.stringify([{ assignee: 3, instructions: 'x' }]), 2), /ไม่มีอยู่/);
   assert.throws(() => parsePlan(JSON.stringify([{ id: 'a', assignee: 1, instructions: 'x', dependsOn: ['b'] }, { id: 'b', assignee: 1, instructions: 'y', dependsOn: ['a'] }]), 1), /วง/);

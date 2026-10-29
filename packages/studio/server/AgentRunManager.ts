@@ -108,6 +108,27 @@ export interface Activity {
   text: string;
 }
 
+/** A multiple-choice question the AI asks before it starts (like Claude's clarifying questions). */
+export interface ClarifyQuestion {
+  id: string;
+  header: string;
+  question: string;
+  multiSelect: boolean;
+  options: { label: string; description: string; recommended: boolean }[];
+}
+export interface ClarifyAnswer {
+  selected: string[];
+  other: string;
+}
+export interface Clarification {
+  by: string;
+  intro: string;
+  questions: ClarifyQuestion[];
+  status: "waiting" | "answered" | "skipped" | "cancelled";
+  /** Keyed by question id; a missing key means the user skipped that question. */
+  answers?: Record<string, ClarifyAnswer>;
+}
+
 export interface UsageStep { stage: string; seat: string; provider: string; calls: TokenUsage[]; status: 'running' | 'completed' | 'failed'; missing: boolean; }
 
 export interface ConversationRun {
@@ -125,6 +146,7 @@ export interface ConversationRun {
   allowTools: boolean;
   attachments?: string[];
   activity: Activity[];
+  clarify?: Clarification;
   usageSteps?: UsageStep[];
   // Chat
   panel?: PanelAnswer[];
@@ -134,7 +156,7 @@ export interface ConversationRun {
   // Agent
   main?: Seat;
   subagents?: Seat[];
-  stage?: "planning" | "working" | "summarizing" | RunStatus;
+  stage?: "asking" | "planning" | "working" | "summarizing" | RunStatus;
   plan?: string;
   tasks?: AgentTask[];
 }
@@ -147,6 +169,7 @@ export interface ChatRequest {
   summarizer?: unknown;
   summaryStyle?: unknown;
   attachments?: string[];
+  clarify?: boolean;
 }
 export interface AgentRequest {
   projectContext?: ProjectContext;
@@ -156,6 +179,7 @@ export interface AgentRequest {
   subagents: unknown;
   allowTools?: boolean;
   attachments?: string[];
+  clarify?: boolean;
 }
 
 const MAX_PANEL = 5;
@@ -182,6 +206,49 @@ export function extractJson(raw: string): any {
   }
   throw new Error("ไม่พบ JSON");
 }
+const MAX_QUESTIONS = 4;
+const ASK_RULES = `ถามเฉพาะเรื่องที่คำตอบเปลี่ยนผลลัพธ์อย่างมีนัยสำคัญ และเดาจากคำขอ ไฟล์แนบ หรือไฟล์ในโปรเจกต์ไม่ได้
+ถามได้ไม่เกิน ${MAX_QUESTIONS} ข้อ แต่ละข้อมี 2-4 ตัวเลือกที่ต่างกันชัดเจน ใส่ "recommended":true ที่ตัวเลือกที่แนะนำและวางไว้เป็นตัวแรก
+ใช้ "multiSelect":true เมื่อเลือกได้หลายข้อ ไม่ต้องใส่ตัวเลือก "อื่นๆ" เพราะผู้ใช้พิมพ์คำตอบเองได้เสมอ
+รูปแบบ JSON:
+{"intro":"บอกสั้นๆ ว่าตรวจอะไรแล้วและทำไมต้องถาม","questions":[{"header":"หัวข้อสั้น","question":"คำถามเต็ม?","multiSelect":false,"options":[{"label":"ตัวเลือกสั้นๆ","description":"ผลของการเลือกข้อนี้","recommended":true},{"label":"ตัวเลือกอื่น","description":"ผลของการเลือกข้อนี้"}]}]}`;
+
+/** Read clarifying questions from an AI reply; null when it asked none or the reply is not usable. */
+export function parseQuestions(raw: string): { intro: string; questions: ClarifyQuestion[] } | null {
+  let data: any;
+  try {
+    data = extractJson(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(data?.questions)) return null;
+  const text = (value: unknown, max: number) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+  const questions = data.questions
+    .slice(0, MAX_QUESTIONS)
+    .map((q: any, index: number): ClarifyQuestion => ({
+      id: `q${index + 1}`,
+      header: text(q?.header, 40),
+      question: text(q?.question, 500),
+      multiSelect: q?.multiSelect === true,
+      options: (Array.isArray(q?.options) ? q.options : [])
+        .slice(0, 4)
+        .map((o: any) => ({ label: text(typeof o === "string" ? o : o?.label, 120), description: text(o?.description, 300), recommended: o?.recommended === true }))
+        .filter((o: { label: string }) => o.label),
+    }))
+    .filter((q: ClarifyQuestion) => q.question && q.options.length >= 2);
+  return questions.length ? { intro: text(data.intro, 600), questions } : null;
+}
+
+/** Turn the user's choices into text the AI can follow; skipped questions leave the call to the AI. */
+export function describeAnswers(clarify: Clarification) {
+  const lines = clarify.questions.map((q) => {
+    const a = clarify.answers?.[q.id];
+    const picked = [...(a?.selected || []), ...(a?.other ? [a.other] : [])];
+    return `- ${q.question}\n  คำตอบ: ${picked.length ? picked.join(", ") : "ข้าม (ตัดสินใจเองตามที่เหมาะสม และบอกว่าเลือกอะไร)"}`;
+  });
+  return `คำตอบของผู้ใช้ต่อคำถามที่ ${clarify.by} ถามไว้:\n${lines.join("\n")}`;
+}
+
 
 /** Validate Main's plan: known assignees, unique ids, dependencies that exist and contain no cycles. */
 export function parsePlan(raw: string, subagentCount: number): { note: string; tasks: AgentTask[] } {
@@ -229,6 +296,8 @@ export function parsePlan(raw: string, subagentCount: number): { note: string; t
 export class AgentRunManager {
   private runs = new Map<string, ConversationRun>();
   private controllers = new Map<string, AbortController>();
+  /** Runs paused on clarifying questions, resumed by answer(). */
+  private waiters = new Map<string, () => void>();
   constructor(private file = path.join(os.homedir(), ".opencode-multi", "superai-conversations.json")) {
     try {
       for (const r of JSON.parse(fs.readFileSync(file, "utf8"))) {
@@ -236,6 +305,7 @@ export class AgentRunManager {
         const run = { activity: [], allowTools: false, ...r, mode: r.mode === "chat" ? "chat" : "agent" };
         if (r.mode === "assistant") delete run.tasks;
         if (run.status === "running") run.status = "cancelled";
+        if (run.clarify?.status === "waiting") run.clarify.status = "cancelled";
         this.runs.set(run.id, run);
       }
     } catch {}
@@ -293,6 +363,7 @@ export class AgentRunManager {
         if (run.status === "running") run.status = "completed";
         if (run.mode === "agent") run.stage = run.status;
         const stop = (s: StepStatus): StepStatus => (s === "pending" || s === "running" ? "cancelled" : s);
+        if (run.clarify?.status === "waiting") run.clarify.status = "cancelled";
         if (run.status !== "completed") {
           run.tasks?.forEach((t) => (t.status = stop(t.status)));
           run.panel?.forEach((a) => {
@@ -363,11 +434,52 @@ export class AgentRunManager {
     } catch (error) { record.status = 'failed'; record.missing = true; throw error; }
   }
 
+
+  /** Show the questions, then wait until the user answers or skips (or the run is cancelled). Returns text for the next prompt. */
+  private async waitForAnswers(run: ConversationRun, by: string, asked: { intro: string; questions: ClarifyQuestion[] }, signal: AbortSignal, note: (who: string, text: string) => void) {
+    run.clarify = { by, intro: asked.intro, questions: asked.questions, status: "waiting" };
+    note(by, `ขอถามคุณ ${asked.questions.length} ข้อก่อนเริ่ม`);
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        signal.removeEventListener("abort", done);
+        this.waiters.delete(run.id);
+        resolve();
+      };
+      signal.addEventListener("abort", done, { once: true });
+      this.waiters.set(run.id, done);
+    });
+    if (signal.aborted) return "";
+    note("คุณ", run.clarify.status === "skipped" ? "ข้ามคำถาม ให้ AI ตัดสินใจเอง" : "ตอบคำถามแล้ว");
+    return describeAnswers(run.clarify);
+  }
+
+  /** The user's reply to a run's clarifying questions. Omit answers (or a question) to skip it. */
+  answer(id: string, body: { answers?: unknown; skip?: unknown }) {
+    const run = this.runs.get(id);
+    const resume = this.waiters.get(id);
+    if (!run?.clarify || run.clarify.status !== "waiting" || !resume) throw new Error("งานนี้ไม่ได้รอคำตอบอยู่");
+    const given = body.skip === true || !body.answers || typeof body.answers !== "object" ? {} : (body.answers as Record<string, any>);
+    const answers: Record<string, ClarifyAnswer> = {};
+    for (const q of run.clarify.questions) {
+      const a = given[q.id];
+      if (!a || typeof a !== "object") continue;
+      const labels = q.options.map((o) => o.label);
+      const selected = (Array.isArray(a.selected) ? a.selected : []).map(String).filter((s: string) => labels.includes(s));
+      const other = typeof a.other === "string" ? a.other.trim().slice(0, 500) : "";
+      if (!q.multiSelect && selected.length + (other ? 1 : 0) > 1) throw new Error(`“${q.header || q.question}” เลือกได้ข้อเดียว`);
+      if (selected.length || other) answers[q.id] = { selected: Array.from(new Set(selected)), other };
+    }
+    run.clarify.answers = answers;
+    run.clarify.status = Object.keys(answers).length ? "answered" : "skipped";
+    resume();
+    return run;
+  }
+
   private history(wsId: string, mode: "chat" | "agent") {
     return this.list(wsId)
       .filter((r) => r.mode === mode && r.status === "completed")
       .slice(-6)
-      .map((r) => `ผู้ใช้: ${r.prompt}\nคำตอบ: ${(r.output || r.panel?.find((a) => a.status === "completed")?.output || "").slice(0, 4000)}`)
+      .map((r) => `ผู้ใช้: ${r.prompt}${r.clarify?.status === "answered" ? `\n${describeAnswers(r.clarify)}` : ""}\nคำตอบ: ${(r.output || r.panel?.find((a) => a.status === "completed")?.output || "").slice(0, 4000)}`)
       .join("\n\n");
   }
 
@@ -381,20 +493,41 @@ export class AgentRunManager {
     const attachments = body.attachments || [];
     const prompt = this.begin(wsId, String(body.prompt || ""), attachments, summarizer ? [...panel, summarizer] : panel);
     const history = this.history(wsId, "chat");
+    const clarify = body.clarify === true;
     const run: ConversationRun = {
       id: randomUUID(), wsId, prompt, mode: "chat", status: "running", output: "", createdAt: Date.now(), allowTools: false, attachments, activity: [], projectContext: body.projectContext, responseStyle: body.responseStyle,
-      panel: panel.map((seat) => ({ seat, status: "running", output: "", startedAt: Date.now() })),
+      panel: panel.map((seat) => ({ seat, status: clarify ? "pending" : "running", output: "", startedAt: Date.now() })),
       summarizer, summaryStyle: style, summaryStatus: summarizer ? "pending" : undefined,
     };
     return this.launch(run, async (controller, note) => {
+      let question = `${history ? `บทสนทนาก่อนหน้า:\n${history}\n\n` : ""}${prompt}`;
+      if (clarify) {
+        const screener = summarizer || panel[0];
+        note(screener.name, "ตรวจว่าคำถามชัดพอหรือยัง");
+        let reply = "";
+        try {
+          reply = await this.ask(screener, `คุณคือผู้ช่วยตรวจคำถามก่อนส่งให้ AI หลายตัวตอบ\n${question}\n\nถ้าคำถามชัดพอจะตอบได้ดีแล้ว ให้ตอบ {"questions":[]} เท่านั้น\nถ้ายังกำกวม ให้ถามผู้ใช้กลับเป็นภาษาไทยแบบมีตัวเลือก\n${ASK_RULES}\nตอบเป็น JSON อย่างเดียว ไม่ต้องมีคำอธิบายอื่น`, cwd, controller.signal, {
+            tools: false, readTools: true, attachments, projectContext: run.projectContext, responseStyle: run.responseStyle, run, stage: 'ตรวจคำถาม', onChunk: () => {},
+          });
+        } catch (err: any) {
+          if (controller.signal.aborted) return;
+          note(screener.name, `ตรวจคำถามไม่สำเร็จ ส่งคำถามเดิมให้ทุกตัว: ${err.message}`);
+        }
+        const asked = parseQuestions(reply);
+        if (asked) question += `\n\n${await this.waitForAnswers(run, screener.name, asked, controller.signal, note)}`;
+        if (controller.signal.aborted) return;
+        run.panel!.forEach((a) => (a.status = "running"));
+      }
+      const clarifyingContext = run.clarify ? `\n\n${describeAnswers(run.clarify)}` : "";
+      const basePrompt = `${prompt}${clarifyingContext}`;
       await Promise.all(
         run.panel!.map(async (answer) => {
           answer.startedAt = Date.now();
           note(answer.seat.name, `เริ่มคิด (${describe(answer.seat)})`);
           try {
-            const selected = answer.seat.provider.startsWith("cli:") ? skillPrompt(prompt, cwd, answer.seat.provider.slice(4)) : prompt;
-            const question = `${history ? `บทสนทนาก่อนหน้า:\n${history}\n\n` : ""}${selected}`;
-            const text = await this.ask(answer.seat, `ตอบเป็นภาษาไทย ให้เหตุผลประกอบ\n\n${question}`, cwd, controller.signal, {
+            const selected = answer.seat.provider.startsWith("cli:") ? skillPrompt(basePrompt, cwd, answer.seat.provider.slice(4)) : basePrompt;
+            const fullQuestion = `${history ? `บทสนทนาก่อนหน้า:\n${history}\n\n` : ""}${selected}`;
+            const text = await this.ask(answer.seat, `ตอบเป็นภาษาไทย ให้เหตุผลประกอบ\n\n${fullQuestion}`, cwd, controller.signal, {
               tools: false, readTools: true, attachments, projectContext: run.projectContext, responseStyle: run.responseStyle, run, stage: 'ตอบคำถาม',
               onChunk: (t) => {
                 if (!controller.signal.aborted) {
@@ -433,7 +566,7 @@ export class AgentRunManager {
         : "รวมความเห็นที่มีประโยชน์จากทุกตัวเข้าด้วยกันให้ครบ";
       const summaryPrompt = `คุณคือผู้สรุปความเห็นจาก AI หลายตัวให้ผู้ใช้ ตอบเป็นภาษาไทย
 คำถามของผู้ใช้:
-${prompt}
+${prompt}${run.clarify ? `\n\n${describeAnswers(run.clarify)}` : ""}
 
 คำตอบจาก AI แต่ละตัว:
 ${answers}
@@ -478,26 +611,43 @@ ${instructions}
       const signal = controller.signal;
       const roster = subagents.map((s, i) => `${i + 1}. ${s.name} — ${describe(s)}`).join("\n");
       note(main.name, "กำลังวางแผนและแบ่งงาน");
-      const planPrompt = `คุณคือ Main agent หัวหน้าทีม AI ที่ทำงานในโฟลเดอร์โปรเจกต์ของผู้ใช้
-${history ? `งานก่อนหน้าในโปรเจกต์นี้:\n${history}\n\n` : ""}เป้าหมายของผู้ใช้:
-${prompt}
-
-Sub-agent ที่มี (ใช้หมายเลขเป็น assignee):
-${roster}
-
-${allowTools ? "Sub-agent แก้ไฟล์และรันคำสั่งได้" : "Sub-agent อ่านไฟล์ได้อย่างเดียว ห้ามสั่งให้แก้ไฟล์ ให้เสนอโค้ดหรือขั้นตอนแทน"}
-แบ่งงานเป็น 1-${MAX_TASKS} งาน งานที่ไม่มี dependsOn จะทำพร้อมกัน ดังนั้นงานที่ทำพร้อมกันห้ามแก้ไฟล์เดียวกัน
-ถ้างานต้องใช้ผลของงานอื่นให้ใส่ id ของงานนั้นใน dependsOn เลือก Sub-agent ให้เหมาะกับงาน
-ตอบเป็น JSON อย่างเดียว ไม่ต้องมีคำอธิบายอื่น:
-{"note":"แนวทางโดยย่อ (ภาษาไทย)","tasks":[{"id":"t1","title":"ชื่องาน","assignee":1,"instructions":"คำสั่งละเอียด","dependsOn":[]}]}`;
-      let planText = "";
-      try {
-        planText = await this.ask(main, planPrompt, cwd, signal, { tools: false, readTools: true, attachments, projectContext: run.projectContext, onChunk: () => {}, run, stage: 'วางแผน' });
-      } catch (err: any) {
-        throw new Error(`Main (${main.name}) วางแผนไม่สำเร็จ: ${err.message}`);
-      }
+      const planPrompt = (answers: string, mayAsk: boolean) => {
+        let text = `คุณคือ Main agent หัวหน้าทีม AI ที่ทำงานในโฟลเดอร์โปรเจกต์ของผู้ใช้\n` +
+          (history ? `งานก่อนหน้าในโปรเจกต์นี้:\n${history}\n\n` : "") +
+          `เป้าหมายของผู้ใช้:\n${prompt}\n` +
+          (answers ? `\n${answers}\n` : "") +
+          `Sub-agent ที่มี (ใช้หมายเลขเป็น assignee):\n${roster}\n\n` +
+          (allowTools ? "Sub-agent แก้ไฟล์และรันคำสั่งได้" : "Sub-agent อ่านไฟล์ได้อย่างเดียว ห้ามสั่งให้แก้ไฟล์ ให้เสนอโค้ดหรือขั้นตอนแทน") +
+          `\nแบ่งงานเป็น 1-${MAX_TASKS} งาน งานที่ไม่มี dependsOn จะทำพร้อมกัน ดังนั้นงานที่ทำพร้อมกันห้ามแก้ไฟล์เดียวกัน\n` +
+          `ถ้างานต้องใช้ผลของงานอื่นให้ใส่ id ของงานนั้นใน dependsOn เลือก Sub-agent ให้เหมาะกับงาน\n` +
+          `ตอบเป็น JSON อย่างเดียว ไม่ต้องมีคำอธิบายอื่น:\n` +
+          `{"note":"แนวทางโดยย่อ (ภาษาไทย)","tasks":[{"id":"t1","title":"ชื่องาน","assignee":1,"instructions":"คำสั่งละเอียด","dependsOn":[]}]}`;
+        if (mayAsk) {
+          text += `\n\nก่อนวางแผน ตรวจคำขอและไฟล์ในโปรเจกต์ก่อน ถ้าเป้าหมายยังกำกวมจนแผนอาจผิดทาง ให้ถามผู้ใช้กลับเป็นภาษาไทยแทนการส่งแผน\n${ASK_RULES}`;
+        }
+        return text;
+      };
+      const askMain = async (text: string) => {
+        try {
+          return await this.ask(main, text, cwd, signal, { tools: false, readTools: true, attachments, projectContext: run.projectContext, onChunk: () => {}, run, stage: 'วางแผน' });
+        } catch (err: any) {
+          throw new Error(`Main (${main.name}) วางแผนไม่สำเร็จ: ${err.message}`);
+        }
+      };
+      let planText = await askMain(planPrompt("", body.clarify === true));
       if (signal.aborted) return;
+      const asked = body.clarify === true ? parseQuestions(planText) : null;
+      if (asked) {
+        run.stage = "asking";
+        const answers = await this.waitForAnswers(run, main.name, asked, signal, note);
+        if (signal.aborted) return;
+        run.stage = "planning";
+        note(main.name, "ได้คำตอบแล้ว กำลังวางแผนและแบ่งงาน");
+        planText = await askMain(planPrompt(answers, false));
+        if (signal.aborted) return;
+      }
       const plan = parsePlan(planText, subagents.length);
+      const goal = run.clarify ? `${prompt}\n${describeAnswers(run.clarify)}` : prompt;
       run.plan = plan.note;
       run.tasks = plan.tasks;
       run.stage = "working";
@@ -524,7 +674,7 @@ ${allowTools ? "Sub-agent แก้ไฟล์และรันคำสั่
             note(seat.name, `เริ่ม “${t.title}”`);
             const context = t.dependsOn.map((d) => `[ผลจาก ${resultOf(d).title} โดย ${subagents[resultOf(d).assignee].name}]\n${resultOf(d).output}`).join("\n\n");
             const taskPrompt = `คุณคือ ${seat.name} Sub-agent ในทีม ทำงานในโฟลเดอร์โปรเจกต์ของผู้ใช้ ตอบเป็นภาษาไทย
-เป้าหมายรวมของผู้ใช้: ${prompt}
+เป้าหมายรวมของผู้ใช้: ${goal}
 ${plan.note ? `แนวทางจาก Main: ${plan.note}\n` : ""}${context ? `\n${context}\n` : ""}
 งานของคุณ (${t.title}):
 ${t.instructions}
@@ -555,7 +705,7 @@ ${allowTools ? "แก้ไฟล์/รันคำสั่งได้เท
         .join("\n\n");
       try {
         const text = await this.ask(main, `คุณคือ Main agent ทุก Sub-agent ทำงานเสร็จแล้ว
-เป้าหมายของผู้ใช้: ${prompt}
+เป้าหมายของผู้ใช้: ${goal}
 
 ผลงานของแต่ละ Sub-agent:
 ${report}

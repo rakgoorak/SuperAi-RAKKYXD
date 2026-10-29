@@ -10,16 +10,17 @@ import { ProviderAccess } from "./ProviderAccess";
 import { Markdown } from "./Markdown";
 import { RunUsage } from './RunUsage';
 
-export interface AgentConfig { main: Seat; subagents: Seat[]; }
+export interface AgentConfig { main: Seat; subagents: Seat[]; clarify?: boolean; allowTools?: boolean; }
 const MAX_SUBAGENTS = 6;
 
 function validSeat(s: any): s is Seat {
   return s && ["name", "provider", "model", "effort"].every((k) => typeof s[k] === "string");
 }
-function defaultConfig(clis: Cli[]): AgentConfig {
+function defaultConfig(clis: Cli[], workspaceId = ""): AgentConfig {
   const mainCli = firstReady(clis) || HEADLESS[0];
   const subCli = firstReady(clis, [mainCli]) || mainCli;
-  return { main: seatFor(mainCli, "Main"), subagents: [seatFor(subCli, "Sub-agent 1"), seatFor(mainCli, "Sub-agent 2")] };
+  const toolsSaved = workspaceId ? localStorage.getItem(`superai-agent-allow-tools:${workspaceId}`) : null;
+  return { main: seatFor(mainCli, "Main"), subagents: [seatFor(subCli, "Sub-agent 1"), seatFor(mainCli, "Sub-agent 2")], clarify: true, allowTools: toolsSaved === "true" };
 }
 
 export function AgentConfigEditor({ workspaceId, clis, ollamaModels, disabled, onChange, onFixTools }: {
@@ -29,11 +30,20 @@ export function AgentConfigEditor({ workspaceId, clis, ollamaModels, disabled, o
   const team = useTeamDraft<AgentConfig>(key, () => {
     try {
       const saved = JSON.parse(localStorage.getItem(key) || "null");
-      if (saved && validSeat(saved.main) && Array.isArray(saved.subagents) && saved.subagents.length && saved.subagents.every(validSeat)) return saved;
+      const toolsSaved = localStorage.getItem(`superai-agent-allow-tools:${workspaceId}`);
+      const allowTools = toolsSaved !== null ? toolsSaved === "true" : saved?.allowTools === true;
+      if (saved && validSeat(saved.main) && Array.isArray(saved.subagents) && saved.subagents.length && saved.subagents.every(validSeat)) {
+        return { ...saved, clarify: saved.clarify !== false, allowTools };
+      }
     } catch {}
-    return defaultConfig(clis);
+    return defaultConfig(clis, workspaceId);
   }, onChange);
   const { config, saved, edit: setConfig } = team;
+  useEffect(() => {
+    if (config.allowTools !== undefined) {
+      try { localStorage.setItem(`superai-agent-allow-tools:${workspaceId}`, config.allowTools ? "true" : "false"); } catch {}
+    }
+  }, [config.allowTools, workspaceId]);
   const editSub = (index: number, seat: Seat) => setConfig((c) => ({ ...c, subagents: c.subagents.map((s, i) => (i === index ? seat : s)) }));
   return (
     <ConfigShell label="ตั้งค่าทีม Agent" title={<><Users size={19} /> ทีม Agent</>}
@@ -64,13 +74,28 @@ export function AgentConfigEditor({ workspaceId, clis, ollamaModels, disabled, o
       </button>
       </section>
     <div className="team-access" aria-label="ความพร้อมของทีม">{Array.from(new Set([config.main, ...config.subagents].map(s => s.provider).filter(p => p.startsWith("cli:")).map(p => p.slice(4)))).map(provider => <ProviderAccess key={provider} provider={provider} wsId={workspaceId} compact onInstall={() => { close(); onFixTools(); }} />)}</div>
+      <div className="summarizer-row">
+        <label className="tool-permission">
+          <input type="checkbox" checked={config.clarify !== false} disabled={disabled} onChange={(e) => setConfig((c) => ({ ...c, clarify: e.target.checked }))} />
+          ให้ Main ถามกลับแบบมีตัวเลือกก่อนวางแผน เมื่อเป้าหมายยังไม่ชัด (เหมือน Claude)
+        </label>
+        <label className="tool-permission" style={{ marginTop: 8 }}>
+          <input
+            type="checkbox"
+            checked={config.allowTools === true}
+            disabled={disabled}
+            onChange={(e) => setConfig((c) => ({ ...c, allowTools: e.target.checked }))}
+          />
+          อนุญาตให้ Sub-agent แก้ไขไฟล์และรันคำสั่ง (หากไม่ติ๊ก AI จะทำงานในโหมดอ่านและวางแผนอย่างเดียว)
+        </label>
+      </div>
       </>}
     </ConfigShell>
   );
 }
 
 const STEP: Record<StepStatus, string> = { pending: "รอคิว", running: "กำลังทำ", completed: "เสร็จแล้ว", failed: "ไม่สำเร็จ", cancelled: "ยกเลิก", skipped: "ข้าม" };
-const STAGE: Record<string, string> = { planning: "Main กำลังวางแผนและแบ่งงาน", working: "Sub-agent กำลังทำงาน", summarizing: "Main กำลังตรวจผลและสรุป", completed: "ทีมทำงานเสร็จแล้ว", failed: "จบโดยมีงานไม่สำเร็จ", cancelled: "ยกเลิกงานแล้ว" };
+const STAGE: Record<string, string> = { asking: "Main รอคำตอบจากคุณก่อนวางแผน", planning: "Main กำลังวางแผนและแบ่งงาน", working: "Sub-agent กำลังทำงาน", summarizing: "Main กำลังตรวจผลและสรุป", completed: "ทีมทำงานเสร็จแล้ว", failed: "จบโดยมีงานไม่สำเร็จ", cancelled: "ยกเลิกงานแล้ว" };
 export function AgentRunView({ run, onFixTools }: { run: Run; onFixTools: () => void }) {
   const [view, setView] = useState("overview");
   const [selected, setSelected] = useState<number | null>(null);

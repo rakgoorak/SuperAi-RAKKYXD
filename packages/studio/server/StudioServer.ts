@@ -605,6 +605,13 @@ export class StudioServer {
         res.status(409).json({ error: err.message });
       }
     });
+    this.app.post("/api/runs/:id/answer", (req, res) => {
+      try {
+        res.json(this.agentRuns.answer(String(req.params.id), req.body || {}));
+      } catch (err: any) {
+        res.status(400).json({ error: err.message });
+      }
+    });
     this.app.post("/api/runs/:id/cancel", (req, res) =>
       res.json({ success: this.agentRuns.cancel(String(req.params.id)) }),
     );

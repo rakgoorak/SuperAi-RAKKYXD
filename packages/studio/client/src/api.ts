@@ -159,6 +159,9 @@ export interface Session {
   updateFailed?: boolean;
   createdAt?: number;
 }
+export interface ClarifyQuestion { id: string; header: string; question: string; multiSelect: boolean; options: { label: string; description: string; recommended: boolean }[]; }
+export interface ClarifyAnswer { selected: string[]; other: string; }
+export interface Clarification { by: string; intro: string; questions: ClarifyQuestion[]; status: "waiting" | "answered" | "skipped" | "cancelled"; answers?: Record<string, ClarifyAnswer>; }
 export interface Run {
   responseStyle?: import('./responseStyle').ResponseStyle;
   id: string;
@@ -172,6 +175,7 @@ export interface Run {
   allowTools: boolean;
   attachments?: string[];
   activity: Activity[];
+  clarify?: Clarification;
   usageSteps?: UsageStep[];
   panel?: PanelAnswer[];
   summarizer?: Seat | null;

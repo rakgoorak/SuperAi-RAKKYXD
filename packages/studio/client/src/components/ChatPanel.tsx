@@ -9,7 +9,7 @@ import { ComparisonArena } from "./ComparisonArena";
 
 export { ComparisonArena };
 
-export interface ChatConfig { panel: Seat[]; summarizer: Seat | null; style: "merge" | "best"; }
+export interface ChatConfig { panel: Seat[]; summarizer: Seat | null; style: "merge" | "best"; clarify?: boolean; }
 const MAX_PANEL = 5;
 
 function validSeat(s: any): s is Seat {
@@ -18,7 +18,7 @@ function validSeat(s: any): s is Seat {
 function defaultConfig(clis: Cli[]): ChatConfig {
   const ready = HEADLESS.filter((id) => clis.some((c) => c.id === id && c.available));
   const id = ready[0] || HEADLESS[0];
-  return { panel: [seatFor(id, "Main 1")], summarizer: null, style: "merge" };
+  return { panel: [seatFor(id, "Main 1")], summarizer: null, style: "merge", clarify: false };
 }
 
 export function ChatConfigEditor({ workspaceId, clis, ollamaModels, disabled, onChange }: {
@@ -78,6 +78,12 @@ export function ChatConfigEditor({ workspaceId, clis, ollamaModels, disabled, on
       )}
       </section>
       <div className="team-access" aria-label="ความพร้อมของทีม">{Array.from(new Set([...config.panel, ...(config.summarizer ? [config.summarizer] : [])].map(s => s.provider).filter(p => p.startsWith("cli:")).map(p => p.slice(4)))).map(provider => <ProviderAccess key={provider} provider={provider} wsId={workspaceId} compact />)}</div>
+      <div className="summarizer-row">
+        <label className="tool-permission">
+          <input type="checkbox" checked={config.clarify === true} disabled={disabled} onChange={(e) => setConfig((c) => ({ ...c, clarify: e.target.checked }))} />
+          ถามกลับแบบมีตัวเลือกก่อนตอบเมื่อคำถามกำกวม (เหมือน Claude)
+        </label>
+      </div>
     </ConfigShell>
   );
 }
