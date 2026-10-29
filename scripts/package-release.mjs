@@ -7,41 +7,72 @@ import { stageApp } from './stage-app.mjs';
 const require = createRequire(import.meta.url);
 const { version } = JSON.parse(await fs.readFile('package.json', 'utf8'));
 if (!['win32', 'darwin'].includes(process.platform)) throw new Error('Build release on Windows or macOS');
-const platform = process.platform === 'win32' ? 'windows' : 'macos';
-const arch = process.env.TARGET_ARCH || process.arch;
+const platform = process.env.TARGET_PLATFORM || (process.platform === 'win32' ? 'windows' : 'macos');
+const arch = process.env.TARGET_ARCH || (platform === 'windows' ? 'x64' : process.arch);
 const label = `SuperAi-RAKKYXD-v${version}-${platform}-${arch}`;
 const destination = path.resolve('release', label);
 await fs.mkdir(path.dirname(destination), { recursive: true });
 await fs.mkdir(destination); // Never overwrite a previous build.
 let main;
-if (process.platform === 'win32') {
-  await fs.cp(path.dirname(require('electron')), destination, { recursive: true, filter: source => !source.endsWith('default_app.asar') });
-  main = path.join(destination, 'SuperAi-RAKKYXD.exe');
-  await fs.rename(path.join(destination, 'electron.exe'), main);
-  // Brand the executable (icon + file details shown in Explorer and the taskbar).
-  const { default: rcedit } = await import('rcedit');
-  await rcedit(main, {
-    icon: path.resolve('packages/desktop/assets/icon.ico'),
-    'version-string': { ProductName: 'SuperAi & RAKKYXD', FileDescription: 'SuperAi & RAKKYXD', CompanyName: 'RAKKYXD', OriginalFilename: 'SuperAi-RAKKYXD.exe' },
-    'file-version': version, 'product-version': version,
-  });
-  await stageApp(path.join(destination, 'resources', 'app'));
-  const winCert = process.env.WIN_CERT_FILE || process.env.CSC_LINK;
-  const winPass = process.env.WIN_CERT_PASSWORD || process.env.CSC_KEY_PASSWORD;
-  const signtool = process.env.SIGNTOOL_PATH || 'signtool.exe';
-  if (winCert) {
-    console.log(`Signing executable ${main} with signtool...`);
-    const args = ['sign', '/fd', 'SHA256', '/tr', 'http://timestamp.digicert.com', '/td', 'SHA256', '/f', winCert];
-    if (winPass) args.push('/p', winPass);
-    args.push(main);
-    try {
-      execFileSync(signtool, args, { stdio: 'inherit' });
-      console.log('Signed Windows executable successfully.');
-    } catch (e) {
-      console.warn(`signtool signing failed: ${e.message}`);
+if (platform === 'windows') {
+  if (process.platform === 'win32') {
+    await fs.cp(path.dirname(require('electron')), destination, { recursive: true, filter: source => !source.endsWith('default_app.asar') });
+    main = path.join(destination, 'SuperAi-RAKKYXD.exe');
+    await fs.rename(path.join(destination, 'electron.exe'), main);
+    // Brand the executable (icon + file details shown in Explorer and the taskbar).
+    const { default: rcedit } = await import('rcedit');
+    await rcedit(main, {
+      icon: path.resolve('packages/desktop/assets/icon.ico'),
+      'version-string': { ProductName: 'SuperAi & RAKKYXD', FileDescription: 'SuperAi & RAKKYXD', CompanyName: 'RAKKYXD', OriginalFilename: 'SuperAi-RAKKYXD.exe' },
+      'file-version': version, 'product-version': version,
+    });
+    await stageApp(path.join(destination, 'resources', 'app'));
+    const winCert = process.env.WIN_CERT_FILE || process.env.CSC_LINK;
+    const winPass = process.env.WIN_CERT_PASSWORD || process.env.CSC_KEY_PASSWORD;
+    const signtool = process.env.SIGNTOOL_PATH || 'signtool.exe';
+    if (winCert) {
+      console.log(`Signing executable ${main} with signtool...`);
+      const args = ['sign', '/fd', 'SHA256', '/tr', 'http://timestamp.digicert.com', '/td', 'SHA256', '/f', winCert];
+      if (winPass) args.push('/p', winPass);
+      args.push(main);
+      try {
+        execFileSync(signtool, args, { stdio: 'inherit' });
+        console.log('Signed Windows executable successfully.');
+      } catch (e) {
+        console.warn(`signtool signing failed: ${e.message}`);
+      }
+    } else {
+      console.log('[Security Notice] Windows executable is unsigned. To prevent SmartScreen warnings, set WIN_CERT_FILE and WIN_CERT_PASSWORD.');
     }
   } else {
-    console.log('[Security Notice] Windows executable is unsigned. To prevent SmartScreen warnings, set WIN_CERT_FILE and WIN_CERT_PASSWORD.');
+    // Cross-package Windows on macOS using @electron/packager
+    const { packager } = await import('@electron/packager');
+    const staging = path.resolve('output', `release-stage-${Date.now()}`);
+    await stageApp(staging);
+    const [built] = await packager({
+      dir: staging,
+      out: path.resolve('output', `win-package-${Date.now()}`),
+      name: 'SuperAi-RAKKYXD',
+      executableName: 'SuperAi-RAKKYXD',
+      platform: 'win32',
+      arch,
+      electronVersion: require('electron/package.json').version,
+      appVersion: version,
+      appCopyright: 'RAKKYXD',
+      prune: false,
+      asar: false,
+      icon: path.resolve('packages/desktop/assets/icon.ico'),
+      win32metadata: {
+        CompanyName: 'RAKKYXD',
+        FileDescription: 'SuperAi & RAKKYXD',
+        OriginalFilename: 'SuperAi-RAKKYXD.exe',
+        ProductName: 'SuperAi & RAKKYXD',
+        InternalName: 'SuperAi-RAKKYXD',
+      }
+    });
+    await fs.cp(built, destination, { recursive: true });
+    main = path.join(destination, 'SuperAi-RAKKYXD.exe');
+    console.log('[Security Notice] Windows executable packaged cross-platform. To sign or create NSIS installer, build on Windows with makensis.');
   }
 } else {
   const { packager } = await import('@electron/packager');
