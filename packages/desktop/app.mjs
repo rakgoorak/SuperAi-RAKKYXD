@@ -25,7 +25,7 @@ if (process.env.SUPERAI_TEST_MODE === "1" || process.argv.includes("--disable-gp
 }
 app.commandLine.appendSwitch("disable-gpu-process-crash-limit");
 // Same id as the installer's shortcuts: Windows groups the taskbar button with them and shows our toasts.
-if (process.platform === "win32" && app.isPackaged) app.setAppUserModelId("com.rakgoorak.superai");
+if (process.platform === "win32") app.setAppUserModelId("com.rakgoorak.superai");
 let window, server, browser;
 const updater = new Updater({
   currentVersion: app.getVersion(),
@@ -70,6 +70,28 @@ ipcMain.handle("app:folder", async (e) => {
 ipcMain.handle("app:external", async (e, url) => {
   trusted(e);
   await shell.openExternal(normalizeBrowserUrl(url));
+});
+ipcMain.handle("clipboard:stage-image", async (e, filePath) => {
+  trusted(e);
+  if (typeof filePath !== "string" || !filePath.trim()) {
+    throw new Error("ตำแหน่งไฟล์ไม่ถูกต้อง");
+  }
+  const cleanPath = path.resolve(filePath.trim());
+  const ext = path.extname(cleanPath).toLowerCase();
+  const ALLOWED_EXTS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"];
+  if (!ALLOWED_EXTS.includes(ext)) {
+    throw new Error("รองรับเฉพาะไฟล์รูปภาพ");
+  }
+  const stat = await fs.stat(cleanPath);
+  if (!stat.isFile() || stat.size > 20 * 1024 * 1024) {
+    throw new Error("ไฟล์รูปภาพต้องมีขนาดไม่เกิน 20 MB");
+  }
+  const img = nativeImage.createFromPath(cleanPath);
+  if (img.isEmpty()) {
+    throw new Error("ไม่สามารถอ่านข้อมูลรูปภาพได้");
+  }
+  clipboard.writeImage(img);
+  return { success: true };
 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let applying = null;
@@ -243,9 +265,9 @@ else {
           ? { trafficLightPosition: { x: 16, y: 19 } }
           : {}),
         titleBarOverlay: {
-          color: "#20201e",
-          symbolColor: "#e9e8e3",
-          height: 53,
+          color: "#0d1117",
+          symbolColor: "#e2e8f0",
+          height: 38,
         },
         webPreferences: {
           preload: path.join(directory, "preload.cjs"),

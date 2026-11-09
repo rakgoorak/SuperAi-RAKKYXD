@@ -187,3 +187,64 @@ export interface Run {
   plan?: string;
   tasks?: AgentTask[];
 }
+
+export interface VerificationResult {
+  passed: boolean;
+  exitCode: number;
+  command: string;
+  output: string;
+  failureSummary: string;
+  durationMs: number;
+}
+
+export interface SelfHealResult {
+  success: boolean;
+  command: string;
+  totalAttempts: number;
+  attempts: Array<{
+    attempt: number;
+    verification: VerificationResult;
+    fixPrompt?: string;
+    fixedAt?: number;
+  }>;
+  error?: string;
+}
+
+export interface ReviewIssue {
+  severity: 'critical' | 'warning' | 'suggestion';
+  file: string;
+  line?: number;
+  title: string;
+  description: string;
+  suggestedFix?: string;
+}
+
+export interface CrossReviewResult {
+  reviewer: { name: string; provider: string; model: string; effort: string };
+  authorProvider: string;
+  verdict: 'approved' | 'changes_requested' | 'needs_discussion';
+  score: number;
+  summary: string;
+  issues: ReviewIssue[];
+  reviewedAt: number;
+  diffStats: {
+    filesChanged: number;
+    diffSnippet: string;
+  };
+}
+
+export async function verifyProject(wsId: string, command?: string): Promise<VerificationResult> {
+  return post(`/api/workspaces/${wsId}/verify`, { command });
+}
+
+export async function selfHealProject(wsId: string, options: { sessionId?: string; command?: string; maxAttempts?: number }): Promise<SelfHealResult> {
+  return post(`/api/workspaces/${wsId}/self-heal`, options);
+}
+
+export async function requestCrossReview(wsId: string, options?: { authorProvider?: string; reviewer?: any; targetFile?: string; customDiff?: string }): Promise<CrossReviewResult> {
+  return post(`/api/workspaces/${wsId}/cross-review`, options || {});
+}
+
+export async function applyCrossReviewFixes(wsId: string, sessionId: string, review: CrossReviewResult): Promise<{ success: boolean; promptSent: boolean }> {
+  return post(`/api/workspaces/${wsId}/cross-review/apply`, { sessionId, review });
+}

@@ -476,10 +476,19 @@ export class AgentRunManager {
   }
 
   private history(wsId: string, mode: "chat" | "agent") {
-    return this.list(wsId)
-      .filter((r) => r.mode === mode && r.status === "completed")
+    const runs = this.list(wsId).filter((r) => r.mode === mode && r.status === "completed");
+    if (!runs.length) return "";
+    return runs
       .slice(-6)
-      .map((r) => `ผู้ใช้: ${r.prompt}${r.clarify?.status === "answered" ? `\n${describeAnswers(r.clarify)}` : ""}\nคำตอบ: ${(r.output || r.panel?.find((a) => a.status === "completed")?.output || "").slice(0, 4000)}`)
+      .map((r, i, arr) => {
+        const isLatest = i === arr.length - 1;
+        const answer = (r.output || r.panel?.find((a) => a.status === "completed")?.output || "").trim();
+        const compactAnswer = isLatest
+          ? answer.slice(0, 1800)
+          : (answer.length > 350 ? answer.slice(0, 350) + "… [ย่อผลลัพธ์รอบก่อนเพื่อประหยัด Token]" : answer);
+        const prompt = isLatest ? r.prompt : (r.prompt.length > 200 ? r.prompt.slice(0, 200) + "…" : r.prompt);
+        return `ผู้ใช้: ${prompt}${r.clarify?.status === "answered" ? `\n${describeAnswers(r.clarify)}` : ""}\nคำตอบ: ${compactAnswer}`;
+      })
       .join("\n\n");
   }
 

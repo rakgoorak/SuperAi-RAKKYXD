@@ -1,18 +1,30 @@
 {
   "name": "superai-rakkyxd",
   "version": "1.0.35",
+  "description": "All your AI assistants in a single, minimal, privacy-first desktop workspace with 3D pixel lab & Thai voice dictation.",
   "private": true,
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rakgoorak/SuperAi-RAKKYXD.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rakgoorak/SuperAi-RAKKYXD/issues"
+  },
+  "homepage": "https://github.com/rakgoorak/SuperAi-RAKKYXD#readme",
   "workspaces": [
     "packages/*",
     "packages/studio/client"
   ],
   "scripts": {
-    "build": "npm --workspace=@superai-rakkyxd/core run build && npm --workspace=@superai-rakkyxd/studio run build && npm --workspace=@superai-rakkyxd/client run build && npm --workspace=@superai-rakkyxd/desktop run build",
+    "build": "npm --workspace=@superai-rakkyxd/core run build && npm --workspace=@superai-rakkyxd/studio run build && npm --workspace=@superai-rakkyxd/client run build && npm --workspace=@superai-rakkyxd/desktop run build && node scripts/brand-dev-electron.mjs",
     "test": "npm run test --workspaces",
     "studio": "node packages/studio/dist/index.js",
-    "app": "electron packages/desktop",
+    "prestart": "node scripts/brand-dev-electron.mjs",
     "start": "electron packages/desktop",
+    "preapp": "node scripts/brand-dev-electron.mjs",
+    "app": "electron packages/desktop",
     "dev": "npm --workspace=@superai-rakkyxd/client run dev",
     "dev:server": "tsx packages/studio/server/index.ts",
     "test:desktop": "node packages/desktop/test/smoke.mjs",

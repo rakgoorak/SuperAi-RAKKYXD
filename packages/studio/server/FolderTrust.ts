@@ -133,7 +133,7 @@ export function repairCodexConfigFile(paths: TrustPaths = defaults()): boolean {
 /** Returns true when an entry was added; false when already trusted or not applicable. Never throws. */
 export function trustFolder(cliId: string, folder: string, paths: TrustPaths = defaults()): boolean {
   const handler = HANDLERS[cliId];
-  if (!handler || !folder) return false;
+  if (!handler || !folder || typeof folder !== "string" || /[\u0000-\u001f]/.test(folder)) return false;
   try {
     return handler(path.resolve(folder), paths);
   } catch {

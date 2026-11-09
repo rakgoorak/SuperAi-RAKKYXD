@@ -1,3 +1,5 @@
+import { SelfHealingManager } from './SelfHealingManager.js';
+import { CrossReviewManager } from './CrossReviewManager.js';
 import { projectChanges, projectFile, stageFile, unstageFile, discardFile, saveProjectFile } from "./ProjectChanges.js";
 import { listWorktrees, createWorktree, mergeWorktree, removeWorktree } from "./GitWorktrees.js";
 import { readPreviewFile } from './PreviewFiles.js';
@@ -35,6 +37,24 @@ import { cleanPrediction, nextPromptRequest, predictionSeat } from './NextPrompt
 import { CliProvider } from './CliProvider.js';
 import { listMcpServers, saveMcpServer, removeMcpServer, toggleMcpServer } from './McpManager.js';
 
+export function isValidLocalHost(hostHeader: string | undefined): boolean {
+  if (!hostHeader) return true;
+  const trimmed = hostHeader.trim().toLowerCase();
+  if (trimmed.startsWith('[')) {
+    const end = trimmed.indexOf(']');
+    if (end === -1) return false;
+    const ip = trimmed.slice(1, end);
+    if (ip !== '::1') return false;
+    const rest = trimmed.slice(end + 1);
+    return rest === '' || /^:\d+$/.test(rest);
+  }
+  const colonIndex = trimmed.indexOf(':');
+  const hostname = colonIndex === -1 ? trimmed : trimmed.slice(0, colonIndex);
+  const port = colonIndex === -1 ? '' : trimmed.slice(colonIndex + 1);
+  if (port && !/^\d+$/.test(port)) return false;
+  return hostname === 'localhost' || hostname === '127.0.0.1';
+}
+
 export class StudioServer {
   private agentRuns: AgentRunManager;
   private cliInstalls = new CliInstallManager();
@@ -42,6 +62,8 @@ export class StudioServer {
   private usage = new UsageManager();
   private versions = new CliVersionManager();
   private chats: CliChatManager;
+  private selfHealing = new SelfHealingManager();
+  private crossReview = new CrossReviewManager();
   /** Sessions kept across app restarts (with their chat view state); written only once started. */
   private sessionsFile: string;
   private sessionsLoaded = false;
@@ -82,12 +104,14 @@ export class StudioServer {
     this.app = express();
     this.app.use((req, res, next) => {
       if (this.branchChanging && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return res.status(409).json({ error: 'กำลังสลับ branch กรุณารอให้เสร็จก่อน' });
-      const origin = req.headers.origin;
-      const host = req.headers.host?.split(":")[0];
-      if (host && !["localhost", "127.0.0.1", "["].includes(host))
+      if (!isValidLocalHost(req.headers.host))
         return res
           .status(403)
           .json({ error: "อนุญาตเฉพาะการเชื่อมต่อในเครื่อง" });
+      const secFetchSite = req.headers['sec-fetch-site'];
+      if (secFetchSite === 'cross-site')
+        return res.status(403).json({ error: "ไม่อนุญาตการเรียกแบบ cross-site" });
+      const origin = req.headers.origin;
       if (origin && !this.allowedOrigin(origin))
         return res.status(403).json({ error: "ไม่อนุญาตต้นทางนี้" });
       const referer = req.headers.referer;
@@ -100,6 +124,7 @@ export class StudioServer {
       }
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("X-Frame-Options", "DENY");
+      res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
       next();
     });
     this.app.use(express.json({limit:'1mb'}));
@@ -118,9 +143,8 @@ export class StudioServer {
     this.wss = new WebSocketServer({
       server: this.server,
       verifyClient: (info: { origin: string; req: http.IncomingMessage }) => {
-        if (info.origin) return this.allowedOrigin(info.origin);
-        const host = info.req.headers.host?.split(":")[0];
-        return !host || ["localhost", "127.0.0.1", "::1", "["].includes(host);
+        if (info.origin && !this.allowedOrigin(info.origin)) return false;
+        return isValidLocalHost(info.req.headers.host);
       },
     });
 
@@ -184,8 +208,10 @@ export class StudioServer {
     return [
       `http://localhost:${this.port}`,
       `http://127.0.0.1:${this.port}`,
+      `http://[::1]:${this.port}`,
       "http://localhost:5173",
       "http://127.0.0.1:5173",
+      "http://[::1]:5173",
     ].includes(origin);
   }
 
@@ -383,6 +409,105 @@ export class StudioServer {
         res.status(400).json({ error: (error as Error).message });
       }
     });
+
+    // Self-Healing: Verify tests / build
+    this.app.post('/api/workspaces/:wsId/verify', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      try {
+        const command = typeof req.body?.command === 'string' ? req.body.command : undefined;
+        const result = await this.selfHealing.runVerification(ws.rootPath, command);
+        res.json(result);
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Self-Healing: Run healing loop with agent session
+    this.app.post('/api/workspaces/:wsId/self-heal', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      const sessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId : undefined;
+      const command = typeof req.body?.command === 'string' ? req.body.command : undefined;
+      const maxAttempts = Number(req.body?.maxAttempts) || 3;
+
+      const agentSend = async (prompt: string) => {
+        if (sessionId) {
+          const session = this.terminalManager.getSession(sessionId);
+          if (!session) throw new Error(`ไม่พบเซสชัน ${sessionId}`);
+          this.chats.send(sessionId, {
+            agent: session.agentType || 'claude-code',
+            cwd: session.cwd || ws.rootPath,
+            text: prompt,
+          });
+          // Wait for chat to finish running
+          while (this.chats.snapshot(sessionId).running) {
+            await new Promise(r => setTimeout(r, 800));
+          }
+        } else {
+          throw new Error('กรุณาระบุ sessionId ของ Agent สำหรับการแก้ไขโค้ด');
+        }
+      };
+
+      try {
+        const result = await this.selfHealing.runHealingLoop({
+          cwd: ws.rootPath,
+          command,
+          maxAttempts,
+          agentSend,
+        });
+        res.json(result);
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // AI Cross-Examination: Run independent adversarial code review
+    this.app.post('/api/workspaces/:wsId/cross-review', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      const authorProvider = String(req.body?.authorProvider || 'claude-code');
+      const reviewer = req.body?.reviewer;
+      const targetFile = typeof req.body?.targetFile === 'string' ? req.body.targetFile : undefined;
+      const customDiff = typeof req.body?.customDiff === 'string' ? req.body.customDiff : undefined;
+
+      try {
+        const review = await this.crossReview.executeReview({
+          cwd: ws.rootPath,
+          authorProvider,
+          reviewer,
+          targetFile,
+          customDiff,
+        });
+        res.json(review);
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // AI Cross-Examination: Apply review fixes to a session
+    this.app.post('/api/workspaces/:wsId/cross-review/apply', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      const sessionId = String(req.body?.sessionId || '');
+      const review = req.body?.review;
+      if (!sessionId || !review) return res.status(400).json({ error: 'กรุณาระบุ sessionId และข้อมูลผลการตรวจทาน' });
+
+      const session = this.terminalManager.getSession(sessionId);
+      if (!session) return res.status(404).json({ error: 'ไม่พบเซสชัน' });
+
+      try {
+        const prompt = this.crossReview.formatApplyPrompt(review);
+        this.chats.send(sessionId, {
+          agent: session.agentType || 'claude-code',
+          cwd: session.cwd || ws.rootPath,
+          text: prompt,
+        });
+        res.json({ success: true, promptSent: true });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
     const previewFile = (folder: (req: Request) => string | undefined) => async (req: Request, res: Response) => {
       const root = folder(req);
       if (!root) return res.status(404).json({ error: 'ไม่พบโปรเจกต์หรือ session สำหรับเปิดไฟล์นี้' });
@@ -499,7 +624,7 @@ export class StudioServer {
     this.app.delete("/api/mcp/servers/:provider/:name", (req, res) => {
       try {
         const cwd = req.query.cwd ? String(req.query.cwd) : undefined;
-        const provider = req.params.provider as "claude" | "codex";
+        const provider = req.params.provider as "claude" | "codex" | "opencode";
         const removed = removeMcpServer(provider, String(req.params.name), cwd);
         res.json({ success: removed });
       } catch (err: any) {
@@ -509,7 +634,7 @@ export class StudioServer {
     this.app.post("/api/mcp/servers/:provider/:name/toggle", (req, res) => {
       try {
         const cwd = req.body.cwd ? String(req.body.cwd) : undefined;
-        const provider = req.params.provider as "claude" | "codex";
+        const provider = req.params.provider as "claude" | "codex" | "opencode";
         const updated = toggleMcpServer(provider, String(req.params.name), req.body.enabled === true, cwd);
         res.json({ success: updated });
       } catch (err: any) {

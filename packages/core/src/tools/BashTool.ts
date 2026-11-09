@@ -6,6 +6,26 @@ export interface BashArgs {
   timeoutMs?: number;
 }
 
+export function truncateOutput(text: string, maxChars = 12000, maxLines = 300): string {
+  if (!text) return text;
+  const lines = text.split('\n');
+  if (lines.length > maxLines) {
+    const keepHead = Math.floor(maxLines / 2);
+    const keepTail = maxLines - keepHead;
+    const omitted = lines.length - maxLines;
+    return [
+      ...lines.slice(0, keepHead),
+      `\n[... Omitted ${omitted} lines to preserve token context ...]\n`,
+      ...lines.slice(-keepTail),
+    ].join('\n');
+  }
+  if (text.length > maxChars) {
+    const half = Math.floor(maxChars / 2);
+    return `${text.slice(0, half)}\n\n[... Truncated ${text.length - maxChars} chars to preserve token context ...]\n\n${text.slice(-half)}`;
+  }
+  return text;
+}
+
 export class BashTool extends BaseTool {
   name = 'bash';
   description = 'Execute a shell/terminal command in the workspace. Supports streaming output and timeout.';
@@ -93,7 +113,7 @@ export class BashTool extends BaseTool {
           return;
         }
 
-        const combined = stdout + (stderr ? `\n[stderr]\n${stderr}` : '');
+        const combined = truncateOutput(stdout + (stderr ? `\n[stderr]\n${stderr}` : ''));
         resolve({
           success: code === 0,
           output: combined || `Command finished with exit code ${code}`,

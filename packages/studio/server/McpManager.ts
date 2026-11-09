@@ -5,7 +5,7 @@ import path from "node:path";
 export interface McpServerRecord {
   id: string; // e.g. "claude:roblox-studio" or "codex:blender"
   name: string;
-  provider: "claude" | "codex";
+  provider: "claude" | "codex" | "opencode";
   scope: "global" | "project";
   type: "stdio" | "http" | "sse" | "websocket";
   command?: string;
@@ -17,7 +17,7 @@ export interface McpServerRecord {
 }
 
 export interface AddMcpServerInput {
-  provider: "claude" | "codex";
+  provider: "claude" | "codex" | "opencode";
   scope?: "global" | "project";
   name: string;
   type?: "stdio" | "http" | "sse" | "websocket";
@@ -30,11 +30,13 @@ export interface AddMcpServerInput {
 export interface McpPaths {
   home: string;
   codexHome: string;
+  opencodeConfigDir?: string;
 }
 
 export const defaultMcpPaths = (): McpPaths => ({
   home: os.homedir(),
   codexHome: process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
+  opencodeConfigDir: path.join(os.homedir(), ".config", "opencode"),
 });
 
 function writeAtomic(file: string, text: string) {
@@ -212,11 +214,54 @@ export function getCodexMcpServers(paths: McpPaths = defaultMcpPaths(), cwd?: st
   return records;
 }
 
-/** Lists all configured MCP servers across Claude and Codex */
+/** Reads all MCP servers configured for OpenCode in opencode.json */
+export function getOpenCodeMcpServers(paths: McpPaths = defaultMcpPaths(), cwd?: string): McpServerRecord[] {
+  const records: McpServerRecord[] = [];
+  const configDir = paths.opencodeConfigDir || path.join(paths.home, ".config", "opencode");
+  const targets: { file: string; scope: "global" | "project" }[] = [
+    { file: path.join(configDir, "opencode.json"), scope: "global" },
+  ];
+  if (cwd) {
+    targets.push({ file: path.join(cwd, "opencode.json"), scope: "project" });
+    targets.push({ file: path.join(cwd, ".config", "opencode", "opencode.json"), scope: "project" });
+  }
+
+  const seen = new Set<string>();
+  for (const { file, scope } of targets) {
+    if (!fs.existsSync(file)) continue;
+    try {
+      const data = JSON.parse(fs.readFileSync(file, "utf8"));
+      const mcp = data.mcp || data.mcpServers || {};
+      for (const [name, entry] of Object.entries<any>(mcp)) {
+        if (!entry || typeof entry !== "object" || seen.has(name)) continue;
+        seen.add(name);
+        const type = entry.type === "remote" ? "http" : entry.type === "local" ? "stdio" : (entry.type || (entry.url ? "http" : "stdio"));
+        records.push({
+          id: `opencode:${name}`,
+          name,
+          provider: "opencode",
+          scope,
+          type,
+          command: typeof entry.command === "string" ? entry.command : undefined,
+          args: Array.isArray(entry.args) ? entry.args.map(String) : undefined,
+          env: entry.env && typeof entry.env === "object" ? entry.env : undefined,
+          url: typeof entry.url === "string" ? entry.url : undefined,
+          enabled: entry.disabled !== true && entry.enabled !== false,
+          sourceFile: file,
+        });
+      }
+    } catch {}
+  }
+
+  return records;
+}
+
+/** Lists all configured MCP servers across Claude, Codex, and OpenCode */
 export function listMcpServers(cwd?: string, paths: McpPaths = defaultMcpPaths()): McpServerRecord[] {
   const claude = getClaudeMcpServers(paths, cwd);
   const codex = getCodexMcpServers(paths, cwd);
-  return [...claude, ...codex];
+  const opencode = getOpenCodeMcpServers(paths, cwd);
+  return [...claude, ...codex, ...opencode];
 }
 
 /** Adds or updates an MCP server configuration */
@@ -321,11 +366,49 @@ export function saveMcpServer(input: AddMcpServerInput, cwd?: string, paths: Mcp
     };
   }
 
+  if (input.provider === "opencode") {
+    const configDir = paths.opencodeConfigDir || path.join(paths.home, ".config", "opencode");
+    const targetFile = input.scope === "project" && cwd
+      ? path.join(cwd, "opencode.json")
+      : path.join(configDir, "opencode.json");
+
+    let data: any = {};
+    try {
+      if (fs.existsSync(targetFile)) data = JSON.parse(fs.readFileSync(targetFile, "utf8"));
+    } catch {}
+
+    data.mcp = data.mcp || {};
+    const entry: any = {
+      type: type === "http" || type === "sse" ? "remote" : "local",
+    };
+    if (input.command) entry.command = input.command;
+    if (args.length) entry.args = args;
+    if (input.url) entry.url = input.url;
+    if (input.env && Object.keys(input.env).length) entry.env = input.env;
+
+    data.mcp[name] = entry;
+    writeAtomic(targetFile, JSON.stringify(data, null, 2));
+
+    return {
+      id: `opencode:${name}`,
+      name,
+      provider: "opencode",
+      scope: input.scope || "global",
+      type,
+      command: input.command,
+      args,
+      env: input.env,
+      url: input.url,
+      enabled: true,
+      sourceFile: targetFile,
+    };
+  }
+
   throw new Error(`ไม่รองรับ provider: ${input.provider}`);
 }
 
 /** Removes an MCP server from configuration */
-export function removeMcpServer(provider: "claude" | "codex", name: string, cwd?: string, paths: McpPaths = defaultMcpPaths()): boolean {
+export function removeMcpServer(provider: "claude" | "codex" | "opencode", name: string, cwd?: string, paths: McpPaths = defaultMcpPaths()): boolean {
   if (provider === "claude") {
     const targets = [
       path.join(paths.home, ".claude.json"),
@@ -366,11 +449,40 @@ export function removeMcpServer(provider: "claude" | "codex", name: string, cwd?
     return removed;
   }
 
+  if (provider === "opencode") {
+    const configDir = paths.opencodeConfigDir || path.join(paths.home, ".config", "opencode");
+    const targets = [
+      path.join(configDir, "opencode.json"),
+      ...(cwd ? [path.join(cwd, "opencode.json"), path.join(cwd, ".config", "opencode", "opencode.json")] : []),
+    ];
+    let removed = false;
+    for (const targetFile of targets) {
+      if (!fs.existsSync(targetFile)) continue;
+      try {
+        const data = JSON.parse(fs.readFileSync(targetFile, "utf8"));
+        let changed = false;
+        if (data.mcp && data.mcp[name]) {
+          delete data.mcp[name];
+          changed = true;
+        }
+        if (data.mcpServers && data.mcpServers[name]) {
+          delete data.mcpServers[name];
+          changed = true;
+        }
+        if (changed) {
+          writeAtomic(targetFile, JSON.stringify(data, null, 2));
+          removed = true;
+        }
+      } catch {}
+    }
+    return removed;
+  }
+
   return false;
 }
 
 /** Enables or disables an MCP server */
-export function toggleMcpServer(provider: "claude" | "codex", name: string, enabled: boolean, cwd?: string, paths: McpPaths = defaultMcpPaths()): boolean {
+export function toggleMcpServer(provider: "claude" | "codex" | "opencode", name: string, enabled: boolean, cwd?: string, paths: McpPaths = defaultMcpPaths()): boolean {
   if (provider === "claude") {
     const targets = [
       path.join(paths.home, ".claude.json"),
@@ -404,6 +516,35 @@ export function toggleMcpServer(provider: "claude" | "codex", name: string, enab
         const next = setCodexServerDisabled(content, name, !enabled);
         if (next !== content) {
           writeAtomic(file, next);
+          updated = true;
+        }
+      } catch {}
+    }
+    return updated;
+  }
+
+  if (provider === "opencode") {
+    const configDir = paths.opencodeConfigDir || path.join(paths.home, ".config", "opencode");
+    const targets = [
+      path.join(configDir, "opencode.json"),
+      ...(cwd ? [path.join(cwd, "opencode.json"), path.join(cwd, ".config", "opencode", "opencode.json")] : []),
+    ];
+    let updated = false;
+    for (const targetFile of targets) {
+      if (!fs.existsSync(targetFile)) continue;
+      try {
+        const data = JSON.parse(fs.readFileSync(targetFile, "utf8"));
+        let changed = false;
+        if (data.mcp && data.mcp[name]) {
+          data.mcp[name].disabled = !enabled;
+          changed = true;
+        }
+        if (data.mcpServers && data.mcpServers[name]) {
+          data.mcpServers[name].disabled = !enabled;
+          changed = true;
+        }
+        if (changed) {
+          writeAtomic(targetFile, JSON.stringify(data, null, 2));
           updated = true;
         }
       } catch {}

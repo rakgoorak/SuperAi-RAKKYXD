@@ -5,6 +5,14 @@
 <h1 align="center">SuperAi &amp; RAKKYXD</h1>
 
 <p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg" alt="Node Version" /></a>
+  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD/actions"><img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="Build Status" /></a>
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-orange.svg" alt="PRs Welcome" /></a>
+  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest"><img src="https://img.shields.io/badge/release-v1.0.35-blueviolet.svg" alt="Latest Release" /></a>
+</p>
+
+<p align="center">
   <b>AI ทุกตัวของคุณ ในหน้าต่างเดียว — ดีไซน์ใหม่ Minimal เรียบหรู โฟกัสกับงาน</b><br />
   Claude · ChatGPT (Codex) · Antigravity · OpenCode · Freebuff<br />
   Windows และ macOS · ภาษาไทย · รันบนเครื่องคุณ 100% · ใช้บัญชี AI ของคุณเอง
@@ -202,6 +210,32 @@ AgentBuild/
 ├── installer/             # NSIS Installer Script & DMG Assets
 └── scripts/               # Build, Package & Release Scripts
 ```
+
+---
+
+## การมีส่วนร่วม (Contributing)
+
+ยินดีต้อนรับการมีส่วนร่วมจากนักพัฒนาทุกคน! สามารถอ่านรายละเอียดเพิ่มเติมเกี่ยวกับแนวทางการส่ง Pull Request, การแจ้งบั๊ก, และ Code of Conduct ได้ที่ [CONTRIBUTING.md](CONTRIBUTING.md)
+
+---
+
+## ความปลอดภัย (Security)
+
+หากพบช่องโหว่ด้านความปลอดภัย โปรดอ่านนโยบายการรายงานช่องโหว่อย่างปลอดภัยได้ที่ [SECURITY.md](SECURITY.md)
+
+---
+
+## ข้อจำกัดความรับผิดชอบ (Disclaimer)
+
+- **SuperAi & RAKKYXD** เป็นซอฟต์แวร์เครื่องมือ Desktop Workspace ที่อำนวยความสะดวกในการสั่งการ AI Agent และ CLI บนเครื่องคอมพิวเตอร์ของคุณ
+- โค้ด คำสั่ง shell หรือการเปลี่ยนแปลงไฟล์ที่สร้างขึ้นโดย AI จะถูกรันบนสภาพแวดล้อมเครื่องของคุณตามสิทธิ์ที่คุณอนุญาต ผู้ใช้ควรตรวจสอบคำสั่งก่อนให้ Agent ดำเนินการ
+- การใช้งานโมเดล AI แต่ละค่ายอยู่ภายใต้ข้อกำหนดการให้บริการ (Terms of Service) และนโยบายราคาของผู้ให้บริการนั้นๆ
+
+---
+
+## สัญญาอนุญาต (License)
+
+ซอฟต์แวร์นี้เผยแพร่ภายใต้สัญญาอนุญาตแบบ [MIT License](LICENSE) &copy; 2026 RAKKYXD &amp; SuperAi Contributors.
 
 ---
 

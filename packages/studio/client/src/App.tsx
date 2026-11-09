@@ -1,5 +1,6 @@
 import { toastRecovery } from "./recovery";
 import { ChangesPanel } from "./components/ChangesPanel";
+import { InteractiveTour } from "./components/InteractiveTour";
 import { HistoryPanel, type HistoryEntry } from "./components/HistoryPanel";
 import { RunActions } from "./components/RunActions";
 import { SlashMenu, type SlashMenuHandle } from "./components/SlashMenu";
@@ -19,8 +20,7 @@ import {
   Globe,
   LayoutGrid,
   Rows2,
-  Activity,
-  SlidersHorizontal,
+    SlidersHorizontal,
   Minimize2,
   PanelTop,
   PanelLeftClose,
@@ -47,6 +47,7 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
+  Server,
 } from "lucide-react";
 import { api, post, Workspace, Cli, Session, Run, Seat, togglePinnedFile } from "./api";
 import { MessageContextChips } from './components/MessageContextChips';
@@ -67,7 +68,6 @@ import { SessionCanvas, type CanvasLayout } from "./components/SessionCanvas";
 import { RightDock, type DockView } from "./components/RightDock";
 import { parsePreviewTarget, type PreviewRequest, renderTextWithLinks, findUrlAtPosition, extractUrls, openExternalLink } from './previewLinks';
 import { AgentConfigEditor, AgentRunView, type AgentConfig } from "./components/AgentPanel";
-import { AgentWorkspace } from "./components/AgentWorkspace";
 import { ClarifyCard } from "./components/ClarifyCard";
 import { ChatConfigEditor, ChatRunView, type ChatConfig } from "./components/ChatPanel";
 import { SkillsPanel } from "./components/SkillsPanel";
@@ -166,6 +166,15 @@ export function App() {
   const [settingsTab, setSettingsTab] = useState("tools");
   const [usageOpen, setUsageOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [interactiveTourOpen, setInteractiveTourOpen] = useState(false);
+  useEffect(() => {
+    try {
+      const dismissed = localStorage.getItem("superai-tour-dismissed") || localStorage.getItem("superai-tutorial-dismissed");
+      if (!dismissed) {
+        setInteractiveTourOpen(true);
+      }
+    } catch {}
+  }, []);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -277,7 +286,6 @@ export function App() {
       localStorage.setItem("superai-hidden-sessions", JSON.stringify(hiddenSessions));
     } catch {}
   }, [hiddenSessions]);
-  const [showAgentWorkspace, setShowAgentWorkspace] = useState(false);
   const workspaceSessions = sessions.filter((s) => s.wsId === activeWs);
   const visible = workspaceSessions.filter((s) => !hiddenSessions.includes(s.id));
   const hiddenInWorkspace = workspaceSessions.filter((s) => hiddenSessions.includes(s.id));
@@ -962,34 +970,121 @@ export function App() {
     <div className={`app-shell ${window.superai?.platform === "darwin" ? "platform-mac" : ""}`}>
       <ComposerDropOverlay active={dropTarget === "composer"} />
       <header className="titlebar app-drag">
-        <div className="brand">
-          <img className="brand-logo" src="/brand/mark.png" alt="" draggable={false} />
-          <img className="brand-wordmark" src="/brand/wordmark.png" alt="SuperAi & RAKKYXD" draggable={false} />
+        {/* Left: Sidebar toggle, Brand logo & Workspace breadcrumb */}
+        <div className="titlebar-left">
+          <button
+            type="button"
+            className="icon-button titlebar-btn titlebar-sidebar-toggle"
+            title={sidebar ? "ซ่อนแถบข้าง" : "แสดงแถบข้าง"}
+            onClick={() => setSidebar((s) => !s)}
+            aria-label="สลับแถบข้าง"
+          >
+            {sidebar ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+          </button>
+
+          <div className="brand" title="SuperAi & RAKKYXD">
+            <img className="brand-logo" src="/brand/mark.png" alt="" draggable={false} />
+            <img className="brand-wordmark" src="/brand/wordmark.png" alt="SuperAi" draggable={false} />
+          </div>
+
+          <div className="titlebar-breadcrumb" title={workspace?.rootPath || ""}>
+            <span className="breadcrumb-divider">/</span>
+            <Folder size={13} className="breadcrumb-icon" />
+            <span className="breadcrumb-name">{workspace?.name || "เริ่มต้นใช้งาน"}</span>
+            {mode === "code" && selectedSession && (
+              <>
+                <ChevronRight size={11} className="breadcrumb-chevron" />
+                <span className="breadcrumb-session">{selectedSession.name}</span>
+              </>
+            )}
+            <span className={`status-dot ${connected ? "" : "offline"}`} title={connected ? "เชื่อมต่อแล้ว" : "กำลังเชื่อมต่อใหม่"} />
+          </div>
         </div>
-        <div className="titlebar-project">
-          <span className={`status-dot ${connected ? "" : "offline"}`} />
-          {connected ? "พื้นที่ทำงานของคุณ" : "กำลังเชื่อมต่อใหม่"}
+
+        {/* Center: Sleek Compact Mode Switcher (Claude style) */}
+        <nav className="workspace-mode-tabs titlebar-mode-tabs" data-tour="mode-tabs" aria-label="โหมดทำงาน">
+          {(["agent", "chat", "code"] as Mode[]).map((m) => (
+            <button
+              key={m}
+              type="button"
+              className={`workspace-mode-tab ${mode === m ? "active" : ""}`}
+              aria-label={modeLabels[m]}
+              aria-pressed={mode === m}
+              title={
+                m === "agent"
+                  ? "ทีม Agent: ให้ AI แบ่งงานและลงมือทำ"
+                  : m === "chat"
+                  ? "ถามหลาย AI: ถามคำถามเดียวเทียบคำตอบ"
+                  : "Terminal: ผู้ช่วย AI และเขียนโค้ดลงเครื่อง"
+              }
+              onClick={() => {
+                setMode(m);
+                if (m === "agent") setPreview(false);
+              }}
+            >
+              {m === "agent" ? <Bot size={13} /> : m === "chat" ? <MessageSquare size={13} /> : <Code2 size={13} />}
+              <span>{m === "agent" ? "ทีม Agent" : m === "chat" ? "ถามหลาย AI" : "Terminal"}</span>
+            </button>
+          ))}
+        </nav>
+
+        {/* Right: Actions before Windows window controls */}
+        <div className="titlebar-right">
+          <div className="toolbar-actions titlebar-actions" data-tour="toolbar-actions">
+            <UsageButton open={usageOpen} onOpenChange={setUsageOpen} />
+            <button
+              className={`toolbar-button titlebar-btn ${preview && dockView === "files" ? "selected" : ""}`}
+              aria-label="ไฟล์"
+              title="เปิดไฟล์และแก้ไขด่วน"
+              onClick={() => {
+                setDockView("files");
+                setPreview(dockView === "files" ? !preview : true);
+              }}
+            >
+              <Folder size={13} />
+              <span className="btn-label">ไฟล์</span>
+            </button>
+            <button
+              aria-label="Preview"
+              title="เปิด Preview หน้าเว็บ"
+              className={`toolbar-button titlebar-btn ${preview && dockView === "browser" ? "selected" : ""}`}
+              onClick={() => {
+                setDockView("browser");
+                setPreview(dockView === "browser" ? !preview : true);
+              }}
+            >
+              <Globe size={13} />
+              <span className="btn-label">Preview</span>
+            </button>
+            <button
+              className="toolbar-button titlebar-btn secondary compact"
+              aria-label="สร้าง session"
+              title="เปิด Terminal หรือหลายห้อง"
+              disabled={!workspace}
+              onClick={() => openSession()}
+            >
+              <Terminal size={13} />
+              <span className="btn-label">Terminal</span>
+            </button>
+            <button
+              className="toolbar-button titlebar-btn primary compact"
+              aria-label="บทสนทนาใหม่"
+              title="บทสนทนาใหม่"
+              disabled={busy}
+              onClick={() => {
+                newConversationWorkspace.current = activeWs;
+                setMode("code");
+                setSelected("");
+                setTarget("active");
+                setZoomed(false);
+                requestAnimationFrame(() => composer.current?.focus());
+              }}
+            >
+              <Plus size={13} />
+              <span className="btn-label">ใหม่</span>
+            </button>
+          </div>
         </div>
-            <nav className="mode-switch" aria-label="โหมดทำงาน">
-              {(["agent", "code", "chat"] as Mode[]).map((m) => (
-                <button
-                  key={m}
-                  className={mode === m ? "active" : ""}
-                  aria-label={modeLabels[m]}
-                  aria-pressed={mode === m}
-                  title={m === "agent" ? "ให้ทีม AI แบ่งงานและลงมือทำ" : m === "code" ? "คุยกับผู้ช่วย AI และทำงานกับไฟล์" : "ถามหลาย AI แล้วเปรียบเทียบคำตอบ"}
-                  onClick={() => { setMode(m); if (m === "agent") setPreview(false); }}
-                >
-                  {m === "code" ? (
-                    <Code2 size={15} />
-                  ) : m === "chat" ? (
-                    <MessageSquare size={15} />
-                  ) : (
-                    <Bot size={15} />
-                  )}
-                </button>
-              ))}
-            </nav>
       </header>
       <div className="workspace-shell">
         {sidebar && (
@@ -1159,6 +1254,17 @@ export function App() {
                 <Puzzle size={17} />
                 <span>Skills<small>AI เสนอ คุณกดติดตั้ง</small></span>
               </button>
+              <button
+                data-tour="sidebar-mcp"
+                onClick={() => {
+                  setSettingsTab("mcp");
+                  openSettings();
+                }}
+                title="จัดการ MCP Servers และเครื่องมือภายนอกของ AI แต่ละ Provider"
+              >
+                <Server size={17} />
+                <span>MCP Servers<small>เชื่อมเครื่องมือ AI แต่ละค่าย</small></span>
+              </button>
               <button onClick={openSettings}>
                 <Settings size={17} />
                 <span>การตั้งค่า</span>
@@ -1192,51 +1298,6 @@ export function App() {
           </aside>
         )}
         <div className="main-column">
-          <div className="workspace-toolbar">
-            <div className="breadcrumb">
-              {!sidebar && (
-                <button
-                  className="icon-button"
-                  title="แสดงแถบโปรเจกต์"
-                  onClick={() => setSidebar(true)}
-                >
-                  <PanelLeftOpen size={17} />
-                </button>
-              )}
-              <Folder size={15} />
-              <span>{workspace?.name || "เริ่มต้นใช้งาน"}</span>
-              {mode !== "code" && <><ChevronRight size={13} /><span className="dim">{modeLabels[mode]}</span></>}
-              {mode === "code" && selectedSession && <><ChevronRight size={13} /><ProviderBadge provider={selectedSession.agentType} /><span className="conversation-title">{selectedSession.name}</span></>}
-            </div>
-
-            <div className="toolbar-actions">
-              <UsageButton open={usageOpen} onOpenChange={setUsageOpen} />
-              <button className={`toolbar-button ${preview && dockView === "dashboard" ? "selected" : ""}`} aria-label="สถานะ" title="เปิดแผงสถานะ" onClick={() => { setDockView("dashboard"); setPreview(true); }}><Activity size={16} /><span>สถานะ</span></button>
-              <button className={`toolbar-button ${preview && dockView === "files" ? "selected" : ""}`} aria-label="ไฟล์" title="เปิดไฟล์และแก้ไขด่วน" onClick={() => { setDockView("files"); setPreview(dockView === "files" ? !preview : true); }}><Folder size={16} /><span>ไฟล์</span></button>
-              <button
-                aria-label="Preview" title="เปิด Preview" className={`toolbar-button ${preview && dockView === "browser" ? "selected" : ""}`}
-                onClick={() => { setDockView("browser"); setPreview(dockView === "browser" ? !preview : true); }}
-              >
-                <Globe size={16} />
-                <span>เปิด Preview</span>
-              </button>
-              <button
-                className="secondary compact advanced-session-button"
-                aria-label="สร้าง session"
-                title="เปิด Terminal หรือหลายห้อง"
-                disabled={!workspace}
-                onClick={() => openSession()}
-              >
-                <Terminal size={16} />
-                <span>Terminal / หลายห้อง</span>
-              </button>
-              <button className="primary compact" aria-label="บทสนทนาใหม่" title="บทสนทนาใหม่" disabled={busy} onClick={() => {
-                newConversationWorkspace.current = activeWs;
-                setMode("code"); setSelected(""); setTarget("active"); setZoomed(false);
-                requestAnimationFrame(() => composer.current?.focus());
-              }}><Plus size={15} /><span>คุยใหม่</span></button>
-            </div>
-          </div>
           <div className="canvas-row">
             <main className={`work-canvas ${mode === "code" ? "code-mode" : mode === "agent" ? "agent-mode" : ""}`}>
           {(error || notice) && (
@@ -1347,16 +1408,7 @@ export function App() {
                   ) : (
                     <>
                       {mode === "agent" ? (
-                        <>
-                          <AgentConfigEditor key={`agent-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} onChange={setAgentConfig} onFixTools={() => openSession()} />
-                          <button
-                            className={`text-button ${!conversation.length || activeRun || showAgentWorkspace ? "active" : ""}`}
-                            onClick={() => setShowAgentWorkspace(prev => !prev)}
-                            title="เปิด/ปิด พื้นที่ทำงาน 3D ของทีม Agent"
-                          >
-                            <Bot size={13} /> ห้องทำงาน 3D
-                          </button>
-                        </>
+                        <AgentConfigEditor key={`agent-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} onChange={setAgentConfig} onFixTools={() => openSession()} />
                       ) : (
                         <ChatConfigEditor key={`chat-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} onChange={setChatConfig} />
                       )}
@@ -1398,9 +1450,7 @@ export function App() {
               </div>
               {mode !== "code" && (
                 <ImageEndpointContext.Provider value={`/api/workspaces/${encodeURIComponent(activeWs)}/preview-file`}><div className="conversation-scroll">
-                  {mode === "agent" && (!conversation.length || activeRun?.mode === "agent" || showAgentWorkspace) && (
-                    <AgentWorkspace config={agentConfig} run={activeRun?.mode === "agent" ? activeRun : undefined} typing={!!draft.trim()} />
-                  )}
+                  
                   {!conversation.length ? (
                     <div className="conversation-empty compact">
                       <div className="empty-command">
@@ -1625,7 +1675,7 @@ export function App() {
                   <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
                     {mode === 'code' && chatTarget && <MessageContextChips sessionId={chatTarget.id} />}
                   </div>
-                  <div className="composer-input-container">
+                  <div className="composer-input-container" data-tour="composer">
                     <SlashMenu ref={slashMenu} draft={draft} sessionId={chatTarget?.id} workspaceId={mode === "chat" ? workspace?.id : undefined} providers={mode === "chat" ? [...new Set((chatConfig?.panel || []).filter(seat => seat.provider.startsWith("cli:")).map(seat => seat.provider.slice(4)))] : []} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
                     <MentionMenu ref={mentionMenu} draft={draft} workspaceId={workspace?.id} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
                     <textarea
@@ -1677,7 +1727,7 @@ export function App() {
                     />
                   </div>
                   <div className="composer-bottom">
-                    <div className="inline">
+                    <div className="inline" data-tour="dictation">
                       <DictationButton
                         settings={voiceSettings}
                         onSettingsChange={setVoiceSettings}
@@ -1894,7 +1944,7 @@ export function App() {
               </div>
             )}
             {dialog === "history" && <HistoryPanel workspaces={workspaces} sessions={sessions} onSelect={openHistoryEntry} />}
-            {dialog === "changes" && workspace && <ChangesPanel workspaceId={workspace.id} onPreview={() => { setDialog(null); setDockView("browser"); setPreview(true); }} />}
+            {dialog === "changes" && workspace && <ChangesPanel workspaceId={workspace.id} sessions={sessions} onSelectSession={(id) => { setSelected(id); setDialog(null); }} onPreview={() => { setDialog(null); setDockView("browser"); setPreview(true); }} />}
             {dialog === "session-delete" && deleteSession && <><p className="confirm-description"><strong>{deleteSession.name}</strong><br />ประวัติแชตใน session นี้จะถูกลบด้วย (หากต้องการพักไว้ชั่วคราว กด “ซ่อนไว้ก่อน” เพื่อเปิดกลับมาใช้ทีหลังได้)</p><div className="dialog-footer"><button className="secondary" autoFocus onClick={closeDialog}>ยกเลิก</button><button className="secondary" disabled={busy} onClick={() => { hideSession(deleteSession.id); setDialog(null); }}><EyeOff size={15} /> ซ่อนไว้ก่อน (ไม่ลบ)</button><button className="danger-button" disabled={busy} onClick={() => { closeSession(deleteSession.id); setDialog(null); }}>ลบ session</button></div></>}
             {dialog === "session" && (
               <>
@@ -2244,6 +2294,10 @@ export function App() {
           </section>
         </div>
       )}
+      <InteractiveTour
+        active={interactiveTourOpen}
+        onClose={() => setInteractiveTourOpen(false)}
+      />
       <UpdatePrompt state={update} onError={showError} onDetails={() => setDialog("update")} />
     </div>
   );

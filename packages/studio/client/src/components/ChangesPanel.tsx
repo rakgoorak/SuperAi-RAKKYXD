@@ -1,10 +1,37 @@
 import { useEffect, useState } from 'react';
-import { api, getWorktrees, mergeWorktree, type WorktreeInfo } from '../api';
+import { api, getWorktrees, mergeWorktree, type WorktreeInfo, type Session } from '../api';
+import { SelfHealingModal } from './SelfHealingModal';
+import { CrossReviewModal } from './CrossReviewModal';
 import { VisualDiffViewer } from './VisualDiffViewer';
 import { WorktreeModal } from './WorktreeModal';
-import { GitBranch, GitMerge, LoaderCircle, CheckCircle2, AlertCircle, FolderGit2 } from 'lucide-react';
+import { GitBranch, GitMerge, LoaderCircle, CheckCircle2, AlertCircle, FolderGit2, Activity, Scale } from 'lucide-react';
 
-export function ChangesPanel({ workspaceId, onPreview }: { workspaceId: string; onPreview: () => void }) {
+export function ChangesPanel({
+  workspaceId,
+  sessions = [],
+  onPreview,
+  onSelectSession,
+}: {
+  workspaceId: string;
+  sessions?: Session[];
+  onPreview: () => void;
+  onSelectSession?: (id: string) => void;
+}) {
+  const [selfHealOpen, setSelfHealOpen] = useState(false);
+  const [crossReviewOpen, setCrossReviewOpen] = useState(false);
+  const [localSessions, setLocalSessions] = useState<Session[]>(sessions);
+
+  useEffect(() => {
+    if (sessions && sessions.length > 0) {
+      setLocalSessions(sessions);
+    } else {
+      api<Session[]>('/api/sessions')
+        .then(list => {
+          if (Array.isArray(list)) setLocalSessions(list);
+        })
+        .catch(() => {});
+    }
+  }, [sessions]);
   const [files, setFiles] = useState<string[]>([]);
   const [file, setFile] = useState<{
     name: string;
@@ -183,6 +210,26 @@ export function ChangesPanel({ workspaceId, onPreview }: { workspaceId: string; 
           <FolderGit2 size={13} />
           <span>{worktreeInfo?.current ? (isCurrentWorktree ? worktreeInfo.current.branch : 'main') : 'Worktrees'}</span>
         </button>
+        <button
+          type="button"
+          className="secondary btn-self-heal-trigger"
+          onClick={() => setSelfHealOpen(true)}
+          title="รันคำสั่งทดสอบและซ่อมแซมโค้ดอัตโนมัติ (Self-Healing Loop)"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+        >
+          <Activity size={13} style={{ color: '#10b981' }} />
+          <span>Self-Healing</span>
+        </button>
+        <button
+          type="button"
+          className="secondary btn-cross-review-trigger"
+          onClick={() => setCrossReviewOpen(true)}
+          title="ให้ AI ข้ามค่ายช่วยตรวจทานหาข้อบกพร่อง (AI Cross-Examination)"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+        >
+          <Scale size={13} style={{ color: '#6366f1' }} />
+          <span>AI Cross-Review</span>
+        </button>
         <button className="secondary" onClick={() => setRevision(n => n + 1)}>
           ตรวจไฟล์อีกครั้ง
         </button>
@@ -232,6 +279,24 @@ export function ChangesPanel({ workspaceId, onPreview }: { workspaceId: string; 
         wsId={workspaceId}
         onWorktreeCreated={() => setRevision(n => n + 1)}
       />
+
+      {selfHealOpen && (
+        <SelfHealingModal
+          workspaceId={workspaceId}
+          sessions={localSessions}
+          onClose={() => setSelfHealOpen(false)}
+          onSelectSession={onSelectSession}
+        />
+      )}
+
+      {crossReviewOpen && (
+        <CrossReviewModal
+          workspaceId={workspaceId}
+          sessions={localSessions}
+          onClose={() => setCrossReviewOpen(false)}
+          onApplied={() => setRevision(n => n + 1)}
+        />
+      )}
     </div>
   );
 }

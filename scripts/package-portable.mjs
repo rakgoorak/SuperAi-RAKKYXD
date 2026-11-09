@@ -11,6 +11,13 @@ const electronExecutable=require('electron');const runtime=path.dirname(electron
 await fs.mkdir(path.dirname(destination),{recursive:true});
 await fs.cp(runtime,destination,{recursive:true,filter:source=>!source.endsWith('default_app.asar')});
 await fs.rename(path.join(destination,'electron.exe'),path.join(destination,'SuperAi-RAKKYXD.exe'));
+if (process.platform === 'win32') {
+  const { default: rcedit } = await import('rcedit');
+  await rcedit(path.join(destination,'SuperAi-RAKKYXD.exe'), {
+    icon: path.resolve('packages/desktop/assets/icon.ico'),
+    'version-string': { ProductName: 'SuperAi & RAKKYXD', FileDescription: 'SuperAi & RAKKYXD', CompanyName: 'RAKKYXD', OriginalFilename: 'SuperAi-RAKKYXD.exe' },
+  });
+}
 await fs.mkdir(appRoot,{recursive:true});
 await fs.writeFile(path.join(appRoot,'package.json'),JSON.stringify({name:'superai-rakkyxd',productName:'SuperAi & RAKKYXD',version:'1.0.0',type:'module',main:'bootstrap.mjs'},null,2));
 await fs.writeFile(path.join(appRoot,'bootstrap.mjs'),`await import('./packages/desktop/main.mjs');\n`);

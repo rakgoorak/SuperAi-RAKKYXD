@@ -5,7 +5,7 @@ import { api, post } from "../api";
 export interface McpServerRecord {
   id: string;
   name: string;
-  provider: "claude" | "codex";
+  provider: "claude" | "codex" | "opencode";
   scope: "global" | "project";
   type: "stdio" | "http" | "sse" | "websocket";
   command?: string;
@@ -23,6 +23,14 @@ interface Props {
 }
 
 const PRESETS = [
+  {
+    name: "puppeteer",
+    title: "Puppeteer (Browser)",
+    desc: "ควบคุมเบราว์เซอร์อัตโนมัติ ท่องเว็บ และจับภาพหน้าจอ",
+    type: "stdio" as const,
+    command: "npx",
+    args: "-y @modelcontextprotocol/server-puppeteer",
+  },
   {
     name: "desktop-commander",
     title: "Desktop Commander",
@@ -48,6 +56,38 @@ const PRESETS = [
     args: "-y @modelcontextprotocol/server-sqlite --db-path ./database.sqlite",
   },
   {
+    name: "postgres",
+    title: "PostgreSQL",
+    desc: "เชื่อมต่อและคิวรีฐานข้อมูล PostgreSQL",
+    type: "stdio" as const,
+    command: "npx",
+    args: "-y @modelcontextprotocol/server-postgres postgresql://localhost/mydb",
+  },
+  {
+    name: "filesystem",
+    title: "Filesystem",
+    desc: "เข้าถึงและจัดการไฟล์ในโฟลเดอร์ที่กำหนด",
+    type: "stdio" as const,
+    command: "npx",
+    args: "-y @modelcontextprotocol/server-filesystem D:\\",
+  },
+  {
+    name: "brave-search",
+    title: "Brave Search",
+    desc: "ค้นหาข้อมูลบนอินเทอร์เน็ตผ่าน Brave Search API",
+    type: "stdio" as const,
+    command: "npx",
+    args: "-y @modelcontextprotocol/server-brave-search",
+  },
+  {
+    name: "memory",
+    title: "Memory Graph",
+    desc: "กราฟความจำระยะยาว เสริมความจำให้กับ AI",
+    type: "stdio" as const,
+    command: "npx",
+    args: "-y @modelcontextprotocol/server-memory",
+  },
+  {
     name: "fetch",
     title: "Fetch Web Server",
     desc: "ดาวน์โหลดและอ่านหน้าเว็บเพื่อแปลงเป็น Markdown",
@@ -60,13 +100,13 @@ const PRESETS = [
 export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
   const [servers, setServers] = useState<McpServerRecord[]>([]);
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState<"all" | "claude" | "codex">("all");
+  const [filter, setFilter] = useState<"all" | "claude" | "codex" | "opencode">("all");
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
   const [busyServer, setBusyServer] = useState<string | null>(null);
 
   // Form state
-  const [formProvider, setFormProvider] = useState<"claude" | "codex">("claude");
+  const [formProvider, setFormProvider] = useState<"claude" | "codex" | "opencode">("claude");
   const [formScope, setFormScope] = useState<"global" | "project">("global");
   const [formName, setFormName] = useState("");
   const [formType, setFormType] = useState<"stdio" | "http">("stdio");
@@ -93,6 +133,32 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
     void load();
   }, [cwd]);
 
+  const handleCopyToServer = async (server: McpServerRecord, targetProvider: "claude" | "codex" | "opencode") => {
+    setBusyServer(server.id);
+    try {
+      const payload = {
+        provider: targetProvider,
+        scope: server.scope,
+        name: server.name,
+        type: server.type,
+        command: server.command,
+        args: server.args ? server.args.join(" ") : undefined,
+        url: server.url,
+        env: server.env,
+        cwd,
+      };
+      const res = await post<{ success: boolean; server: McpServerRecord }>("/api/mcp/servers", payload);
+      if (res.server) {
+        setServers((prev) => [...prev.filter((s) => s.id !== res.server.id), res.server]);
+      }
+      onNotice?.(`คัดลอก ${server.name} ไปยัง ${targetProvider === "claude" ? "Claude Code" : targetProvider === "codex" ? "Codex" : "OpenCode"} สำเร็จแล้ว`);
+    } catch (err: any) {
+      onError(err.message || "คัดลอกไม่สำเร็จ");
+    } finally {
+      setBusyServer(null);
+    }
+  };
+
   const handleToggle = async (server: McpServerRecord) => {
     setBusyServer(server.id);
     try {
@@ -110,7 +176,7 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
   };
 
   const handleDelete = async (server: McpServerRecord) => {
-    if (!confirm(`คุณต้องการลบ MCP server "${server.name}" ออกจาก ${server.provider === "claude" ? "Claude Code" : "Codex"} ใช่หรือไม่?`)) {
+    if (!confirm(`คุณต้องการลบ MCP server "${server.name}" ออกจาก ${server.provider === "claude" ? "Claude Code" : server.provider === "codex" ? "Codex" : "OpenCode"} ใช่หรือไม่?`)) {
       return;
     }
     setBusyServer(server.id);
@@ -183,7 +249,7 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
       if (res.server) {
         setServers((prev) => [...prev.filter((s) => s.id !== res.server.id), res.server]);
       }
-      onNotice?.(`เพิ่ม MCP Server "${formName}" ให้ ${formProvider === "claude" ? "Claude Code" : "Codex"} เรียบร้อยแล้ว`);
+      onNotice?.(`เพิ่ม MCP Server "${formName}" ให้ ${formProvider === "claude" ? "Claude Code" : formProvider === "codex" ? "Codex" : "OpenCode"} เรียบร้อยแล้ว`);
       setAdding(false);
       // Reset form
       setFormName("");
@@ -251,6 +317,13 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
             onClick={() => setFilter("codex")}
           >
             Codex ({servers.filter((s) => s.provider === "codex").length})
+          </button>
+          <button
+            type="button"
+            className={filter === "opencode" ? "active" : ""}
+            onClick={() => setFilter("opencode")}
+          >
+            OpenCode ({servers.filter((s) => s.provider === "opencode").length})
           </button>
         </div>
         <input
@@ -327,8 +400,9 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
                   onChange={(e) => setFormProvider(e.target.value as any)}
                   style={{ width: "100%", padding: "6px", borderRadius: "4px", background: "var(--input-bg, #1a1a1a)", color: "inherit", border: "1px solid var(--border, #444)" }}
                 >
-                  <option value="claude">Claude Code</option>
-                  <option value="codex">Codex</option>
+                  <option value="claude">Claude Code (~/.claude.json)</option>
+                  <option value="codex">ChatGPT Codex (config.toml)</option>
+                  <option value="opencode">OpenCode (opencode.json)</option>
                 </select>
               </label>
 
@@ -451,7 +525,7 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
           ) : (
             <div>
               <Server size={32} style={{ opacity: 0.4, marginBottom: "8px" }} />
-              <div>ยังไม่มี MCP Server {filter !== "all" ? `สำหรับ ${filter === "claude" ? "Claude Code" : "Codex"}` : ""}</div>
+              <div>ยังไม่มี MCP Server {filter !== "all" ? `สำหรับ ${filter === "claude" ? "Claude Code" : filter === "codex" ? "Codex" : "OpenCode"}` : ""}</div>
               <p style={{ fontSize: "12px", marginTop: "4px" }}>
                 กดปุ่ม "เพิ่ม Server" ด้านบน เพื่อเชื่อมต่อเครื่องมือภายนอกเข้าสู่ระบบ AI
               </p>
@@ -485,12 +559,12 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
                         padding: "2px 6px",
                         borderRadius: "4px",
                         fontWeight: 500,
-                        background: s.provider === "claude" ? "rgba(168, 85, 247, 0.15)" : "rgba(34, 197, 94, 0.15)",
-                        color: s.provider === "claude" ? "#c084fc" : "#4ade80",
-                        border: `1px solid ${s.provider === "claude" ? "rgba(168, 85, 247, 0.3)" : "rgba(34, 197, 94, 0.3)"}`,
+                        background: s.provider === "claude" ? "rgba(168, 85, 247, 0.15)" : s.provider === "codex" ? "rgba(34, 197, 94, 0.15)" : "rgba(56, 189, 248, 0.15)",
+                        color: s.provider === "claude" ? "#c084fc" : s.provider === "codex" ? "#4ade80" : "#38bdf8",
+                        border: `1px solid ${s.provider === "claude" ? "rgba(168, 85, 247, 0.3)" : s.provider === "codex" ? "rgba(34, 197, 94, 0.3)" : "rgba(56, 189, 248, 0.3)"}`,
                       }}
                     >
-                      {s.provider === "claude" ? "Claude Code" : "Codex"}
+                      {s.provider === "claude" ? "Claude Code" : s.provider === "codex" ? "Codex" : "OpenCode"}
                     </span>
                     <span
                       style={{
@@ -537,7 +611,24 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
                   </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "12px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  {/* One-Click Copy to Other Providers */}
+                  {(["claude", "codex", "opencode"] as const)
+                    .filter((targetP) => targetP !== s.provider)
+                    .map((targetP) => (
+                      <button
+                        key={targetP}
+                        type="button"
+                        className="text-button"
+                        disabled={isBusy}
+                        onClick={() => handleCopyToServer(s, targetP)}
+                        title={`คัดลอก ${s.name} ไปยัง ${targetP === "claude" ? "Claude Code" : targetP === "codex" ? "Codex" : "OpenCode"}`}
+                        style={{ fontSize: "11px", padding: "3px 6px", opacity: 0.85 }}
+                      >
+                        + {targetP === "claude" ? "Claude" : targetP === "codex" ? "Codex" : "OpenCode"}
+                      </button>
+                    ))}
+
                   <button
                     className={`text-button ${s.enabled ? "primary" : ""}`}
                     disabled={isBusy}

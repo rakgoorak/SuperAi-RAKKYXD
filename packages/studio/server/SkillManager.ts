@@ -14,6 +14,7 @@ export const SKILL_SOURCES = [
   { id: "openai", label: "OpenAI", repo: "openai/skills", branch: "main", prefix: "skills/.curated/" },
   { id: "vercel", label: "Vercel / skills.sh", repo: "vercel-labs/agent-skills", branch: "main", prefix: "skills/" },
   { id: "vercel-tools", label: "Vercel Tools", repo: "vercel-labs/skills", branch: "main", prefix: "skills/" },
+  { id: "cloudflare", label: "Cloudflare Security", repo: "cloudflare/security-audit-skill", branch: "main", prefix: "skills/" },
   { id: "supabase", label: "Supabase", repo: "supabase/agent-skills", branch: "main", prefix: "skills/" },
 ] as const;
 export const SKILL_TARGETS = [".claude/skills", ".agents/skills"];

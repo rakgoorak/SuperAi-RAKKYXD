@@ -26,18 +26,25 @@ export class ViewFileTool extends BaseTool {
     try {
       const raw = await fs.readFile(fullPath, 'utf-8');
       const lines = raw.split('\n');
+      const MAX_VIEW_LINES = 500;
       const start = Math.max(1, args.startLine ?? 1);
-      const end = Math.min(lines.length, args.endLine ?? lines.length);
+      const requestedEnd = args.endLine ?? lines.length;
+      const end = Math.min(lines.length, requestedEnd, start + MAX_VIEW_LINES - 1);
+      const truncated = requestedEnd > end || (start + MAX_VIEW_LINES - 1 < lines.length && args.endLine === undefined);
 
-      const sliced = lines
+      let sliced = lines
         .slice(start - 1, end)
         .map((line, idx) => `${start + idx}: ${line}`)
         .join('\n');
 
+      if (truncated) {
+        sliced += `\n[... Showing lines ${start}-${end} of ${lines.length}. Specify startLine=${end + 1} to inspect more lines ...]`;
+      }
+
       return {
         success: true,
         output: sliced,
-        metadata: { totalLines: lines.length, startLine: start, endLine: end },
+        metadata: { totalLines: lines.length, startLine: start, endLine: end, truncated },
       };
     } catch (err: any) {
       return {

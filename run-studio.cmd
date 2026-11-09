@@ -30,5 +30,6 @@ if defined taskNeedsBuild (
     exit /b 1
   )
 )
+if exist "scripts\brand-dev-electron.mjs" node scripts\brand-dev-electron.mjs >nul 2>nul
 call npm start
 if errorlevel 1 pause

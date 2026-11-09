@@ -26,10 +26,13 @@ export class ContextManager {
   }
 
   addToolResult(toolCallId: string, output: string): void {
+    const trimmed = output.length > 12000
+      ? output.slice(0, 6000) + '\n\n[... Truncated tool output to preserve token budget ...]\n\n' + output.slice(-6000)
+      : output;
     this.messages.push({
       role: 'tool',
       toolCallId,
-      content: output,
+      content: trimmed,
     });
     this.pruneIfNeeded();
   }

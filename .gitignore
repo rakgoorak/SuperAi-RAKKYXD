@@ -15,6 +15,7 @@ release/
 
 release-assets/
 .env.*
+!.env.example
 *.p12
 *.pfx
 
