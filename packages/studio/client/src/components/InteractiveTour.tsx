@@ -232,9 +232,9 @@ export function InteractiveTour({ active, onClose }: Props) {
       {/* Semi-transparent Backdrop with Cutout Hole */}
       {rect && !isCompleted ? (
         <>
-          {/* SVG Overlay: Blocks clicks outside the target, passes clicks through inside the hole */}
+          {/* SVG Overlay: Semi-transparent spotlight backdrop */}
           <svg
-            className="fixed inset-0 w-full h-full pointer-events-auto"
+            className="fixed inset-0 w-full h-full pointer-events-none"
             style={{ fill: 'rgba(5, 8, 15, 0.78)' }}
           >
             <path fillRule="evenodd" d={svgCutoutPath} />
@@ -266,7 +266,7 @@ export function InteractiveTour({ active, onClose }: Props) {
           </div>
         </>
       ) : (
-        <div className="fixed inset-0 bg-black/80 pointer-events-auto transition-opacity" />
+        <div className="fixed inset-0 bg-black/80 pointer-events-none transition-opacity" />
       )}
 
       {/* Floating Tooltip Card */}

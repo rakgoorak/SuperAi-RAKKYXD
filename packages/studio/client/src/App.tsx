@@ -2295,7 +2295,7 @@ export function App() {
         </div>
       )}
       <InteractiveTour
-        active={interactiveTourOpen}
+        active={interactiveTourOpen && !dialog}
         onClose={() => setInteractiveTourOpen(false)}
       />
       <UpdatePrompt state={update} onError={showError} onDetails={() => setDialog("update")} />
