@@ -44,7 +44,7 @@ test('Codex rate limits detect usage_limit_exceeded error events and extract res
   const r = parseCodexRateLimits([errorEvent])!;
   assert.equal(r.windows[0].remainingPercent, 0);
   assert.equal(r.windows[0].note, 'โควตาเต็ม รอรอบรีเซ็ต');
-  assert.equal(r.windows[0].resetsAt, '2026-10-25T17:02:00.000Z');
+  assert.equal(r.windows[0].resetsAt, new Date('Oct 26, 2026 12:02 AM').toISOString());
   assert.equal(r.at, Date.parse('2026-10-25T15:30:37.676Z'));
 });
 
