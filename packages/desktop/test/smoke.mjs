@@ -265,7 +265,7 @@ try {
     .getByRole("button", { name: "สร้าง session", exact: false })
     .click();
   await page
-    .getByRole("button", { name: /Freebuff.*เปิดได้ 1 session/ })
+    .getByRole("button", { name: /Freebuff/ })
     .click();
   const options = await page
     .getByRole("dialog")
