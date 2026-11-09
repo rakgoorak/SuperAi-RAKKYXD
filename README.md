@@ -30,6 +30,11 @@
   <img src="docs/images/workspace.png" alt="หน้าหลักของ SuperAi & RAKKYXD ในโหมด Minimal UI" width="900" style="border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.4);" />
 </p>
 
+<p align="center">
+  <img src="docs/images/agent.png" alt="หน้าต่างโหมด Agent Team" width="445" style="border-radius: 10px; border: 1px solid #1e2d38;" />
+  <img src="docs/images/chat.png" alt="หน้าต่างโหมด Multi-AI Chat" width="445" style="border-radius: 10px; border: 1px solid #1e2d38;" />
+</p>
+
 ถ้าคุณใช้ AI หลายตัวพร้อมกันแล้วต้องเปิดหลายโปรแกรมสลับไปมา **SuperAi & RAKKYXD** รวมทุกเครื่องมือไว้ในหน้าต่างเดียว: ให้ทีม AI ช่วยกันเขียนโค้ดและแก้งาน, เปิด CLI หลายเซสชันพร้อมกัน, ค้นหาประวัติแชตทุกค่าย, ควบคุม Git Worktrees คู่ขนาน และตรวจสอบโควตาคงเหลือของแต่ละเจ้าได้ทันที
 
 ---
@@ -60,7 +65,7 @@
 
 | แพลตฟอร์ม | ไฟล์ติดตั้ง | ขนาด | รูปแบบ |
 | :--- | :--- | :--- | :--- |
-| **Windows 10 / 11 (64-bit)** | [SuperAi-RAKKYXD-Setup.exe](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-Setup.exe) | ≈90 MB | ตัวติดตั้งอัตโนมัติ (NSIS) |
+| **Windows 10 / 11 (64-bit)** | [SuperAi-RAKKYXD-Setup.exe](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-Setup.exe) | ≈91 MB | ตัวติดตั้งอัตโนมัติ (NSIS) |
 | **Mac Apple Silicon (M1/M2/M3/M4)** | [SuperAi-RAKKYXD-macos-arm64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.dmg) | ≈110 MB | Drag & Drop DMG |
 | **Mac Intel** | [SuperAi-RAKKYXD-macos-x64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.dmg) | ≈115 MB | Drag & Drop DMG |
 
@@ -131,6 +136,24 @@ SuperAi & RAKKYXD ได้รับการปรับโฉมครั้�
 <p align="center">
   <img src="docs/images/usage.png" alt="หน้าต่างตรวจสอบโควตาการใช้งาน" width="860" style="border-radius: 12px; border: 1px solid #1e2d38;" />
 </p>
+
+### 10. Agent Workspace & Clarifying Questions (v1.0.35)
+- ระบบวิเคราะห์ความชัดเจนของเป้าหมายงานก่อนลงมือทำ หากโจทย์กำกวม AI จะถามกลับพร้อมตัวเลือก (Multiple-choice) ก่อนเริ่มวางแผน
+- แสดงสถานะการทำงานแบบคู่ขนานของทีม Agent พร้อมบอร์ดจัดแบ่งงานอัตโนมัติ
+
+### 11. ตัวควบคุมสิทธิ์เครื่องมือและความปลอดภัย (Tool Permission Control)
+- สลับโหมดปลอดภัย (**Safe Read-only** / Plan mode) เพื่อให้ AI อ่านโค้ดและวางแผนโดยไม่แตะต้องไฟล์จริง
+- หรือเปิดโหมดลงมือทำ (**Edit mode**) เมื่อต้องการให้ Agent เขียนโค้ด รันเทสต์ และแก้ไขไฟล์ได้อิสระ
+
+### 12. Cross-Agent Review & Security Audit
+- ให้ AI ช่วยตรวจสอบและวิเคราะห์โค้ดซึ่งกันและกัน (เช่น Claude เขียนแล้วให้ Antigravity หรือ Codex ช่วยรีวิวหาช่องโหว่)
+- ตรวจจับความปลอดภัยเครือข่าย Localhost และตรวจสอบสิทธิ์ Folder Trust ก่อนรันคำสั่ง
+
+### 13. Self-Healing Automated Test Loop
+- วนรอบรันทดสอบและซ่อมแซมโค้ดอัตโนมัติเมื่อเกิดข้อผิดพลาด โดย AI จะวิเคราะห์ Failure Summary และดำเนินการแก้จนกว่าจะผ่าน
+
+### 14. Curated Skills Ecosystem
+- ติดตั้งและจัดการชุดคำสั่งพิเศษ (Agent Skills) จาก Anthropic, OpenAI, Vercel (skills.sh) และ Cloudflare Security Audit ได้ในคลิกเดียว
 
 ---
 
