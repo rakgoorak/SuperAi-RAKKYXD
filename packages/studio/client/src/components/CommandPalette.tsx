@@ -11,6 +11,7 @@ import {
   GitBranch,
   Globe,
   BookOpen,
+  Compass,
   X,
 } from 'lucide-react';
 import type { Session, Workspace } from '../api';
@@ -94,6 +95,17 @@ export function CommandPalette({
       icon: <Settings size={15} />,
       action: () => {
         onAction('settings');
+        onClose();
+      },
+    },
+    {
+      id: 'act-tour',
+      category: 'คำสั่งด่วน',
+      title: 'ทัวร์แนะนำโปรแกรม (Interactive Tour)',
+      subtitle: 'เรียนรู้เครื่องมือหลัก 5 ขั้นตอน',
+      icon: <Compass size={15} style={{ color: 'var(--accent)' }} />,
+      action: () => {
+        onAction('tour');
         onClose();
       },
     },

@@ -168,12 +168,9 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [interactiveTourOpen, setInteractiveTourOpen] = useState(false);
   useEffect(() => {
-    try {
-      const dismissed = localStorage.getItem("superai-tour-dismissed") || localStorage.getItem("superai-tutorial-dismissed");
-      if (!dismissed) {
-        setInteractiveTourOpen(true);
-      }
-    } catch {}
+    const openTour = () => setInteractiveTourOpen(true);
+    window.addEventListener("superai:open-tour", openTour);
+    return () => window.removeEventListener("superai:open-tour", openTour);
   }, []);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -1868,6 +1865,7 @@ export function App() {
           else if (actionName === "history") setDialog("history");
           else if (actionName === "changes") setDialog("changes");
           else if (actionName === "setup") setDialog("setup");
+          else if (actionName === "tour") setInteractiveTourOpen(true);
           else if (actionName === "preview") {
             setDockView("browser");
             setPreview(true);
