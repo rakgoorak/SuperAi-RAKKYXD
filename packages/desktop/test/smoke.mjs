@@ -265,7 +265,7 @@ try {
     .getByRole("button", { name: "สร้าง session", exact: false })
     .click();
   await page
-    .getByRole("button", { name: /Freebuff/ })
+    .locator("button.cli-option", { hasText: "Freebuff" })
     .click();
   const options = await page
     .getByRole("dialog")
