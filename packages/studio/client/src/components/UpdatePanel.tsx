@@ -48,6 +48,24 @@ function statusLine(state: UpdateState) {
 
 export function UpdatePanel({ state, onError }: { state: UpdateState | null; onError: (m: string) => void }) {
   const { busy, run } = useUpdateAction(onError);
+  const [downloadCount, setDownloadCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("https://api.github.com/repos/rakgoorak/SuperAi-RAKKYXD-releases/releases?per_page=30")
+      .then(res => res.ok ? res.json() : [])
+      .then((list: Array<{ assets?: Array<{ name?: string; download_count?: number }> }>) => {
+        if (!Array.isArray(list)) return;
+        let count = 0;
+        for (const rel of list) {
+          for (const asset of (rel.assets || [])) {
+            if (asset.name && !asset.name.endsWith('.sha256')) count += (asset.download_count || 0);
+          }
+        }
+        if (count > 0) setDownloadCount(count);
+      })
+      .catch(() => {});
+  }, []);
+
   if (!state) return <p className="muted">ปุ่มอัปเดตใช้ได้ในแอป Desktop เท่านั้น</p>;
   const s = state.status;
   return (
@@ -55,6 +73,9 @@ export function UpdatePanel({ state, onError }: { state: UpdateState | null; onE
       <div className="update-versions">
         <div><small>เวอร์ชันที่ใช้อยู่</small><strong>v{state.currentVersion}</strong></div>
         {state.latestVersion && <div><small>เวอร์ชันล่าสุด</small><strong>v{state.latestVersion}</strong></div>}
+        {downloadCount !== null && (
+          <div><small>ยอดดาวน์โหลดคอมมูนิตี้</small><strong style={{ color: "var(--brand-blue, #38bdf8)" }}>{downloadCount.toLocaleString()} ครั้ง</strong></div>
+        )}
         {pending(s) && <span className={`update-kind ${state.mandatory ? "hard" : ""}`}>{state.mandatory ? "ต้องอัปเดต" : "อัปเดตหรือไม่ก็ได้"}</span>}
       </div>
       {!state.packaged && <p className="muted">กำลังรันจาก source code: อัปเดตด้วย <code>git pull</code> แล้ว <code>npm run build</code> ปุ่มนี้ตรวจได้อย่างเดียว</p>}
@@ -117,41 +138,26 @@ export function UpdatePrompt({ state, onError, onDetails }: { state: UpdateState
     <div className="update-actions">
       {s === "waiting" ? (
         <>
-          <button className="primary" onClick={() => void run("force")}><RotateCw size={14} /> {hard ? "หยุดงานแล้วอัปเดตเลย" : "ติดตั้งเลยไม่ต้องรอ"}</button>
-          {!hard && <button className="secondary" onClick={() => void run("cancel")}>ยกเลิก</button>}
+          <button className="primary" disabled={busy} onClick={() => void run("force")}><RotateCw size={14} /> {hard ? "หยุดงานแล้วอัปเดตเลย" : "ติดตั้งเลยไม่ต้องรอ"}</button>
+          <button className="secondary" disabled={busy} onClick={() => void run("cancel")}><X size={14} /> ยกเลิก</button>
         </>
-      ) : s === "installing" ? null : (
+      ) : (
         <>
-          <button className="primary" disabled={busy || (hard && s !== "error")} onClick={() => void run("apply")}>
-            {s === "error" ? <><RefreshCw size={14} /> ลองอีกครั้ง</> : <><Download size={14} /> อัปเดตตอนนี้</>}
-          </button>
-          {!hard && <button className="secondary" onClick={() => setLater(state!.latestVersion || "")}>ไว้ทีหลัง</button>}
+          <button className="primary" disabled={busy} onClick={() => void run("apply")}><Download size={14} /> อัปเดตตอนนี้</button>
+          <button className="secondary" onClick={() => setLater(state!.latestVersion || "")}>ไว้ทีหลัง</button>
         </>
       )}
-      <button className="text-button" onClick={onDetails}>มีอะไรใหม่</button>
+      <button className="text-button" onClick={onDetails}><ExternalLink size={13} /> ดูรายละเอียด</button>
     </div>
   );
 
-  if (hard)
-    return (
-      <div className="update-gate" role="alertdialog" aria-modal="true" aria-labelledby="update-gate-title">
-        <section>
-          <span className="update-kind hard">ต้องอัปเดต</span>
-          <h2 id="update-gate-title">อัปเดตเป็น v{state!.latestVersion} ก่อนใช้งานต่อ</h2>
-          <p>เวอร์ชันนี้แก้ปัญหาสำคัญ จึงต้องอัปเดตก่อน โปรแกรมจะติดตั้งให้เองแล้วเปิดกลับมาที่เดิม แท็บที่เปิดอยู่จะคุยต่อจากเดิม</p>
-          <p className={`update-status ${s === "error" ? "danger-text" : ""}`} role="status">
-            {s !== "error" && <LoaderCircle size={14} className="spin" />} {s === "error" ? state!.error : statusLine(state!)}
-          </p>
-          {s === "downloading" && <progress max={100} value={state!.progress || 0} aria-label="ความคืบหน้าการดาวน์โหลด" />}
-          {actions}
-        </section>
-      </div>
-    );
-
   return (
-    <aside className="update-toast" role="status" aria-live="polite">
-      <strong>มีเวอร์ชันใหม่ v{state!.latestVersion}</strong>
-      <small>{s === "available" || s === "ready" ? "อัปเดตแล้วโปรแกรมจะเปิดกลับมาที่เดิม งานไม่หาย" : statusLine(state!)}</small>
+    <aside className={`update-prompt ${hard ? "hard" : "soft"}`} aria-label="แจ้งเตือนการอัปเดต">
+      <div className="update-prompt-head">
+        <strong>{hard ? "จำเป็นต้องอัปเดต" : `มีเวอร์ชันใหม่ v${state!.latestVersion}`}</strong>
+        {!hard && <button className="icon-button" onClick={() => setLater(state!.latestVersion || "")} title="ปิด"><X size={14} /></button>}
+      </div>
+      <p>{statusLine(state!)}</p>
       {actions}
     </aside>
   );

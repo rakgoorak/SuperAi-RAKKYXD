@@ -8,6 +8,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg" alt="Node Version" /></a>
   <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD/actions"><img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="Build Status" /></a>
+  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases"><img src="https://img.shields.io/github/downloads/rakgoorak/SuperAi-RAKKYXD-releases/total?color=2563eb&label=Downloads&logo=github" alt="Total Downloads" /></a>
   <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-orange.svg" alt="PRs Welcome" /></a>
   <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest"><img src="https://img.shields.io/badge/release-v1.0.35-blueviolet.svg" alt="Latest Release" /></a>
 </p>
@@ -70,6 +71,8 @@
 | **Mac Intel** | [SuperAi-RAKKYXD-macos-x64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.dmg) | ≈115 MB | Drag & Drop DMG |
 
 - ไฟล์ทั้งหมดชี้ไปที่เวอร์ชันล่าสุดเสมอ ไม่จำเป็นต้องล็อกอิน GitHub
+- หรือเปิด [หน้าเว็บไซต์ดาวน์โหลด](https://rakgoorak.github.io/SuperAi-RAKKYXD-releases/) ที่ตรวจจับระบบและแนะนำไฟล์ที่ตรงกับเครื่องของคุณ
+- 📊 ตรวจสอบสถิติและยอดดาวน์โหลดสดแบบละเอียดได้ที่ [GitHub Releases Stats (Grev)](https://hanadigital.github.io/grev/?user=rakgoorak&repo=SuperAi-RAKKYXD-releases)
 - มีไฟล์ ZIP แบบไม่ต้องติดตั้ง (Portable) ให้ดาวน์โหลดในหน้า [Releases](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest)
 - มีไฟล์ `.sha256` คู่กันทุกไฟล์สำหรับการตรวจสอบความถูกต้องของข้อมูล
 
