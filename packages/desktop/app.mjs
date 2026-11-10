@@ -7,6 +7,7 @@ import { BrowserController } from "./browser.mjs";
 import { normalizeBrowserUrl } from "./browser-url.mjs";
 import { prepareDesktopPath } from "./platform-env.mjs";
 import { Updater } from "./updater.mjs";
+import { UsagePing } from "./usage.mjs";
 prepareDesktopPath();
 // Started from inside a Claude Code session: do not pass its session markers on to the CLIs
 // opened here (with CLAUDE_CODE_CHILD_SESSION, Claude Code stops saving conversations).
@@ -152,6 +153,19 @@ ipcMain.handle("update:action", async (e, action) => {
   }
   if (action === "install") return applyUpdate();
   throw new Error("คำสั่งอัปเดตไม่ถูกต้อง");
+});
+// Anonymous usage count (see usage.mjs). Only installed builds count, never dev or test runs.
+let usage;
+const usagePing = () => usage ||= new UsagePing({
+  dir: app.getPath("userData"),
+  version: app.getVersion(),
+  active: app.isPackaged && !process.env.SUPERAI_TEST_MODE,
+});
+ipcMain.handle("usage:action", async (e, action, value) => {
+  trusted(e);
+  if (action === "state") return usagePing().state();
+  if (action === "set") return usagePing().setEnabled(value === true);
+  throw new Error("คำสั่งไม่ถูกต้อง");
 });
 ipcMain.handle("browser:action", async (e, action, payload) => {
   trusted(e);
@@ -310,6 +324,7 @@ else {
         if (error?.code !== "ERR_ABORTED" && error?.errno !== -3) throw error;
       });
       await log(`SuperAi & RAKKYXD ${app.getVersion()} started at ${appUrl}`);
+      usagePing().start();
       if (updater.packaged && !process.env.SUPERAI_TEST_MODE) {
         setTimeout(() => void checkForUpdate(), 4000);
         setInterval(() => void checkForUpdate(), 30 * 60_000);

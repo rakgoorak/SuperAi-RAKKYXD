@@ -42,6 +42,11 @@ try {
   await setup.getByRole("button", { name: "ปิดไว้ก่อน" }).click();
   await setup.waitFor({ state: "hidden" });
   checks++;
+  // Closing the guide for the first time starts the tour once; skipping it must stick.
+  await page.getByTitle("ข้ามทัวร์ (Esc)", { exact: true }).click();
+  await page.getByTitle("ข้ามทัวร์ (Esc)", { exact: true }).waitFor({ state: "hidden" });
+  assert.equal(await page.evaluate(() => localStorage.getItem("superai-tour-dismissed")), "1");
+  checks++;
   const request = async (route, options) =>
     page.evaluate(
       async ({ route, options }) => {

@@ -939,6 +939,11 @@ export function App() {
   const closeSetup = () => {
     try { localStorage.setItem("superai-setup-dismissed", "1"); } catch {}
     setDialog(null);
+    // New users get the tour once, right after the first-run setup guide (the tour stays hidden
+    // while any dialog is open, so it cannot start earlier).
+    try {
+      if (!localStorage.getItem("superai-tour-dismissed") && !localStorage.getItem("superai-tutorial-dismissed")) setInteractiveTourOpen(true);
+    } catch {}
   };
   const closeDialog = () => {
     if (dialog === "project" && returnToSetup) { setReturnToSetup(false); setDialog("setup"); }

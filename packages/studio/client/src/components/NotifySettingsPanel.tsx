@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { loadNotifySettings, notifyDone, saveNotifySettings, type NotifySettings } from "../completionNotify";
 import { loadNextPromptSettings, saveNextPromptSettings } from "../nextPrompt";
 
 export function NotifySettingsPanel() {
   const [settings, setSettings] = useState(loadNotifySettings);
   const [nextPrompt, setNextPrompt] = useState(loadNextPromptSettings);
+  // Anonymous usage count lives in the desktop shell; absent in the browser UI and older shells.
+  const [usage, setUsage] = useState<{ available: boolean; enabled: boolean } | null>(null);
+  useEffect(() => { void window.superai?.usage?.("state").then(setUsage).catch(() => {}); }, []);
   const set = (key: keyof NotifySettings, value: boolean) => {
     const next = { ...settings, [key]: value };
     setSettings(next);
@@ -36,6 +39,18 @@ export function NotifySettingsPanel() {
         <input type="checkbox" checked={nextPrompt.ai} onChange={e => { const next = { ai: e.target.checked }; setNextPrompt(next); saveNextPromptSettings(next); }} />
         ให้ AI เดาข้อความถัดไปเมื่อคำตอบไม่มีขั้นตอนถัดไป
       </label>
+      {usage && (
+        <>
+          <div className="settings-section-title">
+            <h3>นับจำนวนผู้ใช้แบบไม่ระบุตัวตน</h3>
+          </div>
+          <p className="muted">ช่วยให้หน้าดาวน์โหลดแสดงจำนวนคนที่ใช้ SuperAi อยู่จริง แอปส่งแค่รหัสสุ่มของเครื่องนี้ เวอร์ชันแอป และระบบปฏิบัติการ ไม่ส่งชื่อ บัญชี โปรเจกต์ หรือบทสนทนา</p>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={usage.enabled} onChange={e => void window.superai?.usage?.("set", e.target.checked).then(setUsage).catch(() => {})} />
+            ร่วมนับเครื่องนี้เป็นผู้ใช้งาน
+          </label>
+        </>
+      )}
     </>
   );
 }

@@ -48,6 +48,8 @@ declare global {
       /** In-app updater: check GitHub Releases, download, verify and install. */
       update: (action: "state" | "check" | "download" | "apply" | "force" | "cancel" | "install") => Promise<UpdateState>;
       onUpdate: (callback: (state: UpdateState) => void) => () => void;
+      /** Anonymous usage count: `available` is false in dev builds, `enabled` is the user's choice. */
+      usage?: (action: "state" | "set", value?: boolean) => Promise<{ available: boolean; enabled: boolean }>;
       /** OS notification + taskbar flash; clicking it focuses the window and reports `target` via onNotifyOpen. */
       notify?: (notice: { tag: string; title: string; body: string; target: unknown }) => Promise<void>;
       onNotifyOpen?: (callback: (target: unknown) => void) => () => void;

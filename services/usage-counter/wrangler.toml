@@ -1,0 +1,9 @@
+name = "superai-usage"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+# After `npx wrangler d1 create superai-usage`, paste the printed database_id here.
+[[d1_databases]]
+binding = "DB"
+database_name = "superai-usage"
+database_id = "00000000-0000-0000-0000-000000000000"

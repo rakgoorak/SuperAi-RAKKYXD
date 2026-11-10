@@ -25,3 +25,5 @@ packages/studio/client/public/ort/
 
 .agents/
 .claude/
+
+.wrangler/
