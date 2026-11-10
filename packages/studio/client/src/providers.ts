@@ -28,7 +28,7 @@ export const EFFORT_LABEL: Record<string, string> = {
 export const EFFORTS: Record<string, string[]> = {
   "claude-code": ["low", "medium", "high", "xhigh", "max"],
   codex: ["low", "medium", "high", "xhigh", "max", "ultra"],
-  antigravity: ["low", "medium", "high", "xhigh", "max"],
+  antigravity: ["low", "medium", "high"],
   opencode: ["minimal", "low", "medium", "high", "max"],
 };
 

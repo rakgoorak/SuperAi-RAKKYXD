@@ -69,6 +69,7 @@ test('Antigravity text deltas join into one message; tools show their main param
   const silent = lines('antigravity', [{ event: 'result', result: { status: 'SUCCESS', response: 'done' } }])[0];
   assert.equal((silent.items![0] as any).text, 'done', 'an answer seen only in the result is still shown');
   assert.match(lines('antigravity', [{ event: 'result', result: { status: 'ERROR', error: { message: 'quota exceeded' } } }])[0].error!, /quota/);
+  assert.match(lines('antigravity', [{ event: 'result', result: { status: 'SUCCESS', response: '', denied_actions: [{ action: 'read_file', display_name: 'ReadFile' }] } }])[0].error!, /ReadFile/, 'an empty answer after a refused tool is explained');
 });
 
 test('turn arguments resume the conversation and keep edits in the project', () => {

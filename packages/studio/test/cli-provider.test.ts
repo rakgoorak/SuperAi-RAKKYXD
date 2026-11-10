@@ -54,6 +54,17 @@ test('Antigravity runs headless with the prompt attached to --print and plan mod
  assert.throws(() => promptArguments('antigravity', false), /คำขอ/);
 });
 
+test('Antigravity never gets a model and effort pair that agy refuses', async () => {
+ const { modelEffortArgs } = await import('../server/Providers.js');
+ // `agy --model gemini-4-argon-high --effort low` fails with "conflicts with --effort=low".
+ assert.deepEqual(modelEffortArgs('antigravity', 'gemini-4-argon-high', 'low'), ['--model', 'gemini-4-argon-high']);
+ assert.deepEqual(modelEffortArgs('antigravity', 'gemini-4-argon', 'low'), ['--model', 'gemini-4-argon', '--effort', 'low']);
+ // No agy model has xhigh/max: an older saved choice falls back to the highest level there is.
+ assert.deepEqual(modelEffortArgs('antigravity', '', 'max'), ['--effort', 'high']);
+ assert.deepEqual(modelEffortArgs('antigravity', '', ''), []);
+ assert.deepEqual(modelEffortArgs('claude-code', 'opus', 'max'), ['--model', 'opus', '--effort', 'max']);
+});
+
 test('CLI failures surface the provider message and a model hint instead of raw logs', async () => {
  const { cliFailure } = await import('../server/CliProvider.js');
  const log = 'WARN noise\nERROR: {"type":"error","status":400,"error":{"message":"The \'gpt-x\' model is not supported when using Codex with a ChatGPT account."}}';

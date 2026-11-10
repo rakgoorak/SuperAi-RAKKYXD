@@ -83,10 +83,19 @@ export function validateSeat(value: unknown, label = "ผู้ช่วย"): S
   return { name, provider, model, effort: provider.startsWith("cli:") ? effort : "" };
 }
 
+/** Efforts agy accepts today; its model names end in the level they run at (`gemini-4-argon-high`). */
+export const ANTIGRAVITY_EFFORTS = ["low", "medium", "high"];
+const AGY_LEVEL = /-(low|medium|high|xhigh|max)$/;
+
 /** Flags that select model and effort, shared by headless runs and terminal sessions. */
 export function modelEffortArgs(id: string, model = "", effort = "", interactive = false): string[] {
   const args: string[] = [];
-  if (id === "claude-code" || id === "antigravity") {
+  if (id === "antigravity") {
+    // agy refuses a model whose name already carries a level together with another --effort, and
+    // no model goes above "high": either mistake fails the turn before it starts.
+    if (model) args.push("--model", model);
+    if (effort && !AGY_LEVEL.test(model)) args.push("--effort", ANTIGRAVITY_EFFORTS.includes(effort) ? effort : "high");
+  } else if (id === "claude-code") {
     if (model) args.push("--model", model);
     if (effort) args.push("--effort", effort);
   } else if (id === "codex") {
@@ -137,10 +146,15 @@ export async function listModels(id: string): Promise<ModelList> {
       const cached = codexCachedModels();
       return { ...base, models: cached.models, modelEfforts: cached.efforts, note: cached.models.length ? "รายชื่อมาจาก Codex บางรุ่นอาจใช้กับแพ็กเกจ ChatGPT ของคุณไม่ได้" : "ยังไม่พบรายชื่อรุ่น เปิด Codex ในโหมด Code หนึ่งครั้งเพื่อให้ CLI ดึงรายชื่อ หรือพิมพ์ชื่อรุ่นเอง" };
     }
-    if (id === "antigravity") return { ...base, models: await antigravityModels() };
+    if (id === "antigravity") {
+      const models = await antigravityModels();
+      // A model named with its level leaves nothing to choose, so the effort box is hidden for it.
+      const modelEfforts = Object.fromEntries(models.filter((m) => AGY_LEVEL.test(m)).map((m) => [m, []]));
+      return { ...base, efforts: ANTIGRAVITY_EFFORTS, models, modelEfforts, note: "ชื่อรุ่นของ Antigravity บอกระดับ effort อยู่แล้ว (-low / -medium / -high) จึงไม่ต้องเลือก effort ซ้ำ" };
+    }
     if (id === "opencode") return { ...base, models: await listOpenCodeModels() };
   } catch {
-    return { ...base, models: profile.suggestedModels, note: "ดึงรายชื่อรุ่นจาก CLI ไม่สำเร็จ ตรวจการติดตั้ง/เข้าสู่ระบบ หรือพิมพ์ชื่อรุ่นเอง" };
+    return { ...base, ...(id === "antigravity" ? { efforts: ANTIGRAVITY_EFFORTS } : {}), models: profile.suggestedModels, note: "ดึงรายชื่อรุ่นจาก CLI ไม่สำเร็จ ตรวจการติดตั้ง/เข้าสู่ระบบ หรือพิมพ์ชื่อรุ่นเอง" };
   }
   return { ...base, models: profile.suggestedModels };
 }

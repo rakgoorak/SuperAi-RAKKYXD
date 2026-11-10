@@ -305,6 +305,10 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
         if (result.status !== "SUCCESS")
           return { error: String(result.error?.message || result.error || `Antigravity หยุดทำงาน (${result.status || "ไม่ทราบสาเหตุ"})`) };
         const response = typeof result.response === "string" ? result.response.trim() : "";
+        // agy reports success with no answer when a tool it needed was refused in this mode.
+        const denied = Array.isArray(result.denied_actions) ? result.denied_actions.map((d: any) => String(d?.display_name || d?.action || "")).filter(Boolean) : [];
+        if (!answered && !response && denied.length)
+          return { error: `Antigravity ไม่ได้ตอบ เพราะสิทธิ์ที่เลือกไม่อนุญาตให้ใช้เครื่องมือ ${[...new Set(denied)].join(", ")} ลองเปลี่ยนสิทธิ์เป็น Auto แล้วส่งใหม่` };
         return { done: true, items: !answered && response ? [{ id: `${prefix}-result`, kind: "assistant", text: response }] : undefined };
       }
       default: return {};
