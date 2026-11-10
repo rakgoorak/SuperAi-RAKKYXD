@@ -11,6 +11,21 @@ export const CLI_PASSTHROUGH_COMMANDS = new Set([
   "summary", "context", "status", "model", "mode", "plan", "reset", "undo", "login",
   "logout", "settings", "version", "ide", "listen", "tools",
 ]);
+/** Commands only some CLIs run in headless chat (checked against Claude Code 2.1.310, agy 1.5.5). */
+const PROVIDER_COMMANDS: Record<string, string[]> = {
+  "claude-code": ["goal"],
+  antigravity: ["goal", "boost"],
+};
+/** Commands a CLI has only in its terminal UI: chat explains where to run them instead of sending text. */
+const TERMINAL_ONLY_COMMANDS: Record<string, string[]> = { codex: ["goal"] };
+const PROVIDER_LABEL: Record<string, string> = { "claude-code": "Claude", codex: "Codex", antigravity: "Antigravity", opencode: "OpenCode" };
+
+/** The command name when `text` is a CLI slash command this provider runs from chat, else undefined. */
+export function cliCommand(text: string, provider: string): string | undefined {
+  const name = /^\/([\w.:-]+)(?:\s|$)/.exec(text.trim())?.[1]?.toLowerCase();
+  if (!name) return undefined;
+  return CLI_PASSTHROUGH_COMMANDS.has(name) || PROVIDER_COMMANDS[provider]?.includes(name) ? name : undefined;
+}
 
 /** Read only known skill directories. Project skills take precedence over global skills.
  * IDs distinguish duplicate names; clients never supply a file path to execute/read.
@@ -87,7 +102,13 @@ export function skillPrompt(text: string, root: string, provider: string, skillI
   const skill = skillId ? skills.find((s) => s.id === skillId)
     : skills.find((s) => s.name === (parts?.[1] || (!command ? direct?.[1] : inline ? inline[1] : "")));
   if (!skill) {
-    if (direct && CLI_PASSTHROUGH_COMMANDS.has(direct[1].toLowerCase())) return text;
+    if (direct && cliCommand(trimmed, provider)) return text;
+    const name = direct?.[1].toLowerCase() || "";
+    if (direct && TERMINAL_ONLY_COMMANDS[provider]?.includes(name))
+      throw new Error(`/${name} ของ ${PROVIDER_LABEL[provider] || provider} ใช้ได้เฉพาะในหน้า Terminal กรุณาสลับห้องนี้เป็น Terminal แล้วพิมพ์ /${name} อีกครั้ง`);
+    const others = Object.keys(PROVIDER_COMMANDS).filter((id) => PROVIDER_COMMANDS[id].includes(name));
+    if (direct && others.length)
+      throw new Error(`${PROVIDER_LABEL[provider] || provider} ไม่มีคำสั่ง /${name} · คำสั่งนี้ใช้ได้กับ ${others.map((id) => PROVIDER_LABEL[id]).join(", ")}`);
     if (command) throw new Error("ไม่พบ skill ที่เลือก กรุณาเลือก skill จาก /skills แล้วพิมพ์ /skill ชื่อ งานที่ต้องการ");
     if (direct || skillId) throw new Error("ไม่พบ skill นี้สำหรับผู้ให้บริการ กรุณาเปิด /skills เพื่อดูรายการ · คำสั่งของ Terminal ใช้ในหน้า Terminal");
     return text;

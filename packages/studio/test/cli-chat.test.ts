@@ -120,6 +120,19 @@ const settle = async (chats?: CliChatManager, id?: string) => {
   while (chats && id && chats.isRunning(id) && Date.now() < until);
 };
 
+test('a CLI slash command is sent alone, with no style, context or attachment list before or after it', async () => {
+  const fake = fakeSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch);
+  const context = { text: 'RULES', instructions: true, files: [], preparedAt: Date.now() };
+  chats.send('g1', { agent: 'antigravity', cwd: process.cwd(), text: '/goal all tests pass', responseStyle: 'concise', projectContext: context as any, attachments: ['C:/x/spec.pdf'] });
+  assert.equal(fake.calls[0].args.at(-1), '--print=/goal all tests pass');
+  fake.finish(fake.calls[0].proc, [{ event: 'result', result: { conversation_id: 'c-1', status: 'SUCCESS', response: 'ok' } }]);
+  await settle(chats, 'g1');
+  // The project context was held back, so the next ordinary message still carries it.
+  chats.send('g1', { agent: 'antigravity', cwd: process.cwd(), text: 'ต่อเลย', projectContext: context as any });
+  assert.match(fake.calls[1].args.at(-1)!, /RULES[\s\S]*ต่อเลย/);
+});
+
 test('the manager streams items, resumes the next turn and rejects overlapping turns', async () => {
   const fake = fakeSpawner();
   const chats = new CliChatManager(fake.spawner as any, undefined, launch);
