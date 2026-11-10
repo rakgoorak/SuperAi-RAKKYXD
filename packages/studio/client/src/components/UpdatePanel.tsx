@@ -52,7 +52,7 @@ export function UpdatePanel({ state, onError }: { state: UpdateState | null; onE
   const [downloadCount, setDownloadCount] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("https://api.github.com/repos/rakgoorak/SuperAi-RAKKYXD-releases/releases?per_page=30")
+    fetch("https://api.github.com/repos/rakgoorak/SuperAi-RAKKYXD-releases/releases?per_page=100")
       .then(res => res.ok ? res.json() : [])
       .then((list: Array<{ assets?: Array<{ name?: string; download_count?: number }> }>) => {
         if (!Array.isArray(list)) return;
