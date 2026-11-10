@@ -48,11 +48,12 @@ test("check reports available, latest and missing releases without downloading",
   assert.match((await u.check()).error, /offline/);
 });
 
-async function fixtureZip(dir) {
-  const label = `SuperAi-RAKKYXD-v2.0.0-${process.platform === "win32" ? "windows" : "macos"}-${process.arch}`;
-  const payload = path.join(dir, "src", label);
-  if (process.platform === "darwin") await fs.mkdir(path.join(payload, "SuperAi-RAKKYXD.app", "Contents"), { recursive: true });
-  else await fs.mkdir(path.join(payload, "resources", "app"), { recursive: true });
+async function fixtureZip(dir, version = "2.0.0") {
+  const label = `SuperAi-RAKKYXD-v${version}-${process.platform === "win32" ? "windows" : "macos"}-${process.arch}`;
+  const payload = path.join(dir, `src-${version}`, label);
+  const appDir = process.platform === "darwin" ? path.join(payload, "SuperAi-RAKKYXD.app", "Contents", "Resources", "app") : path.join(payload, "resources", "app");
+  await fs.mkdir(appDir, { recursive: true });
+  await fs.writeFile(path.join(appDir, "package.json"), JSON.stringify({ version }));
   await fs.writeFile(path.join(payload, process.platform === "darwin" ? "SuperAi-RAKKYXD.app/Contents/Info.plist" : "SuperAi-RAKKYXD.exe"), "new");
   const zip = path.join(dir, `${label}.zip`);
   if (process.platform === "darwin") execFileSync("ditto", ["-c", "-k", "--keepParent", payload, zip]);
@@ -87,6 +88,23 @@ test("download verifies SHA-256, extracts the app and rejects tampered files", {
     const failed = await bad.download();
     assert.equal(failed.status, "error");
     assert.match(failed.error, /SHA-256/);
+
+    // The release says 2.0.0 but the ZIP holds an older build: installing it would change nothing.
+    const old = await fixtureZip(dir, "1.9.0");
+    const staleHttp = async (url) => {
+      const u = String(url);
+      if (u.includes("api.github.com")) return release("2.0.0", [
+        { name: old.name, size: old.data.length, browser_download_url: `https://github.com/r/releases/download/v2.0.0/${old.name}` },
+        { name: `${old.name}.sha256`, browser_download_url: `https://github.com/r/releases/download/v2.0.0/${old.name}.sha256` },
+      ]);
+      if (u.endsWith(".sha256")) return new Response(`${old.sha}  ${old.name}\n`);
+      return new Response(old.data, { headers: { "content-length": String(old.data.length) } });
+    };
+    const stale = new Updater({ currentVersion: "1.0.0", packaged: true, http: staleHttp, tempDir: dir });
+    await stale.check();
+    const refused = await stale.download();
+    assert.equal(refused.status, "error");
+    assert.match(refused.error, /v1\.9\.0/);
 
     const dev = new Updater({ currentVersion: "1.0.0", packaged: false, http: make(zip.sha), tempDir: dir });
     await dev.check();

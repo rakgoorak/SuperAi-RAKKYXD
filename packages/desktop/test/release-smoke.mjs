@@ -50,7 +50,8 @@ try {
   const isolation=await withTimeout(app.evaluate(({webContents},url)=>webContents.getAllWebContents().find(w=>w.getURL().startsWith(url)).executeJavaScript('typeof window.superai'),address), 20000, 'isolation check');
   assert.equal(isolation,'undefined'); passed.push('native browser and isolation');
   steps.step('dock suspends browser');
-  await page.getByTitle('เปิดแผงสถานะ',{exact:true}).click();
+  // Switching the dock to Files hides the native browser view (the old status panel button is gone).
+  await page.getByTitle('เปิดไฟล์และแก้ไขด่วน',{exact:true}).click();
   await eventually(()=>withTimeout(page.evaluate(()=>window.superai.browser('state').then(s=>!s.visible)), 10000, 'browser state')); passed.push('dock suspends native browser');
   assert.deepEqual(errors,[]); passed.push('no renderer errors');
   await snapshot(page, path.join(data,'workspace.png'), steps);

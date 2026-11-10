@@ -70,6 +70,18 @@ export function installTarget(execPath = process.execPath, platform = process.pl
   return path.dirname(execPath);
 }
 
+/** Version of the app inside an extracted update ("" when it cannot be read). */
+export async function payloadVersion(source, platform = process.platform) {
+  const file = platform === "darwin"
+    ? path.join(source, "Contents", "Resources", "app", "package.json")
+    : path.join(source, "resources", "app", "package.json");
+  try {
+    return String(JSON.parse(await fsp.readFile(file, "utf8")).version || "");
+  } catch {
+    return "";
+  }
+}
+
 export class Updater {
   constructor({ currentVersion, packaged, onState, http = (...a) => fetch(...a), tempDir = os.tmpdir() }) {
     this.currentVersion = currentVersion;
@@ -165,6 +177,12 @@ export class Updater {
       if (process.platform === "darwin") await promisify(execFile)("ditto", ["-x", "-k", zipPath, extracted]);
       else await promisify(execFile)(windowsTar(), ["-x", "-f", zipPath, "-C", extracted], { windowsHide: true });
       const source = await this.findPayload(extracted);
+      // A release that carries an older build (e.g. re-uploaded assets) would "install" and still
+      // show the old version, then offer the same update again forever. Refuse it up front.
+      const inside = await payloadVersion(source);
+      if (inside && compareVersions(inside, this.state.latestVersion) !== 0) {
+        throw new Error(`ไฟล์อัปเดตของ v${this.state.latestVersion} ข้างในเป็น v${inside} (release ยังอัปโหลดไม่ครบ) กรุณาลองใหม่ภายหลัง`);
+      }
       await fsp.rm(zipPath, { force: true });
       return this.set({ status: "ready", source, work });
     } catch (err) {
