@@ -1,4 +1,5 @@
 # SuperAi & RAKKYXD v1.0.37
+<!-- superai-update: hard -->
 
 - **แก้ปัญหาอัปเดตแล้วยังเป็นเวอร์ชันเดิม (macOS):**
   - ไฟล์ macOS ของ v1.0.36 เป็น build ของ v1.0.35 ทำให้กดติดตั้งอัปเดตแล้วยังขึ้น v1.0.35 และถูกเสนออัปเดตซ้ำ เวอร์ชันนี้ build ใหม่ครบทั้ง Windows, macOS Apple Silicon และ macOS Intel
