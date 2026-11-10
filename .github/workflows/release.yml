@@ -92,6 +92,11 @@ jobs:
           if [ -z "$(ls -A release-assets 2>/dev/null)" ]; then
             gh release download "$RELEASE_TAG" --dir release-assets --clobber
           fi
+      # docs/RELEASE.md keeps every version; a release shows only the newest section. Apps up to
+      # v1.0.38 read the hard-update marker from the whole notes, so old sections must stay out.
+      - name: Latest release notes only
+        shell: bash
+        run: awk '/^---[[:space:]]*$/ {exit} {print}' docs/RELEASE.md > release-notes.md
       - name: Publish tested downloads
         env:
           GH_TOKEN: ${{ github.token }}
@@ -99,7 +104,7 @@ jobs:
         shell: bash
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --draft --verify-tag --title "SuperAi & RAKKYXD $RELEASE_TAG" --notes-file docs/RELEASE.md
+            gh release create "$RELEASE_TAG" --draft --verify-tag --title "SuperAi & RAKKYXD $RELEASE_TAG" --notes-file release-notes.md
           fi
           gh release upload "$RELEASE_TAG" release-assets/* --clobber
           gh release edit "$RELEASE_TAG" --draft=false --latest
@@ -117,7 +122,7 @@ jobs:
             exit 0
           fi
           if ! gh release view "$RELEASE_TAG" --repo "$PUBLIC_REPO" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --repo "$PUBLIC_REPO" --draft --title "SuperAi & RAKKYXD $RELEASE_TAG" --notes-file docs/RELEASE.md
+            gh release create "$RELEASE_TAG" --repo "$PUBLIC_REPO" --draft --title "SuperAi & RAKKYXD $RELEASE_TAG" --notes-file release-notes.md
           fi
           gh release upload "$RELEASE_TAG" --repo "$PUBLIC_REPO" release-assets/* --clobber
           gh release edit "$RELEASE_TAG" --repo "$PUBLIC_REPO" --draft=false --latest

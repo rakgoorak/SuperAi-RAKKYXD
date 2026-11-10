@@ -40,7 +40,15 @@ export function pickAsset(assets, platform = process.platform, arch = process.ar
 
 /** "hard" when the release notes carry `<!-- superai-update: hard -->`, otherwise "soft". */
 export function updateKind(body) {
-  return /<!--\s*superai-update:\s*hard\s*-->/i.test(String(body || "")) ? "hard" : "soft";
+  return /<!--\s*superai-update:\s*hard\s*-->/i.test(latestNotes(body)) ? "hard" : "soft";
+}
+/** The newest version's section of release notes: up to the first `---` rule or second `# ` title.
+ *  Notes may carry the whole history, and an older version's hard marker must not count. */
+export function latestNotes(body) {
+  const lines = String(body || "").split(/\r?\n/);
+  let titles = 0;
+  const end = lines.findIndex((line) => /^---\s*$/.test(line) || (/^#\s/.test(line) && ++titles > 1));
+  return (end < 0 ? lines : lines.slice(0, end)).join("\n");
 }
 const stripMarkers = (body) => String(body || "").replace(/<!--\s*superai-update:[^>]*-->\s*/gi, "").trim();
 

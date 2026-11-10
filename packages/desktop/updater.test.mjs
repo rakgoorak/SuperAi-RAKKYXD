@@ -127,6 +127,10 @@ test("downloads only from GitHub hosts", async () => {
 test("a hard update is detected even when a later soft release came after it", async () => {
   assert.equal(updateKind("Fixes\n<!-- superai-update: hard -->"), "hard");
   assert.equal(updateKind("Fixes"), "soft");
+  // Notes that carry the whole history: only the newest version's section decides.
+  assert.equal(updateKind("# v2\r\n- soft fix\r\n\r\n---\r\n\r\n# v1\r\n<!-- superai-update: hard -->\r\n- old"), "soft");
+  assert.equal(updateKind("# v2\n- soft fix\n# v1\n<!-- superai-update: hard -->"), "soft");
+  assert.equal(updateKind("# v2\n<!-- superai-update: hard -->\n- fix\n\n---\n\n# v1\n- old"), "hard");
   const os = process.platform === "win32" ? "windows" : "macos";
   const rel = (v, body, extra = {}) => ({ tag_name: `v${v}`, body, html_url: "https://github.com/x", assets: [{ name: `S-${os}-${process.arch}.zip`, size: 1, browser_download_url: "https://github.com/a.zip" }], ...extra });
   const list = [rel("1.0.5", "soft"), rel("1.0.4", "<!-- superai-update: hard -->\nImportant"), rel("1.0.3", "old"), rel("1.0.9", "<!-- superai-update: hard -->", { prerelease: true })];
