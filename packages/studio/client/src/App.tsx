@@ -49,6 +49,7 @@ import {
   EyeOff,
   ExternalLink,
   Server,
+  Languages,
 } from "lucide-react";
 import { api, post, Workspace, Cli, Session, Run, Seat, togglePinnedFile } from "./api";
 import { MessageContextChips } from './components/MessageContextChips';
@@ -1037,14 +1038,13 @@ export function App() {
           <div className="toolbar-actions titlebar-actions" data-tour="toolbar-actions">
             <button
               type="button"
-              className="toolbar-button titlebar-btn"
+              className="toolbar-button titlebar-btn lang-switch-btn"
+              aria-label={t("titlebar.lang_switch", "เปลี่ยนภาษา (Switch Language)")}
               title={t("titlebar.lang_switch", "เปลี่ยนภาษา (Switch Language)")}
               onClick={() => cycleLocale()}
             >
-              <span style={{ fontSize: 12, lineHeight: 1 }}>
-                {languages.find((l) => l.code === locale)?.flag || "🌐"}
-              </span>
-              <span className="btn-label">{locale.toUpperCase()}</span>
+              <Languages size={13} />
+              <b className="lang-code-badge">{locale.toUpperCase()}</b>
             </button>
             <UsageButton open={usageOpen} onOpenChange={setUsageOpen} />
             <button

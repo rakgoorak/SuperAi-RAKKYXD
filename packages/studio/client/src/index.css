@@ -2989,6 +2989,21 @@ img.small-brand { width: 18px; height: auto; background: none; border-radius: 0;
   flex-shrink: 0 !important;
 }
 
+#root .toolbar-actions .titlebar-btn.lang-switch-btn {
+  width: auto !important;
+  min-width: 44px !important;
+  padding: 0 7px !important;
+  gap: 4px !important;
+}
+
+#root .toolbar-actions .titlebar-btn.lang-switch-btn .lang-code-badge {
+  display: inline-block !important;
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.03em !important;
+  line-height: 1 !important;
+}
+
 @media (max-width: 950px) {
   .titlebar-breadcrumb {
     display: none !important;
