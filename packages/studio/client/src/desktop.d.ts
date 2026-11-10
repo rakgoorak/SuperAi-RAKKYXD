@@ -54,11 +54,5 @@ declare global {
       notify?: (notice: { tag: string; title: string; body: string; target: unknown }) => Promise<void>;
       onNotifyOpen?: (callback: (target: unknown) => void) => () => void;
     };
-    bridgemind?: {
-      isDesktop: true;
-      platform: string;
-      pickFolder: () => Promise<string | null>;
-      openExternal: (url: string) => Promise<void>;
-    };
   }
 }

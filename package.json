@@ -33,7 +33,6 @@
     "test:overflow": "node packages/desktop/test/overflow-audit-smoke.mjs",
     "test:usage-overlay": "node packages/desktop/test/usage-overlay-smoke.mjs",
     "test:terminal-render": "node packages/desktop/test/terminal-render-smoke.mjs",
-    "test:reference": "node packages/desktop/test/reference-smoke.mjs",
     "package:portable": "node scripts/package-portable.mjs",
     "package:release": "node scripts/package-release.mjs",
     "archive:release": "node scripts/archive-release.mjs",

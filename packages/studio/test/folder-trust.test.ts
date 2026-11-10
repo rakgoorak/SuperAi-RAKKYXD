@@ -54,18 +54,18 @@ test('missing or unreadable configs and other CLIs are left alone', () => {
   } finally { fs.rmSync(home, { recursive: true, force: true }); }
 });
 
-// The macOS report: Codex had written [projects."/Users/golffy/app"] and SuperAi 1.0.2 appended
-// [projects.'/Users/golffy/app'] → "config.toml: duplicate key".
+// The macOS report: Codex had written [projects."/Users/someone/app"] and SuperAi 1.0.2 appended
+// [projects.'/Users/someone/app'] → "config.toml: duplicate key".
 const MAC_BROKEN = [
   'model = "gpt-5.6-luna"',
   '',
-  '[projects."/Users/golffy/app"]',
+  '[projects."/Users/someone/app"]',
   'trust_level = "trusted"',
   '',
-  '[projects."/Users/golffy/other"]',
+  '[projects."/Users/someone/other"]',
   'trust_level = "trusted"',
   '',
-  "[projects.'/Users/golffy/app']",
+  "[projects.'/Users/someone/app']",
   'trust_level = "trusted"',
   '',
 ].join('\n');
@@ -73,9 +73,9 @@ const MAC_BROKEN = [
 test('repair removes only the duplicate block SuperAi appended', async () => {
   const { repairCodexConfig, codexProjectHeader } = await import('../server/FolderTrust.js');
   const fixed = repairCodexConfig(MAC_BROKEN);
-  assert.equal((fixed.match(/\/Users\/golffy\/app/g) || []).length, 1);
-  assert.ok(fixed.includes('[projects."/Users/golffy/app"]\ntrust_level = "trusted"'));
-  assert.ok(fixed.includes('[projects."/Users/golffy/other"]'));
+  assert.equal((fixed.match(/\/Users\/someone\/app/g) || []).length, 1);
+  assert.ok(fixed.includes('[projects."/Users/someone/app"]\ntrust_level = "trusted"'));
+  assert.ok(fixed.includes('[projects."/Users/someone/other"]'));
   assert.ok(fixed.startsWith('model = "gpt-5.6-luna"'));
   // Already-valid configs are returned unchanged.
   assert.equal(repairCodexConfig(fixed), fixed);
