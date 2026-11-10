@@ -6,7 +6,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 // Set after deploying services/usage-counter (empty = nothing is ever sent).
-export const USAGE_ENDPOINT = process.env.SUPERAI_USAGE_URL || "";
+export const USAGE_ENDPOINT = process.env.SUPERAI_USAGE_URL || "https://superai-usage.rakgorak.workers.dev";
 const INTERVAL_MS = 10 * 60_000;
 
 export class UsagePing {

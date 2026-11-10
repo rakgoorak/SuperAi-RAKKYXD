@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   X,
   ChevronRight,
@@ -8,6 +8,7 @@ import {
   Rocket,
   Compass,
 } from 'lucide-react';
+import { useTranslation } from '../i18n';
 
 export interface TourStep {
   id: string;
@@ -20,72 +21,73 @@ export interface TourStep {
   padding?: number;
 }
 
-const TOUR_STEPS: TourStep[] = [
-  {
-    id: 'mode-tabs',
-    targetSelector: '[data-tour="mode-tabs"]',
-    title: '1. สลับโหมดการทำงาน (3 โหมดหลัก)',
-    badge: 'ขั้นตอนที่ 1 / 5',
-    desc: 'SuperAi รวมโหมดทำงานอัจฉริยะไว้ในที่เดียว:\n• 🤖 ทีม Agent: สั่งงานใหญ่ ให้ AI หลายตัวช่วยกันวางแผนและเขียนโค้ด\n• ⚡ Terminal: คุยตรงกับ AI CLI สั่งรันคำสั่งและแก้ไฟล์บนเครื่อง\n• 💬 ถามหลาย AI: ถามข้อความเดียว AI ทุกค่ายร่วมแข่งกันตอบ',
-    hint: '💡 ลองคลิกปุ่มสลับโหมด หรือกดปุ่ม "ถัดไป" ได้เลยครับ',
-    preferredPosition: 'bottom',
-    padding: 6,
-  },
-  {
-    id: 'composer',
-    targetSelector: '[data-tour="composer"]',
-    title: '2. กล่องพิมพ์สั่งงาน AI (Smart Composer)',
-    badge: 'ขั้นตอนที่ 2 / 5',
-    desc: 'กล่องคำสั่ง AI ที่รองรับทุกอย่างที่คุณต้องการ:\n• พิมพ์ภาษาไทยหรืออังกฤษตามธรรมชาติ\n• กด Enter เพื่อส่ง / Shift+Enter ขึ้นบรรทัดใหม่\n• พิมพ์ / เพื่อเปิดเมนูคำสั่งลัด เช่น /review, /test\n• พิมพ์ @ เพื่อแท็กอ้างอิงไฟล์ในโปรเจกต์',
-    hint: '💡 สามารถลากไฟล์ รูปภาพ หรือโฟลเดอร์มาวางในกล่องนี้ได้ทันที',
-    preferredPosition: 'top',
-    padding: 8,
-  },
-  {
-    id: 'dictation',
-    targetSelector: '[data-tour="dictation"]',
-    title: '3. สั่งงานด้วยเสียงภาษาไทย (Whisper AI)',
-    badge: 'ขั้นตอนที่ 3 / 5',
-    desc: 'ประหยัดเวลาพิมพ์คำสั่งยาวๆ!\n• กดปุ่มไมโครโฟนสีฟ้าข้างกล่องพิมพ์ แล้วพูดภาษาไทยได้ทันที\n• ระบบใช้ Local Whisper AI ถอดเสียงเป็นข้อความลงช่องพิมพ์ให้อัตโนมัติ\n• ทำงานบนเครื่องของคุณ 100% ปลอดภัยและเป็นส่วนตัว',
-    hint: '💡 ลองกดปุ่มไมโครโฟน แล้วพูดทดสอบได้เลยครับ',
-    preferredPosition: 'top',
-    padding: 6,
-  },
-  {
-    id: 'toolbar-actions',
-    targetSelector: '[data-tour="toolbar-actions"]',
-    title: '4. เปิด Preview ดูเว็บจริง & ควบคุมระบบ',
-    badge: 'ขั้นตอนที่ 4 / 5',
-    desc: 'ศูนย์ตรวจงานและมอนิเตอร์:\n• 🌐 เปิด Preview: เปิดดูหน้าเว็บจริงที่ AI สร้างขึ้นในหน้าต่างเดียว ไม่ต้องสลับเบราว์เซอร์\n• 💻 เปิด Terminal: เปิดหน้าจอดำสำหรับรันคำสั่งภายนอกอิสระ',
-    hint: '💡 เห็นทั้งโค้ดและหน้าเว็บที่ AI กำลังสร้างพร้อมๆ กัน',
-    preferredPosition: 'bottom',
-    padding: 6,
-  },
-  {
-    id: 'sidebar-mcp',
-    targetSelector: '[data-tour="sidebar-mcp"]',
-    title: '5. ปลั๊กอิน MCP & ซ่อมโค้ดอัตโนมัติ',
-    badge: 'ขั้นตอนที่ 5 / 5',
-    desc: 'ขุมพลังพิเศษของ SuperAi:\n• 🔌 MCP Servers: เชื่อมต่อเครื่องมือเบราว์เซอร์ Puppeteer, ฐานข้อมูล SQLite/Postgres ให้ AI ทุกค่ายใช้ร่วมกัน\n• 🩹 Self-Healing: ซ่อมโค้ดอัตโนมัติเมื่อ Test พัง (ดูได้ที่หน้า Changes)\n• ⚖️ AI Cross-Review: ให้ AI ต่างค่ายช่วยรีวิวหาช่องโหว่ความปลอดภัย',
-    hint: '💡 ลองคลิกที่ปุ่ม MCP Servers เพื่อดูเครื่องมือที่เปิดให้เชื่อมต่อได้ในคลิกเดียว',
-    preferredPosition: 'right',
-    padding: 6,
-  },
-];
-
 interface Props {
   active: boolean;
   onClose: () => void;
 }
 
 export function InteractiveTour({ active, onClose }: Props) {
+  const { t, locale, setLocale, languages } = useTranslation();
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [isCompleted, setIsCompleted] = useState(false);
 
-  const step = TOUR_STEPS[currentStepIdx];
+  const tourSteps: TourStep[] = useMemo(() => [
+    {
+      id: 'mode-tabs',
+      targetSelector: '[data-tour="mode-tabs"]',
+      title: t('tour.step1_title', '1. สลับโหมดการทำงาน (3 โหมดหลัก)'),
+      badge: t('tour.step1_badge', 'ขั้นตอนที่ 1 / 5'),
+      desc: t('tour.step1_desc'),
+      hint: t('tour.step1_hint'),
+      preferredPosition: 'bottom',
+      padding: 6,
+    },
+    {
+      id: 'composer',
+      targetSelector: '[data-tour="composer"]',
+      title: t('tour.step2_title', '2. กล่องพิมพ์สั่งงาน AI (Smart Composer)'),
+      badge: t('tour.step2_badge', 'ขั้นตอนที่ 2 / 5'),
+      desc: t('tour.step2_desc'),
+      hint: t('tour.step2_hint'),
+      preferredPosition: 'top',
+      padding: 8,
+    },
+    {
+      id: 'dictation',
+      targetSelector: '[data-tour="dictation"]',
+      title: t('tour.step3_title', '3. สั่งงานด้วยเสียง (Local Whisper AI)'),
+      badge: t('tour.step3_badge', 'ขั้นตอนที่ 3 / 5'),
+      desc: t('tour.step3_desc'),
+      hint: t('tour.step3_hint'),
+      preferredPosition: 'top',
+      padding: 6,
+    },
+    {
+      id: 'toolbar-actions',
+      targetSelector: '[data-tour="toolbar-actions"]',
+      title: t('tour.step4_title', '4. เปิด Preview ดูเว็บจริง & เช็กโควตา'),
+      badge: t('tour.step4_badge', 'ขั้นตอนที่ 4 / 5'),
+      desc: t('tour.step4_desc'),
+      hint: t('tour.step4_hint'),
+      preferredPosition: 'bottom',
+      padding: 6,
+    },
+    {
+      id: 'sidebar-mcp',
+      targetSelector: '[data-tour="sidebar-mcp"]',
+      title: t('tour.step5_title', '5. ปลั๊กอิน MCP & ซ่อมโค้ดอัตโนมัติ'),
+      badge: t('tour.step5_badge', 'ขั้นตอนที่ 5 / 5'),
+      desc: t('tour.step5_desc'),
+      hint: t('tour.step5_hint'),
+      preferredPosition: 'right',
+      padding: 6,
+    },
+  ], [locale, t]);
+
+  const step = tourSteps[currentStepIdx];
 
   const persistDismissed = () => {
     try {
@@ -188,7 +190,7 @@ export function InteractiveTour({ active, onClose }: Props) {
   }, [active, currentStepIdx, isCompleted]);
 
   const handleNext = () => {
-    if (currentStepIdx < TOUR_STEPS.length - 1) {
+    if (currentStepIdx < tourSteps.length - 1) {
       setCurrentStepIdx((n) => n + 1);
     } else {
       setIsCompleted(true);
@@ -232,9 +234,9 @@ export function InteractiveTour({ active, onClose }: Props) {
       {/* Semi-transparent Backdrop with Cutout Hole */}
       {rect && !isCompleted ? (
         <>
-          {/* SVG Overlay: Semi-transparent spotlight backdrop */}
+          {/* SVG Overlay: Blocks clicks outside the target, passes clicks through inside the hole */}
           <svg
-            className="fixed inset-0 w-full h-full pointer-events-none"
+            className="fixed inset-0 w-full h-full pointer-events-auto"
             style={{ fill: 'rgba(5, 8, 15, 0.78)' }}
           >
             <path fillRule="evenodd" d={svgCutoutPath} />
@@ -266,7 +268,7 @@ export function InteractiveTour({ active, onClose }: Props) {
           </div>
         </>
       ) : (
-        <div className="fixed inset-0 bg-black/80 pointer-events-none transition-opacity" />
+        <div className="fixed inset-0 bg-black/80 pointer-events-auto transition-opacity" />
       )}
 
       {/* Floating Tooltip Card */}
@@ -288,13 +290,30 @@ export function InteractiveTour({ active, onClose }: Props) {
               <Compass size={12} className="text-indigo-400 animate-spin-slow" />
               {step.badge}
             </span>
-            <button
-              onClick={handleClose}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-              title="ข้ามทัวร์ (Esc)"
-            >
-              <X size={16} />
-            </button>
+            <div className="flex items-center gap-1">
+              {languages.map((lang) => (
+                <button
+                  key={lang.code}
+                  type="button"
+                  onClick={() => setLocale(lang.code)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer ${
+                    locale === lang.code
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-400 hover:text-white hover:bg-white/10'
+                  }`}
+                  title={lang.nativeName}
+                >
+                  {lang.code.toUpperCase()}
+                </button>
+              ))}
+              <button
+                onClick={handleClose}
+                className="ml-1 p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                title={t('tour.skip', 'ข้ามทัวร์ (Esc)')}
+              >
+                <X size={16} />
+              </button>
+            </div>
           </div>
 
           {/* Title */}
@@ -319,7 +338,7 @@ export function InteractiveTour({ active, onClose }: Props) {
           <div className="flex items-center justify-between pt-3 border-t border-white/10">
             {/* Step Indicators */}
             <div className="flex items-center gap-1.5">
-              {TOUR_STEPS.map((_, i) => (
+              {tourSteps.map((_, i) => (
                 <button
                   key={i}
                   onClick={() => setCurrentStepIdx(i)}
@@ -328,7 +347,7 @@ export function InteractiveTour({ active, onClose }: Props) {
                       ? 'w-6 bg-gradient-to-r from-indigo-500 to-cyan-400 shadow-sm shadow-indigo-500/50'
                       : 'w-2 bg-white/20 hover:bg-white/40'
                   }`}
-                  title={`ไปยังสเต็ปที่ ${i + 1}`}
+                  title={`${i + 1}`}
                 />
               ))}
             </div>
@@ -340,14 +359,14 @@ export function InteractiveTour({ active, onClose }: Props) {
                   onClick={handlePrev}
                   className="px-2.5 py-1.5 rounded-xl border border-white/15 hover:bg-white/10 text-slate-300 text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer"
                 >
-                  <ChevronLeft size={14} /> ย้อน
+                  <ChevronLeft size={14} /> {t('tour.prev', 'ย้อน')}
                 </button>
               )}
               <button
                 onClick={handleNext}
                 className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
               >
-                <span>{currentStepIdx === TOUR_STEPS.length - 1 ? 'เสร็จสิ้น' : 'ถัดไป'}</span>
+                <span>{currentStepIdx === tourSteps.length - 1 ? t('tour.finish', 'เสร็จสิ้น') : t('tour.next', 'ถัดไป')}</span>
                 <ChevronRight size={14} />
               </button>
             </div>
@@ -362,9 +381,9 @@ export function InteractiveTour({ active, onClose }: Props) {
             </div>
 
             <div>
-              <h3 className="text-xl font-bold text-white">ยอดเยี่ยม! คุณพร้อมใช้งานแล้ว 🎉</h3>
+              <h3 className="text-xl font-bold text-white">{t('tour.done_title', 'ยอดเยี่ยม! คุณพร้อมใช้งานแล้ว 🎉')}</h3>
               <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
-                คุณได้รู้จักเครื่องมือหลักของ SuperAi ครบถ้วนแล้ว ลองพิมพ์คำสั่งแรกในกล่องข้อความ หรือสั่งงานด้วยเสียงภาษาไทยได้ทันที
+                {t('tour.done_desc', 'คุณได้รู้จักเครื่องมือหลักของ SuperAi ครบถ้วนแล้ว ลองพิมพ์คำสั่งแรกในกล่องข้อความ หรือสั่งงานด้วยเสียงได้ทันที')}
               </p>
             </div>
 
@@ -374,7 +393,7 @@ export function InteractiveTour({ active, onClose }: Props) {
                 className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-110 text-slate-950 font-bold text-sm shadow-lg shadow-emerald-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
               >
                 <Rocket size={16} />
-                <span>เริ่มต้นใช้งาน SuperAi ทันที</span>
+                <span>{t('tour.done_btn', 'เริ่มต้นใช้งาน SuperAi ทันที')}</span>
               </button>
             </div>
           </div>

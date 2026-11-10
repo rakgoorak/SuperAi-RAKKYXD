@@ -128,7 +128,7 @@ function initial(key: string, fallback: string) {
 }
 
 export function App() {
-  const { locale, setLocale, t, languages } = useTranslation();
+  const { locale, setLocale, cycleLocale, t, languages } = useTranslation();
   const slashMenu = useRef<SlashMenuHandle>(null);
   const mentionMenu = useRef<MentionMenuHandle>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -1035,6 +1035,17 @@ export function App() {
         {/* Right: Actions before Windows window controls */}
         <div className="titlebar-right">
           <div className="toolbar-actions titlebar-actions" data-tour="toolbar-actions">
+            <button
+              type="button"
+              className="toolbar-button titlebar-btn"
+              title={t("titlebar.lang_switch", "เปลี่ยนภาษา (Switch Language)")}
+              onClick={() => cycleLocale()}
+            >
+              <span style={{ fontSize: 12, lineHeight: 1 }}>
+                {languages.find((l) => l.code === locale)?.flag || "🌐"}
+              </span>
+              <span className="btn-label">{locale.toUpperCase()}</span>
+            </button>
             <UsageButton open={usageOpen} onOpenChange={setUsageOpen} />
             <button
               className={`toolbar-button titlebar-btn ${preview && dockView === "files" ? "selected" : ""}`}
@@ -1109,15 +1120,15 @@ export function App() {
             <label className="project-search">
               <Search size={14} />
               <input
-                placeholder="ค้นหาโปรเจกต์"
-                aria-label="ค้นหาโปรเจกต์"
+                placeholder={t("sidebar.search_projects", "ค้นหาโปรเจกต์")}
+                aria-label={t("sidebar.search_projects", "ค้นหาโปรเจกต์")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </label>
-            <button type="button" className="text-button favorite-filter" aria-pressed={favoritesOnly} onClick={() => setFavoritesOnly(value => !value)}><Star size={13} />โปรเจกต์โปรด</button>
+            <button type="button" className="text-button favorite-filter" aria-pressed={favoritesOnly} onClick={() => setFavoritesOnly(value => !value)}><Star size={13} />{t("sidebar.favorites", "โปรเจกต์โปรด")}</button>
             <div className="project-list">
-              {favoritesOnly && !workspaces.some(item => item.favorite) && <p className="muted" style={{ padding: '8px 14px', fontSize: 12 }}>ยังไม่มีโปรเจกต์โปรด เพิ่มได้จากเมนู … ของโปรเจกต์</p>}
+              {favoritesOnly && !workspaces.some(item => item.favorite) && <p className="muted" style={{ padding: '8px 14px', fontSize: 12 }}>{t("sidebar.no_favorites", "ยังไม่มีโปรเจกต์โปรด เพิ่มได้จากเมนู … ของโปรเจกต์")}</p>}
               {workspaces
                 .filter((w) =>
                   w.name.toLowerCase().includes(search.toLowerCase()) && (!favoritesOnly || w.favorite === true),
@@ -1234,7 +1245,7 @@ export function App() {
                             className="add-session-link"
                             onClick={() => openSession()}
                           >
-                            <Plus size={13} /> เปิด session ใหม่
+                            <Plus size={13} /> {t("sidebar.new_session", "เปิด session ใหม่")}
                           </button>
                         </div>
                       )}
@@ -1243,20 +1254,20 @@ export function App() {
                 })}
               {!workspaces.length && (
                 <p className="sidebar-empty">
-                  บทสนทนาแรกจะปรากฏที่นี่ · เริ่มพิมพ์ได้เลย
+                  {t("sidebar.empty_sessions", "บทสนทนาแรกจะปรากฏที่นี่ · เริ่มพิมพ์ได้เลย")}
                 </p>
               )}
             </div>
-            <div className="sidebar-bottom"><button onClick={() => setDialog("history")}><Search size={17} /> ค้นหาประวัติ</button>
-              <button onClick={() => setDialog("setup")} title="ตรวจความพร้อมและตั้งค่าเริ่มต้น">
+            <div className="sidebar-bottom"><button onClick={() => setDialog("history")}><Search size={17} /> {t("sidebar.search_history", "ค้นหาประวัติ")}</button>
+              <button onClick={() => setDialog("setup")} title={t("sidebar.getting_started_sub", "ตรวจความพร้อมและตั้งค่าเริ่มต้น")}>
                 <Rocket size={17} />
                 <span>
-                  เริ่มต้นใช้งาน<small>ตรวจ Node, Git, CLI และบัญชี</small>
+                  {t("sidebar.getting_started", "เริ่มต้นใช้งาน")}<small>{t("sidebar.getting_started_sub", "ตรวจ Node, Git, CLI และบัญชี")}</small>
                 </span>
               </button>
-              <button onClick={() => setDialog("skills")} disabled={!workspace} title="ให้ AI เสนอ skill ที่จำเป็นต่อโปรเจกต์นี้">
+              <button onClick={() => setDialog("skills")} disabled={!workspace} title={t("sidebar.skills_sub", "ให้ AI เสนอ skill ที่จำเป็นต่อโปรเจกต์นี้")}>
                 <Puzzle size={17} />
-                <span>Skills<small>AI เสนอ คุณกดติดตั้ง</small></span>
+                <span>{t("sidebar.skills", "Skills")}<small>{t("sidebar.skills_sub", "AI เสนอ คุณกดติดตั้ง")}</small></span>
               </button>
               <button
                 data-tour="sidebar-mcp"
@@ -1264,10 +1275,10 @@ export function App() {
                   setSettingsTab("mcp");
                   openSettings();
                 }}
-                title="จัดการ MCP Servers และเครื่องมือภายนอกของ AI แต่ละ Provider"
+                title={t("sidebar.mcp_sub", "จัดการ MCP Servers และเครื่องมือภายนอกของ AI แต่ละ Provider")}
               >
                 <Server size={17} />
-                <span>MCP Servers<small>เชื่อมเครื่องมือ AI แต่ละค่าย</small></span>
+                <span>{t("sidebar.mcp", "MCP Servers")}<small>{t("sidebar.mcp_sub", "เชื่อมเครื่องมือ AI แต่ละค่าย")}</small></span>
               </button>
               <button onClick={openSettings}>
                 <Settings size={17} />
@@ -1339,15 +1350,15 @@ export function App() {
                   </span>
                   <h1>
                     {mode === "code"
-                      ? "ห้องทำงาน"
+                      ? t("canvas.workspace_room", "ห้องทำงาน")
                       : mode === "agent"
-                        ? "ทีม Agent"
-                        : "ถามหลาย AI"}
+                        ? t("mode.agent", "ทีม Agent")
+                        : t("mode.chat", "ถามหลาย AI")}
                   </h1>
                   <span className="count-badge">
                     {mode === "code"
                       ? `${visible.length} session`
-                      : `${conversation.length} งาน`}
+                      : `${conversation.length} ${t("canvas.tasks_unit", "งาน")}`}
                   </span>
                   {mode === "code" && hiddenInWorkspace.length > 0 && (
                     <div className="hidden-sessions-bar" role="group" aria-label="session ที่ซ่อนอยู่">
@@ -1384,7 +1395,7 @@ export function App() {
                     <>
                       <span className="running-label">
                         <span className="status-dot" />
-                        {running.length} กำลังทำงาน
+                        {running.length} {t("canvas.running_unit", "กำลังทำงาน")}
                       </span>
                       {zoomed && (
                         <button className="text-button" onClick={() => setZoomed(false)} title="กลับการจัดวางเดิม">
@@ -1460,11 +1471,11 @@ export function App() {
                       <div className="empty-command">
                         {mode === "agent" ? <Users size={26} /> : <MessageSquare size={26} />}
                       </div>
-                      <h2>{mode === "agent" ? "บอกเป้าหมาย แล้วให้ทีมแบ่งงานกันทำ" : "พิมพ์คำถามครั้งเดียว ได้ความเห็นจากทุก AI"}</h2>
+                      <h2>{mode === "agent" ? t("canvas.agent_empty_title", "บอกเป้าหมาย แล้วให้ทีมแบ่งงานกันทำ") : t("canvas.chat_empty_title", "พิมพ์คำถามครั้งเดียว ได้ความเห็นจากทุก AI")}</h2>
                       <p>
                         {mode === "agent"
-                          ? "พิมพ์เป้าหมายและเกณฑ์ตรวจรับด้านล่าง Main จะแจกงานให้ Sub-agent และคุณจะเห็นว่าแต่ละตัวกำลังทำอะไร"
-                          : "แต่ละ AI ตอบแยกกัน แล้วผู้สรุปจะรวมผลพร้อมบอกว่าใครแนะนำอะไร"}
+                          ? t("canvas.agent_empty_desc", "พิมพ์เป้าหมายและเกณฑ์ตรวจรับด้านล่าง Main จะแจกงานให้ Sub-agent และคุณจะเห็นว่าแต่ละตัวกำลังทำอะไร")
+                          : t("canvas.chat_empty_desc", "แต่ละ AI ตอบแยกกัน แล้วผู้สรุปจะรวมผลพร้อมบอกว่าใครแนะนำอะไร")}
                       </p>
                     </div>
                   ) : (
@@ -1686,8 +1697,8 @@ export function App() {
                       ref={composer}
                       rows={mode === "code" && !composerExpanded ? 1 : 3}
                       aria-label="คำสั่ง"
-                      placeholder={mode === 'code' ? target === 'all' ? 'ส่งข้อความถึงทุกห้อง…' : 'พิมพ์ข้อความ…' : mode === 'agent' ? 'บอกสิ่งที่ต้องการให้ทีมทำ…' : 'ถาม AI ที่เลือก…'}
-                      title={nextPrompt ? 'มีข้อความแนะนำ: กด Tab เพื่อใช้ หรือเปิดเมนู + เพื่อดูตัวเลือก' : 'Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่'}
+                      placeholder={mode === 'code' ? target === 'all' ? t("composer.placeholder_all", 'ส่งข้อความถึงทุกห้อง…') : t("composer.placeholder_code", 'พิมพ์ข้อความ…') : mode === 'agent' ? t("composer.placeholder_agent", 'บอกสิ่งที่ต้องการให้ทีมทำ…') : t("composer.placeholder_chat", 'ถาม AI ที่เลือก…')}
+                      title={nextPrompt ? 'มีข้อความแนะนำ: กด Tab เพื่อใช้ หรือเปิดเมนู + เพื่อดูตัวเลือก' : t("composer.shortcut_hint", 'Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่')}
                       value={draft}
                       onChange={(e) => {
                         setDraft(e.target.value);
