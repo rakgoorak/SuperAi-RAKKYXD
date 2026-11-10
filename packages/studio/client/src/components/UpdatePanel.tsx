@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, Download, ExternalLink, LoaderCircle, RefreshCw, RotateCw, X } from "lucide-react";
 import type { UpdateState } from "../desktop";
 import { Markdown } from "./Markdown";
+import { t } from "../i18n";
 
 /** Live update state from the desktop shell; null in the browser UI (no updater there). */
 export function useUpdateState() {
@@ -71,10 +72,10 @@ export function UpdatePanel({ state, onError }: { state: UpdateState | null; onE
   return (
     <div className="update-panel">
       <div className="update-versions">
-        <div><small>เวอร์ชันที่ใช้อยู่</small><strong>v{state.currentVersion}</strong></div>
-        {state.latestVersion && <div><small>เวอร์ชันล่าสุด</small><strong>v{state.latestVersion}</strong></div>}
+        <div><small>{t("updates.current_version", "เวอร์ชันที่ใช้อยู่")}</small><strong>v{state.currentVersion}</strong></div>
+        {state.latestVersion && <div><small>{t("updates.latest_version", "เวอร์ชันล่าสุด")}</small><strong>v{state.latestVersion}</strong></div>}
         {downloadCount !== null && (
-          <div><small>ยอดดาวน์โหลดคอมมูนิตี้</small><strong style={{ color: "var(--brand-blue, #38bdf8)" }}>{downloadCount.toLocaleString()} ครั้ง</strong></div>
+          <div><small>{t("updates.community_downloads", "ยอดดาวน์โหลดคอมมูนิตี้")}</small><strong style={{ color: "var(--brand-blue, #38bdf8)" }}>{downloadCount.toLocaleString()} ครั้ง</strong></div>
         )}
         {pending(s) && <span className={`update-kind ${state.mandatory ? "hard" : ""}`}>{state.mandatory ? "ต้องอัปเดต" : "อัปเดตหรือไม่ก็ได้"}</span>}
       </div>

@@ -10,13 +10,18 @@
   <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD/actions"><img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="Build Status" /></a>
   <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases"><img src="https://img.shields.io/github/downloads/rakgoorak/SuperAi-RAKKYXD-releases/total?color=2563eb&label=Downloads&logo=github" alt="Total Downloads" /></a>
   <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-orange.svg" alt="PRs Welcome" /></a>
-  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest"><img src="https://img.shields.io/badge/release-v1.0.35-blueviolet.svg" alt="Latest Release" /></a>
+  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest"><img src="https://img.shields.io/badge/release-v1.0.36-blueviolet.svg" alt="Latest Release" /></a>
+  <a href="https://rakgoorak.github.io/SuperAi-RAKKYXD-releases/"><img src="https://img.shields.io/badge/website-live-success.svg" alt="Website" /></a>
 </p>
 
 <p align="center">
-  <b>AI ทุกตัวของคุณ ในหน้าต่างเดียว — ดีไซน์ใหม่ Minimal เรียบหรู โฟกัสกับงาน</b><br />
-  Claude · ChatGPT (Codex) · Antigravity · OpenCode · Freebuff<br />
-  Windows และ macOS · ภาษาไทย · รันบนเครื่องคุณ 100% · ใช้บัญชี AI ของคุณเอง
+  <b>🇹🇭 ภาษาไทย</b> &nbsp;|&nbsp; <a href="README_EN.md">🇬🇧 English</a> &nbsp;|&nbsp; 🇯🇵 日本語 &nbsp;|&nbsp; 🇨🇳 简体中文
+</p>
+
+<p align="center">
+  <b>AI ทุกตัวของคุณ ในหน้าต่างเดียว — ดีไซน์ใหม่ Minimal เรียบหรู โฟกัสกับงาน (v1.0.36)</b><br />
+  Claude · ChatGPT (Codex) · Antigravity · OpenCode · Freebuff · Ollama<br />
+  Windows และ macOS · รองรับหลายภาษา (ไทย, อังกฤษ, ญี่ปุ่น, จีน) · รันบนเครื่องคุณ 100% · ใช้บัญชี AI ของคุณเอง
 </p>
 
 <p align="center">

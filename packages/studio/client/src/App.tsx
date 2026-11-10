@@ -6,6 +6,7 @@ import { RunActions } from "./components/RunActions";
 import { SlashMenu, type SlashMenuHandle } from "./components/SlashMenu";
 import { MentionMenu, type MentionMenuHandle } from "./components/MentionMenu";
 import { CommandPalette } from "./components/CommandPalette";
+import { useTranslation } from "./i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Folder,
@@ -127,6 +128,7 @@ function initial(key: string, fallback: string) {
 }
 
 export function App() {
+  const { locale, setLocale, t, languages } = useTranslation();
   const slashMenu = useRef<SlashMenuHandle>(null);
   const mentionMenu = useRef<MentionMenuHandle>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -972,9 +974,9 @@ export function App() {
           <button
             type="button"
             className="icon-button titlebar-btn titlebar-sidebar-toggle"
-            title={sidebar ? "ซ่อนแถบข้าง" : "แสดงแถบข้าง"}
+            title={sidebar ? t("titlebar.sidebar_hide", "ซ่อนแถบข้าง") : t("titlebar.sidebar_show", "แสดงแถบข้าง")}
             onClick={() => setSidebar((s) => !s)}
-            aria-label="สลับแถบข้าง"
+            aria-label={t("titlebar.sidebar_toggle", "สลับแถบข้าง")}
           >
             {sidebar ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
           </button>
@@ -987,14 +989,14 @@ export function App() {
           <div className="titlebar-breadcrumb" title={workspace?.rootPath || ""}>
             <span className="breadcrumb-divider">/</span>
             <Folder size={13} className="breadcrumb-icon" />
-            <span className="breadcrumb-name">{workspace?.name || "เริ่มต้นใช้งาน"}</span>
+            <span className="breadcrumb-name">{workspace?.name || t("sidebar.start_here", "เริ่มต้นใช้งาน")}</span>
             {mode === "code" && selectedSession && (
               <>
                 <ChevronRight size={11} className="breadcrumb-chevron" />
                 <span className="breadcrumb-session">{selectedSession.name}</span>
               </>
             )}
-            <span className={`status-dot ${connected ? "" : "offline"}`} title={connected ? "เชื่อมต่อแล้ว" : "กำลังเชื่อมต่อใหม่"} />
+            <span className={`status-dot ${connected ? "" : "offline"}`} title={connected ? t("titlebar.connected", "เชื่อมต่อแล้ว") : t("titlebar.reconnecting", "กำลังเชื่อมต่อใหม่")} />
           </div>
         </div>
 
@@ -1009,10 +1011,10 @@ export function App() {
               aria-pressed={mode === m}
               title={
                 m === "agent"
-                  ? "ทีม Agent: ให้ AI แบ่งงานและลงมือทำ"
+                  ? t("mode.agent_desc", "ทีม Agent: ให้ AI แบ่งงานและลงมือทำ")
                   : m === "chat"
-                  ? "ถามหลาย AI: ถามคำถามเดียวเทียบคำตอบ"
-                  : "Terminal: ผู้ช่วย AI และเขียนโค้ดลงเครื่อง"
+                  ? t("mode.chat_desc", "ถามหลาย AI: ถามคำถามเดียวเทียบคำตอบ")
+                  : t("mode.code_desc", "Terminal: ผู้ช่วย AI และเขียนโค้ดลงเครื่อง")
               }
               onClick={() => {
                 setMode(m);
@@ -1020,7 +1022,7 @@ export function App() {
               }}
             >
               {m === "agent" ? <Bot size={13} /> : m === "chat" ? <MessageSquare size={13} /> : <Code2 size={13} />}
-              <span>{m === "agent" ? "ทีม Agent" : m === "chat" ? "ถามหลาย AI" : "Terminal"}</span>
+              <span>{m === "agent" ? t("mode.agent", "ทีม Agent") : m === "chat" ? t("mode.chat", "ถามหลาย AI") : t("mode.code", "Terminal")}</span>
             </button>
           ))}
         </nav>
@@ -1031,19 +1033,19 @@ export function App() {
             <UsageButton open={usageOpen} onOpenChange={setUsageOpen} />
             <button
               className={`toolbar-button titlebar-btn ${preview && dockView === "files" ? "selected" : ""}`}
-              aria-label="ไฟล์"
-              title="เปิดไฟล์และแก้ไขด่วน"
+              aria-label={t("nav.files", "ไฟล์")}
+              title={t("nav.files_desc", "เปิดไฟล์และแก้ไขด่วน")}
               onClick={() => {
                 setDockView("files");
                 setPreview(dockView === "files" ? !preview : true);
               }}
             >
               <Folder size={13} />
-              <span className="btn-label">ไฟล์</span>
+              <span className="btn-label">{t("nav.files", "ไฟล์")}</span>
             </button>
             <button
-              aria-label="Preview"
-              title="เปิด Preview หน้าเว็บ"
+              aria-label={t("nav.preview", "Preview")}
+              title={t("nav.preview_desc", "เปิด Preview หน้าเว็บ")}
               className={`toolbar-button titlebar-btn ${preview && dockView === "browser" ? "selected" : ""}`}
               onClick={() => {
                 setDockView("browser");
@@ -1051,22 +1053,22 @@ export function App() {
               }}
             >
               <Globe size={13} />
-              <span className="btn-label">Preview</span>
+              <span className="btn-label">{t("nav.preview", "Preview")}</span>
             </button>
             <button
               className="toolbar-button titlebar-btn secondary compact"
               aria-label="สร้าง session"
-              title="เปิด Terminal หรือหลายห้อง"
+              title={t("nav.terminal_desc", "เปิด Terminal หรือหลายห้อง")}
               disabled={!workspace}
               onClick={() => openSession()}
             >
               <Terminal size={13} />
-              <span className="btn-label">Terminal</span>
+              <span className="btn-label">{t("nav.terminal", "Terminal")}</span>
             </button>
             <button
               className="toolbar-button titlebar-btn primary compact"
               aria-label="บทสนทนาใหม่"
-              title="บทสนทนาใหม่"
+              title={t("nav.new_desc", "บทสนทนาใหม่")}
               disabled={busy}
               onClick={() => {
                 newConversationWorkspace.current = activeWs;
@@ -1078,7 +1080,7 @@ export function App() {
               }}
             >
               <Plus size={13} />
-              <span className="btn-label">ใหม่</span>
+              <span className="btn-label">{t("nav.new", "ใหม่")}</span>
             </button>
           </div>
         </div>
@@ -1087,17 +1089,17 @@ export function App() {
         {sidebar && (
           <aside className="project-sidebar">
             <div className="sidebar-heading">
-              <span>พื้นที่ทำงาน</span>
+              <span>{t("sidebar.heading", "พื้นที่ทำงาน")}</span>
               <button
                 className="icon-button"
-                title="ซ่อนแถบโปรเจกต์"
+                title={t("sidebar.hide", "ซ่อนแถบโปรเจกต์")}
                 onClick={() => setSidebar(false)}
               >
                 <PanelLeftClose size={16} />
               </button>
             </div>
             <button className="new-project" onClick={() => openProject()}>
-              <Plus size={16} /> เพิ่มโปรเจกต์{" "}
+              <Plus size={16} /> {t("sidebar.add_project", "เพิ่มโปรเจกต์")}{" "}
             </button>
             <label className="project-search">
               <Search size={14} />
@@ -1264,7 +1266,7 @@ export function App() {
               </button>
               <button onClick={openSettings}>
                 <Settings size={17} />
-                <span>การตั้งค่า</span>
+                <span>{t("sidebar.settings", "การตั้งค่า")}</span>
               </button>
               {update && (
                 <button onClick={() => setDialog("update")} className={update.status === "available" || update.status === "ready" ? "update-ready" : ""}
@@ -2162,8 +2164,45 @@ export function App() {
             {dialog === "settings" && (
               <>
                 <div className="mission-settings">
-<nav className="settings-nav" aria-label="หมวดการตั้งค่า">{[["tools", "เครื่องมือ AI"], ["mcp", "MCP Servers"], ["models", "Model และ Effort"], ["folders", "โฟลเดอร์"], ["voice", "เสียง"], ["notify", "แจ้งเตือนและคำแนะนำ"]].map(([id, label]) => <button key={id} aria-current={settingsTab === id ? "page" : undefined} onClick={() => setSettingsTab(id)}>{label}</button>)}</nav>
-<div className="settings-content"><section hidden={settingsTab !== "tools"}>
+<nav className="settings-nav" aria-label="หมวดการตั้งค่า">{[["language", t("settings.tab_language", "ภาษา / Language")], ["tools", t("settings.tab_tools", "เครื่องมือ AI")], ["mcp", t("settings.tab_mcp", "MCP Servers")], ["models", t("settings.tab_models", "Model และ Effort")], ["folders", t("settings.tab_folders", "โฟลเดอร์")], ["voice", t("settings.tab_voice", "เสียง")], ["notify", t("settings.tab_notify", "แจ้งเตือนและคำแนะนำ")]].map(([id, label]) => <button key={id} aria-current={settingsTab === id ? "page" : undefined} onClick={() => setSettingsTab(id)}>{label}</button>)}</nav>
+<div className="settings-content">
+<section hidden={settingsTab !== "language"}>
+  <div className="settings-section-title">
+    <h3>{t("settings.lang_heading", "เลือกภาษาการแสดงผล (Display Language)")}</h3>
+  </div>
+  <p className="muted">
+    {t("settings.lang_desc", "เปลี่ยนภาษาเมนูและปุ่มสั่งงานทั้งหมดในโปรแกรมได้ทันที")}
+  </p>
+  <div className="language-selector-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '10px', marginTop: '14px' }}>
+    {languages.map((lang) => (
+      <button
+        key={lang.code}
+        type="button"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          padding: '12px 16px',
+          borderRadius: '10px',
+          border: locale === lang.code ? '1.5px solid var(--brand-blue, #38bdf8)' : '1px solid rgba(255,255,255,0.08)',
+          background: locale === lang.code ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255,255,255,0.03)',
+          color: locale === lang.code ? '#ffffff' : '#cbd5e1',
+          cursor: 'pointer',
+          textAlign: 'left',
+          transition: 'all 0.15s ease'
+        }}
+        onClick={() => setLocale(lang.code)}
+      >
+        <span style={{ fontSize: '26px' }}>{lang.flag}</span>
+        <div>
+          <div style={{ fontWeight: 600, fontSize: '14px' }}>{lang.nativeName}</div>
+          <small style={{ color: '#94a3b8', fontSize: '11px' }}>{lang.label}</small>
+        </div>
+      </button>
+    ))}
+  </div>
+</section>
+<section hidden={settingsTab !== "tools"}>
                   <div className="settings-section-title">
                     <h3>เครื่องมือ CLI</h3>
                     <button
