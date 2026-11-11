@@ -425,3 +425,14 @@ test('preview forgetting closes tabs and clears shared cookies/storage/cache; bl
     assert.equal(controller.forgetting, false);
   } finally { delete (globalThis as any).__previewSessionTest; }
 });
+
+test('API keys are saved encrypted, limited to known providers, and can be removed', t => {
+  const { dir, store } = fixture(t);
+  store.saveApi('openrouter', 'sk-or-secret-123');
+  assert.equal(store.get('api', 'openrouter'), 'sk-or-secret-123');
+  assert.ok(!fs.readFileSync(path.join(dir, 'credentials.enc'), 'utf8').includes('"api:openrouter":"sk-or-secret-123"'), 'the file is not plain JSON');
+  assert.throws(() => store.saveApi('elsewhere', 'x'), /Unsupported/);
+  assert.throws(() => store.saveApi('groq', 'two words'), /Invalid/);
+  store.forgetApi('openrouter');
+  assert.equal(store.get('api', 'openrouter'), undefined);
+});

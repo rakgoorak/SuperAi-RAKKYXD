@@ -18,6 +18,12 @@ export function sessionService(value: string): SessionService {
   return value as SessionService;
 }
 
+export const API_SERVICES = ['openrouter', 'deepseek', 'groq'] as const;
+export function apiService(value: string): string {
+  if (!(API_SERVICES as readonly string[]).includes(value)) throw new Error('Unsupported API service');
+  return value;
+}
+
 function systemEncryption(): CredentialEncryption {
   try {
     const { safeStorage } = createRequire(import.meta.url)('electron');
@@ -102,6 +108,22 @@ export class CredentialStore {
     if (kind === 'session') sessionService(provider);
     this.migrateLegacy();
     return this.read()[`${kind}:${provider}`];
+  }
+
+  /** API keys the user pasted in Settings (OpenRouter, DeepSeek, Groq). */
+  saveApi(provider: string, key: string): void {
+    apiService(provider);
+    if (!key || key.length > 500 || /\s/.test(key)) throw new Error('Invalid API key');
+    this.migrateLegacy();
+    this.write({ ...this.read(), [`api:${provider}`]: key });
+  }
+
+  forgetApi(provider: string): void {
+    apiService(provider);
+    this.migrateLegacy();
+    const data = this.read();
+    delete data[`api:${provider}`];
+    this.write(data);
   }
 
   saveSession(provider: string, token: string): void {
