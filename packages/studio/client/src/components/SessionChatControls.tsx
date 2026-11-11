@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { FileText, X } from 'lucide-react';
 import { api, loginProvider } from '../api';
+import { useAccounts } from '../accounts';
 import { useModels, EFFORT_LABEL } from '../providers';
 import { ModelCombo } from './ModelCombo';
 import { useProviderAccess } from './ProviderAccess';
@@ -16,6 +17,9 @@ import type { ResponseStyle } from '../responseStyle';
  * Choices are kept per session (chatControls) and go with the next message.
  */
 export function SessionChatControls({ sessionId, name, disabled }: { sessionId: string; name: string; disabled: boolean; onDraft?: (text: string) => void }) {
+  const [accountId, setAccountId] = useState("system");
+  const [accountName, setAccountName] = useState("");
+  const { providers: accountProviders } = useAccounts();
   const [agent, setAgent] = useState('');
   const [model, setModel] = useState(chatPrefs(sessionId).model);
   const [effort, setEffort] = useState(chatPrefs(sessionId).effort);
@@ -26,8 +30,9 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
   const [problem, setProblem] = useState('');
   const [busy, setBusy] = useState(false);
   const [rules, setRules] = useState<{ rules: string; files: string[] } | null>(null);
-  const { list, error: modelError, refresh: refreshModels } = useModels(agent);
-  const { auth, checking, error: authError, check } = useProviderAccess(agent);
+  const { list, error: modelError, refresh: refreshModels } = useModels(agent, accountId);
+  const { auth, checking, error: authError, check } = useProviderAccess(agent, accountId);
+  const profileName = accountProviders.find(p => p.provider === agent)?.profiles.find(p => p.id === accountId)?.name || accountName;
   const efforts = (model && list?.modelEfforts?.[model]) || list?.efforts || [];
 
   useEffect(() => { setIncludeProjectContext(chatPrefs(sessionId).includeProjectContext); }, [sessionId]);
@@ -40,10 +45,10 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
 
   useEffect(() => {
     let disposed = false;
-    api<{ agent: string; model: string; effort: string }>(`/api/terminals/${sessionId}/chat/settings`)
+    api<{ agent: string; accountId: string; accountName: string; model: string; effort: string }>(`/api/terminals/${sessionId}/chat/settings`)
       .then((settings) => {
         if (disposed) return;
-        setAgent(settings.agent);
+        setAgent(settings.agent); setAccountId(settings.accountId); setAccountName(settings.accountName);
         // A choice made here earlier wins over the session's saved default.
         const saved = chatPrefs(sessionId);
         setModel(hasChatPrefs(sessionId) ? saved.model : settings.model);
@@ -84,6 +89,7 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
       </select>
       {problem && <div className="chat-composer-problem" role="alert">{problem}<button type="button" onClick={() => setProblem('')} aria-label="ปิดข้อความ"><X size={12} /></button></div>}
       {agent && <ProviderBadge provider={agent} />}
+      {ready && <span className="session-account-name" title="บัญชีที่ผูกกับห้องนี้">{profileName}</span>}
       <div className="chat-model-controls">
         <label>Model<ModelCombo label={`Model ในแชท ${name}`} value={model} options={list?.models || []} onOpen={refreshModels} placeholder="ค่าเริ่มต้นของ CLI" disabled={disabled || !ready}
           onChange={(value) => { setModel(value); setEffort(''); }} /></label>
@@ -97,7 +103,7 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
         <small>ปิดเพื่อลดบริบทที่ SuperAi เพิ่มในการส่งครั้งถัดไป CLI อาจอ่านกฎของตัวเองและเก็บบริบทที่ส่งไปแล้วในประวัติ</small>
         {agent && <p className="permission-description">{permissionLabel(agent, permission)} · {permissionDescription(agent, permission)}</p>}
         <section className={`composer-option-account ${auth?.status || ''}`} aria-label="บัญชีของ session">
-          <strong>{auth?.status === 'authenticated' ? 'บัญชีเชื่อมต่อแล้ว' : 'บัญชี AI'}</strong>
+          <strong>{profileName || 'บัญชี AI'}</strong>
           <p>{authError || auth?.note || (agent ? 'กำลังตรวจบัญชี…' : 'กำลังโหลดการตั้งค่า…')}</p>
           <button type="button" className="text-button" disabled={checking || busy || !agent} onClick={() => void check(true)}>ตรวจบัญชีอีกครั้ง</button>
           {auth?.status !== 'authenticated' && auth?.status !== 'not-installed' && <button type="button" className="text-button" disabled={!agent || busy || disabled} onClick={() => void login()}>เข้าสู่ระบบใน Terminal</button>}

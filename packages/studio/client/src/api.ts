@@ -125,11 +125,11 @@ export interface Cli {
   teamSupported?: boolean;
 }
 /** One AI seat: tool ("cli:<id>" or an Ollama model), model and effort ("" = CLI default). */
-export interface Seat { name: string; provider: string; model: string; effort: string; }
+export interface Seat { accountId?: string; name: string; provider: string; model: string; effort: string; }
 export interface ModelList { models: string[]; efforts: string[]; modelEfforts?: Record<string, string[]>; note?: string; }
 export interface CliAuthStatus { id: string; status: "authenticated" | "login-required" | "unknown" | "not-installed"; note: string; checkedAt: number; loginCommand: string }
 export interface ChatSkill { id: string; name: string; description: string; source: string; path: string }
-export async function loginProvider(id: string, context: { sessionId?: string; wsId?: string }) {
+export async function loginProvider(id: string, context: { sessionId?: string; wsId?: string; accountId?: string }) {
   const session = await post<{ id: string }>(`/api/clis/${id}/login`, context);
   window.dispatchEvent(new CustomEvent("superai:login-session", { detail: session.id }));
 }
@@ -141,6 +141,7 @@ export interface UsageStep { stage: string; seat: string; provider: string; stat
 export interface SkillInfo { source: string; sourceLabel: string; name: string; description: string; files: string[]; url: string; repo?: string; branch?: string; prefix?: string; installs?: number; reason?: string; }
 export interface InstalledSkill { name: string; source: string; managed: boolean; targets: string[]; }
 export interface Session {
+  accountId?: string;
   authOnly?: boolean;
   id: string;
   name: string;

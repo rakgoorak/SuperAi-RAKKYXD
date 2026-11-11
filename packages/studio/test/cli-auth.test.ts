@@ -2,6 +2,28 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CliAuthManager, isAuthFailure, LOGIN_ARGS } from '../server/CliAuth.js';
 import { cliFailure } from '../server/CliProvider.js';
+import { AccountRegistry } from '../server/Accounts.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+test('auth state and failures are isolated per account', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'superai-auth-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const registry = new AccountRegistry(dir);
+  const a = registry.create('codex', 'A'), b = registry.create('codex', 'B');
+  const seen: string[] = [];
+  const manager = new CliAuthManager(async (_id, _args, env) => {
+    seen.push(env!.CODEX_HOME!);
+    return { code: 0, stdout: 'Logged in using ChatGPT', stderr: '' };
+  }, () => true, registry);
+  await Promise.all([manager.get('codex', false, a.id), manager.get('codex', false, b.id)]);
+  assert.equal(new Set(seen).size, 2);
+  manager.failure('codex', 'Not logged in', a.id);
+  assert.equal((await manager.get('codex', false, a.id)).status, 'login-required');
+  assert.equal((await manager.get('codex', false, b.id)).status, 'authenticated');
+  await assert.rejects(manager.get('codex', false, '../invalid'));
+});
 
 test('missing CLI, signed-out account and unverified account are different states', async () => {
   let calls = 0;
@@ -34,6 +56,17 @@ test('free OpenCode models are not blocked by an empty credential list or anothe
   assert.equal((await manager.get('opencode')).status, 'unknown');
   manager.failure('opencode', 'Invalid API key');
   await manager.requireReady('opencode');
+});
+
+test('sending to OpenCode does not start the CLI just to check the account', async () => {
+  let calls = 0;
+  const ready = new CliAuthManager(async () => { calls++; return { code: 0, stdout: '', stderr: '' }; }, () => true);
+  await ready.requireReady('opencode');
+  await ready.requireReady('opencode');
+  assert.equal(calls, 0);
+  const missing = new CliAuthManager(async () => { calls++; return { code: 0, stdout: '', stderr: '' }; }, () => false);
+  await assert.rejects(missing.requireReady('opencode'), /ยังไม่พบ CLI/);
+  assert.equal(calls, 0);
 });
 
 test('timeouts, unsupported auth commands and network failures stay unverified', async () => {

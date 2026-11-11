@@ -1,4 +1,6 @@
+import { accounts } from "./Accounts.js";
 import fs from "node:fs";
+import { cloudKeys, isCloud } from "./CloudKeys.js";
 import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -7,6 +9,7 @@ import { cliLaunch, listOpenCodeModels } from "./CliCatalog.js";
 
 /** One AI seat: which tool runs it, which model and how hard it should think. */
 export interface Seat {
+  accountId?: string;
   name: string;
   provider: string; // "cli:<id>" or an Ollama model name
   model: string; // "" = the CLI's own default
@@ -80,7 +83,7 @@ export function validateSeat(value: unknown, label = "ผู้ช่วย"): S
       throw new Error(`${label}: CLI นี้ใช้ได้เฉพาะโหมด Code (ไม่มีโหมดสั่งงานเบื้องหลัง)`);
     if (effort && !PROVIDER_PROFILES[id].efforts.includes(effort)) throw new Error(`${label}: ระดับ effort ไม่ถูกต้อง`);
   } else if (!SAFE.test(provider) || provider.startsWith("-")) throw new Error(`${label}: ชื่อรุ่น Ollama ไม่ถูกต้อง`);
-  return { name, provider, model, effort: provider.startsWith("cli:") ? effort : "" };
+  return { name, provider, model, effort: provider.startsWith("cli:") ? effort : "", ...(provider.startsWith("cli:") ? { accountId: accounts.resolve(provider.slice(4), s.accountId) } : {}) };
 }
 
 /** Efforts agy accepts today; its model names end in the level they run at (`gemini-4-argon-high`). */
@@ -109,8 +112,8 @@ export function modelEffortArgs(id: string, model = "", effort = "", interactive
   return args;
 }
 
-function codexCachedModels(): { models: string[]; efforts: Record<string, string[]> } {
-  const home = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+function codexCachedModels(env: NodeJS.ProcessEnv = process.env): { models: string[]; efforts: Record<string, string[]> } {
+  const home = env.CODEX_HOME || path.join(os.homedir(), ".codex");
   try {
     const data = JSON.parse(fs.readFileSync(path.join(home, "models_cache.json"), "utf8"));
     const efforts: Record<string, string[]> = {};
@@ -137,13 +140,14 @@ async function antigravityModels(): Promise<string[]> {
 export interface ModelList { models: string[]; efforts: string[]; modelEfforts?: Record<string, string[]>; note?: string }
 
 /** Models a provider offers right now. Failures fall back to suggestions plus free typing. */
-export async function listModels(id: string): Promise<ModelList> {
+export async function listModels(id: string, accountId = "system"): Promise<ModelList> {
+  const env = accounts.environment(id, accountId);
   const profile = PROVIDER_PROFILES[id];
   if (!profile) throw new Error("ไม่รู้จักผู้ให้บริการนี้");
   const base = { efforts: profile.efforts, note: profile.effortNote };
   try {
     if (id === "codex") {
-      const cached = codexCachedModels();
+      const cached = codexCachedModels(env);
       return { ...base, models: cached.models, modelEfforts: cached.efforts, note: cached.models.length ? "รายชื่อมาจาก Codex บางรุ่นอาจใช้กับแพ็กเกจ ChatGPT ของคุณไม่ได้" : "ยังไม่พบรายชื่อรุ่น เปิด Codex ในโหมด Code หนึ่งครั้งเพื่อให้ CLI ดึงรายชื่อ หรือพิมพ์ชื่อรุ่นเอง" };
     }
     if (id === "antigravity") {
@@ -152,7 +156,11 @@ export async function listModels(id: string): Promise<ModelList> {
       const modelEfforts = Object.fromEntries(models.filter((m) => AGY_LEVEL.test(m)).map((m) => [m, []]));
       return { ...base, efforts: ANTIGRAVITY_EFFORTS, models, modelEfforts, note: "ชื่อรุ่นของ Antigravity บอกระดับ effort อยู่แล้ว (-low / -medium / -high) จึงไม่ต้องเลือก effort ซ้ำ" };
     }
-    if (id === "opencode") return { ...base, models: await listOpenCodeModels() };
+    if (id === "opencode") return { ...base, models: await listOpenCodeModels(env) };
+    if (isCloud(id)) {
+      const models = await cloudKeys.models(id);
+      return models.length ? { ...base, models } : { ...base, models: profile.suggestedModels, note: "ใส่ API Key ที่ การตั้งค่า > API Key เพื่อดูรายชื่อรุ่นทั้งหมด" };
+    }
   } catch {
     return { ...base, ...(id === "antigravity" ? { efforts: ANTIGRAVITY_EFFORTS } : {}), models: profile.suggestedModels, note: "ดึงรายชื่อรุ่นจาก CLI ไม่สำเร็จ ตรวจการติดตั้ง/เข้าสู่ระบบ หรือพิมพ์ชื่อรุ่นเอง" };
   }

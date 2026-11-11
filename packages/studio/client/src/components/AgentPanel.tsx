@@ -73,7 +73,7 @@ export function AgentConfigEditor({ workspaceId, clis, ollamaModels, disabled, o
         <Plus size={13} /> เพิ่ม Sub-agent ({config.subagents.length}/{MAX_SUBAGENTS})
       </button>
       </section>
-    <div className="team-access" aria-label="ความพร้อมของทีม">{Array.from(new Set([config.main, ...config.subagents].map(s => s.provider).filter(p => p.startsWith("cli:")).map(p => p.slice(4)))).map(provider => <ProviderAccess key={provider} provider={provider} wsId={workspaceId} compact onInstall={() => { close(); onFixTools(); }} />)}</div>
+    <div className="team-access" aria-label="ความพร้อมของทีม">{Array.from(new Set([config.main, ...config.subagents].filter(s => s.provider.startsWith("cli:")).map(s => `${s.provider.slice(4)}:${s.accountId || ""}`))).map(provider => <ProviderAccess key={provider} provider={provider.split(":")[0]} accountId={provider.split(":")[1] || undefined} wsId={workspaceId} compact onInstall={() => { close(); onFixTools(); }} />)}</div>
       <div className="summarizer-row">
         <label className="tool-permission">
           <input type="checkbox" checked={config.clarify !== false} disabled={disabled} onChange={(e) => setConfig((c) => ({ ...c, clarify: e.target.checked }))} />

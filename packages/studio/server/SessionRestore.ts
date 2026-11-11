@@ -19,8 +19,8 @@ export function resumeArgs(agentType: string, resume?: string): string[] {
 }
 
 /** True when Claude Code saved a transcript for this session id (a tab nobody typed in has none). */
-export function claudeTranscriptExists(id: string, home = os.homedir()): boolean {
-  const root = path.join(home, ".claude", "projects");
+export function claudeTranscriptExists(id: string, home = os.homedir(), configDir = process.env.CLAUDE_CONFIG_DIR): boolean {
+  const root = path.join(configDir || path.join(home, ".claude"), "projects");
   try {
     return fs.readdirSync(root).some((dir) => fs.existsSync(path.join(root, dir, `${id}.jsonl`)));
   } catch {
@@ -36,8 +36,8 @@ const samePath = (a: string, b: string) =>
  * tab opened and is not already taken by another tab. Codex writes one rollout per conversation
  * under ~/.codex/sessions/YYYY/MM/DD with its id, folder and start time on the first line.
  */
-export function findCodexSession(cwd: string, since: number, taken: Set<string>, home = os.homedir()): string | null {
-  const root = path.join(home, ".codex", "sessions");
+export function findCodexSession(cwd: string, since: number, taken: Set<string>, home = os.homedir(), codexHome = process.env.CODEX_HOME): string | null {
+  const root = path.join(codexHome || path.join(home, ".codex"), "sessions");
   const found: { id: string; at: number }[] = [];
   for (let day = new Date(since - 86_400_000); day.getTime() <= Date.now() + 86_400_000; day = new Date(day.getTime() + 86_400_000)) {
     const dir = path.join(root, String(day.getFullYear()), String(day.getMonth() + 1).padStart(2, "0"), String(day.getDate()).padStart(2, "0"));

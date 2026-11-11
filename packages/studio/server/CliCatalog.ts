@@ -208,7 +208,7 @@ export function listClis() {
   }));
 }
 
-export async function listOpenCodeModels(): Promise<string[]> {
+export async function listOpenCodeModels(env: NodeJS.ProcessEnv = process.env): Promise<string[]> {
   const launch = cliLaunch("opencode", ["models"]);
   for (let attempt = 0; ; attempt++) {
     try {
@@ -216,7 +216,7 @@ export async function listOpenCodeModels(): Promise<string[]> {
         windowsHide: true,
         timeout: 20000,
         maxBuffer: 2 * 1024 * 1024,
-        env: { ...process.env, ...cliEnv() },
+        env: { ...env, ...cliEnv() },
       });
       return stdout
         .split(/\r?\n/)

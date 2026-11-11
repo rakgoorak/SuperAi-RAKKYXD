@@ -1,3 +1,5 @@
+import { accounts } from "./Accounts.js";
+import { openCodePermissionEnv } from "./OpenCodePermissions.js";
 import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptions } from "node:child_process";
 import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
@@ -74,11 +76,11 @@ export function promptArguments(
   throw new Error("CLI นี้รองรับเฉพาะ terminal กรุณาใช้โหมดโค้ด");
 }
 /** Short, actionable failure text: prefer the provider's own JSON error message over raw logs. */
-export function cliFailure(provider: string, model: string, errors: string, output: string, code: number | null) {
+export function cliFailure(provider: string, model: string, errors: string, output: string, code: number | null, accountId = "system") {
   const raw = (errors || output).replace(/\x1b\[[0-9;]*m/g, "");
   const id = provider.replace(/^cli:/, "");
   const authText = `${errors}\n${output}`.replace(/\x1b\[[0-9;]*m/g, "");
-  cliAuth.failure(id, authText);
+  cliAuth.failure(id, authText, accountId);
   if (isAuthFailure(authText)) return `${provider}: บัญชียังไม่พร้อมหรือหมดอายุ กรุณากดเข้าสู่ระบบในหน้าแชต หรือเปิด Terminal ของผู้ให้บริการแล้วเข้าสู่ระบบ จากนั้นกดตรวจอีกครั้ง`;
 
   if (/Individual quota reached|quota reached|RESOURCE_EXHAUSTED/i.test(raw)) {
@@ -104,7 +106,7 @@ export function attachmentProblem(provider: string, attachments: string[]): stri
   if (!attachments.length) return "";
   const id = provider.replace(/^cli:/, "");
   if (!provider.startsWith("cli:"))
-    return "รุ่น Ollama บนเครื่องอ่านรูปหรือ PDF ที่แนบไม่ได้ กรุณาเลือก Claude Code, Codex หรือ OpenCode ในการตั้งค่า หรือส่งไฟล์ในโหมดโค้ด";
+    return "รุ่น Ollama บนเครื่องและ API นอกอ่านรูปหรือ PDF ที่แนบไม่ได้ กรุณาเลือก Claude Code, Codex หรือ OpenCode ในการตั้งค่า หรือส่งไฟล์ในโหมดโค้ด";
   if (!["claude-code", "codex", "opencode", "antigravity"].includes(id))
     return "CLI นี้รับไฟล์แนบในโหมดสนทนาไม่ได้ กรุณาใช้โหมดโค้ดแล้วแนบไฟล์ใน session";
   if (id === "codex" && attachments.some((file) => !/\.(png|jpe?g|gif|webp)$/i.test(file)))
@@ -125,6 +127,7 @@ export class CliProvider implements LLMProvider {
     private effort = "",
     private onUsage?: (usage: TokenUsage) => void,
     private dependencies: { launch: typeof cliLaunch; spawn: (command: string, args: string[], options: SpawnOptions) => ChildProcessWithoutNullStreams } = { launch: cliLaunch, spawn: (command, args, options) => spawn(command, args, options) as ChildProcessWithoutNullStreams },
+    private accountId = "system",
   ) {}
   async generate(messages: LLMMessage[]): Promise<LLMResponse> {
     return this.stream(messages, () => {});
@@ -147,7 +150,7 @@ export class CliProvider implements LLMProvider {
     try {
       if (inputFile) await fs.writeFile(inputFile, prompt, "utf8");
       if (this.signal.aborted) throw new Error("ยกเลิกงานแล้ว");
-      try { await cliAuth.requireReady(id); }
+      try { await cliAuth.requireReady(id, this.accountId); }
       catch (error) { if (this.signal.aborted) throw new Error("ยกเลิกงานแล้ว"); throw error; }
       if (this.signal.aborted) throw new Error("ยกเลิกงานแล้ว");
       const inline = longInline && inputFile
@@ -166,7 +169,11 @@ export class CliProvider implements LLMProvider {
           detached: process.platform !== 'win32',
           windowsHide: true,
           stdio: ["pipe", "pipe", "pipe"],
-          env: { ...process.env, ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0" },
+          env: (() => {
+            const env: NodeJS.ProcessEnv = { ...accounts.environment(id, this.accountId), ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0" };
+            // Same as chat: let OpenCode read the temp folder instead of ending the answer on a refused request.
+            return id === "opencode" ? { ...env, ...openCodePermissionEnv(env.OPENCODE_CONFIG_CONTENT) } : env;
+          })(),
         });
         proc.stdin.on("error", () => {});
         proc.stdin.end(id === "opencode" || id === "antigravity" ? undefined : prompt, "utf8");
@@ -218,10 +225,10 @@ export class CliProvider implements LLMProvider {
           if (parser && pending.trim()) parser.line(pending);
           const parsed = parser?.result();
           if (parsed?.usage) this.onUsage?.(parsed.usage);
-          if (parsed?.error) return reject(new Error(cliFailure(this.model, this.modelOverride, parsed.error, '', code)));
+          if (parsed?.error) return reject(new Error(cliFailure(this.model, this.modelOverride, parsed.error, '', code, this.accountId)));
           if (code !== 0)
             return reject(
-              new Error(cliFailure(this.model, this.modelOverride, errors, output, code)),
+              new Error(cliFailure(this.model, this.modelOverride, errors, output, code, this.accountId)),
             );
           if (parsed && !parsed.finished) return reject(new Error(`${this.model}: CLI ไม่ส่งผลลัพธ์ที่สมบูรณ์`));
           resolve({ text: (parsed?.text ?? output).replace(/\x1b\[[0-9;]*m/g, "").trim() });

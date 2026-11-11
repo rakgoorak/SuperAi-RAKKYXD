@@ -1,3 +1,4 @@
+import { accounts } from "./Accounts.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -12,6 +13,7 @@ import {
   createProvider,
 } from "@superai-rakkyxd/core";
 import { CliProvider, attachmentProblem } from "./CliProvider.js";
+import { CLOUD_PROVIDERS, cloudKeys, isCloud } from "./CloudKeys.js";
 import { cliLaunch } from "./CliCatalog.js";
 import { Seat, validateSeat } from "./Providers.js";
 import { skillPrompt } from "./ChatSkills.js";
@@ -186,7 +188,7 @@ const MAX_PANEL = 5;
 const MAX_SUBAGENTS = 6;
 const MAX_TASKS = 10;
 const describe = (seat: Seat) => {
-  const tool = seat.provider.startsWith("cli:") ? seat.provider.slice(4) : `ollama:${seat.provider}`;
+  const tool = seat.provider.startsWith("cli:") ? seat.provider.slice(4) : isCloud(seat.provider) ? CLOUD_PROVIDERS[seat.provider].name : `ollama:${seat.provider}`;
   return [tool, seat.model, seat.effort && `effort ${seat.effort}`].filter(Boolean).join(" · ");
 };
 
@@ -306,12 +308,18 @@ export class AgentRunManager {
         if (r.mode === "assistant") delete run.tasks;
         if (run.status === "running") run.status = "cancelled";
         if (run.clarify?.status === "waiting") run.clarify.status = "cancelled";
+        for (const seat of [run.main, ...(run.subagents || []), ...(run.panel || []).map((a: PanelAnswer) => a.seat), run.summarizer]) {
+          if (seat?.provider?.startsWith("cli:") && !seat.accountId) seat.accountId = "system";
+        }
         this.runs.set(run.id, run);
       }
     } catch {}
   }
   list(wsId: string) {
     return [...this.runs.values()].filter((r) => r.wsId === wsId);
+  }
+  usesAccount(accountId: string) {
+    return [...this.runs.values()].some(run => [run.main, ...(run.subagents || []), ...(run.panel || []).map(a => a.seat), run.summarizer].some(seat => seat?.accountId === accountId));
   }
   private save() {
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
@@ -324,7 +332,10 @@ export class AgentRunManager {
     if (this.list(wsId).some((r) => r.status === "running"))
       throw new Error("โปรเจกต์นี้มีงานกำลังทำอยู่ กรุณารอหรือหยุดงานก่อน");
     for (const seat of seats) {
-      if (seat.provider.startsWith("cli:")) cliLaunch(seat.provider.slice(4));
+      if (seat.provider.startsWith("cli:")) { accounts.resolve(seat.provider.slice(4), seat.accountId || "system"); cliLaunch(seat.provider.slice(4)); }
+      // Without a key the provider would answer with its own "apiKey not set" text instead of failing.
+      if (isCloud(seat.provider) && !cloudKeys.key(seat.provider))
+        throw new Error(`${seat.name}: ยังไม่ได้ใส่ API Key ของ ${CLOUD_PROVIDERS[seat.provider].name} เปิด การตั้งค่า > API Key เพื่อเชื่อมต่อ`);
       const problem = attachmentProblem(seat.provider, attachments);
       if (problem) throw new Error(`${seat.name}: ${problem}`);
     }
@@ -388,12 +399,14 @@ export class AgentRunManager {
 
   private provider(seat: Seat, cwd: string, signal: AbortSignal, tools: boolean, readTools: boolean, attachments: string[], onUsage?: (usage: TokenUsage) => void): LLMProvider {
     if (seat.provider.startsWith("cli:")) {
-      return new CliProvider(seat.provider, cwd, signal, tools, seat.model, readTools, attachments, seat.effort, onUsage);
+      return new CliProvider(seat.provider, cwd, signal, tools, seat.model, readTools, attachments, seat.effort, onUsage, undefined, seat.accountId || "system");
     }
     const cloud = ["deepseek", "groq", "openrouter", "openai", "anthropic", "gemini", "openai_compatible"];
     if (cloud.includes(seat.provider)) {
       return createProvider({
         provider: seat.provider as any,
+        // The key saved in Settings; other providers keep reading their own stored credentials.
+        apiKey: (isCloud(seat.provider) && cloudKeys.key(seat.provider)) || undefined,
         model: seat.model || undefined,
       });
     }
@@ -534,7 +547,7 @@ export class AgentRunManager {
           answer.startedAt = Date.now();
           note(answer.seat.name, `เริ่มคิด (${describe(answer.seat)})`);
           try {
-            const selected = answer.seat.provider.startsWith("cli:") ? skillPrompt(basePrompt, cwd, answer.seat.provider.slice(4)) : basePrompt;
+            const selected = answer.seat.provider.startsWith("cli:") ? skillPrompt(basePrompt, cwd, answer.seat.provider.slice(4), undefined, undefined, accounts.environment(answer.seat.provider.slice(4), answer.seat.accountId || "system")) : basePrompt;
             const fullQuestion = `${history ? `บทสนทนาก่อนหน้า:\n${history}\n\n` : ""}${selected}`;
             const text = await this.ask(answer.seat, `ตอบเป็นภาษาไทย ให้เหตุผลประกอบ\n\n${fullQuestion}`, cwd, controller.signal, {
               tools: false, readTools: true, attachments, projectContext: run.projectContext, responseStyle: run.responseStyle, run, stage: 'ตอบคำถาม',

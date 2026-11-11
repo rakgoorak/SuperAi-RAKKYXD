@@ -15,7 +15,7 @@ export const CLI_PASSTHROUGH_COMMANDS = new Set([
 /** Read only known skill directories. Project skills take precedence over global skills.
  * IDs distinguish duplicate names; clients never supply a file path to execute/read.
  */
-export function chatSkills(root: string, provider: string, home = os.homedir()): ChatSkill[] {
+export function chatSkills(root: string, provider: string, home = os.homedir(), env: NodeJS.ProcessEnv = process.env): ChatSkill[] {
   if (!PROVIDERS.includes(provider)) return [];
   const dirs: { dir: string; source: string }[] = [];
   const projectDirs = provider === "claude-code" ? [".claude/skills", ".agents/skills"]
@@ -25,18 +25,18 @@ export function chatSkills(root: string, provider: string, home = os.homedir()):
     for (const suffix of projectDirs) dirs.push({ dir: path.join(parent, suffix), source: parent === path.resolve(root) ? "โปรเจกต์" : "โฟลเดอร์แม่" });
     if (parent === path.dirname(parent) || parent === path.resolve(home)) break;
   }
-  const globals = provider === "claude-code" ? [path.join(home, ".claude/skills")]
-    : provider === "codex" ? [path.join(process.env.CODEX_HOME || path.join(home, ".codex"), "skills"), path.join(home, ".agents/skills")]
+  const globals = provider === "claude-code" ? [path.join(env.CLAUDE_CONFIG_DIR || path.join(home, ".claude"), "skills")]
+    : provider === "codex" ? [path.join(env.CODEX_HOME || path.join(home, ".codex"), "skills"), path.join(home, ".agents/skills")]
     : provider === "antigravity" ? [path.join(home, ".gemini/antigravity-cli/skills"), path.join(home, ".gemini/config/skills")]
-    : [path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "opencode/skills"), path.join(home, ".claude/skills"), path.join(home, ".agents/skills")];
+    : [path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), "opencode/skills"), path.join(env.CLAUDE_CONFIG_DIR || path.join(home, ".claude"), "skills"), path.join(home, ".agents/skills")];
   globals.forEach((dir) => dirs.push({ dir, source: "ผู้ให้บริการ · ส่วนตัว" }));
 
   // Claude's registry lists installed versions, including externally installed plugins.
   // Scan only registered plugin roots, never every cached/removed plugin version.
   if (provider === "claude-code") {
     try {
-      const registry = JSON.parse(fs.readFileSync(path.join(home, ".claude/plugins/installed_plugins.json"), "utf8"));
-      const settings = [path.join(home, ".claude/settings.json"), path.join(root, ".claude/settings.json"), path.join(root, ".claude/settings.local.json")];
+      const registry = JSON.parse(fs.readFileSync(path.join(env.CLAUDE_CONFIG_DIR || path.join(home, ".claude"), "plugins/installed_plugins.json"), "utf8"));
+      const settings = [path.join(env.CLAUDE_CONFIG_DIR || path.join(home, ".claude"), "settings.json"), path.join(root, ".claude/settings.json"), path.join(root, ".claude/settings.local.json")];
       const enabled: Record<string, boolean> = {};
       for (const file of settings) { try { Object.assign(enabled, JSON.parse(fs.readFileSync(file, "utf8")).enabledPlugins); } catch {} }
       for (const [key, installs] of Object.entries(registry.plugins || {})) {
@@ -76,13 +76,13 @@ export function chatSkills(root: string, provider: string, home = os.homedir()):
 }
 
 /** Explicit manual invocation; never treat arbitrary input as a skill file path. */
-export function skillPrompt(text: string, root: string, provider: string, skillId?: string, home?: string): string {
+export function skillPrompt(text: string, root: string, provider: string, skillId?: string, home?: string, env?: NodeJS.ProcessEnv): string {
   const trimmed = text.trim();
   const command = /^\/(skill|skills)(?:\s|$)/.exec(trimmed);
   const direct = /^\/([\w.:-]+)(?:\s+([\s\S]*))?$/.exec(trimmed);
   const inline = /(?:^|\s)\/(?:skill\s+)?([\w.:-]+)(?:\s+([\s\S]*))?$/.exec(trimmed);
   if (!skillId && !command && !direct && !inline) return text;
-  const skills = chatSkills(root, provider, home);
+  const skills = chatSkills(root, provider, home, env);
   const parts = /^\/skill\s+(\S+)(?:\s+([\s\S]*))?$/.exec(trimmed);
   const skill = skillId ? skills.find((s) => s.id === skillId)
     : skills.find((s) => s.name === (parts?.[1] || (!command ? direct?.[1] : inline ? inline[1] : "")));

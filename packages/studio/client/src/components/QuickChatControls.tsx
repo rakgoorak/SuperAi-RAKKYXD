@@ -2,12 +2,14 @@ import type { Cli } from '../api';
 import { HEADLESS, loadDefaults } from '../providers';
 import { providerIdentity } from '../providerIdentity';
 import { ProviderBadge } from './ProviderBadge';
+import { AccountPicker } from './AccountPicker';
 import { ComposerOptions } from './ComposerOptions';
 import { ResponseStyleSelect } from './ResponseStyleSelect';
 import type { ResponseStyle } from '../responseStyle';
 
-export function QuickChatControls({ clis, provider, onProvider, disabled, onSetup, style = 'normal', onStyle }: {
+export function QuickChatControls({ clis, provider, onProvider, accountId, onAccount, disabled, onSetup, style = 'normal', onStyle }: {
   clis: Cli[]; provider: string; onProvider: (id: string) => void; disabled: boolean; onSetup: () => void; style?: ResponseStyle; onStyle?: (value: ResponseStyle) => void;
+  accountId?: string; onAccount?: (id: string | undefined) => void;
 }) {
   const ready = clis.filter(cli => cli.available && HEADLESS.includes(cli.id));
   const defaults = loadDefaults()[provider];
@@ -17,6 +19,7 @@ export function QuickChatControls({ clis, provider, onProvider, disabled, onSetu
       {!ready.length && <option value="">ยังไม่มี AI พร้อมใช้</option>}
       {ready.map(cli => <option key={cli.id} value={cli.id}>{providerIdentity(cli.id).label}</option>)}
     </select></label>
+    {onAccount && <AccountPicker provider={provider} value={accountId} onChange={onAccount} disabled={disabled} label="บัญชีสำหรับบทสนทนาใหม่" />}
     <span className="quick-chat-model" title="ใช้รุ่นและระดับการคิดจากการตั้งค่าของคุณ">{defaults?.model || 'ใช้รุ่นที่ตั้งไว้'}</span>
     <ComposerOptions label="ตัวเลือกบทสนทนาใหม่">
       {onStyle && <ResponseStyleSelect value={style} onChange={onStyle} disabled={disabled} />}

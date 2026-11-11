@@ -32,6 +32,30 @@ export const EFFORTS: Record<string, string[]> = {
   opencode: ["minimal", "low", "medium", "high", "max"],
 };
 
+/** API providers connected with the user's own key (Settings > API Key). */
+export const CLOUD = ["openrouter", "deepseek", "groq"];
+export const isCloud = (provider: string) => CLOUD.includes(provider);
+export interface CloudKeyStatus { id: string; name: string; hasKey: boolean; source: "settings" | "env" | null; keyPage: string; hint?: string }
+const CLOUD_EVENT = "superai:cloud-keys-changed";
+export function notifyCloudKeysChanged() {
+  for (const id of CLOUD) {
+    for (const key of cache.keys()) if (key.startsWith(`${id}:`)) { cache.delete(key); fetchedAt.delete(key); }
+  }
+  window.dispatchEvent(new Event(CLOUD_EVENT));
+}
+/** Which API providers have a key; refreshed when a key is saved or removed. */
+export function useCloudKeys() {
+  const [keys, setKeys] = useState<CloudKeyStatus[]>([]);
+  useEffect(() => {
+    let live = true;
+    const load = () => void api<CloudKeyStatus[]>("/api/cloud-keys").then((k) => live && setKeys(k)).catch(() => {});
+    load();
+    window.addEventListener(CLOUD_EVENT, load);
+    return () => { live = false; window.removeEventListener(CLOUD_EVENT, load); };
+  }, []);
+  return keys;
+}
+
 export function providerName(provider: string) {
   if (provider.startsWith("cli:")) return PROVIDER_LABEL[provider.slice(4)] || provider.slice(4);
   if (PROVIDER_LABEL[provider]) return PROVIDER_LABEL[provider];
@@ -87,39 +111,41 @@ export function firstReady(clis: Cli[], skip: string[] = []) {
 const cache = new Map<string, Promise<ModelList>>();
 const fetchedAt = new Map<string, number>();
 const pending = new Set<string>();
-export function fetchModels(id: string, refresh = false) {
-  if (!pending.has(id) && (refresh || !cache.has(id) || Date.now() - (fetchedAt.get(id) || 0) > 60_000)) {
-    pending.add(id);
-    const request = api<ModelList>(`/api/providers/${id}/models`);
-    request.then(() => { fetchedAt.set(id, Date.now()); pending.delete(id); }, () => { pending.delete(id); cache.delete(id); });
-    if (refresh) request.then(() => window.dispatchEvent(new CustomEvent("superai:models-refreshed", { detail: id })), () => {});
-    cache.set(id, request);
+export function fetchModels(id: string, refresh = false, accountId?: string) {
+  const key = `${id}:${accountId || ""}`;
+  if (!pending.has(key) && (refresh || !cache.has(key) || Date.now() - (fetchedAt.get(key) || 0) > 60_000)) {
+    pending.add(key);
+    const request = api<ModelList>(`/api/providers/${id}/models${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`);
+    request.then(() => { fetchedAt.set(key, Date.now()); pending.delete(key); }, () => { pending.delete(key); cache.delete(key); });
+    if (refresh) request.then(() => window.dispatchEvent(new CustomEvent("superai:models-refreshed", { detail: key })), () => {});
+    cache.set(key, request);
   }
-  return cache.get(id)!;
+  return cache.get(key)!;
 }
-export function useModels(id: string) {
+export function useModels(id: string, accountId?: string) {
+  const key = `${id}:${accountId || ""}`;
   const [revision, setRevision] = useState(0);
   const [list, setList] = useState<ModelList | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
-    const refreshed = (event: Event) => { if ((event as CustomEvent<string>).detail === id) setRevision((n) => n + 1); };
+    const refreshed = (event: Event) => { if ((event as CustomEvent<string>).detail === key) setRevision((n) => n + 1); };
     window.addEventListener("superai:models-refreshed", refreshed);
     return () => window.removeEventListener("superai:models-refreshed", refreshed);
-  }, [id]);
+  }, [key]);
   useEffect(() => {
     if (!id) return setList(null);
     let ignore = false;
     setList(null);
     setError("");
-    fetchModels(id)
+    fetchModels(id, false, accountId)
       .then((value) => !ignore && setList(value))
       .catch((e) => !ignore && setError((e as Error).message));
     return () => {
       ignore = true;
     };
-  }, [id, revision]);
+  }, [id, accountId, revision]);
   const refresh = () => {
-    if (id) void fetchModels(id, true).then(() => setError(''), e => setError((e as Error).message));
+    if (id) void fetchModels(id, true, accountId).then(() => setError(''), e => setError((e as Error).message));
   };
   return { list, error, refresh };
 }

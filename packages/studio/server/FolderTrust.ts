@@ -8,7 +8,7 @@ import path from "node:path";
  * Only adds a missing entry; never removes or rewrites anything else. Configs that
  * don't exist yet are left alone (the CLI creates them on first run).
  */
-export interface TrustPaths { home: string; codexHome: string }
+export interface TrustPaths { home: string; codexHome: string; claudeConfigDir?: string }
 const defaults = (): TrustPaths => ({ home: os.homedir(), codexHome: process.env.CODEX_HOME || path.join(os.homedir(), ".codex") });
 
 function writeAtomic(file: string, text: string) {
@@ -24,7 +24,7 @@ function writeAtomic(file: string, text: string) {
 
 /** Claude Code: ~/.claude.json → projects["D:/Test"].hasTrustDialogAccepted */
 function trustClaude(dir: string, p: TrustPaths) {
-  const file = path.join(p.home, ".claude.json");
+  const file = path.join(p.claudeConfigDir || p.home, ".claude.json");
   if (!fs.existsSync(file)) return false;
   const config = JSON.parse(fs.readFileSync(file, "utf8"));
   const key = dir.replace(/\\/g, "/");

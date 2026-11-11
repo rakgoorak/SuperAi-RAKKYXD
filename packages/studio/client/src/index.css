@@ -3027,3 +3027,30 @@ img.small-brand { width: 18px; height: auto; background: none; border-radius: 0;
     padding: 0 6px !important;
   }
 }
+
+/* Settings > API Key: one row per API provider (OpenRouter, DeepSeek, Groq). */
+.api-keys { display: grid; gap: 10px; margin-top: 10px; }
+.api-key-row { display: grid; gap: 8px; padding: 12px; border: 1px solid #363532; border-radius: 8px; }
+.api-key-row header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.api-key-row header strong { margin-right: auto; }
+.api-key-row > small { color: #b7b6b2; }
+.api-key-row form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.api-key-row form input { flex: 1 1 220px; min-width: 0; }
+.api-key-row .api-key-problem { color: #ffbcc5; }
+.byok-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid #484844; border-radius: 999px; font-size: 11px; color: #b7b6b2; white-space: nowrap; }
+.byok-badge.authenticated { border-color: #4f6b55; color: #a9d3b0; }
+.accounts-panel { display: grid; gap: 12px; min-width: 0; }
+.account-provider { display: grid; gap: 10px; padding: 16px 0; border-bottom: 1px solid var(--border); min-width: 0; }
+.account-provider h4, .account-provider p { margin: 0; }
+.account-card { padding: 14px; border: 1px solid var(--border); border-radius: 8px; display: grid; gap: 10px; min-width: 0; }
+.account-card-heading, .account-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.account-card-heading strong { overflow-wrap: anywhere; }
+.account-default { font-size: 11px; color: var(--accent); }
+.account-actions input { flex: 1 1 180px; min-width: 0; }
+.account-remove { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
+.account-remove p { flex-basis: 100%; }
+.account-picker { display: grid; gap: 5px; min-width: 0; font-size: 12px; }
+.account-picker select { min-width: 0; max-width: 100%; }
+.seat-picker > .account-picker { grid-column: 1 / -1; }
+.session-account-name { font-size: 11px; color: var(--dim); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usage-card > .account-picker { padding: 0 12px 8px; }

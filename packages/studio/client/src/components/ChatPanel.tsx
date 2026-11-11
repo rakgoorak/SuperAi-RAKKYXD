@@ -77,7 +77,7 @@ export function ChatConfigEditor({ workspaceId, clis, ollamaModels, disabled, on
         </div>
       )}
       </section>
-      <div className="team-access" aria-label="ความพร้อมของทีม">{Array.from(new Set([...config.panel, ...(config.summarizer ? [config.summarizer] : [])].map(s => s.provider).filter(p => p.startsWith("cli:")).map(p => p.slice(4)))).map(provider => <ProviderAccess key={provider} provider={provider} wsId={workspaceId} compact />)}</div>
+      <div className="team-access" aria-label="ความพร้อมของทีม">{Array.from(new Set([...config.panel, ...(config.summarizer ? [config.summarizer] : [])].filter(s => s.provider.startsWith("cli:")).map(s => `${s.provider.slice(4)}:${s.accountId || ""}`))).map(provider => <ProviderAccess key={provider} provider={provider.split(":")[0]} accountId={provider.split(":")[1] || undefined} wsId={workspaceId} compact />)}</div>
       <div className="summarizer-row">
         <label className="tool-permission">
           <input type="checkbox" checked={config.clarify === true} disabled={disabled} onChange={(e) => setConfig((c) => ({ ...c, clarify: e.target.checked }))} />

@@ -11,7 +11,7 @@ export function ChatQuickControls({ workspaceId, config, onChange, clis, ollamaM
   workspaceId: string; config: ChatConfig; onChange: (value: ChatConfig) => void; clis: Cli[]; ollamaModels: string[];
   disabled: boolean; onDraft: (value: string) => void;
 }) {
-  const providers = [...new Set(config.panel.filter(seat => seat.provider.startsWith('cli:')).map(seat => seat.provider.slice(4)))];
+  const providers = [...new Set(config.panel.filter(seat => seat.provider.startsWith('cli:')).map(seat => `${seat.provider.slice(4)}:${seat.accountId || ''}`))];
   const menu = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     const close = (event: Event) => {
@@ -30,7 +30,7 @@ export function ChatQuickControls({ workspaceId, config, onChange, clis, ollamaM
       <SeatPicker seat={seat} onChange={next => onChange({ ...config, panel: config.panel.map((current, at) => at === index ? next : current) })}
         named={false} fixedProvider label={`ข้อความถัดไป ${seat.name}`} clis={clis} ollamaModels={ollamaModels} disabled={disabled} />
     </div>)}
-    <details><summary>บัญชีผู้ให้บริการ</summary>{providers.map(id => <ProviderAccess key={id} provider={id} wsId={workspaceId} />)}</details>
+    <details><summary>บัญชีผู้ให้บริการ</summary>{providers.map(id => <ProviderAccess key={id} provider={id.split(":")[0]} accountId={id.split(":")[1] || undefined} wsId={workspaceId} />)}</details>
     <button type="button" className="text-button" disabled={disabled} onClick={() => { if (menu.current) menu.current.open = false; onDraft('/'); }}>/skills · เลือก skill</button>
     </div></details>
   </div>;

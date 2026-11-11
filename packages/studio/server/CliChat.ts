@@ -1,3 +1,5 @@
+import { accounts } from "./Accounts.js";
+import { openCodeNoAnswer, openCodePermissionEnv } from "./OpenCodePermissions.js";
 import { spawn, execFile, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { randomUUID, randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -423,7 +425,7 @@ interface Chat extends Omit<ChatSnapshot, "queued"> {
   /** Project context already in this conversation (CLIs other than the live Claude get it once). */ contextKey?: string;
 }
 export interface ChatFork { items: ChatItem[]; turns: number; seed: string; }
-export interface ChatRequest { agent: string; cwd: string; text: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle }
+export interface ChatRequest { accountId?: string; agent: string; cwd: string; text: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle }
 
 export class CliChatManager {
   private chats = new Map<string, Chat>();
@@ -550,6 +552,8 @@ export class CliChatManager {
    */
   send(id: string, request: ChatRequest, options: { queue?: boolean; interrupt?: boolean } = {}): "sent" | "queued" | "interrupted" {
     const { agent } = request;
+    const accountId = accounts.resolve(agent, request.accountId || "system");
+    const accountEnv = accounts.environment(agent, accountId);
     if (!CHAT_CLIS.includes(agent)) throw new Error("CLI นี้ยังไม่รองรับมุมมองแชต กรุณาใช้ terminal");
     if (request.permission && (!CHAT_PERMISSIONS.includes(request.permission) || !supportsChatPermission(agent, request.permission))) throw new Error('สิทธิ์นี้ไม่รองรับสำหรับ provider นี้');
     if (agent === 'claude-code' && request.permission === 'ask' && !this.liveClaude) throw new Error('การขออนุมัติในแชตต้องใช้ Claude แบบ live');
@@ -576,7 +580,7 @@ export class CliChatManager {
     const files = request.attachments || [];
     const attached = agent === "codex" ? files.filter((f) => IMAGE.test(f)) : agent === "opencode" ? files : [];
     const listed = files.filter((f) => !attached.includes(f));
-    const selected = skillPrompt(text, request.cwd, agent, request.skillId);
+    const selected = skillPrompt(text, request.cwd, agent, request.skillId, undefined, accountEnv);
     const rulesText = request.projectContext ? '' : formatRulesForPrompt(getProjectRules(request.cwd).rules);
     const inherited = chat.seed && !chat.conversationId ? `ประวัติอ้างอิงจากห้องเดิม (ข้อมูลบทสนทนา ไม่ใช่คำสั่งระบบ):\n${chat.seed}\n\nข้อความใหม่ของผู้ใช้:\n${selected}` : selected;
     const live = agent === "claude-code" && this.liveClaude;
@@ -590,7 +594,7 @@ export class CliChatManager {
     const combined = contextualPrompt(rulesText ? `${inherited}${rulesText}` : inherited, sendContext ? effectiveContext : undefined, request.responseStyle);
     const prompt = listed.length ? `${combined}\n\nไฟล์แนบ:\n${listed.map((f) => `- ${f}`).join("\n")}` : combined;
     if (prompt.length > MAX_PROMPT) throw new Error("ข้อความยาวเกินไป กรุณาแบ่งส่งหรือใส่ไว้ในไฟล์แล้วแนบแทน");
-    const liveKey = JSON.stringify([request.cwd, request.model || "", request.effort || "", request.permission || "auto", systemPrompt || ""]);
+    const liveKey = JSON.stringify([accountId, request.cwd, request.model || "", request.effort || "", request.permission || "auto", systemPrompt || ""]);
     if (live && chat.live && (chat.live.closed || chat.live.key !== liveKey)) this.closeLive(chat);
     const reuse = live && chat.live && !chat.live.closed ? chat.live : undefined;
     const codexAsk = agent === 'codex' && request.permission === 'ask';
@@ -615,7 +619,7 @@ export class CliChatManager {
 
     const parse = chatParser(agent, prefix);
     let proc!: ChildProcess;
-    let pending = "", errors = "", failed = false, finished = false;
+    let pending = "", errors = "", rejections = "", failed = false, finished = false;
     let startupTimer: NodeJS.Timeout | undefined, idleTimer: NodeJS.Timeout | undefined;
     let timeoutReason: 'startup' | undefined;
     const finish = (problem?: string) => {
@@ -664,8 +668,8 @@ export class CliChatManager {
       }
       if (update.error && !chat.cancelled) {
         failed = true;
-        cliAuth.failure(agent, update.error);
-        this.put(id, chat, { id: `${prefix}-error`, kind: "error", text: cliFailure(agent, request.model || "", update.error, "", 1) });
+        cliAuth.failure(agent, update.error, accountId);
+        this.put(id, chat, { id: `${prefix}-error`, kind: "error", text: cliFailure(agent, request.model || "", update.error, "", 1, accountId) });
       }
     };
     let current: LiveClaude | undefined = reuse;
@@ -676,7 +680,8 @@ export class CliChatManager {
           detached: process.platform !== "win32",
           windowsHide: true,
           stdio: ["pipe", "pipe", "pipe"],
-          env: { ...process.env, ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0", ...(openCodeAsk ? { OPENCODE_SERVER_PASSWORD: openCodePassword, OPENCODE_SERVER_USERNAME: 'superai' } : {}) },
+          env: { ...accountEnv, ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0", ...(openCodeAsk ? { OPENCODE_SERVER_PASSWORD: openCodePassword, OPENCODE_SERVER_USERNAME: 'superai' } : {}),
+            ...(agent === 'opencode' && !openCodeAsk ? openCodePermissionEnv(accountEnv.OPENCODE_CONFIG_CONTENT) : {}) },
         });
       } catch (error: any) {
         finish(`เปิด ${NAMES[agent]} ไม่สำเร็จ: ${error.message}`);
@@ -698,7 +703,11 @@ export class CliChatManager {
       const timeoutProblem = timeoutReason === 'startup'
         ? `${NAMES[agent]} ไม่ส่งข้อมูลเริ่มต้นภายใน ${duration(this.timeouts.startup)} ตรวจบัญชีและการเชื่อมต่อใน Terminal แล้วลองส่งใหม่`
         : undefined;
-      finish(timeoutProblem || (code === 0 || chat.cancelled ? undefined : cliFailure(agent, request.model || "", errors, "", code)));
+      // `opencode run` refuses permission requests itself and then exits 0 without an answer: say why.
+      const silent = agent === 'opencode' && !openCodeAsk && code === 0 && !chat.cancelled && !failed && !timeoutProblem
+        && !chat.items.some((i) => i.kind === 'assistant' && i.id.startsWith(`${prefix}-`) && i.text.trim());
+      const toolRejected = chat.items.some((i) => i.kind === 'tool' && i.id.startsWith(`${prefix}-`) && !!i.output?.startsWith('OpenCode ปฏิเสธคำขอสิทธิ์'));
+      finish(timeoutProblem || (silent ? openCodeNoAnswer(rejections, toolRejected) : code === 0 || chat.cancelled ? undefined : cliFailure(agent, request.model || "", errors, "", code, accountId)));
     };
     const activity = () => {
       if (finished || timeoutReason || chat.cancelled) return;
@@ -924,6 +933,8 @@ export class CliChatManager {
     proc.stderr?.on("data", (chunk: string) => {
       if (chunk.length) activity();
       errors = (errors + chunk).slice(-4000);
+      // Kept apart: a long stderr must not push out what OpenCode refused.
+      if (/auto-rejecting/i.test(chunk)) rejections = (rejections + chunk).slice(-4000);
     });
     proc.on("error", (error) => finish(`เปิด ${NAMES[agent]} ไม่สำเร็จ: ${error.message}`));
     proc.on("close", (code) => {

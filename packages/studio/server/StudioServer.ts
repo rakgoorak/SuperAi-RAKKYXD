@@ -1,3 +1,5 @@
+import { accounts } from "./Accounts.js";
+import { registerAccountRoutes } from "./AccountRoutes.js";
 import { SelfHealingManager } from './SelfHealingManager.js';
 import { CrossReviewManager } from './CrossReviewManager.js';
 import { projectChanges, projectFile, stageFile, unstageFile, discardFile, saveProjectFile } from "./ProjectChanges.js";
@@ -26,6 +28,7 @@ import { WorkspaceRegistry } from "./WorkspaceRegistry.js";
 import { listModels, modelEffortArgs, PROVIDER_PROFILES } from "./Providers.js";
 import { SkillManager } from "./SkillManager.js";
 import { UsageManager, USAGE_PROVIDERS } from "./UsageManager.js";
+import { cloudKeys, isCloud } from "./CloudKeys.js";
 import { trustFolder, repairCodexConfigFile } from "./FolderTrust.js";
 import { CliVersionManager, VERSIONED_CLIS } from "./CliVersions.js";
 import { AttachmentError, MAX_ATTACHMENT_BYTES, resolveAttachments, saveAttachment } from "./AttachmentStore.js";
@@ -216,9 +219,32 @@ export class StudioServer {
   }
 
   private setupRoutes(): void {
+    registerAccountRoutes(this.app, id => this.terminalManager.listSessions().some(s => s.accountId === id) || this.agentRuns.usesAccount(id));
     this.app.get("/api/clis", (_req, res) => res.json(listClis()));
     this.app.get("/api/clis/:id/auth", async (req, res) => {
-      try { res.json(await cliAuth.get(String(req.params.id), req.query.refresh === "1")); }
+      try { res.json(await cliAuth.get(String(req.params.id), req.query.refresh === "1", accounts.resolve(String(req.params.id), req.query.accountId))); }
+      catch (error: any) { res.status(400).json({ error: error.message }); }
+    });
+    // API keys for OpenRouter, DeepSeek and Groq: checked with the provider, then kept encrypted on this machine.
+    this.app.get("/api/cloud-keys", (_req, res) => res.json(cloudKeys.all()));
+    this.app.put("/api/cloud-keys/:id", async (req, res) => {
+      try {
+        const id = String(req.params.id);
+        const status = await cloudKeys.save(id, String(req.body?.key || ""));
+        cliAuth.forget(id);
+        res.json(status);
+      } catch (error: any) { res.status(400).json({ error: error.message }); }
+    });
+    this.app.delete("/api/cloud-keys/:id", (req, res) => {
+      try {
+        const id = String(req.params.id);
+        const status = cloudKeys.remove(id);
+        cliAuth.forget(id);
+        res.json(status);
+      } catch (error: any) { res.status(400).json({ error: error.message }); }
+    });
+    this.app.post("/api/cloud-keys/:id/test", async (req, res) => {
+      try { await cloudKeys.test(String(req.params.id)); res.json({ ok: true }); }
       catch (error: any) { res.status(400).json({ error: error.message }); }
     });
     this.app.post("/api/clis/:id/login", (req, res) => {
@@ -227,13 +253,14 @@ export class StudioServer {
         if (!(id in LOGIN_ARGS)) throw new Error("ไม่รู้จักผู้ให้บริการนี้");
         const context = req.body?.sessionId ? this.terminalManager.getSession(String(req.body.sessionId)) : undefined;
         if (req.body?.sessionId && (!context || context.agentType !== id)) throw new Error("ไม่พบ session ของผู้ให้บริการนี้");
+        const accountId = accounts.resolve(id, context ? context.accountId || "system" : req.body?.accountId);
         const workspace = this.workspaceRegistry.getWorkspace(String(context?.wsId || req.body?.wsId || ""));
         if (!context && !workspace) throw new Error("กรุณาเลือกโปรเจกต์ก่อนเข้าสู่ระบบ");
-        const existing = this.terminalManager.listSessions().find((s) => s.agentType === id && s.status === "running" && (this.terminalManager.getSession(s.id)?.restart?.authOnly || id === "freebuff"));
+        const existing = this.terminalManager.listSessions().find((s) => s.agentType === id && s.accountId === accountId && s.status === "running" && (this.terminalManager.getSession(s.id)?.restart?.authOnly || id === "freebuff"));
         if (existing) return res.json({ id: existing.id });
         const launch = cliLaunch(id, LOGIN_ARGS[id]);
-        const session = this.terminalManager.spawnSession({ agentType: id, ...launch, authOnly: true,
-          name: `${getCliDefinition(id).name} · เข้าสู่ระบบ`, cwd: context?.cwd || workspace!.rootPath, wsId: context?.wsId || workspace?.id });
+        const session = this.terminalManager.spawnSession({ agentType: id, accountId, ...launch, authOnly: true,
+          name: `${getCliDefinition(id).name} · ${accounts.list(id).find(p => p.id === accountId)?.name || accountId} · เข้าสู่ระบบ`, cwd: context?.cwd || workspace!.rootPath, wsId: context?.wsId || workspace?.id });
         this.views.set(session.id, "terminal");
         res.json({ id: session.id });
       } catch (error: any) { res.status(400).json({ error: error.message }); }
@@ -584,7 +611,7 @@ export class StudioServer {
     });
     this.app.get("/api/providers/:id/models", async (req, res) => {
       try {
-        res.json(await listModels(String(req.params.id)));
+        res.json(await listModels(String(req.params.id), accounts.resolve(String(req.params.id), req.query.accountId)));
       } catch (err: any) {
         res.status(400).json({ error: err.message });
       }
@@ -592,7 +619,11 @@ export class StudioServer {
     this.app.get("/api/workspaces/:wsId/chat-skills/:provider", (req, res) => {
       const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
       if (!workspace) return res.status(404).json({ error: "ไม่พบโปรเจกต์" });
-      res.json(chatSkills(workspace.rootPath, String(req.params.provider)));
+      try {
+        const provider = String(req.params.provider);
+        const accountId = accounts.resolve(provider, req.query.accountId);
+        res.json(chatSkills(workspace.rootPath, provider, undefined, accounts.environment(provider, accountId)));
+      } catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
     this.app.get("/api/workspaces/:wsId/rules", (req, res) => {
       const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
@@ -662,7 +693,8 @@ export class StudioServer {
     this.app.get("/api/usage/:id", async (req, res) => {
       const id = String(req.params.id);
       if (!USAGE_PROVIDERS.includes(id)) return res.status(404).json({ error: "ไม่รู้จักผู้ให้บริการนี้" });
-      res.json(await this.usage.get(id, req.query.refresh === "1"));
+      try { res.json(await this.usage.get(id, req.query.refresh === "1", accounts.resolve(id, req.query.accountId))); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
     this.app.get("/api/skills/search", async (req, res) => {
       try {
@@ -901,10 +933,13 @@ export class StudioServer {
           (!fs.existsSync(workingDir) || !fs.statSync(workingDir).isDirectory())
         )
           return res.status(400).json({ error: "ไม่พบโฟลเดอร์ทำงาน" });
+        const accountId = accounts.resolve(typeof agentType === "string" ? agentType : "terminal", req.body.accountId);
+        const accountEnv = accounts.environment(agentType || "terminal", accountId);
         // Skip the CLI's "trust this folder?" prompt for the user's own project folder.
         if (req.body.trustFolder === true && workspace?.rootPath && workingDir === workspace.rootPath && typeof agentType === "string")
-          trustFolder(agentType, workspace.rootPath);
+          trustFolder(agentType, workspace.rootPath, { home: os.homedir(), codexHome: accountEnv.CODEX_HOME || path.join(os.homedir(), ".codex"), claudeConfigDir: accountEnv.CLAUDE_CONFIG_DIR });
         const spawnOptions = {
+          accountId,
           agentType,
           wsId,
           threadId,
@@ -942,6 +977,7 @@ export class StudioServer {
           mode: session.mode,
           status: session.status,
           agentType: session.agentType,
+          accountId: session.accountId,
           wsId: session.wsId,
           dormant: !!session.dormant,
           view: this.viewOf(session.id),
@@ -1028,8 +1064,8 @@ export class StudioServer {
     this.app.get("/api/terminals/:id/chat/settings", (req, res) => {
       const session = this.terminalManager.getSession(String(req.params.id));
       if (!session) return res.status(404).json({ error: "ไม่พบ session นี้แล้ว" });
-      res.json({ agent: session.agentType, model: session.restart?.model || session.restart?.openCodeModel || "", effort: session.restart?.effort || "",
-        skills: chatSkills(session.cwd, session.agentType || "") });
+      res.json({ agent: session.agentType, accountId: session.accountId || "system", accountName: accounts.list(session.agentType || "").find(p => p.id === (session.accountId || "system"))?.name || "บัญชีไม่พร้อม", model: session.restart?.model || session.restart?.openCodeModel || "", effort: session.restart?.effort || "",
+        skills: chatSkills(session.cwd, session.agentType || "", undefined, accounts.environment(session.agentType || "", session.accountId)) });
     });
     this.app.get("/api/terminals/:id/chat", (req: Request, res: Response) => {
       res.json(this.chats.snapshot(String(req.params.id)));
@@ -1063,7 +1099,7 @@ export class StudioServer {
         if (req.body.selection !== undefined && (typeof req.body.selection !== 'string' || !req.body.selection.trim())) throw new Error('กรุณาเลือกข้อความสำหรับ Side chat');
         const fork = this.chats.forkData(source.id, req.body.messageId, req.body.selection);
         const session = this.terminalManager.addDormant({ id: randomUUID(), options: {
-          agentType: source.agentType, cwd: source.cwd, wsId: source.wsId,
+          agentType: source.agentType, accountId: source.accountId || "system", cwd: source.cwd, wsId: source.wsId,
           name: `${req.body.selection !== undefined ? 'Side chat' : 'Fork'} · ${source.name}`.slice(0, 100),
           model: source.restart?.model, effort: source.restart?.effort, openCodeModel: source.restart?.openCodeModel,
         } });
@@ -1093,12 +1129,13 @@ export class StudioServer {
         if (req.body.permission !== undefined && !supportsChatPermission(agent, req.body.permission)) throw new Error('สิทธิ์นี้ไม่รองรับสำหรับ provider นี้');
         if (req.body.includeProjectContext !== undefined && typeof req.body.includeProjectContext !== 'boolean') throw new Error('การตั้งค่าบริบทโปรเจกต์ไม่ถูกต้อง');
         const style = responseStyle(req.body.responseStyle);
-        await cliAuth.requireReady(agent);
+        await cliAuth.requireReady(agent, session.accountId || "system");
         if (this.terminalManager.getSession(id) !== session || this.viewOf(id) !== "chat") return res.status(409).json({ error: "session เปลี่ยนไปแล้ว กรุณาลองใหม่" });
         if (session.sleeping || ["running", "stopping"].includes(session.status)) return res.status(409).json({ error: "Terminal ยังปิดไม่เสร็จ กรุณารอก่อนส่งข้อความ" });
         if (this.branchChanging) return res.status(409).json({ error: 'กำลังสลับ branch กรุณารอก่อนส่งข้อความ' });
         const outcome = this.chats.send(id, {
           agent,
+          accountId: session.accountId || "system",
           cwd: session.cwd,
           text: typeof req.body?.text === "string" ? req.body.text : "",
           ...chosen,
@@ -1138,9 +1175,9 @@ export class StudioServer {
       const timer = setTimeout(() => controller.abort(), 60_000);
       res.on("close", () => { if (!res.writableEnded) controller.abort(); });
       try {
-        await cliAuth.requireReady(agent);
+        await cliAuth.requireReady(agent, session.accountId || "system");
         const seat = predictionSeat(agent, session.restart?.model || (agent === "opencode" ? session.restart?.openCodeModel : "") || "");
-        const reply = await new CliProvider(`cli:${agent}`, session.cwd, controller.signal, false, seat.model, false, [], seat.effort)
+        const reply = await new CliProvider(`cli:${agent}`, session.cwd, controller.signal, false, seat.model, false, [], seat.effort, undefined, undefined, session.accountId || "system")
           .generate([{ role: "user", content: prompt }]);
         res.json({ text: cleanPrediction(reply.text) });
       } catch (err: any) {

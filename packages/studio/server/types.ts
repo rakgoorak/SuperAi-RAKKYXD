@@ -11,6 +11,7 @@ export interface PtyProcess {
 }
 
 export interface TerminalSession {
+  accountId?: string;
   agentType?: string;
   wsId?: string;
   threadId?: string;
@@ -94,6 +95,7 @@ export interface Workspace {
 }
 
 export interface SpawnSessionOptions {
+  accountId?: string;
   /** One-off authentication terminal; never restored as a conversation. */
   authOnly?: boolean;
   openCodeModel?: string;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Gauge, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { api } from "../api";
+import { AccountPicker } from './AccountPicker';
 import { orderUsageWindows, usageResetLabel, type UsageWindow } from "../usageDisplay";
 
 interface ProviderUsage {
@@ -8,12 +9,14 @@ interface ProviderUsage {
   windows: UsageWindow[]; details?: { label: string; value: string }[]; note?: string; updatedAt: number; dataTime?: number;
 }
 
-const PROVIDERS: { id: string; label: string }[] = [
+const PROVIDERS: { id: string; label: string; cloud?: boolean }[] = [
   { id: "claude-code", label: "Claude" },
   { id: "codex", label: "ChatGPT (Codex)" },
   { id: "antigravity", label: "Antigravity" },
   { id: "opencode", label: "OpenCode" },
   { id: "freebuff", label: "Freebuff" },
+  { id: "openrouter", label: "OpenRouter", cloud: true },
+  { id: "deepseek", label: "DeepSeek", cloud: true },
 ];
 
 const level = (pct: number) => (pct > 50 ? "good" : pct >= 20 ? "warn" : "low");
@@ -29,16 +32,20 @@ export function UsageButton({ open, onOpenChange: setOpen }: { open: boolean; on
   const [data, setData] = useState<Record<string, ProviderUsage>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const root = useRef<HTMLDivElement>(null);
+  const selections = useRef<Record<string, string | undefined>>({});
+  const [selectedAccounts, setSelectedAccounts] = useState<Record<string, string | undefined>>({});
 
   const load = useCallback(async (id: string, refresh = false) => {
+    const accountId = selections.current[id];
     setLoading((l) => ({ ...l, [id]: true }));
     try {
-      const result = await api<ProviderUsage>(`/api/usage/${id}${refresh ? "?refresh=1" : ""}`);
-      setData((d) => ({ ...d, [id]: result }));
+      const result = await api<ProviderUsage>(`/api/usage/${id}?refresh=${refresh ? "1" : "0"}${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ""}`);
+      if (selections.current[id] === accountId) setData((d) => ({ ...d, [id]: result }));
     } catch (e) {
+      if (selections.current[id] !== accountId) return;
       setData((d) => ({ ...d, [id]: { id, name: id, status: "error", windows: [], note: (e as Error).message, updatedAt: Date.now() } }));
     } finally {
-      setLoading((l) => ({ ...l, [id]: false }));
+      if (selections.current[id] === accountId) setLoading((l) => ({ ...l, [id]: false }));
     }
   }, []);
   const loadAll = useCallback((refresh = false) => PROVIDERS.forEach((p) => void load(p.id, refresh)), [load]);
@@ -78,19 +85,27 @@ export function UsageButton({ open, onOpenChange: setOpen }: { open: boolean; on
             <button className="icon-button" title="ปิด" onClick={() => setOpen(false)}><X size={14} /></button>
           </header>
           <div className="usage-list">
-            {PROVIDERS.map(({ id, label }) => {
+            {PROVIDERS.map(({ id, label, cloud }) => {
               const p = data[id];
               const busy = loading[id];
+              // API providers only take a card once the user has connected one.
+              if (cloud && (!p || p.status === "not-installed")) return null;
               const groups = [...new Set((p?.windows || []).map((w) => w.group || ""))];
               return (
                 <article key={id} className={`usage-card status-${p?.status || "loading"}`}>
                   <header>
                     <strong>{label}</strong>
-                    <small>{busy ? "กำลังตรวจ…" : p ? `อัปเดต ${ago(p.dataTime || p.updatedAt)}` : ""}</small>
+                    <small>{busy ? "กำลังตรวจ…" : p ? `ตรวจล่าสุด ${ago(p.updatedAt)}` : ""}</small>
                     <button className="icon-button" title={`ตรวจ ${label} ใหม่`} disabled={busy} onClick={() => void load(id, true)}>
                       {busy ? <LoaderCircle size={12} className="spin" /> : <RefreshCw size={12} />}
                     </button>
                   </header>
+                  <AccountPicker provider={id} value={selectedAccounts[id]} label={`บัญชีโควตา ${label}`} onChange={accountId => {
+                    selections.current[id] = accountId;
+                    setSelectedAccounts(v => ({ ...v, [id]: accountId }));
+                    setData(v => { const next = { ...v }; delete next[id]; return next; });
+                    void load(id);
+                  }} />
                   {!p && busy && <div className="usage-skeleton" />}
                   {groups.map((group) => (
                     <div key={group} className="usage-group">
@@ -118,7 +133,8 @@ export function UsageButton({ open, onOpenChange: setOpen }: { open: boolean; on
                       {p.details.map((d) => (<div key={d.label}><dt>{d.label}</dt><dd>{d.value}</dd></div>))}
                     </dl>
                   )}
-                  {p?.note && <p className="usage-note">{p.note}</p>}
+                  {/* Figures read from an older record say how old they are; the header says when we last checked. */}
+                  {p?.note && <p className="usage-note">{p.note}{p.dataTime ? ` (${ago(p.dataTime)})` : ""}</p>}
                 </article>
               );
             })}

@@ -63,7 +63,7 @@ export const SlashMenu = forwardRef<SlashMenuHandle, Props>(function SlashMenu({
     setLoading(true); setError(''); setSkills([]);
     const request = sessionId
       ? api<{ skills: ChatSkill[] }>(`/api/terminals/${sessionId}/chat/settings`).then(s => s.skills)
-      : Promise.all(providers.map(provider => api<ChatSkill[]>(`/api/workspaces/${workspaceId}/chat-skills/${provider}`))).then(lists => lists.flat());
+      : Promise.all(providers.map(key => { const [provider, accountId] = key.split(":"); return api<ChatSkill[]>(`/api/workspaces/${workspaceId}/chat-skills/${provider}${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`); })).then(lists => lists.flat());
     request.then(list => { if (!disposed) setSkills(list.filter((skill, index, all) => all.findIndex(s => s.name === skill.name) === index)); })
       .catch(() => { if (!disposed) setError('โหลดรายการ skill ไม่สำเร็จ ลองพิมพ์ / ใหม่อีกครั้ง'); })
       .finally(() => { if (!disposed) setLoading(false); });

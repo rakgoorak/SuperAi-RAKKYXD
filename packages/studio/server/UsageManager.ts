@@ -1,9 +1,11 @@
+import { accounts, AccountRegistry } from "./Accounts.js";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { cliLaunch, cliEnv, findExecutable, getCliDefinition } from "./CliCatalog.js";
+import { CLOUD_PROVIDERS, cloudKeys, isCloud } from "./CloudKeys.js";
 
 /** One quota window, normalised to "percent remaining" so every provider reads the same way. */
 export interface UsageWindow {
@@ -122,6 +124,60 @@ export function parseCodexRateLimits(lines: string[]): { windows: UsageWindow[];
   return null;
 }
 
+/** `account/rateLimits/read` from `codex app-server`: the account's limits right now. */
+export function parseCodexLiveLimits(result: any): UsageWindow[] {
+  const limits = result?.rateLimits;
+  const windows: UsageWindow[] = [];
+  for (const key of ["primary", "secondary"]) {
+    const w = limits?.[key];
+    if (!w || typeof w.usedPercent !== "number") continue;
+    const minutes = Number(w.windowDurationMins) || 0;
+    const label = minutes === 300 ? "5 ชั่วโมง" : minutes === 10080 ? "รายสัปดาห์" : minutes >= 1440 ? `${Math.round(minutes / 1440)} วัน` : `${Math.round(minutes / 60)} ชั่วโมง`;
+    windows.push({ label, remainingPercent: clamp(100 - w.usedPercent), resetsAt: typeof w.resetsAt === "number" ? new Date(w.resetsAt * 1000).toISOString() : undefined });
+  }
+  return windows;
+}
+
+/** Asks a short-lived `codex app-server` for the limits; null when this Codex cannot answer. */
+function codexLiveLimits(timeout = 20000, env: NodeJS.ProcessEnv = process.env): Promise<UsageWindow[] | null> {
+  return new Promise((resolve) => {
+    let proc: ReturnType<typeof spawn>;
+    let done = false;
+    const finish = (windows: UsageWindow[] | null) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { proc?.kill(); } catch {}
+      resolve(windows && windows.length ? windows : null);
+    };
+    const timer = setTimeout(() => finish(null), timeout);
+    try {
+      const launch = cliLaunch("codex", ["app-server"]);
+      proc = spawn(launch.command, launch.args, { windowsHide: true, cwd: os.tmpdir(), env: { ...env, ...cliEnv() }, stdio: ["pipe", "pipe", "ignore"] });
+    } catch { return finish(null); }
+    const send = (message: unknown) => { try { proc.stdin?.write(JSON.stringify(message) + "\n"); } catch {} };
+    let pending = "";
+    proc.stdout?.setEncoding("utf8");
+    proc.stdout?.on("data", (chunk: string) => {
+      const lines = (pending + chunk).split(/\r?\n/);
+      pending = lines.pop() || "";
+      for (const line of lines) {
+        let message: any;
+        try { message = JSON.parse(line); } catch { continue; }
+        if (message?.id === 1) {
+          if (message.error) return finish(null);
+          send({ method: "initialized" });
+          send({ id: 2, method: "account/rateLimits/read" });
+        } else if (message?.id === 2) finish(message.error ? null : parseCodexLiveLimits(message.result));
+      }
+    });
+    proc.stdin?.on("error", () => finish(null));
+    proc.on("error", () => finish(null));
+    proc.on("close", () => finish(null));
+    send({ id: 1, method: "initialize", params: { clientInfo: { name: "superai_rakkyxd", title: "SuperAi & RAKKYXD", version: "1" } } });
+  });
+}
+
 /** `agy --print=/usage`: tab-separated "group, label, remaining, reset" rows. */
 export function parseAntigravityUsage(text: string): UsageWindow[] {
   const windows: UsageWindow[] = [];
@@ -153,7 +209,7 @@ export function parseOpenCodeStats(text: string): { label: string; value: string
   return out;
 }
 
-async function runCli(id: string, args: string[], timeout = 60000) {
+async function runCli(id: string, args: string[], timeout = 60000, env: NodeJS.ProcessEnv = process.env) {
   const launch = cliLaunch(id, args);
   for (let attempt = 0; ; attempt++) {
     try {
@@ -162,7 +218,7 @@ async function runCli(id: string, args: string[], timeout = 60000) {
         timeout,
         maxBuffer: 2 * 1024 * 1024,
         cwd: os.tmpdir(),
-        env: { ...process.env, ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0" },
+        env: { ...env, ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0" },
       });
       return stdout.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
     } catch (err: any) {
@@ -175,8 +231,8 @@ async function runCli(id: string, args: string[], timeout = 60000) {
   }
 }
 
-async function newestCodexLog(): Promise<string | null> {
-  const root = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "sessions");
+async function newestCodexLog(env: NodeJS.ProcessEnv = process.env): Promise<string | null> {
+  const root = path.join(env.CODEX_HOME || path.join(os.homedir(), ".codex"), "sessions");
   // sessions/YYYY/MM/DD/rollout-*.jsonl: walk newest folders first.
   const newestDir = async (dir: string) => (await fsp.readdir(dir).catch(() => [] as string[])).filter((n) => /^\d+$/.test(n)).sort().reverse();
   for (const y of await newestDir(root))
@@ -204,59 +260,72 @@ async function newestCodexLog(): Promise<string | null> {
   return null;
 }
 
-type Probe = () => Promise<Omit<ProviderUsage, "id" | "name" | "updatedAt">>;
+type Probe = (env?: NodeJS.ProcessEnv) => Promise<Omit<ProviderUsage, "id" | "name" | "updatedAt">>;
 
 const PROBES: Record<string, Probe> = {
-  "claude-code": async () => {
-    const windows = parseClaudeUsage(await runCli("claude-code", ["-p", "/usage"]));
+  "claude-code": async env => {
+    const windows = parseClaudeUsage(await runCli("claude-code", ["-p", "/usage"], 60000, env));
     if (!windows.length) return { status: "error", windows, source: "claude /usage", note: "อ่านผล /usage ไม่ได้ ตรวจว่าเข้าสู่ระบบด้วยบัญชี Claude (Pro/Max) แล้ว" };
     return { status: "ok", windows, source: "claude /usage" };
   },
-  codex: async () => {
-    const log = await newestCodexLog();
+  codex: async env => {
+    // Live figures first; older Codex versions (or no sign-in) fall back to the last session log.
+    const live = await codexLiveLimits(20000, env);
+    if (live) return { status: "ok", windows: live, source: "codex app-server" };
+    const log = await newestCodexLog(env);
     const parsed = log && parseCodexRateLimits(log.split(/\r?\n/));
     if (!parsed) return { status: "error", windows: [], source: "Codex session log", note: "ยังไม่มีข้อมูล ใช้ Codex สักครั้ง (ในโหมด Code หรือ Agent/Chat) แล้วกดรีเฟรช" };
     return { status: "ok", windows: parsed.windows, source: "Codex session log", dataTime: parsed.at, note: "ตัวเลขจากการใช้ Codex ครั้งล่าสุด" };
   },
-  antigravity: async () => {
-    const windows = parseAntigravityUsage(await runCli("antigravity", ["--print=/usage"]));
+  antigravity: async env => {
+    const windows = parseAntigravityUsage(await runCli("antigravity", ["--print=/usage"], 60000, env));
     if (!windows.length) return { status: "error", windows, source: "agy /usage", note: "อ่านผล /usage ไม่ได้ ตรวจว่าเข้าสู่ระบบ Antigravity แล้ว" };
     return { status: "ok", windows, source: "agy /usage" };
   },
-  opencode: async () => {
-    const details = parseOpenCodeStats(await runCli("opencode", ["stats", "--days", "7"]));
+  opencode: async env => {
+    const details = parseOpenCodeStats(await runCli("opencode", ["stats", "--days", "7"], 60000, env));
     return { status: "unsupported", windows: [], details, source: "opencode stats", note: "OpenCode ไม่มีโควตารวม ขีดจำกัดขึ้นกับผู้ให้บริการรุ่นที่เลือก แสดงการใช้งาน 7 วันแทน" };
   },
   freebuff: async () => ({ status: "unsupported", windows: [], source: "-", note: "Freebuff ยังไม่มีคำสั่งให้ดูโควตา" }),
+  openrouter: () => cloudBalance("openrouter"),
+  deepseek: () => cloudBalance("deepseek"),
 };
 
-export const USAGE_PROVIDERS = ["claude-code", "codex", "antigravity", "opencode", "freebuff"];
+/** API providers bill per use: there is no quota window, so the card shows the credit that is left. */
+async function cloudBalance(id: string): ReturnType<Probe> {
+  const details = (await cloudKeys.balance(id)) || [];
+  return { status: "unsupported", windows: [], details, source: `${CLOUD_PROVIDERS[id].name} API`, note: details.length ? "คิดเงินตามการใช้จริงจากเครดิตที่เติมไว้" : "ผู้ให้บริการไม่ได้ส่งยอดเครดิตกลับมา" };
+}
+
+export const USAGE_PROVIDERS = ["claude-code", "codex", "antigravity", "opencode", "freebuff", "openrouter", "deepseek"];
 
 export class UsageManager {
   private cache = new Map<string, ProviderUsage>();
   private pending = new Map<string, Promise<ProviderUsage>>();
-  constructor(private probes: Record<string, Probe> = PROBES, private installed = (id: string) => !!findExecutable(getCliDefinition(id).command)) {}
+  constructor(private probes: Record<string, Probe> = PROBES, private installed = (id: string) => (isCloud(id) ? !!cloudKeys.key(id) : !!findExecutable(getCliDefinition(id).command)), private registry: AccountRegistry = accounts) {}
 
-  async get(id: string, refresh = false): Promise<ProviderUsage> {
-    const cached = this.cache.get(id);
+  async get(id: string, refresh = false, accountId = "system"): Promise<ProviderUsage> {
+    const env = this.registry.environment(id, accountId);
+    const key = `${id}:${accountId}`;
+    const cached = this.cache.get(key);
     if (!refresh && cached && Date.now() - cached.updatedAt < 120_000) return cached;
-    const running = this.pending.get(id);
+    const running = this.pending.get(key);
     if (running) return running;
     const task = (async () => {
-      const name = getCliDefinition(id).name;
+      const name = isCloud(id) ? CLOUD_PROVIDERS[id].name : getCliDefinition(id).name;
       let result: ProviderUsage;
-      if (!this.installed(id)) result = { id, name, status: "not-installed", windows: [], source: "-", note: "ยังไม่ได้ติดตั้ง", updatedAt: Date.now() };
+      if (!this.installed(id)) result = { id, name, status: "not-installed", windows: [], source: "-", note: isCloud(id) ? "ยังไม่ได้ใส่ API Key" : "ยังไม่ได้ติดตั้ง", updatedAt: Date.now() };
       else
         try {
-          result = { id, name, ...(await this.probes[id]()), updatedAt: Date.now() };
+          result = { id, name, ...(await this.probes[id](env)), updatedAt: Date.now() };
         } catch (err: any) {
           const message = String(err?.message || err).split("\n").slice(-3).join(" ").slice(0, 300);
           result = { id, name, status: "error", windows: [], source: "-", note: /timed? ?out|ETIMEDOUT|killed/i.test(message) ? "CLI ตอบช้าเกินไป ลองรีเฟรชอีกครั้ง" : `ตรวจไม่สำเร็จ: ${message}`, updatedAt: Date.now() };
         }
-      this.cache.set(id, result);
+      this.cache.set(key, result);
       return result;
-    })().finally(() => this.pending.delete(id));
-    this.pending.set(id, task);
+    })().finally(() => this.pending.delete(key));
+    this.pending.set(key, task);
     return task;
   }
 

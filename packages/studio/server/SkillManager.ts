@@ -340,7 +340,7 @@ ${options.map((s) => `${s.source}/${s.name}: ${s.description}`).join("\n")}
 
 ตอบเป็น JSON อย่างเดียว: [{"source":"anthropic","name":"ชื่อ","reason":"เหตุผลภาษาไทยสั้นๆ"}]`;
     const provider = seat.provider.startsWith("cli:")
-      ? new CliProvider(seat.provider, root, signal, false, seat.model, false, [], seat.effort)
+      ? new CliProvider(seat.provider, root, signal, false, seat.model, false, [], seat.effort, undefined, undefined, seat.accountId || 'system')
       : new LocalProvider(seat.provider, signal);
     const reply = await provider.generate([{ role: "user", content: prompt }]);
     let picks: any;

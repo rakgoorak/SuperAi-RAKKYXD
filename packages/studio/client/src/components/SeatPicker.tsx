@@ -1,7 +1,8 @@
 import { X } from "lucide-react";
+import { AccountPicker } from "./AccountPicker";
 import { ModelCombo } from "./ModelCombo";
 import type { Cli, Seat } from "../api";
-import { EFFORTS, EFFORT_LABEL, HEADLESS, PROVIDER_LABEL, loadDefaults, useModels } from "../providers";
+import { CLOUD, EFFORTS, EFFORT_LABEL, HEADLESS, PROVIDER_LABEL, isCloud, loadDefaults, useCloudKeys, useModels } from "../providers";
 
 interface Props {
   seat: Seat;
@@ -15,17 +16,22 @@ interface Props {
   disabled?: boolean;
   /** Hide the provider choice (setup defaults are per provider). */
   fixedProvider?: boolean;
+  showAccount?: boolean;
 }
 
 /** Pick a provider, then a model and an effort level for it. */
-export function SeatPicker({ seat, onChange, clis, ollamaModels, label, named = true, onRemove, disabled, fixedProvider }: Props) {
+export function SeatPicker({ seat, onChange, clis, ollamaModels, label, named = true, onRemove, disabled, fixedProvider, showAccount = true }: Props) {
   const cli = seat.provider.startsWith("cli:") ? seat.provider.slice(4) : "";
-  const { list, error, refresh: refreshModels } = useModels(cli);
-  const efforts = (seat.model && list?.modelEfforts?.[seat.model]) || list?.efforts || EFFORTS[cli] || [];
+  // API providers (OpenRouter, DeepSeek, Groq) have a model list like a CLI but no effort levels.
+  const cloud = isCloud(seat.provider) ? seat.provider : "";
+  const cloudKeys = useCloudKeys();
+  const { list, error, refresh: refreshModels } = useModels(cli || cloud, seat.accountId);
+  const efforts = cloud ? [] : (seat.model && list?.modelEfforts?.[seat.model]) || list?.efforts || EFFORTS[cli] || [];
   const pickProvider = (value: string) => {
-    if (value === "ollama") return onChange({ ...seat, provider: ollamaModels[0] || "", model: "", effort: "" });
+    if (isCloud(value)) return onChange({ ...seat, provider: value, accountId: undefined, model: "", effort: "" });
+    if (value === "ollama") return onChange({ ...seat, provider: ollamaModels[0] || "", accountId: undefined, model: "", effort: "" });
     const d = loadDefaults()[value.slice(4)] || { model: "", effort: "" };
-    onChange({ ...seat, provider: value, model: d.model, effort: d.effort });
+    onChange({ ...seat, provider: value, accountId: undefined, model: d.model, effort: d.effort });
   };
   return (
     <div className={`seat-picker ${named ? "" : "unnamed"} ${fixedProvider ? "fixed" : ""}`}>
@@ -37,7 +43,7 @@ export function SeatPicker({ seat, onChange, clis, ollamaModels, label, named = 
       )}
       {!fixedProvider && <label>
         ผู้ให้บริการ
-        <select aria-label={`ผู้ให้บริการของ${label}`} value={cli ? seat.provider : "ollama"} disabled={disabled} onChange={(e) => pickProvider(e.target.value)}>
+        <select aria-label={`ผู้ให้บริการของ${label}`} value={cli ? seat.provider : cloud || "ollama"} disabled={disabled} onChange={(e) => pickProvider(e.target.value)}>
           {HEADLESS.map((cliId) => {
             const found = clis.find((c) => c.id === cliId);
             return (
@@ -48,11 +54,18 @@ export function SeatPicker({ seat, onChange, clis, ollamaModels, label, named = 
             );
           })}
           <option value="ollama">Ollama บนเครื่อง</option>
+          <optgroup label="API ภายนอก (ใช้ key ของคุณ)">
+            {CLOUD.map((id) => {
+              const ready = cloudKeys.find((k) => k.id === id)?.hasKey;
+              return <option key={id} value={id} disabled={!ready && cloud !== id}>{PROVIDER_LABEL[id]}{ready ? "" : " · ยังไม่ใส่ API Key"}</option>;
+            })}
+          </optgroup>
         </select>
       </label>}
+      {cli && showAccount && <AccountPicker provider={cli} value={seat.accountId} disabled={disabled} label={`บัญชีของ${label}`} onChange={accountId => onChange({ ...seat, accountId })} />}
       <label>
         รุ่น AI (Model)
-        {cli ? (
+        {cli || cloud ? (
           <ModelCombo label={`model ของ${label}`} value={seat.model} options={list?.models || []} onOpen={refreshModels} placeholder="ใช้รุ่นเริ่มต้นได้" disabled={disabled}
             onChange={(model) => onChange({ ...seat, model: model.trim(), effort: efforts.includes(seat.effort) || !seat.effort ? seat.effort : "" })} />
         ) : (

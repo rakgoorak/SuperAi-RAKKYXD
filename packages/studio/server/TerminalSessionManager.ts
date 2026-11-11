@@ -1,3 +1,4 @@
+import { accounts, AccountRegistry } from "./Accounts.js";
 import { modelEffortArgs } from "./Providers.js";
 
 // How to submit typed commands to each TUI (see submitInput).
@@ -34,6 +35,7 @@ try {
 }
 
 export class TerminalSessionManager {
+  constructor(private registry: AccountRegistry = accounts) {}
   private sessions: Map<string, TerminalSession> = new Map();
   private maxBufferSize: number = 200 * 1024; // backlog replayed to new viewers
 
@@ -42,7 +44,9 @@ export class TerminalSessionManager {
   }
 
   public spawnSession(options: SpawnSessionOptions = {}): TerminalSession {
+    options = { ...options, accountId: options.accountId || "system" };
     const original = options;
+    this.registry.resolve(options.agentType || "terminal", options.accountId);
     let cliSessionId: string | undefined;
     if (options.agentType) {
       const definition = getCliDefinition(options.agentType);
@@ -102,17 +106,18 @@ export class TerminalSessionManager {
         ? `${localBin};${existingPath}`
         : existingPath;
 
-    const env: Record<string, string> = {
+    const env = this.registry.environment(options.agentType || "terminal", options.accountId, {
       ...(process.env as Record<string, string>),
       ...cliEnv(),
       PATH: [cliPath(), enhancedPath].join(path.delimiter),
       TERM: "xterm-256color",
       COLORTERM: "truecolor",
       ...options.env,
-    };
+    }) as Record<string, string>;
 
     const session: TerminalSession = {
       agentType: options.agentType || "terminal",
+      accountId: options.accountId || "system",
       wsId: options.wsId,
       threadId: options.threadId,
       id,
@@ -236,9 +241,10 @@ export class TerminalSessionManager {
   public addDormant(entry: { id: string; options: SpawnSessionOptions; createdAt?: number; resume?: string }): TerminalSession {
     const existing = this.sessions.get(entry.id);
     if (existing) return existing;
-    const options = entry.options;
+    const options = { ...entry.options, accountId: entry.options.accountId || "system" };
     const session: TerminalSession = {
       agentType: options.agentType || "terminal",
+      accountId: options.accountId || "system",
       wsId: options.wsId,
       threadId: options.threadId,
       id: entry.id,
@@ -307,13 +313,20 @@ export class TerminalSessionManager {
   /** How to pick the tab's conversation up again, or undefined to start fresh. */
   private resumeFor(session: TerminalSession, taken: Set<string>, newestOfKind = true): string | undefined {
     const agent = session.agentType || "";
+    let accountEnv: NodeJS.ProcessEnv;
+    try { accountEnv = this.registry.environment(agent, session.accountId); }
+    catch {
+      // A missing profile must not discard its tab or prevent unrelated tabs from being saved.
+      // Launch/auth still reject the unavailable account rather than falling back to another one.
+      return session.cliSessionId || (session.resumedFrom !== "last" ? session.resumedFrom : undefined);
+    }
     if (agent === "claude-code") {
       const id = session.cliSessionId;
-      if (id && claudeTranscriptExists(id)) return id;
+      if (id && claudeTranscriptExists(id, os.homedir(), accountEnv.CLAUDE_CONFIG_DIR)) return id;
       return session.resumedFrom === "last" ? "last" : undefined;
     }
     if (agent === "codex") {
-      const id = session.resumedFrom && session.resumedFrom !== "last" ? session.resumedFrom : findCodexSession(session.cwd, session.createdAt, taken);
+      const id = session.resumedFrom && session.resumedFrom !== "last" ? session.resumedFrom : findCodexSession(session.cwd, session.createdAt, taken, os.homedir(), accountEnv.CODEX_HOME);
       if (id) taken.add(id);
       return id || undefined;
     }
@@ -330,7 +343,7 @@ export class TerminalSessionManager {
     const taken = new Set<string>();
     const newest = new Map<string, string>();
     for (const s of open) {
-      const key = `${s.agentType}|${s.cwd.toLowerCase()}`;
+      const key = `${s.agentType}|${s.accountId}|${s.cwd.toLowerCase()}`;
       const other = newest.get(key) && this.sessions.get(newest.get(key)!);
       if (!other || other.createdAt < s.createdAt) newest.set(key, s.id);
     }
@@ -339,7 +352,7 @@ export class TerminalSessionManager {
       .map((s) => ({
         id: s.id,
         options: { ...s.restart!, name: s.name },
-        resume: this.resumeFor(s, taken, newest.get(`${s.agentType}|${s.cwd.toLowerCase()}`) === s.id),
+        resume: this.resumeFor(s, taken, newest.get(`${s.agentType}|${s.accountId}|${s.cwd.toLowerCase()}`) === s.id),
       }));
   }
 
@@ -402,6 +415,7 @@ export class TerminalSessionManager {
       createdAt: s.createdAt,
       dormant: !!s.dormant,
       authOnly: !!s.restart?.authOnly,
+      accountId: s.accountId || "system",
       bufferedOutput: s.bufferedOutput.slice(-1000),
     }));
   }

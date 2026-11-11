@@ -22,7 +22,7 @@ export function ProviderDefaults({ clis, onSaved }: { clis: Cli[]; onSaved?: () 
         return (
           <div className="seat-row" key={id}>
             <span className="seat-badge">{PROVIDER_LABEL[id]}</span>
-            <SeatPicker named={false} fixedProvider label={PROVIDER_LABEL[id]} clis={clis.filter((c) => c.id === id)} ollamaModels={[]}
+            <SeatPicker named={false} fixedProvider showAccount={false} label={PROVIDER_LABEL[id]} clis={clis.filter((c) => c.id === id)} ollamaModels={[]}
               seat={{ name: id, provider: `cli:${id}`, model: d.model, effort: d.effort }}
               onChange={(seat) => update(id, seat.model, seat.effort)} />
           </div>

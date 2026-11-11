@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Key, LogIn, RefreshCw } from "lucide-react";
 import { api, loginProvider, type CliAuthStatus } from "../api";
 import { fetchModels, PROVIDER_LABEL } from "../providers";
@@ -8,55 +8,56 @@ export function isCloudByok(provider: string): boolean {
   return (CLOUD_BYOK_PROVIDERS as readonly string[]).includes(provider);
 }
 
-const CLOUD_ENV_MAP: Record<string, string> = {
-  deepseek: "DEEPSEEK_API_KEY",
-  groq: "GROQ_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-  openai_compatible: "OPENAI_API_KEY",
-};
-
-export function useProviderAccess(provider: string) {
+export function useProviderAccess(provider: string, accountId?: string) {
+  const identity = `${provider}:${accountId || ''}`;
+  const activeIdentity = useRef(identity);
+  activeIdentity.current = identity;
+  const generation = useRef(0);
   const [auth, setAuth] = useState<CliAuthStatus | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
   const check = useCallback(async (refresh = false) => {
     if (!provider) return;
+    const request = ++generation.current;
+    const current = () => activeIdentity.current === identity && generation.current === request;
     setChecking(true);
     try {
-      setAuth(await api<CliAuthStatus>(`/api/clis/${provider}/auth${refresh ? "?refresh=1" : ""}`));
+      const result = await api<CliAuthStatus>(`/api/clis/${provider}/auth?refresh=${refresh ? "1" : "0"}${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ""}`);
+      if (!current()) return;
+      setAuth(result);
       setError("");
-      if (refresh) void fetchModels(provider, true).catch(() => {});
+      if (refresh) void fetchModels(provider, true, accountId).catch(() => {});
     } catch {
+      if (!current()) return;
       if (isCloudByok(provider)) {
-        const envKey = CLOUD_ENV_MAP[provider] || "API Key";
-        setError(`ตรวจสถานะ API Key ไม่สำเร็จ กรุณาตั้งค่า ${envKey} ใน .env`);
+        setError("ตรวจสถานะ API Key ไม่สำเร็จ เปิด การตั้งค่า > API Key เพื่อตรวจสอบ");
       } else {
         setError("ตรวจบัญชีไม่สำเร็จ กรุณาลองใหม่หรือเปิด Terminal เพื่อตรวจสอบ");
       }
     }
-    finally { setChecking(false); }
-  }, [provider]);
+    finally { if (current()) setChecking(false); }
+  }, [provider, accountId, identity]);
   useEffect(() => {
     setAuth(null);
     void check();
     const focused = () => void check(true);
     window.addEventListener("focus", focused);
-    return () => window.removeEventListener("focus", focused);
+    window.addEventListener("superai:accounts-changed", focused);
+    return () => { generation.current++; window.removeEventListener("focus", focused); window.removeEventListener("superai:accounts-changed", focused); };
   }, [check]);
   return { auth, checking, error, check };
 }
 
-export function ProviderAccess({ provider, wsId, sessionId, onStatus, compact = false, onInstall, friendly = false }: {
-  provider: string; wsId?: string; sessionId?: string; onStatus?: (status: CliAuthStatus) => void; compact?: boolean; onInstall?: () => void; friendly?: boolean;
+export function ProviderAccess({ provider, wsId, sessionId, accountId, onStatus, compact = false, onInstall, friendly = false }: {
+  provider: string; wsId?: string; sessionId?: string; accountId?: string; onStatus?: (status: CliAuthStatus) => void; compact?: boolean; onInstall?: () => void; friendly?: boolean;
 }) {
-  const { auth, checking, error, check } = useProviderAccess(provider);
+  const { auth, checking, error, check } = useProviderAccess(provider, accountId);
   const [opening, setOpening] = useState(false);
   const [problem, setProblem] = useState("");
   useEffect(() => { if (auth) onStatus?.(auth); }, [auth, onStatus]);
   if (compact && !error && !problem && (!auth || auth.status === "authenticated")) return null;
 
   const isCloud = isCloudByok(provider);
-  const envKey = CLOUD_ENV_MAP[provider] || "API Key";
 
   return <div className={`provider-access ${auth?.status || "checking"}`}>
     <div>
@@ -69,7 +70,7 @@ export function ProviderAccess({ provider, wsId, sessionId, onStatus, compact = 
     {!isCloud && auth?.status !== "not-installed" && (
       <button type="button" className="secondary" disabled={opening || (!wsId && !sessionId)} onClick={async () => {
         setOpening(true); setProblem("");
-        try { await loginProvider(provider, { wsId, sessionId }); }
+        try { await loginProvider(provider, { wsId, sessionId, accountId }); }
         catch { setProblem("เปิดขั้นตอนเข้าสู่ระบบไม่สำเร็จ กรุณาตรวจโปรเจกต์และ CLI แล้วลองใหม่"); }
         finally { setOpening(false); }
       }}>
@@ -77,8 +78,8 @@ export function ProviderAccess({ provider, wsId, sessionId, onStatus, compact = 
       </button>
     )}
     {isCloud && (
-      <span className={`byok-badge ${auth?.status === "authenticated" ? "authenticated" : "pending"}`} title={`ตั้งค่า ${envKey} ใน .env หรือ environment variable`}>
-        <Key size={12} /> {auth?.status === "authenticated" ? "BYOK พร้อมใช้งาน" : `ระบุ ${envKey} ใน .env`}
+      <span className={`byok-badge ${auth?.status === "authenticated" ? "authenticated" : "pending"}`} title="ใส่ key ได้ที่ การตั้งค่า > API Key">
+        <Key size={12} /> {auth?.status === "authenticated" ? "API Key พร้อมใช้งาน" : "ใส่ key ที่ การตั้งค่า > API Key"}
       </span>
     )}
     {!isCloud && auth?.status === "not-installed" && onInstall && (

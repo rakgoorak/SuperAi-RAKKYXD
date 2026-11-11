@@ -74,6 +74,7 @@ import { ClarifyCard } from "./components/ClarifyCard";
 import { ChatConfigEditor, ChatRunView, type ChatConfig } from "./components/ChatPanel";
 import { SkillsPanel } from "./components/SkillsPanel";
 import { UpdatePanel, UpdatePrompt, useUpdateState } from "./components/UpdatePanel";
+import { AccountsPanel } from "./components/AccountsPanel";
 import { UsageButton } from "./components/UsagePanel";
 import { CliVersionsPanel, OutdatedNotice } from "./components/CliVersions";
 import { ProviderDefaults } from "./components/ProviderDefaults";
@@ -85,6 +86,7 @@ import { CliInstaller } from "./components/CliInstaller";
 import { LaunchPresets, type LaunchSeat } from "./components/LaunchPresets";
 import { VoiceSettingsPanel } from "./components/VoiceSettingsPanel";
 import { NotifySettingsPanel } from "./components/NotifySettingsPanel";
+import { ApiKeysPanel } from "./components/ApiKeysPanel";
 import { McpManagerPanel } from "./components/McpManagerPanel";
 import { finishedRuns, notifyDone, onNoticeOpen, runNotice } from "./completionNotify";
 import { onChatRunning, onNextPrompt } from "./nextPrompt";
@@ -191,6 +193,7 @@ export function App() {
     : composerDraftKey(activeWs, mode, selected, target);
   const { draft, setDraft, setDraftFor } = useComposerDrafts(draftScope);
   const [quickChoice, setQuickChoice] = useState(() => initial("superai-quick-provider", ""));
+  const [quickAccount, setQuickAccount] = useState<string | undefined>();
   const quickProvider = clis.some(cli => cli.id === quickChoice && cli.available && HEADLESS.includes(cli.id)) ? quickChoice : firstReady(clis);
   const sending = useRef(false);
   const pendingQuick = useRef<PendingQuickConversation | undefined>(quickState.pending);
@@ -549,7 +552,7 @@ export function App() {
               agentType: type, wsId: workspace.id,
               name: [cli.name, supportsModel && chosen.model].filter(Boolean).join(" · "),
               openCodeModel: type === "opencode" && !chosen.model && openCodeModel !== "auto" ? openCodeModel : undefined,
-              ...(supportsModel ? { model: chosen.model, effort: chosen.effort } : {}),
+              ...(supportsModel ? { model: chosen.model, effort: chosen.effort, accountId: chosen.accountId } : {}),
               trustFolder: trustFolders,
             });
             if (session.status === "error") throw new Error(`เปิด ${cli.name} ไม่สำเร็จ กรุณาตรวจการติดตั้ง CLI`);
@@ -629,13 +632,13 @@ export function App() {
         }
         newConversationWorkspace.current = ws.id;
         const chosen = seatFor(quickProvider, "");
-        let session = pendingQuick.current?.wsId === ws.id && pendingQuick.current.session.agentType === quickProvider ? pendingQuick.current.session : undefined;
+        let session = pendingQuick.current?.wsId === ws.id && pendingQuick.current.session.agentType === quickProvider && (pendingQuick.current.accountSelection || "") === (quickAccount || "") ? pendingQuick.current.session : undefined;
         if (!session) {
-          session = await post<Session>("/api/terminals/spawn", { agentType: quickProvider, wsId: ws.id,
+          session = await post<Session>("/api/terminals/spawn", { agentType: quickProvider, accountId: quickAccount, wsId: ws.id,
             name: draft.trim().split('\n')[0].slice(0, 60) || providerIdentity(quickProvider).label, model: chosen.model, effort: chosen.effort,
             view: "chat", trustFolder: false });
           if (session.status === "error") throw new Error(`เปิด ${providerIdentity(quickProvider).label} ไม่สำเร็จ ตรวจการติดตั้งแล้วลองอีกครั้ง`);
-          pendingQuick.current = { session, wsId: ws.id };
+          pendingQuick.current = { session, wsId: ws.id, accountSelection: quickAccount || "" };
           saveQuickConversationState(starterDraftScopes.current, pendingQuick.current);
           setChatPrefs(session.id, { model: chosen.model, effort: chosen.effort, permission: "read", responseStyle: answerStyle });
         }
@@ -1691,7 +1694,7 @@ export function App() {
                     {mode === 'code' && chatTarget && <MessageContextChips sessionId={chatTarget.id} />}
                   </div>
                   <div className="composer-input-container" data-tour="composer">
-                    <SlashMenu ref={slashMenu} draft={draft} sessionId={chatTarget?.id} workspaceId={mode === "chat" ? workspace?.id : undefined} providers={mode === "chat" ? [...new Set((chatConfig?.panel || []).filter(seat => seat.provider.startsWith("cli:")).map(seat => seat.provider.slice(4)))] : []} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
+                    <SlashMenu ref={slashMenu} draft={draft} sessionId={chatTarget?.id} workspaceId={mode === "chat" ? workspace?.id : undefined} providers={mode === "chat" ? [...new Set((chatConfig?.panel || []).filter(seat => seat.provider.startsWith("cli:")).map(seat => `${seat.provider.slice(4)}:${seat.accountId || ""}`))] : []} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
                     <MentionMenu ref={mentionMenu} draft={draft} workspaceId={workspace?.id} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
                     <textarea
                       ref={composer}
@@ -1815,7 +1818,7 @@ export function App() {
                       </select>
                     )}
                   {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name} disabled={busy} />}
-                  {mode === "code" && !composerTarget && target === "active" && <QuickChatControls clis={clis} provider={quickProvider} onProvider={chooseQuickProvider} disabled={busy} onSetup={() => setDialog("setup")} style={answerStyle} onStyle={setAnswerStyle} />}
+                  {mode === "code" && !composerTarget && target === "active" && <QuickChatControls clis={clis} provider={quickProvider} accountId={quickAccount} onAccount={setQuickAccount} onProvider={id => { setQuickAccount(undefined); chooseQuickProvider(id); }} disabled={busy} onSetup={() => setDialog("setup")} style={answerStyle} onStyle={setAnswerStyle} />}
                   {mode !== 'code' && <ComposerOptions label="ตัวเลือกคำตอบ"><ResponseStyleSelect value={answerStyle} onChange={setAnswerStyle} disabled={busy || !!activeRun} /></ComposerOptions>}
                   {mode === "code" && composerTarget && !chatTarget && <div className="terminal-provider-context"><ProviderBadge provider={composerTarget.agentType} /><span>{providerIdentity(composerTarget.agentType).connection}</span></div>}
                 </div>
@@ -2180,8 +2183,9 @@ export function App() {
             {dialog === "settings" && (
               <>
                 <div className="mission-settings">
-<nav className="settings-nav" aria-label="หมวดการตั้งค่า">{[["language", t("settings.tab_language", "ภาษา / Language")], ["tools", t("settings.tab_tools", "เครื่องมือ AI")], ["mcp", t("settings.tab_mcp", "MCP Servers")], ["models", t("settings.tab_models", "Model และ Effort")], ["folders", t("settings.tab_folders", "โฟลเดอร์")], ["voice", t("settings.tab_voice", "เสียง")], ["notify", t("settings.tab_notify", "แจ้งเตือนและคำแนะนำ")]].map(([id, label]) => <button key={id} aria-current={settingsTab === id ? "page" : undefined} onClick={() => setSettingsTab(id)}>{label}</button>)}</nav>
+<nav className="settings-nav" aria-label="หมวดการตั้งค่า">{[["language", t("settings.tab_language", "ภาษา / Language")], ["tools", t("settings.tab_tools", "เครื่องมือ AI")], ["accounts", "บัญชี AI"], ["apikeys", t("settings.tab_apikeys", "API Key")], ["mcp", t("settings.tab_mcp", "MCP Servers")], ["models", t("settings.tab_models", "Model และ Effort")], ["folders", t("settings.tab_folders", "โฟลเดอร์")], ["voice", t("settings.tab_voice", "เสียง")], ["notify", t("settings.tab_notify", "แจ้งเตือนและคำแนะนำ")]].map(([id, label]) => <button key={id} aria-current={settingsTab === id ? "page" : undefined} onClick={() => setSettingsTab(id)}>{label}</button>)}</nav>
 <div className="settings-content">
+{settingsTab === "accounts" && <section><AccountsPanel wsId={activeWs || undefined} /></section>}
 <section hidden={settingsTab !== "language"}>
   <div className="settings-section-title">
     <h3>{t("settings.lang_heading", "เลือกภาษาการแสดงผล (Display Language)")}</h3>
@@ -2292,7 +2296,7 @@ export function App() {
                       ใส่ในช่องคำสั่ง
                     </button>
                   </div>
-                  </section><section hidden={settingsTab !== "mcp"}><McpManagerPanel cwd={workspace?.rootPath} onError={showError} onNotice={setNotice} /></section><section hidden={settingsTab !== "voice"}><VoiceSettingsPanel settings={voiceSettings} onChange={setVoiceSettings} /></section><section hidden={settingsTab !== "notify"}><NotifySettingsPanel /></section></div>
+                  </section><section hidden={settingsTab !== "mcp"}><McpManagerPanel cwd={workspace?.rootPath} onError={showError} onNotice={setNotice} /></section><section hidden={settingsTab !== "voice"}><VoiceSettingsPanel settings={voiceSettings} onChange={setVoiceSettings} /></section><section hidden={settingsTab !== "notify"}><NotifySettingsPanel /></section><section hidden={settingsTab !== "apikeys"}><ApiKeysPanel onNotice={setNotice} /></section></div>
                 </div>
                 <div className="dialog-footer">
                   <span className="muted">บันทึกการตั้งค่าอัตโนมัติ</span>
