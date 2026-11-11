@@ -70,9 +70,9 @@
 
 | แพลตฟอร์ม | ไฟล์ติดตั้ง | ขนาด | รูปแบบ |
 | :--- | :--- | :--- | :--- |
-| **Windows 10 / 11 (64-bit)** | [SuperAi-RAKKYXD-Setup.exe](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-Setup.exe) | ≈91 MB | ตัวติดตั้งอัตโนมัติ (NSIS) |
-| **Mac Apple Silicon (M1/M2/M3/M4)** | [SuperAi-RAKKYXD-macos-arm64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.dmg) | ≈110 MB | Drag & Drop DMG |
-| **Mac Intel** | [SuperAi-RAKKYXD-macos-x64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.dmg) | ≈115 MB | Drag & Drop DMG |
+| **Windows 10 / 11 (64-bit)** | [SuperAi-RAKKYXD-Setup.exe](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-Setup.exe) | ≈95 MB | ตัวติดตั้งอัตโนมัติ (NSIS) |
+| **Mac Apple Silicon (M1/M2/M3/M4)** | [SuperAi-RAKKYXD-macos-arm64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.dmg) | ≈118 MB | Drag & Drop DMG |
+| **Mac Intel** | [SuperAi-RAKKYXD-macos-x64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.dmg) | ≈124 MB | Drag & Drop DMG |
 
 - ไฟล์ทั้งหมดชี้ไปที่เวอร์ชันล่าสุดเสมอ ไม่จำเป็นต้องล็อกอิน GitHub
 - หรือเปิด [หน้าเว็บไซต์](https://rakgoorak.github.io/SuperAi-RAKKYXD/) ที่ตรวจจับระบบและแนะนำไฟล์ที่ตรงกับเครื่องของคุณ
@@ -128,7 +128,7 @@
 - แปลงเสียงเป็นข้อความด้วย Whisper Thonburian บนเครื่อง 100% ข้อมูลเสียงไม่ถูกส่งออกภายนอก
 
 ### 9. ดูโควตาคงเหลือ (Usage Tracker)
-- ตรวจสอบโควตาคงเหลือของ Claude, Codex, Antigravity แบบเรียลไทม์
+- ตรวจสอบโควตาคงเหลือของ Claude, Codex, Antigravity แบบเรียลไทม์ และเครดิตคงเหลือของ OpenRouter, DeepSeek
 - แสดงแถบสถานะและเวลารีเซ็ตรอบ 5 ชั่วโมงและรอบสัปดาห์
 
 ### 10. Agent Workspace & Clarifying Questions
@@ -173,7 +173,8 @@
 ## ความเป็นส่วนตัวและความปลอดภัย
 
 - **Local-First Architecture:** โปรแกรมรันบนเครื่องของคุณทั้งหมด ไม่มีเซิร์ฟเวอร์กลาง
-- **ใช้บัญชีของคุณเอง:** ทุก AI ทำงานผ่าน CLI ด้วย Session และ API Key ของคุณ
+- **ใช้บัญชีของคุณเอง:** ทุก AI ทำงานผ่าน CLI ด้วย Session และ API Key ของคุณ API Key ที่บันทึกในการตั้งค่าถูกเข้ารหัสด้วยระบบของเครื่อง และส่งไปที่ผู้ให้บริการเจ้าของ key เท่านั้น
+- **นับผู้ใช้แบบไม่ระบุตัวตน:** เพื่อแสดงจำนวนผู้ใช้บนหน้าเว็บ แอปส่งรหัสสุ่มของเครื่อง เวอร์ชันแอป และระบบปฏิบัติการทุก 10 นาที ไม่มีข้อมูลบัญชี โปรเจกต์ ข้อความ หรือไฟล์ ปิดได้ที่ **การตั้งค่า → แจ้งเตือนและคำแนะนำ**
 - **ข้อมูลโปรเจกต์:** เก็บที่ `%USERPROFILE%\.opencode-multi` (Windows) หรือ `~/.opencode-multi` (macOS)
 - **ไฟล์แนบ:** เก็บใน `.superai/attachments/` ภายในโปรเจกต์ (แนะนำให้ใส่ `.superai/` ใน `.gitignore`)
 

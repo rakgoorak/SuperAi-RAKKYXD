@@ -56,7 +56,7 @@
 Using several AI assistants usually means juggling 5–10 browser tabs, separate terminal windows, and a different subscription or API key for every provider. **SuperAi & RAKKYXD** puts them in one desktop window:
 
 - **One workspace, every assistant** — Claude Code, Codex, Antigravity, OpenCode, Freebuff, and local Ollama side by side.
-- **Local-first by design** — no relay servers, no analytics, no telemetry. Your prompts and code talk directly to the providers with your own account.
+- **Local-first by design** — no relay servers. Your prompts and code go directly to the providers with your own account; the only thing the app sends to us is an anonymous usage count you can turn off (see [Privacy](#privacy-and-security)).
 - **Multi-agent orchestration** — split a large task into parallel sub-agent workstreams and merge the result.
 - **Multi-AI arena** — ask one question, compare answers from several models, then synthesize the best one.
 - **Native developer tooling** — Git worktrees, branch switching, terminal tabs, artifact previews, and quota tracking.
@@ -91,7 +91,10 @@ Live preview for HTML, SVG, Tailwind CSS, and Mermaid diagrams, plus an interact
 Offline speech-to-text with Whisper (including Thonburian Thai). Audio never leaves your machine.
 
 ### 8. Usage and quota tracker
-Live 5-hour and weekly quota windows for Claude, Codex, and Antigravity.
+Live 5-hour and weekly quota windows for Claude, Codex, and Antigravity, plus remaining credit for OpenRouter and DeepSeek.
+
+### 13. Several accounts and API providers
+Use more than one Claude, Codex, or OpenCode account and choose one per tab or seat. Agent and Chat can also use OpenRouter, DeepSeek, or Groq with your own API key, stored encrypted on your machine.
 
 ### 9. Tool permissions
 Read-only / plan mode for safe exploration, or edit mode when you want agents to write code and run commands. Sub-agent file access is a separate switch.
@@ -111,9 +114,9 @@ Install Agent Skills from Anthropic, OpenAI, Vercel (skills.sh), and Cloudflare 
 
 | Platform | Installer | Size | Format |
 | :--- | :--- | :--- | :--- |
-| **Windows 10 / 11 (64-bit)** | [SuperAi-RAKKYXD-Setup.exe](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-Setup.exe) | ≈91 MB | NSIS installer |
-| **macOS Apple Silicon (M1–M4)** | [SuperAi-RAKKYXD-macos-arm64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.dmg) | ≈110 MB | Drag &amp; drop DMG |
-| **macOS Intel (x64)** | [SuperAi-RAKKYXD-macos-x64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.dmg) | ≈115 MB | Drag &amp; drop DMG |
+| **Windows 10 / 11 (64-bit)** | [SuperAi-RAKKYXD-Setup.exe](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-Setup.exe) | ≈95 MB | NSIS installer |
+| **macOS Apple Silicon (M1–M4)** | [SuperAi-RAKKYXD-macos-arm64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.dmg) | ≈118 MB | Drag &amp; drop DMG |
+| **macOS Intel (x64)** | [SuperAi-RAKKYXD-macos-x64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.dmg) | ≈124 MB | Drag &amp; drop DMG |
 
 - Every link points at the latest release. No GitHub account required.
 - Portable ZIP builds are on the [Releases page](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest).
@@ -146,7 +149,8 @@ The setup guide checks and installs what you need:
 ## Privacy and security
 
 - **Local-first architecture:** everything runs on your machine. No middleman server.
-- **Your accounts, your keys:** providers are reached through their CLIs using your own sessions and API keys.
+- **Your accounts, your keys:** providers are reached through their CLIs using your own sessions and API keys. API keys saved in Settings are encrypted by the operating system and only sent to their own provider.
+- **Anonymous usage count:** to show how many people use the app, it sends a random install ID, the app version, and the OS every 10 minutes. No account, project, prompt, or file data. Turn it off in **Settings → Notifications**.
 - **Project data:** settings and chat history live in `%USERPROFILE%\.opencode-multi` on Windows or `~/.opencode-multi` on macOS.
 - **Safe attachments:** files are stored under `.superai/attachments/` inside the project; add `.superai/` to `.gitignore`.
 
