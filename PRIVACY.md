@@ -26,7 +26,7 @@ Only an anonymous usage count, so the website can show how many people use the a
 | Sent | Example |
 | :--- | :--- |
 | A random ID created on first launch | `0b1e…` (not linked to you, your account or your computer's name) |
-| App version | `1.0.41` |
+| App version | `1.0.42` |
 | Operating system | `win32`, `darwin` |
 
 It is sent every 10 minutes while the app is open, to a Cloudflare Worker

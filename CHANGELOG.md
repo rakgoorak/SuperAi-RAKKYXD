@@ -6,6 +6,19 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.0.42] - 2026-11-11
+
+### Added
+- Question cards: when the AI needs a decision it shows a card with options (works
+  with every agent and permission mode, including Claude's own questions). An
+  "ask before working" switch in the chat footer makes the AI ask first.
+- Chat rooms on API providers (OpenRouter, DeepSeek, Groq) and custom
+  OpenAI-compatible providers added with a base URL, models and key.
+
+### Changed
+- Task checklists follow the agent's own task list more accurately, and streamed
+  replies render more smoothly.
+
 ## [1.0.41] - 2026-11-11
 
 ### Fixed
