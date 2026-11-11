@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { Sparkles, Copy, Check } from "lucide-react";
 import { openPreviewLink, openArtifact, parsePreviewTarget, openExternalLink } from '../previewLinks';
 import { ThinkingAccordion } from './ThinkingAccordion';
@@ -139,7 +139,7 @@ function ArtifactCard({ title, language, content }: { title: string; language: s
   );
 }
 
-export function Markdown({ text }: { text: string }) {
+export const Markdown = memo(function Markdown({ text }: { text: string }) {
   const thinkingBlocks: string[] = [];
   const artifactBlocks: { title: string; language: string; content: string }[] = [];
   let remainingText = text;
@@ -240,4 +240,4 @@ export function Markdown({ text }: { text: string }) {
   }
   flush();
   return <div className="markdown">{out}</div>;
-}
+});

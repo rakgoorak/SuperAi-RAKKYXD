@@ -1,0 +1,6 @@
+.chat-task-progress {
+  margin: 0 14px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}

@@ -9,6 +9,45 @@ const lines = (agent: string, events: unknown[]) => {
   return events.map((e) => parse(JSON.stringify(e)));
 };
 
+test('failed OpenCode task writes do not replace the accepted checklist; empty writes clear it', () => {
+  const updates = lines('opencode', [
+    { type: 'tool_use', part: { tool: 'todowrite', state: { status: 'error', input: { todos: [{ content: 'unverified', status: 'completed' }] }, error: 'denied' } } },
+    { type: 'tool_use', part: { tool: 'todowrite', state: { status: 'completed', input: { todos: [] } } } },
+  ]);
+  assert.equal(updates[0].items?.some(item => item.kind === 'todos') ?? false, false);
+  assert.deepEqual(updates[1].items, [{ id: 't1-todos', kind: 'todos', todos: [] }]);
+});
+
+test('resumed turns remind the agent to reconcile task status without claiming tool activity proves completion', async () => {
+  const fake = fakeSpawner(), chats = new CliChatManager(fake.spawner as any, undefined, launch);
+  chats.setConversation('tasks-sync', 'existing');
+  chats.send('tasks-sync', { agent: 'opencode', cwd: process.cwd(), text: 'continue' });
+  const prompt = fake.calls[0].args.at(-1)!;
+  assert.match(prompt, /\[Task progress\]/);
+  assert.match(prompt, /Do not infer completion from tool-call counts/);
+  fake.finish(fake.calls[0].proc, [{ type: 'text', part: { text: 'done' } }]);
+  await settle(chats, 'tasks-sync');
+});
+
+test('accepted task updates refresh their timestamp in place and tool activity never completes tasks', async () => {
+  const fake = fakeSpawner(), chats = new CliChatManager(fake.spawner as any, undefined, launch);
+  chats.send('task-time', { agent: 'opencode', cwd: process.cwd(), text: 'work' });
+  const proc = fake.calls[0].proc;
+  const update = (status: string) => ({ type: 'tool_use', part: { tool: 'todowrite', state: { status: 'completed', input: { todos: [{ content: 'verify', status }] } } } });
+  proc.stdout.write(JSON.stringify(update('pending')) + '\n');
+  const first = chats.snapshot('task-time').items.find(item => item.kind === 'todos')!;
+  await new Promise(resolve => setTimeout(resolve, 10));
+  proc.stdout.write(JSON.stringify(update('in_progress')) + '\n');
+  proc.stdout.write(JSON.stringify({ type: 'tool_use', part: { id: 'edit', tool: 'edit', state: { status: 'completed', input: { filePath: 'app.js' } } } }) + '\n');
+  const tasks = chats.snapshot('task-time').items.filter(item => item.kind === 'todos');
+  assert.equal(tasks.length, 1);
+  assert.equal(tasks[0].id, first.id);
+  assert.ok(tasks[0].at > first.at);
+  assert.equal((tasks[0] as any).todos[0].status, 'in_progress');
+  fake.finish(proc, [{ type: 'text', part: { text: 'needs verification' } }]);
+  await settle(chats, 'task-time');
+});
+
 test('OpenCode automatic permission rejection does not claim the user pressed deny', () => {
   const result = lines('opencode', [{ type: 'tool_use', sessionID: 's', part: { id: 'p', tool: 'bash', state: { status: 'error', input: { command: 'echo test' }, error: 'The user rejected permission to use this specific tool call.' } } }])[0];
   const item = result.items![0] as any;
