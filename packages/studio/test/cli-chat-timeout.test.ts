@@ -77,7 +77,7 @@ test('waiting extends only the warning deadline, and fresh output clears the war
     f.proc.stderr.write('Sub-agent progress\n');
     assert.equal(f.snapshot().activity?.quiet, undefined);
     assert.equal(f.kills(), 0);
-    assert.equal(f.proc.stdin.read()?.toString(), 'งานที่ใช้เวลานาน', 'Wait never sends a second prompt');
+    assert.equal(f.proc.stdin.read()?.toString().split('\n\n[วิธีถามผู้ใช้]')[0], 'งานที่ใช้เวลานาน', 'Wait never sends a second prompt');
   } finally { f.proc.emit('close', 0); }
   assert.equal(f.manager.wait('timeout-fixture'), false);
   assert.equal(f.manager.wait('unknown-session'), false);

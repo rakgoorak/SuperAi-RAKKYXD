@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { FileText, X } from 'lucide-react';
+import { CircleHelp, FileText, X } from 'lucide-react';
 import { api, loginProvider } from '../api';
 import { useAccounts } from '../accounts';
 import { useModels, EFFORT_LABEL } from '../providers';
+import { isCloud } from '../providers';
 import { ModelCombo } from './ModelCombo';
 import { useProviderAccess } from './ProviderAccess';
 import { chatPrefs, hasChatPrefs, onChatCommand, setChatPrefs, PERMISSION_LABEL, type ChatPermission } from '../chatControls';
@@ -26,6 +27,7 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
   const [permission, setPermission] = useState<ChatPermission>(chatPrefs(sessionId).permission);
   const [style, setStyle] = useState<ResponseStyle>(chatPrefs(sessionId).responseStyle);
   const [includeProjectContext, setIncludeProjectContext] = useState(chatPrefs(sessionId).includeProjectContext);
+  const [askFirst, setAskFirst] = useState(chatPrefs(sessionId).askFirst);
   const [ready, setReady] = useState(false);
   const [problem, setProblem] = useState('');
   const [busy, setBusy] = useState(false);
@@ -35,7 +37,7 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
   const profileName = accountProviders.find(p => p.provider === agent)?.profiles.find(p => p.id === accountId)?.name || accountName;
   const efforts = (model && list?.modelEfforts?.[model]) || list?.efforts || [];
 
-  useEffect(() => { setIncludeProjectContext(chatPrefs(sessionId).includeProjectContext); }, [sessionId]);
+  useEffect(() => { setIncludeProjectContext(chatPrefs(sessionId).includeProjectContext); setAskFirst(chatPrefs(sessionId).askFirst); }, [sessionId]);
 
   useEffect(() => {
     api<{ rules: string; files: string[] }>(`/api/terminals/${sessionId}/rules`)
@@ -87,9 +89,14 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
         {(Object.keys(PERMISSION_LABEL) as ChatPermission[]).filter(p => p === 'review' ? agent === 'codex' : p === 'full' ? agent === 'codex' || agent === 'claude-code' : p === 'ask' ? agent === 'claude-code' || agent === 'codex' || agent === 'opencode' : p === 'approve_all' ? agent === 'opencode' || agent === 'antigravity' : true).map((p) => <option key={p} value={p}>{p === 'auto' ? 'Auto' : permissionLabel(agent, p)}</option>)}
         {agent === 'antigravity' && <option value="ask-unavailable" disabled>Ask for approval (ใช้ใน Terminal)</option>}
       </select>
+      <button type="button" className={`chat-ask-first ${askFirst ? 'on' : ''}`} aria-pressed={askFirst} disabled={disabled}
+        title={askFirst ? 'AI จะถามเรื่องที่ยังไม่ชัดเป็นตัวเลือกก่อนเริ่มงาน กดเพื่อปิด' : 'ให้ AI ถามเรื่องที่ยังไม่ชัดเป็นตัวเลือกก่อนเริ่มงาน'}
+        onClick={() => { const next = !askFirst; setAskFirst(next); setChatPrefs(sessionId, { askFirst: next }); }}>
+        <CircleHelp size={13} /> ถามก่อนทำ
+      </button>
       {problem && <div className="chat-composer-problem" role="alert">{problem}<button type="button" onClick={() => setProblem('')} aria-label="ปิดข้อความ"><X size={12} /></button></div>}
       {agent && <ProviderBadge provider={agent} />}
-      {ready && <span className="session-account-name" title="บัญชีที่ผูกกับห้องนี้">{profileName}</span>}
+      {ready && <span className="session-account-name" title="การเชื่อมต่อของห้องนี้">{isCloud(agent) ? 'API Key' : profileName}</span>}
       <div className="chat-model-controls">
         <label>Model<ModelCombo label={`Model ในแชท ${name}`} value={model} options={list?.models || []} onOpen={refreshModels} placeholder="ค่าเริ่มต้นของ CLI" disabled={disabled || !ready}
           onChange={(value) => { setModel(value); setEffort(''); }} /></label>
@@ -106,7 +113,7 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
           <strong>{profileName || 'บัญชี AI'}</strong>
           <p>{authError || auth?.note || (agent ? 'กำลังตรวจบัญชี…' : 'กำลังโหลดการตั้งค่า…')}</p>
           <button type="button" className="text-button" disabled={checking || busy || !agent} onClick={() => void check(true)}>ตรวจบัญชีอีกครั้ง</button>
-          {auth?.status !== 'authenticated' && auth?.status !== 'not-installed' && <button type="button" className="text-button" disabled={!agent || busy || disabled} onClick={() => void login()}>เข้าสู่ระบบใน Terminal</button>}
+          {!isCloud(agent) && auth?.status !== 'authenticated' && auth?.status !== 'not-installed' && <button type="button" className="text-button" disabled={!agent || busy || disabled} onClick={() => void login()}>เข้าสู่ระบบใน Terminal</button>}
         </section>
         {rules?.files && rules.files.length > 0 && (
           <section className="composer-option-rules" aria-label="กฎประจำโปรเจกต์" style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, margin: '8px 0' }}>

@@ -29,6 +29,7 @@ import { listModels, modelEffortArgs, PROVIDER_PROFILES } from "./Providers.js";
 import { SkillManager } from "./SkillManager.js";
 import { UsageManager, USAGE_PROVIDERS } from "./UsageManager.js";
 import { cloudKeys, isCloud } from "./CloudKeys.js";
+import { customProviders } from './CustomProviders.js';
 import { trustFolder, repairCodexConfigFile } from "./FolderTrust.js";
 import { CliVersionManager, VERSIONED_CLIS } from "./CliVersions.js";
 import { AttachmentError, MAX_ATTACHMENT_BYTES, resolveAttachments, saveAttachment } from "./AttachmentStore.js";
@@ -96,6 +97,7 @@ export class StudioServer {
       ? path.join(path.dirname(options.customWorkspacePath), "restore.json")
       : path.join(os.homedir(), ".opencode-multi", "superai-restore.json");
     const dataDir = options?.customWorkspacePath ? path.dirname(options.customWorkspacePath) : path.join(os.homedir(), ".opencode-multi");
+    customProviders.configure(path.join(dataDir, 'custom-providers.json'));
     this.sessionsFile = path.join(dataDir, "superai-sessions.json");
     this.chats = new CliChatManager(undefined, path.join(dataDir, "superai-chats"));
     this.chats.onChange = () => this.saveSessions();
@@ -202,6 +204,7 @@ export class StudioServer {
     const m = typeof model === "string" ? model.trim() : "";
     const e = typeof effort === "string" ? effort.trim() : "";
     if (m && (m.length > 200 || !/^[\w.:/@+-]+$/.test(m) || m.startsWith("-"))) throw new Error("ชื่อรุ่นไม่ถูกต้อง");
+    if (isCloud(id)) { if (e) throw new Error('API นี้ไม่รองรับ effort'); return { model: m, effort: '' }; }
     if (e && !PROVIDER_PROFILES[id]?.efforts.includes(e)) throw new Error("ระดับ effort ไม่ถูกต้องสำหรับ CLI นี้");
     if ((m || e) && !modelEffortArgs(id, m, e, true).length) return {};
     return { model: m, effort: e };
@@ -222,11 +225,23 @@ export class StudioServer {
     registerAccountRoutes(this.app, id => this.terminalManager.listSessions().some(s => s.accountId === id) || this.agentRuns.usesAccount(id));
     this.app.get("/api/clis", (_req, res) => res.json(listClis()));
     this.app.get("/api/clis/:id/auth", async (req, res) => {
+      if (isCloud(String(req.params.id))) {
+        try { const status = cloudKeys.status(String(req.params.id)); return res.json({ id: status.id, status: status.hasKey ? 'authenticated' : 'login-required', note: status.hasKey ? 'ใช้ API Key ที่บันทึกไว้ในแอป' : 'เชื่อมต่อที่ การตั้งค่า > API Key' }); }
+        catch (error) { return res.status(400).json({ error: (error as Error).message }); }
+      }
       try { res.json(await cliAuth.get(String(req.params.id), req.query.refresh === "1", accounts.resolve(String(req.params.id), req.query.accountId))); }
       catch (error: any) { res.status(400).json({ error: error.message }); }
     });
     // API keys for OpenRouter, DeepSeek and Groq: checked with the provider, then kept encrypted on this machine.
     this.app.get("/api/cloud-keys", (_req, res) => res.json(cloudKeys.all()));
+    this.app.post('/api/custom-providers', async (req, res) => {
+      try { res.json(await cloudKeys.addCustom(req.body)); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); }
+    });
+    this.app.delete('/api/custom-providers/:id', (req, res) => {
+      try { cloudKeys.removeCustom(String(req.params.id)); res.json({ ok: true }); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); }
+    });
     this.app.put("/api/cloud-keys/:id", async (req, res) => {
       try {
         const id = String(req.params.id);
@@ -936,7 +951,7 @@ export class StudioServer {
         const accountId = accounts.resolve(typeof agentType === "string" ? agentType : "terminal", req.body.accountId);
         const accountEnv = accounts.environment(agentType || "terminal", accountId);
         // Skip the CLI's "trust this folder?" prompt for the user's own project folder.
-        if (req.body.trustFolder === true && workspace?.rootPath && workingDir === workspace.rootPath && typeof agentType === "string")
+        if (req.body.trustFolder === true && workspace?.rootPath && workingDir === workspace.rootPath && typeof agentType === "string" && !isCloud(agentType))
           trustFolder(agentType, workspace.rootPath, { home: os.homedir(), codexHome: accountEnv.CODEX_HOME || path.join(os.homedir(), ".codex"), claudeConfigDir: accountEnv.CLAUDE_CONFIG_DIR });
         const spawnOptions = {
           accountId,
@@ -954,7 +969,11 @@ export class StudioServer {
           rows: Number(rows) || undefined,
         };
         // CLIs with a chat view open as a chat: no terminal process until the user switches to it.
-        const chat = !command && CHAT_CLIS.includes(agentType) && req.body.view !== "terminal";
+        if (isCloud(agentType || '')) {
+          if (command || req.body.view === 'terminal') throw new Error('API Provider ใช้ผ่านหน้าคุยเท่านั้น');
+          if (!cloudKeys.key(agentType)) throw new Error('เชื่อมต่อ API Key ที่ การตั้งค่า > API Key ก่อน');
+        }
+        const chat = !command && (CHAT_CLIS.includes(agentType) || isCloud(agentType || '')) && req.body.view !== "terminal";
         const session = chat
           ? this.terminalManager.addDormant({ id: randomUUID(), options: { ...spawnOptions, cwd: workingDir || process.cwd() } })
           : this.terminalManager.spawnSession(spawnOptions);
@@ -1005,6 +1024,10 @@ export class StudioServer {
       const session = this.terminalManager.getSession(id);
       if (!session) return res.status(404).json({ error: "ไม่พบ session นี้แล้ว" });
       const view = req.body?.view === "terminal" ? "terminal" : "chat";
+      if (isCloud(session.agentType || '')) {
+        if (view === 'terminal') return res.status(400).json({ error: 'API Provider ใช้หน้าคุย ไม่มีโปรเซส CLI' });
+        this.views.set(id, 'chat'); return res.json({ success: true, view: 'chat' });
+      }
       if (view === "chat" && session.restart?.authOnly) return res.status(400).json({ error: "แท็บนี้ใช้เข้าสู่ระบบ กรุณากลับไปแท็บแชตเดิมแล้วกดตรวจบัญชีอีกครั้ง" });
       if (view === "chat" && !CHAT_CLIS.includes(session.agentType || "")) return res.status(400).json({ error: "CLI นี้ยังไม่รองรับมุมมองแชต" });
       if ((session.sleeping || session.status === "stopping") && !(view === "chat" && session.sleeping && session.exitObserved && session.terminationConfirmed)) return res.status(409).json({ error: "Terminal กำลังปิด กรุณารอให้ปิดเสร็จก่อน" });
@@ -1065,7 +1088,7 @@ export class StudioServer {
       const session = this.terminalManager.getSession(String(req.params.id));
       if (!session) return res.status(404).json({ error: "ไม่พบ session นี้แล้ว" });
       res.json({ agent: session.agentType, accountId: session.accountId || "system", accountName: accounts.list(session.agentType || "").find(p => p.id === (session.accountId || "system"))?.name || "บัญชีไม่พร้อม", model: session.restart?.model || session.restart?.openCodeModel || "", effort: session.restart?.effort || "",
-        skills: chatSkills(session.cwd, session.agentType || "", undefined, accounts.environment(session.agentType || "", session.accountId)) });
+        skills: isCloud(session.agentType || '') ? [] : chatSkills(session.cwd, session.agentType || "", undefined, accounts.environment(session.agentType || "", session.accountId)) });
     });
     this.app.get("/api/terminals/:id/chat", (req: Request, res: Response) => {
       res.json(this.chats.snapshot(String(req.params.id)));
@@ -1093,7 +1116,7 @@ export class StudioServer {
     this.app.post('/api/terminals/:id/chat/fork', (req: Request, res: Response) => {
       const source = this.terminalManager.getSession(String(req.params.id));
       if (!source) return res.status(404).json({ error: 'ไม่พบห้องต้นทาง' });
-      if (!CHAT_CLIS.includes(source.agentType || '') || this.viewOf(source.id) !== 'chat') return res.status(400).json({ error: 'แยกบทสนทนาได้จากห้องแชต AI เท่านั้น' });
+      if ((!CHAT_CLIS.includes(source.agentType || '') && !isCloud(source.agentType || '')) || this.viewOf(source.id) !== 'chat') return res.status(400).json({ error: 'แยกบทสนทนาได้จากห้องแชต AI เท่านั้น' });
       try {
         if (typeof req.body?.messageId !== 'string') throw new Error('กรุณาระบุข้อความต้นทาง');
         if (req.body.selection !== undefined && (typeof req.body.selection !== 'string' || !req.body.selection.trim())) throw new Error('กรุณาเลือกข้อความสำหรับ Side chat');
@@ -1113,7 +1136,7 @@ export class StudioServer {
       const session = this.terminalManager.getSession(id);
       if (!session) return res.status(404).json({ error: "ไม่พบ session นี้แล้ว กรุณาเปิด session ใหม่" });
       const agent = session.agentType || "";
-      if (!CHAT_CLIS.includes(agent)) return res.status(400).json({ error: "CLI นี้ยังไม่รองรับมุมมองแชต กรุณาใช้ terminal" });
+      if (!CHAT_CLIS.includes(agent) && !isCloud(agent)) return res.status(400).json({ error: "ผู้ให้บริการนี้ยังไม่รองรับมุมมองแชต" });
       // One writer per conversation: while its terminal is open, the chat waits.
       if (this.viewOf(id) !== "chat") return res.status(409).json({ error: "session นี้เปิดอยู่ในโหมด Terminal กรุณาสลับเป็นแชตก่อน" });
       if (session.sleeping || ["running", "stopping"].includes(session.status)) return res.status(409).json({ error: "Terminal ยังปิดไม่เสร็จ กรุณารอก่อนส่งข้อความ" });
@@ -1129,7 +1152,7 @@ export class StudioServer {
         if (req.body.permission !== undefined && !supportsChatPermission(agent, req.body.permission)) throw new Error('สิทธิ์นี้ไม่รองรับสำหรับ provider นี้');
         if (req.body.includeProjectContext !== undefined && typeof req.body.includeProjectContext !== 'boolean') throw new Error('การตั้งค่าบริบทโปรเจกต์ไม่ถูกต้อง');
         const style = responseStyle(req.body.responseStyle);
-        await cliAuth.requireReady(agent, session.accountId || "system");
+        if (!isCloud(agent)) await cliAuth.requireReady(agent, session.accountId || "system");
         if (this.terminalManager.getSession(id) !== session || this.viewOf(id) !== "chat") return res.status(409).json({ error: "session เปลี่ยนไปแล้ว กรุณาลองใหม่" });
         if (session.sleeping || ["running", "stopping"].includes(session.status)) return res.status(409).json({ error: "Terminal ยังปิดไม่เสร็จ กรุณารอก่อนส่งข้อความ" });
         if (this.branchChanging) return res.status(409).json({ error: 'กำลังสลับ branch กรุณารอก่อนส่งข้อความ' });
@@ -1144,6 +1167,7 @@ export class StudioServer {
           attachments,
           projectContext: req.body.includeProjectContext === false ? { text: '', instructions: false, files: [], preparedAt: Date.now(), chunks: [] } : buildProjectContext(session.wsId ? this.workspaceRegistry.getWorkspace(session.wsId) : undefined, session.cwd, { native: nativeRuleFiles(agent) }),
           responseStyle: style,
+          askFirst: req.body?.askFirst === true,
         // Enter while the chat is answering interrupts it (like Claude); Ctrl+Enter (`queue`) waits instead.
         }, { queue: req.body.queue === true, interrupt: req.body.queue !== true && req.body.interrupt !== false });
         session.restart = { ...session.restart, ...chosen };
@@ -1152,6 +1176,13 @@ export class StudioServer {
       } catch (err: any) {
         res.status(/ยังตอบ/.test(err.message) ? 409 : 400).json({ error: err.message });
       }
+    });
+    // The user's choices on a question card the AI asked.
+    this.app.post("/api/terminals/:id/chat/question", (req: Request, res: Response) => {
+      try {
+        if (typeof req.body?.itemId !== "string") throw new Error("ไม่พบคำถาม");
+        res.json(this.chats.answerQuestion(String(req.params.id), req.body.itemId, { answers: req.body.answers, skip: req.body.skip }));
+      } catch (error: any) { res.status(400).json({ error: error.message }); }
     });
     // The user's answer to a permission card (Claude asked to use a tool its mode does not cover).
     this.app.post("/api/terminals/:id/chat/permission", async (req: Request, res: Response) => {
@@ -1165,6 +1196,7 @@ export class StudioServer {
       const id = String(req.params.id);
       const session = this.terminalManager.getSession(id);
       const agent = session?.agentType || "";
+      if (isCloud(agent)) return res.json({ text: '' });
       if (!session || !CHAT_CLIS.includes(agent)) return res.status(404).json({ error: "ไม่พบห้องแชต" });
       const chat = this.chats.snapshot(id);
       // Nothing to guess while answering or when a message is already waiting to go (interrupt, queue).

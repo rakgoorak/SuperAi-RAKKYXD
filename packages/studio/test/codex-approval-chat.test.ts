@@ -15,7 +15,7 @@ test('Codex app-server asks and receives allow or deny without changing the sand
   assert.equal(calls()[0].method,'initialize');say({id:1,result:{}});
   assert.equal(calls().find(m=>m.id===2).params.approvalPolicy,'untrusted');
   assert.equal(calls().find(m=>m.id===2).params.sandbox,'workspace-write');
-  say({id:2,result:{thread:{id:'thread-1'}}});assert.equal(calls().find(m=>m.id===3).params.input[0].text,'test');
+  say({id:2,result:{thread:{id:'thread-1'}}});assert.equal(calls().find(m=>m.id===3).params.input[0].text.split('\n\n[วิธีถามผู้ใช้]')[0],'test');
   say({id:99,method:'item/commandExecution/requestApproval',params:{command:'echo test'}});
   await wait(()=>chats.snapshot('room').items.some(i=>i.kind==='permission'));
   const card=chats.snapshot('room').items.find(i=>i.kind==='permission')!;

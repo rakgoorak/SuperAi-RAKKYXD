@@ -20,6 +20,9 @@ import { skillPrompt } from "./ChatSkills.js";
 import { contextualPrompt, contextForAgent, type ProjectContext } from './ProjectContext.js';
 import type { ResponseStyle } from './ResponseStyle.js';
 import type { TokenUsage } from './CliRunStream.js';
+import { ASK_RULES, extractJson, parseQuestions, type ClarifyAnswer, type ClarifyQuestion } from "./Questions.js";
+export { extractJson, parseQuestions };
+export type { ClarifyAnswer, ClarifyQuestion };
 
 export function ollamaBase() {
   const value = process.env.SUPERAI_OLLAMA_URL || "http://127.0.0.1:11434";
@@ -110,18 +113,6 @@ export interface Activity {
   text: string;
 }
 
-/** A multiple-choice question the AI asks before it starts (like Claude's clarifying questions). */
-export interface ClarifyQuestion {
-  id: string;
-  header: string;
-  question: string;
-  multiSelect: boolean;
-  options: { label: string; description: string; recommended: boolean }[];
-}
-export interface ClarifyAnswer {
-  selected: string[];
-  other: string;
-}
 export interface Clarification {
   by: string;
   intro: string;
@@ -188,58 +179,9 @@ const MAX_PANEL = 5;
 const MAX_SUBAGENTS = 6;
 const MAX_TASKS = 10;
 const describe = (seat: Seat) => {
-  const tool = seat.provider.startsWith("cli:") ? seat.provider.slice(4) : isCloud(seat.provider) ? CLOUD_PROVIDERS[seat.provider].name : `ollama:${seat.provider}`;
+    const tool = seat.provider.startsWith("cli:") ? seat.provider.slice(4) : isCloud(seat.provider) ? cloudKeys.status(seat.provider).name : `ollama:${seat.provider}`;
   return [tool, seat.model, seat.effort && `effort ${seat.effort}`].filter(Boolean).join(" · ");
 };
-
-/** Pull the first JSON object or array out of a CLI reply that may wrap it in prose or fences. */
-export function extractJson(raw: string): any {
-  const text = raw.replace(/```(?:json)?/gi, "").trim();
-  try {
-    return JSON.parse(text);
-  } catch {}
-  for (const [open, close] of [["{", "}"], ["[", "]"]]) {
-    const start = text.indexOf(open);
-    const end = text.lastIndexOf(close);
-    if (start >= 0 && end > start)
-      try {
-        return JSON.parse(text.slice(start, end + 1));
-      } catch {}
-  }
-  throw new Error("ไม่พบ JSON");
-}
-const MAX_QUESTIONS = 4;
-const ASK_RULES = `ถามเฉพาะเรื่องที่คำตอบเปลี่ยนผลลัพธ์อย่างมีนัยสำคัญ และเดาจากคำขอ ไฟล์แนบ หรือไฟล์ในโปรเจกต์ไม่ได้
-ถามได้ไม่เกิน ${MAX_QUESTIONS} ข้อ แต่ละข้อมี 2-4 ตัวเลือกที่ต่างกันชัดเจน ใส่ "recommended":true ที่ตัวเลือกที่แนะนำและวางไว้เป็นตัวแรก
-ใช้ "multiSelect":true เมื่อเลือกได้หลายข้อ ไม่ต้องใส่ตัวเลือก "อื่นๆ" เพราะผู้ใช้พิมพ์คำตอบเองได้เสมอ
-รูปแบบ JSON:
-{"intro":"บอกสั้นๆ ว่าตรวจอะไรแล้วและทำไมต้องถาม","questions":[{"header":"หัวข้อสั้น","question":"คำถามเต็ม?","multiSelect":false,"options":[{"label":"ตัวเลือกสั้นๆ","description":"ผลของการเลือกข้อนี้","recommended":true},{"label":"ตัวเลือกอื่น","description":"ผลของการเลือกข้อนี้"}]}]}`;
-
-/** Read clarifying questions from an AI reply; null when it asked none or the reply is not usable. */
-export function parseQuestions(raw: string): { intro: string; questions: ClarifyQuestion[] } | null {
-  let data: any;
-  try {
-    data = extractJson(raw);
-  } catch {
-    return null;
-  }
-  if (!Array.isArray(data?.questions)) return null;
-  const text = (value: unknown, max: number) => (typeof value === "string" ? value.trim().slice(0, max) : "");
-  const questions = data.questions
-    .slice(0, MAX_QUESTIONS)
-    .map((q: any, index: number): ClarifyQuestion => ({
-      id: `q${index + 1}`,
-      header: text(q?.header, 40),
-      question: text(q?.question, 500),
-      multiSelect: q?.multiSelect === true,
-      options: (Array.isArray(q?.options) ? q.options : [])
-        .slice(0, 4)
-        .map((o: any) => ({ label: text(typeof o === "string" ? o : o?.label, 120), description: text(o?.description, 300), recommended: o?.recommended === true }))
-        .filter((o: { label: string }) => o.label),
-    }))
-    .filter((q: ClarifyQuestion) => q.question && q.options.length >= 2);
-  return questions.length ? { intro: text(data.intro, 600), questions } : null;
-}
 
 /** Turn the user's choices into text the AI can follow; skipped questions leave the call to the AI. */
 export function describeAnswers(clarify: Clarification) {
@@ -335,7 +277,7 @@ export class AgentRunManager {
       if (seat.provider.startsWith("cli:")) { accounts.resolve(seat.provider.slice(4), seat.accountId || "system"); cliLaunch(seat.provider.slice(4)); }
       // Without a key the provider would answer with its own "apiKey not set" text instead of failing.
       if (isCloud(seat.provider) && !cloudKeys.key(seat.provider))
-        throw new Error(`${seat.name}: ยังไม่ได้ใส่ API Key ของ ${CLOUD_PROVIDERS[seat.provider].name} เปิด การตั้งค่า > API Key เพื่อเชื่อมต่อ`);
+        throw new Error(`${seat.name}: ยังไม่ได้ใส่ API Key ของ ${cloudKeys.status(seat.provider).name} เปิด การตั้งค่า > API Key เพื่อเชื่อมต่อ`);
       const problem = attachmentProblem(seat.provider, attachments);
       if (problem) throw new Error(`${seat.name}: ${problem}`);
     }
@@ -398,6 +340,7 @@ export class AgentRunManager {
   }
 
   private provider(seat: Seat, cwd: string, signal: AbortSignal, tools: boolean, readTools: boolean, attachments: string[], onUsage?: (usage: TokenUsage) => void): LLMProvider {
+    if (isCloud(seat.provider)) return cloudKeys.create(seat.provider, seat.model || undefined, signal);
     if (seat.provider.startsWith("cli:")) {
       return new CliProvider(seat.provider, cwd, signal, tools, seat.model, readTools, attachments, seat.effort, onUsage, undefined, seat.accountId || "system");
     }

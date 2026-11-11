@@ -1,4 +1,5 @@
 import { accounts } from "./Accounts.js";
+import { cleanAnswers, describeChoices, fromAskUserQuestion, questionRules, takeQuestions, type ClarifyAnswer, type ClarifyQuestion } from "./Questions.js";
 import { openCodeNoAnswer, openCodePermissionEnv } from "./OpenCodePermissions.js";
 import { spawn, execFile, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { randomUUID, randomBytes } from "node:crypto";
@@ -13,6 +14,9 @@ import { skillPrompt } from "./ChatSkills.js";
 import { getProjectRules, formatRulesForPrompt } from "./ProjectRules.js";
 import { contextualPrompt, contextForAgent, type ProjectContext } from './ProjectContext.js';
 import type { ResponseStyle } from './ResponseStyle.js';
+import { cloudKeys, isCloud } from './CloudKeys.js';
+import { runApiConversation } from './ApiConversation.js';
+import type { LLMProvider } from '@superai-rakkyxd/core';
 
 // Chat view for Code sessions: each message runs the CLI headless with its JSON event stream and
 // resumes the same conversation, so the client can draw messages and tool calls instead of a TUI.
@@ -23,6 +27,7 @@ const NAMES: Record<string, string> = { "claude-code": "Claude Code", codex: "Co
 const MAX_ITEMS = 400;
 // Windows limits a command line to 32,767 characters; agy only takes the prompt as an argument.
 const MAX_PROMPT = 20000;
+const TASK_PROGRESS = "[Task progress]\nIf you use a task list, keep it aligned with the work: update it with your native task tool when a task starts, completes, or the scope changes, and reconcile it before your final response. Mark tasks complete only after checking their acceptance criteria; explain unfinished work and blockers. Do not infer completion from tool-call counts.";
 const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 
 export type ToolKind = "command" | "read" | "edit" | "search" | "web" | "plan" | "other";
@@ -31,6 +36,7 @@ export type TodoStatus = "pending" | "in_progress" | "completed";
 export type ChatPermission = "read" | "edit" | "auto" | "review" | "full" | "ask" | "approve_all";
 export const CHAT_PERMISSIONS: ChatPermission[] = ["read", "edit", "auto", "review", "full", "ask", "approve_all"];
 export function supportsChatPermission(agent: string, permission: ChatPermission): boolean {
+  if (isCloud(agent)) return ['read', 'edit', 'auto'].includes(permission);
   if (permission === 'ask') return agent === 'claude-code' || agent === 'codex' || agent === 'opencode';
   if (permission === 'review') return agent === 'codex';
   if (permission === 'full') return agent === 'codex' || agent === 'claude-code';
@@ -46,10 +52,13 @@ export type ChatItem =
   | { id: string; kind: "todos"; todos: { text: string; status: TodoStatus }[]; at: number }
   | { id: string; kind: "error" | "notice"; text: string; at: number }
   /** Claude asked to use a tool the permission mode does not cover; the user answers in the chat. */
-  | { id: string; kind: "permission"; requestId: string; tool: string; title: string; detail?: string; canAlways?: boolean; status: PermissionStatus; at: number };
+  | { id: string; kind: "permission"; requestId: string; tool: string; title: string; detail?: string; canAlways?: boolean; status: PermissionStatus; at: number }
+  /** Multiple-choice questions the AI asked (its superai-questions block, or Claude's AskUserQuestion). */
+  | { id: string; kind: "question"; by: string; intro: string; questions: ClarifyQuestion[]; status: QuestionStatus; answers?: Record<string, ClarifyAnswer>; requestId?: string; at: number };
+export type QuestionStatus = "waiting" | "answered" | "skipped" | "expired";
 export type PermissionStatus = "pending" | "allowed" | "always" | "denied" | "expired";
 export type PermissionDecision = "allow" | "always" | "deny";
-type NewItem = ChatItem extends infer T ? (T extends ChatItem ? Omit<T, "at"> : never) : never;
+export type NewItem = ChatItem extends infer T ? (T extends ChatItem ? Omit<T, "at"> : never) : never;
 
 /** What one line of a CLI's JSON stream changes. `outputTokens` is added to the turn's count. */
 export interface ChatUpdate { items?: NewItem[]; conversationId?: string; error?: string; done?: boolean; outputTokens?: number }
@@ -97,7 +106,7 @@ function usageNotice(prefix: string, usage: any, fields: [string, string][]): Ne
 
 /** A CLI's todo entries in one shape. `done` lists (Codex) mark the first open entry as in progress. */
 function todoList(entries: unknown, prefix: string, running = true): NewItem | null {
-  if (!Array.isArray(entries) || !entries.length) return null;
+  if (!Array.isArray(entries)) return null;
   let current = false;
   const todos = entries.map((t: any) => {
     const text = String(t?.content ?? t?.text ?? t?.activeForm ?? "").trim();
@@ -105,7 +114,7 @@ function todoList(entries: unknown, prefix: string, running = true): NewItem | n
     if (t?.status === undefined && status === "pending" && running && !current) { status = "in_progress"; current = true; }
     return { text, status };
   }).filter((t) => t.text);
-  return todos.length ? { id: `${prefix}-todos`, kind: "todos", todos } : null;
+  return { id: `${prefix}-todos`, kind: "todos", todos };
 }
 
 /** `"...\powershell.exe" -Command 'echo hi'` → `echo hi`: the shell wrapper Codex adds is noise. */
@@ -243,7 +252,7 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
         case "tool_use": {
           const name = String(part.tool || "tool");
           const state = part.state || {};
-          if (name === "todowrite") {
+          if (name === "todowrite" && state.status === "completed") {
             const todos = todoList(state.input?.todos, prefix);
             return todos ? { ...conversation, items: [todos] } : conversation;
           }
@@ -419,13 +428,16 @@ interface QueuedRequest extends QueuedChat { request: ChatRequest }
 interface LiveClaude { proc: ChildProcess; key: string; closed: boolean; errors: string; writeProblem?: string; onWriteFailure?: (message: string) => void; onLine?: (line: string) => void; onClose?: (code: number | null) => void; idle?: NodeJS.Timeout; stopTimer?: NodeJS.Timeout }
 interface PendingPermission { live: LiveClaude; input: unknown; itemId: string; tool: string; protocol?: 'codex' | 'opencode'; rpcId?: string | number; reply?: (decision: PermissionDecision) => Promise<void>; answering?: boolean }
 interface Chat extends Omit<ChatSnapshot, "queued"> {
+  apiAbort?: AbortController;
   seed?: string; turns: number; proc?: ChildProcess; cancelled?: boolean; /** Stopped to take a new message (Enter while answering). */ interrupting?: boolean;
   wait?: () => void; listeners: Set<(m: ChatMessage) => void>; saveTimer?: NodeJS.Timeout; queue: QueuedRequest[];
   live?: LiveClaude; permissions: Map<string, PendingPermission>; /** Tools the user allowed for the rest of this chat. */ alwaysAllowed: Set<string>;
+  /** Claude's AskUserQuestion calls waiting for the user's choices. */ asks: Map<string, { live: LiveClaude; itemId: string }>;
   /** Project context already in this conversation (CLIs other than the live Claude get it once). */ contextKey?: string;
+  /** Which question rules this conversation already has ("ask" or "ask-first"), sent once like the context. */ rulesKey?: string;
 }
 export interface ChatFork { items: ChatItem[]; turns: number; seed: string; }
-export interface ChatRequest { accountId?: string; agent: string; cwd: string; text: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle }
+export interface ChatRequest { accountId?: string; agent: string; cwd: string; text: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle; askFirst?: boolean }
 
 export class CliChatManager {
   private chats = new Map<string, Chat>();
@@ -436,7 +448,7 @@ export class CliChatManager {
     // `turn` is the silence warning threshold; only startup silence terminates the CLI.
     private timeouts = { startup: 90000, turn: 600000 },
     // `live`: keep Claude Code running between turns; `idle` closes it after this long unused.
-    private options: { live?: boolean; idle?: number } = {}) {}
+    private options: { live?: boolean; idle?: number; apiProvider?: (id: string, model: string | undefined, signal: AbortSignal) => LLMProvider } = {}) {}
   private get liveClaude() { return this.options.live !== false; }
 
   private file(id: string): string | undefined {
@@ -445,17 +457,18 @@ export class CliChatManager {
   private chat(id: string): Chat {
     let chat = this.chats.get(id);
     if (chat) return chat;
-    chat = { items: [], running: false, turns: 0, listeners: new Set(), queue: [], permissions: new Map(), alwaysAllowed: new Set() };
+    chat = { items: [], running: false, turns: 0, listeners: new Set(), queue: [], permissions: new Map(), alwaysAllowed: new Set(), asks: new Map() };
     const file = this.file(id);
     try {
       if (file && fs.existsSync(file)) {
         const saved = JSON.parse(fs.readFileSync(file, "utf8"));
         // A turn cut off by quitting the app: its unfinished tools did not complete.
-        if (Array.isArray(saved.items)) chat.items = saved.items.map((i: ChatItem) => i.kind === "tool" && i.status === "running" ? { ...i, status: "failed" } : i.kind === 'permission' && i.status === 'pending' ? { ...i, status: 'expired' } : i);
+        if (Array.isArray(saved.items)) chat.items = saved.items.map((i: ChatItem) => i.kind === "tool" && i.status === "running" ? { ...i, status: "failed" } : i.kind === 'permission' && i.status === 'pending' ? { ...i, status: 'expired' } : i.kind === 'question' && i.status === 'waiting' && i.requestId ? { ...i, status: 'expired' } : i);
         if (typeof saved.conversationId === "string" && saved.conversationId) chat.conversationId = saved.conversationId;
         chat.turns = Number(saved.turns) || 0;
         if (typeof saved.seed === 'string') chat.seed = saved.seed;
         if (typeof saved.contextKey === 'string') chat.contextKey = saved.contextKey;
+        if (typeof saved.rulesKey === 'string') chat.rulesKey = saved.rulesKey;
       }
     } catch {
       // an unreadable file starts an empty chat
@@ -470,7 +483,7 @@ export class CliChatManager {
     const write = () => {
       try {
         fs.mkdirSync(this.dir!, { recursive: true });
-        fs.writeFileSync(file, JSON.stringify({ conversationId: chat.conversationId, turns: chat.turns, items: chat.items, seed: chat.seed, contextKey: chat.contextKey }));
+        fs.writeFileSync(file, JSON.stringify({ conversationId: chat.conversationId, turns: chat.turns, items: chat.items, seed: chat.seed, contextKey: chat.contextKey, rulesKey: chat.rulesKey }));
       } catch {
         // a full disk must not break the chat on screen
       }
@@ -483,7 +496,7 @@ export class CliChatManager {
   }
   private put(id: string, chat: Chat, item: NewItem) {
     const index = chat.items.findIndex((i) => i.id === item.id);
-    const full = { ...item, at: index >= 0 ? chat.items[index].at : Date.now() } as ChatItem;
+    const full = { ...item, at: index >= 0 && item.kind !== 'todos' ? chat.items[index].at : Date.now() } as ChatItem;
     if (index >= 0) chat.items[index] = full;
     else chat.items.push(full);
     if (chat.items.length > MAX_ITEMS) chat.items.splice(0, chat.items.length - MAX_ITEMS);
@@ -506,6 +519,7 @@ export class CliChatManager {
       : structuredClone(source.items.slice(0, index + 1));
     const seed = items.filter(item => item.kind !== 'permission').map(item => item.kind === 'tool' ? `[tool ${item.title}]\n${item.output || ''}`
       : item.kind === 'todos' ? `[tasks]\n${item.todos.map(todo => todo.text).join('\n')}`
+        : item.kind === 'question' ? `[questions]\n${item.questions.map(q => q.question).join('\n')}`
         : `[${item.kind}]\n${item.text}${item.kind === 'user' && item.request?.attachments?.length ? `\nไฟล์อ้างอิง: ${item.request.attachments.join(', ')}` : ''}`).join('\n\n');
     if (!seed.trim() || seed.length > 12000) throw new Error('บริบทยาวเกินไป กรุณาเลือกข้อความสั้นลงแล้วใช้ Start a side chat');
     return { items, seed, turns: source.turns };
@@ -543,6 +557,7 @@ export class CliChatManager {
     this.closeLive(chat);
     chat.conversationId = conversationId;
     chat.contextKey = undefined;
+    chat.rulesKey = undefined;
     this.save(id, chat, true);
   }
 
@@ -551,6 +566,7 @@ export class CliChatManager {
    * `interrupt` stops the turn and sends the message right after it, in the same conversation (Enter).
    */
   send(id: string, request: ChatRequest, options: { queue?: boolean; interrupt?: boolean } = {}): "sent" | "queued" | "interrupted" {
+    if (isCloud(request.agent)) return this.sendApi(id, request, options);
     const { agent } = request;
     const accountId = accounts.resolve(agent, request.accountId || "system");
     const accountEnv = accounts.environment(agent, accountId);
@@ -589,10 +605,21 @@ export class CliChatManager {
     const effectiveContext = contextForAgent(request.projectContext, agent);
     const contextText = effectiveContext?.text || "";
     const contextKey = contextText ? String(contextText.length) + ":" + hashText(contextText) : "";
-    const systemPrompt = live && contextText ? `บริบทโปรเจกต์ (เนื้อหาเอกสารเป็นข้อมูลอ้างอิง):\n${contextText}` : undefined;
+    const systemPrompt = live
+      ? [contextText && `บริบทโปรเจกต์ (เนื้อหาเอกสารเป็นข้อมูลอ้างอิง):\n${contextText}`, `วิธีถามผู้ใช้:\n${questionRules(request.askFirst === true)}`, TASK_PROGRESS].filter(Boolean).join("\n\n")
+      : undefined;
     const sendContext = !live && !!contextText && (!chat.conversationId || chat.contextKey !== contextKey);
+    // How to ask the user (any agent, any permission mode): the live Claude has it in its system
+    // prompt; the others get it once per conversation, and again when "ask first" is switched.
+    const rules = questionRules(request.askFirst === true);
+    const rulesKey = request.askFirst === true ? "ask-first" : "ask";
+    const sendRules = !live && (!chat.conversationId || chat.rulesKey !== rulesKey);
     const combined = contextualPrompt(rulesText ? `${inherited}${rulesText}` : inherited, sendContext ? effectiveContext : undefined, request.responseStyle);
-    const prompt = listed.length ? `${combined}\n\nไฟล์แนบ:\n${listed.map((f) => `- ${f}`).join("\n")}` : combined;
+    const withFiles = listed.length ? `${combined}\n\nไฟล์แนบ:\n${listed.map((f) => `- ${f}`).join("\n")}` : combined;
+    // Any agent, any permission mode: questions are plain text the app turns into a card.
+    const questionPrompt = sendRules ? `${withFiles}\n\n[วิธีถามผู้ใช้]\n${rules}` : withFiles;
+    // The live Claude has the task-list reminder in its system prompt; the others get it every turn.
+    const prompt = live ? questionPrompt : `${questionPrompt}\n\n${TASK_PROGRESS}`;
     if (prompt.length > MAX_PROMPT) throw new Error("ข้อความยาวเกินไป กรุณาแบ่งส่งหรือใส่ไว้ในไฟล์แล้วแนบแทน");
     const liveKey = JSON.stringify([accountId, request.cwd, request.model || "", request.effort || "", request.permission || "auto", systemPrompt || ""]);
     if (live && chat.live && (chat.live.closed || chat.live.key !== liveKey)) this.closeLive(chat);
@@ -608,6 +635,7 @@ export class CliChatManager {
     // Resolved first: a CLI that is not installed is refused before the message joins the chat.
     const launch = reuse ? undefined : this.launcher(agent, args);
     if (sendContext) chat.contextKey = contextKey;
+    if (sendRules) chat.rulesKey = rulesKey;
     const prefix = `t${++chat.turns}`;
     this.put(id, chat, { id: `${prefix}-user`, kind: "user", text, request: { text, model: request.model, effort: request.effort, skillId: request.skillId, attachments: files, permission: request.permission, projectContext: request.projectContext, responseStyle: request.responseStyle }, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}) });
     chat.running = true;
@@ -640,6 +668,12 @@ export class CliChatManager {
         if (item?.kind === "permission" && item.status === "pending") this.put(id, chat, { ...item, status: "expired" });
         chat.permissions.delete(requestId);
       }
+      for (const [requestId, ask] of chat.asks) {
+        const item = chat.items.find((i) => i.id === ask.itemId);
+        if (item?.kind === "question" && item.status === "waiting") this.put(id, chat, { ...item, status: "expired" });
+        chat.asks.delete(requestId);
+      }
+      if (!chat.cancelled) this.collectQuestions(id, chat, prefix, NAMES[agent]);
       for (const item of chat.items)
         if (item.kind === "tool" && item.status === "running" && item.id.startsWith(`${prefix}-`)) this.put(id, chat, { ...item, status: chat.cancelled || problem || failed ? "failed" : "done" });
       const interrupted = chat.cancelled && chat.interrupting;
@@ -997,6 +1031,16 @@ export class CliChatManager {
       return;
     }
     const tool = String(request.tool_name || "tool");
+    // Claude's own question tool becomes the same choice card as every other agent's questions.
+    if (tool === "AskUserQuestion") {
+      const asked = fromAskUserQuestion(request.input);
+      if (asked) {
+        const itemId = `${prefix}-ask-${requestId}`;
+        chat.asks.set(requestId, { live: lv, itemId });
+        this.put(id, chat, { id: itemId, kind: "question", by: "Claude", intro: asked.intro, questions: asked.questions, status: "waiting", requestId });
+        return;
+      }
+    }
     if (chat.alwaysAllowed.has(tool)) {
       const failTurn = lv.onWriteFailure;
       const failed = () => failTurn?.('ส่งคำอนุญาตไปยัง Claude ไม่สำเร็จ โปรดลองส่งอีกครั้ง');
@@ -1006,6 +1050,49 @@ export class CliChatManager {
     const itemId = `${prefix}-permission-${requestId}`;
     chat.permissions.set(requestId, { live: lv, input: request.input, itemId, tool });
     this.put(id, chat, { id: itemId, kind: "permission", requestId, tool, ...permissionSummary(tool, request.input, request.description), status: "pending" });
+  }
+
+  /** A question block in this turn's reply becomes a choice card; the reply keeps the rest of its text. */
+  private collectQuestions(id: string, chat: Chat, prefix: string, by: string) {
+    for (const item of chat.items) {
+      if (item.kind !== "assistant" || !item.id.startsWith(`${prefix}-`)) continue;
+      const { text, asked } = takeQuestions(item.text);
+      if (!asked) continue;
+      this.put(id, chat, { ...item, text });
+      this.put(id, chat, { id: `${prefix}-questions`, kind: "question", by, intro: asked.intro, questions: asked.questions, status: "waiting" });
+      return;
+    }
+  }
+
+  /**
+   * The user's choices on a question card. Claude's AskUserQuestion gets them straight away;
+   * for a question block the reply text is returned and the client sends it as the next message.
+   */
+  answerQuestion(id: string, itemId: string, body: { answers?: unknown; skip?: unknown }): { reply?: string; delivered?: boolean } {
+    const chat = this.chat(id);
+    const item = chat.items.find((i) => i.id === itemId);
+    if (item?.kind !== "question" || item.status !== "waiting") throw new Error("คำถามนี้ตอบไปแล้วหรือหมดเวลาแล้ว");
+    const skip = body.skip === true;
+    const answers = skip ? {} : cleanAnswers(item.questions, body.answers);
+    if (!skip && !Object.keys(answers).length) throw new Error("เลือกหรือพิมพ์คำตอบอย่างน้อยหนึ่งข้อ หรือกดให้ AI ตัดสินใจเอง");
+    const reply = describeChoices(item.questions, answers, item.by);
+    if (item.requestId) {
+      const ask = chat.asks.get(item.requestId);
+      const sent = !!ask && !ask.live.closed && this.writeLive(ask.live, { type: "control_response", response: { subtype: "success", request_id: item.requestId,
+        // The tool call ends here with the user's choices as its result text.
+        response: { behavior: "deny", message: `ผู้ใช้ตอบผ่านการ์ดในโปรแกรมแล้ว ใช้คำตอบนี้และไม่ต้องถามซ้ำ
+${reply}` } } });
+      chat.asks.delete(item.requestId);
+      if (!sent) {
+        this.put(id, chat, { ...item, status: "expired" });
+        throw new Error("Claude ไม่ได้รอคำตอบนี้แล้ว พิมพ์คำตอบเป็นข้อความใหม่แทน");
+      }
+      this.put(id, chat, { ...item, status: skip ? "skipped" : "answered", answers });
+      return { delivered: true };
+    }
+    this.put(id, chat, { ...item, status: skip ? "skipped" : "answered", answers });
+    this.save(id, chat, true);
+    return { reply };
   }
 
   /** The user's answer to a permission card. False when the question is no longer open. */
@@ -1082,6 +1169,47 @@ export class CliChatManager {
     setTimeout(() => { if (lv.proc.exitCode === null) this.kill(lv.proc); }, 3000).unref?.();
   }
 
+  private sendApi(id: string, request: ChatRequest, options: { queue?: boolean; interrupt?: boolean }): 'sent' | 'queued' | 'interrupted' {
+    const chat = this.chat(id), text = request.text.trim();
+    if (!text || text.length > MAX_PROMPT) throw new Error('กรุณาระบุข้อความไม่เกิน 20,000 ตัวอักษร');
+    if (!supportsChatPermission(request.agent, request.permission || 'read')) throw new Error('API รองรับสิทธิ์ read, edit และ auto');
+    if (request.attachments?.length) throw new Error('ห้อง API ยังไม่รองรับรูป/PDF แนบ ให้ระบุชื่อไฟล์ข้อความในโปรเจกต์เพื่อให้เครื่องมืออ่าน');
+    // Resolve credentials before accepting the turn; no provider secret enters history.
+    const controller = new AbortController();
+    const provider = this.options.apiProvider ? this.options.apiProvider(request.agent, request.model, controller.signal) : cloudKeys.create(request.agent, request.model, controller.signal);
+    if (chat.running) {
+      if (!options.queue && !options.interrupt) throw new Error('ยังตอบข้อความก่อนหน้าอยู่');
+      const queued = { id: randomUUID(), text, request };
+      if (options.interrupt && chat.apiAbort) {
+        chat.queue.unshift(queued); this.emitQueue(chat); this.cancel(id); chat.interrupting = true; return 'interrupted';
+      }
+      chat.queue.push(queued); this.emitQueue(chat); return 'queued';
+    }
+    const prefix = `t${++chat.turns}`;
+    this.put(id, chat, { id: `${prefix}-user`, kind: 'user', text, request: { text, model: request.model, permission: request.permission, responseStyle: request.responseStyle } });
+    chat.running = true; chat.cancelled = false; chat.apiAbort = controller;
+    chat.activity = { startedAt: Date.now(), outputTokens: 0 };
+    this.emit(chat, { type: 'state', running: true }); this.emit(chat, { type: 'activity', activity: chat.activity }); this.onChange?.(id);
+    const system = contextualPrompt(formatRulesForPrompt(getProjectRules(request.cwd).rules), request.projectContext, request.responseStyle)
+      + '\n' + questionRules(request.askFirst === true) + (chat.seed ? `\nประวัติอ้างอิง:\n${chat.seed}` : '');
+    void runApiConversation({ provider, cwd: request.cwd, signal: controller.signal, prefix, permission: request.permission || 'read',
+      history: [...chat.items], system, onItem: item => { if (this.chats.get(id) === chat) this.put(id, chat, item); } }).catch(error => {
+      if (!controller.signal.aborted && this.chats.get(id) === chat) this.put(id, chat, { id: `${prefix}-error`, kind: 'error', text: String(error.message || 'เรียก API ไม่สำเร็จ') });
+    }).finally(() => {
+      if (this.chats.get(id) !== chat) return;
+      const interrupted = chat.cancelled && chat.interrupting;
+      if (controller.signal.aborted) {
+        for (const item of chat.items) if (item.kind === 'tool' && item.status === 'running' && item.id.startsWith(`${prefix}-`)) this.put(id, chat, { ...item, status: 'failed' });
+        this.put(id, chat, { id: `${prefix}-stopped`, kind: 'notice', text: interrupted ? 'หยุดเพื่อรับข้อความใหม่' : 'หยุดแล้ว' });
+      } else this.collectQuestions(id, chat, prefix, provider.name);
+      chat.running = false; chat.apiAbort = undefined; chat.activity = undefined; chat.interrupting = false;
+      this.emit(chat, { type: 'activity' }); this.emit(chat, { type: 'state', running: false });
+      this.save(id, chat, true); this.onChange?.(id);
+      if ((!chat.cancelled || interrupted) && chat.queue.length) setImmediate(() => this.sendNext(id));
+    });
+    return 'sent';
+  }
+
   private kill(proc: ChildProcess) {
     if (process.platform === "win32" && proc.pid) execFile("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true }, () => {});
     else if (proc.pid) { try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill(); } }
@@ -1128,6 +1256,7 @@ export class CliChatManager {
 
   cancel(id: string): boolean {
     const chat = this.chats.get(id);
+    if (chat?.apiAbort && chat.running) { chat.cancelled = true; chat.interrupting = false; chat.apiAbort.abort(); return true; }
     const proc = chat?.proc;
     if (!chat || !proc) return false;
     chat.cancelled = true;

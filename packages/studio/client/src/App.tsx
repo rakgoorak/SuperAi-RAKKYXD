@@ -63,6 +63,7 @@ import { namedSessions, sessionAliases } from './sessionNames';
 import { Star } from 'lucide-react';
 import './usability.css';
 import { paneView } from "./paneView";
+import { useCloudKeys, isCloud as isApiProvider } from './providers';
 import { chatPrefs, sendChatCommand, setChatPrefs } from "./chatControls";
 import { SessionChatControls } from "./components/SessionChatControls";
 import { ComposerLocation } from "./components/ComposerLocation";
@@ -329,7 +330,9 @@ export function App() {
     lastRun: latestRun ? { ...latestRun, output: latestRun.output || latestRun.panel?.filter(answer => answer.status === "completed").map(answer => answer.output).join("\n\n") || "" } : null,
   });
   const activeRun = runs.find((r) => r.status === "running");
-  const launchCli = clis.find((c) => c.id === launchType);
+  const connectedApis = useCloudKeys();
+  const sessionProviders = [...clis, ...connectedApis.map(provider => ({ id: provider.id, name: `${provider.name} · API`, available: provider.hasKey, maxSessions: 6, command: '', teamSupported: true }))];
+  const launchCli = sessionProviders.find((c) => c.id === launchType);
   const showError = useCallback((text: string) => {
     setError(text);
   }, []);
@@ -536,7 +539,7 @@ export function App() {
       const totals = new Map<string, number>();
       for (const seat of plan) totals.set(seat.type, (totals.get(seat.type) || 0) + seat.count);
       for (const [type, amount] of totals) {
-        const cli = clis.find(c => c.id === type);
+        const cli = sessionProviders.find(c => c.id === type);
         if (!cli?.available) throw new Error(`ไม่พบ CLI ${cli?.name || type} กรุณาติดตั้งก่อน`);
         const capacity = cli.maxSessions - sessions.filter(s => s.agentType === type && ["running", "stopping", "error"].includes(s.status)).length;
         if (amount > capacity) throw new Error(`${cli.name} เปิดเพิ่มได้อีก ${Math.max(0, capacity)} session`);
@@ -545,9 +548,9 @@ export function App() {
       let opened = 0;
       try {
         for (const type of [...remaining]) {
-          const cli = clis.find(c => c.id === type)!;
+          const cli = sessionProviders.find(c => c.id === type)!;
             const chosen = !launchPlan && type === launchType ? sessionSeat : seatFor(type, "");
-            const supportsModel = HEADLESS.includes(type);
+            const supportsModel = HEADLESS.includes(type) || isApiProvider(type);
             const session = await post<Session>("/api/terminals/spawn", {
               agentType: type, wsId: workspace.id,
               name: [cli.name, supportsModel && chosen.model].filter(Boolean).join(" · "),
@@ -699,6 +702,7 @@ export function App() {
               permission: prefs.permission,
               responseStyle: prefs.responseStyle,
               includeProjectContext: prefs.includeProjectContext,
+              askFirst: prefs.askFirst,
               ...(skillId ? { skillId } : {}),
               attachments: saved.map((file) => file.path),
               // Ctrl+Enter: wait behind a running turn instead of being refused.
@@ -1971,7 +1975,7 @@ export function App() {
                 <LaunchPresets clis={clis} type={launchType} count={count} onChoose={setLaunchPlan} onError={showError} />
                 {launchPlan && <div className="launch-plan"><strong>ชุดที่จะเปิด: {launchPlan.map(seat => `${clis.find(c => c.id === seat.type)?.name || seat.type} ×${seat.count}`).join(" + ")}</strong><button className="text-button" onClick={() => setLaunchPlan(null)}>เลือกเอง</button></div>}
                 <div className="cli-options">
-                  {clis.map((c) => {
+                  {sessionProviders.map((c) => {
                     const active = sessions.filter(
                       (s) => s.agentType === c.id && s.status === "running",
                     ).length;
@@ -2013,8 +2017,8 @@ export function App() {
                     );
                   })}
                 </div>
-                {!launchPlan && launchCli?.available && launchType !== "terminal" && <OutdatedNotice key={launchType} cliId={launchType} onError={showError} />}
-                {!launchPlan && HEADLESS.includes(launchType) && launchCli?.available && (
+                {!launchPlan && launchCli?.available && launchType !== "terminal" && !isApiProvider(launchType) && <OutdatedNotice key={launchType} cliId={launchType} onError={showError} />}
+                {!launchPlan && (HEADLESS.includes(launchType) || isApiProvider(launchType)) && launchCli?.available && (
                   <div className="session-model">
                     <SeatPicker named={false} fixedProvider label={launchCli.name} clis={clis} ollamaModels={[]} seat={sessionSeat} onChange={setSessionSeat} />
                     <small className="muted">ไม่แน่ใจว่าจะเลือกรุ่นไหน ใช้ค่าเริ่มต้นได้ แล้วค่อยเปลี่ยนทีหลัง</small>
@@ -2055,7 +2059,7 @@ export function App() {
                   </button>
                   <button
                     className="primary"
-                    disabled={busy || (launchPlan ? launchPlan.some(seat => !clis.find(c => c.id === seat.type)?.available) : !launchCli?.available)}
+                    disabled={busy || (launchPlan ? launchPlan.some(seat => !sessionProviders.find(c => c.id === seat.type)?.available) : !launchCli?.available)}
                     onClick={spawn}
                   >
                     {busy ? (

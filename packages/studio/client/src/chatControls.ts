@@ -15,6 +15,8 @@ export interface ChatPrefs {
   note: string;
   /** What the CLI may do on its own: read only, edit files, or edit and run commands. */
   permission: ChatPermission;
+  /** Ask all open questions (as a choice card) before starting any work. */
+  askFirst: boolean;
 }
 
 export type ChatPermission = 'read' | 'edit' | 'auto' | 'review' | 'full' | 'ask' | 'approve_all';
@@ -23,7 +25,7 @@ const isPermission = (value: unknown): value is ChatPermission => typeof value =
 
 const prefs = new Map<string, ChatPrefs>();
 const choices = new Set<string>();
-const EMPTY: ChatPrefs = { model: '', effort: '', skillId: '', blocked: false, note: '', permission: 'auto', responseStyle: 'normal', includeProjectContext: true };
+const EMPTY: ChatPrefs = { model: '', effort: '', skillId: '', blocked: false, note: '', permission: 'auto', responseStyle: 'normal', includeProjectContext: true, askFirst: false };
 
 export function hasChatPrefs(sessionId: string): boolean { chatPrefs(sessionId); return choices.has(sessionId); }
 
@@ -39,7 +41,7 @@ export function chatPrefs(sessionId: string): ChatPrefs {
     try {
       const saved = JSON.parse(localStorage.getItem(`superai-chat-prefs:${sessionId}`) || 'null');
       if (saved && typeof saved.model === 'string' && typeof saved.effort === 'string') {
-        prefs.set(sessionId, { ...EMPTY, model: saved.model, effort: saved.effort, permission: isPermission(saved.permission) ? saved.permission : 'auto', responseStyle: ['normal', 'concise', 'explanatory'].includes(saved.responseStyle) ? saved.responseStyle : 'normal', includeProjectContext: saved.includeProjectContext !== false });
+        prefs.set(sessionId, { ...EMPTY, model: saved.model, effort: saved.effort, permission: isPermission(saved.permission) ? saved.permission : 'auto', responseStyle: ['normal', 'concise', 'explanatory'].includes(saved.responseStyle) ? saved.responseStyle : 'normal', includeProjectContext: saved.includeProjectContext !== false, askFirst: saved.askFirst === true });
         choices.add(sessionId);
       }
     } catch {}
@@ -50,8 +52,8 @@ export function chatPrefs(sessionId: string): ChatPrefs {
 export function setChatPrefs(sessionId: string, patch: Partial<ChatPrefs>) {
   if ("model" in patch || "effort" in patch) choices.add(sessionId);
   prefs.set(sessionId, { ...chatPrefs(sessionId), ...patch });
-  if ("model" in patch || "effort" in patch || "permission" in patch || 'responseStyle' in patch || 'includeProjectContext' in patch) {
-    try { const value = prefs.get(sessionId)!; localStorage.setItem(`superai-chat-prefs:${sessionId}`, JSON.stringify({ model: value.model, effort: value.effort, permission: value.permission, responseStyle: value.responseStyle, includeProjectContext: value.includeProjectContext })); } catch {}
+  if ("model" in patch || "effort" in patch || "permission" in patch || 'responseStyle' in patch || 'includeProjectContext' in patch || 'askFirst' in patch) {
+    try { const value = prefs.get(sessionId)!; localStorage.setItem(`superai-chat-prefs:${sessionId}`, JSON.stringify({ model: value.model, effort: value.effort, permission: value.permission, responseStyle: value.responseStyle, includeProjectContext: value.includeProjectContext, askFirst: value.askFirst })); } catch {}
   }
   listeners.get(sessionId)?.forEach(listener => listener());
 }

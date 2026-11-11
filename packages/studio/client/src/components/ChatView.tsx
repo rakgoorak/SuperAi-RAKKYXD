@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ShieldCheck, Check, CheckCheck, CheckCircle2, ChevronRight, Circle, Clock3, Copy, FilePen, FileText, GitFork, Globe, ListChecks, Loader2, Paperclip, RotateCcw, Search, Send, Terminal as TerminalIcon, Wrench, X } from 'lucide-react';
 import { Markdown } from './Markdown';
 import { post } from '../api';
@@ -11,14 +11,19 @@ import { ConversationExport } from './ConversationExport';
 import { ArrowDown, Pencil } from 'lucide-react';
 import { MessageAttachments } from './MessageAttachments';
 import { stepLabel } from '../stepLabel';
+import { QuestionCard, type QuestionItem } from './QuestionCard';
+import { hideQuestionBlock } from '../questionBlock';
 import { ImageEndpointContext } from './MarkdownImage';
 import { ImageViewer } from './ImageViewer';
 import { renderTextWithLinks } from '../previewLinks';
 import { timeLabel, tokenLabel } from '../chatFormat';
+import { taskProgressNote } from '../taskProgress';
+import { createItemBatch } from '../chatStreamBatch';
 import { notifyDone, sessionNotice } from '../completionNotify';
 import { loadNextPromptSettings, predictNextPrompt, publishChatRunning, publishNextPrompt } from '../nextPrompt';
 import '../chat-idle.css';
 import '../chat-permission.css';
+import '../chat-task-progress.css';
 
 // Mirrors server/CliChat.ts.
 type ToolKind = 'command' | 'read' | 'edit' | 'search' | 'web' | 'plan' | 'other';
@@ -33,7 +38,8 @@ type ChatItem =
   | ToolItem
   | TodosItem
   | { id: string; kind: 'error' | 'notice'; text: string; at: number }
-  | PermissionItem;
+  | PermissionItem
+  | QuestionItem;
 type PermissionItem = { id: string; kind: 'permission'; requestId: string; tool: string; title: string; detail?: string; canAlways?: boolean; status: 'pending' | 'allowed' | 'always' | 'denied' | 'expired'; at: number };
 type Message =
   | { type: 'snapshot'; chat: { items: ChatItem[]; running: boolean; activity?: Activity; queued?: Queued[] } }
@@ -45,7 +51,7 @@ type Block = Exclude<ChatItem, ToolItem> | { id: string; kind: 'tools'; tools: T
 
 const ICONS = { command: TerminalIcon, read: FileText, edit: FilePen, search: Search, web: Globe, plan: ListChecks, other: Wrench };
 const COUNTS: Record<ToolKind, (n: number) => string> = {
-  command: (n) => `รัน ${n} คำสั่ง`, read: (n) => `อ่าน ${n} ไฟล์`, edit: (n) => `แก้ ${n} ไฟล์`, search: (n) => `ค้นหา ${n} ครั้ง`,
+  command: (n) => `เรียกคำสั่ง ${n} ครั้ง`, read: (n) => `เรียกอ่านไฟล์ ${n} ครั้ง`, edit: (n) => `เรียกแก้ไฟล์ ${n} ครั้ง`, search: (n) => `ค้นหา ${n} ครั้ง`,
   web: (n) => `เปิดเว็บ ${n} ครั้ง`, plan: () => 'อัปเดตแผนงาน', other: (n) => `ใช้เครื่องมือ ${n} ครั้ง`,
 };
 
@@ -129,7 +135,7 @@ function PermissionCard({ item, sessionId, name, inPopup = false }: { item: Perm
 }
 
 /** Folded steps, like Claude's "Resized browser, waited, captured page ▸", with screenshot thumbnails. */
-function ToolGroup({ tools }: { tools: ToolItem[] }) {
+const ToolGroup = memo(function ToolGroup({ tools }: { tools: ToolItem[] }) {
   const running = tools.find((t) => t.status === 'running');
   const [open, setOpen] = useState(false);
   const images = tools.flatMap((t) => t.images || []);
@@ -146,10 +152,10 @@ function ToolGroup({ tools }: { tools: ToolItem[] }) {
       {open && <ul>{tools.map((t) => <ToolRow key={t.id} tool={t} />)}</ul>}
     </div>
   );
-}
+});
 
 /** The CLI's task list as a live checklist: ✓ done, spinner in progress, ○ waiting. */
-function TaskList({ item, live }: { item: TodosItem; live: boolean }) {
+function TaskList({ item, live, items }: { item: TodosItem; live: boolean; items: ChatItem[] }) {
   const done = item.todos.filter((t) => t.status === 'completed').length;
   const [open, setOpen] = useState(true);
   return (
@@ -158,6 +164,7 @@ function TaskList({ item, live }: { item: TodosItem; live: boolean }) {
         <ListChecks size={14} /><span>รายการงาน</span><small>{done}/{item.todos.length}</small>
         <ChevronRight size={13} className={`chat-chevron ${open ? 'open' : ''}`} />
       </button>
+      <p className="chat-task-progress" role="status">{taskProgressNote(items, items.indexOf(item), item.at, done === item.todos.length)}</p>
       {open && <ol>
         {item.todos.map((t, i) => <li key={i} className={t.status}>
           {t.status === 'completed' ? <CheckCircle2 size={15} /> : t.status === 'in_progress' && live ? <Loader2 size={15} className="spin" /> : <Circle size={15} />}
@@ -294,7 +301,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   const stick = useRef(true);
   const [awayFromLatest, setAwayFromLatest] = useState(false);
   const [newOutput, setNewOutput] = useState(false);
-  const lastOutput = useRef('');
+  const lastOutput = useRef<ChatItem[] | null>(null);
   // Turn-finished notification: the previous `running` and the latest tab name for the socket handler.
   const wasRunning = useRef(false);
   const nameRef = useRef(name);
@@ -320,6 +327,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   const [pending, setPending] = useState(false);
   const [problem, setProblem] = useState('');
   const [search, setSearch] = useState('');
+  const groupedBlocks = useMemo(() => blocks(items), [items]);
   const lastUser = [...items].reverse().find(item => item.kind === 'user');
   const lastReply = [...items].reverse().find(item => item.kind === 'assistant');
   const replyIndex = lastReply ? items.indexOf(lastReply) : -1;
@@ -357,15 +365,30 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
     let socket: WebSocket | null = null;
     let retry: number | undefined;
     let disposed = false;
+    const itemBatch = createItemBatch<ChatItem>(updates => {
+      if (disposed) return;
+      setItems(current => {
+        const next = [...current];
+        const positions = new Map(current.map((item, index) => [item.id, index]));
+        for (const item of updates) {
+          const index = positions.get(item.id);
+          if (index === undefined) { positions.set(item.id, next.length); next.push(item); }
+          else next[index] = item;
+        }
+        return next;
+      });
+    }, callback => window.setTimeout(callback, 16), handle => window.clearTimeout(handle));
     const connect = () => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       socket = new WebSocket(`${protocol}//${window.location.host}/ws/chat/${sessionId}`);
       socket.onopen = () => setOffline(false);
       socket.onmessage = (event) => {
+        if (disposed) return;
         let message: Message;
         try { message = JSON.parse(event.data); } catch { return; }
-        if (message.type === 'snapshot') { setItems(message.chat.items); setRunning(message.chat.running); wasRunning.current = message.chat.running; publishChatRunning(sessionId, message.chat.running); setActivity(message.chat.activity); setQueued(message.chat.queued || []); }
+        if (message.type === 'snapshot') { itemBatch.reset(); setItems(message.chat.items); setRunning(message.chat.running); wasRunning.current = message.chat.running; publishChatRunning(sessionId, message.chat.running); setActivity(message.chat.activity); setQueued(message.chat.queued || []); }
         else if (message.type === 'state') {
+          itemBatch.flush();
           if (wasRunning.current && !message.running) { notifyDone(sessionNotice(sessionId, nameRef.current)); setTurnsDone(n => n + 1); }
           if (message.running) publishNextPrompt(sessionId, '');
           publishChatRunning(sessionId, message.running);
@@ -379,39 +402,37 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
           // A question waits for the user: tell them even when the app is in the background.
           if (item.kind === 'permission' && item.status === 'pending')
             notifyDone({ tag: `permission:${item.requestId}`, title: `${nameRef.current} ขออนุญาต${item.title}`, body: item.detail || 'กดเพื่อตอบในห้องแชท', failed: false, target: { kind: 'session', id: sessionId } }, { inactiveSession: !activeRef.current });
-          setItems((current) => {
-            const index = current.findIndex((i) => i.id === item.id);
-            if (index < 0) return [...current, item];
-            const next = [...current];
-            next[index] = item;
-            return next;
-          });
+          if (item.kind === 'question' && item.status === 'waiting')
+            notifyDone({ tag: `question:${item.id}`, title: `${nameRef.current} ถามก่อนทำต่อ`, body: item.questions[0]?.question || 'กดเพื่อตอบในห้องแชท', failed: false, target: { kind: 'session', id: sessionId } });
+          itemBatch.push(item);
+          if (item.kind === 'permission' || item.kind === 'question' || item.kind === 'error') itemBatch.flush();
         }
       };
       socket.onclose = () => {
         if (disposed) return;
+        itemBatch.flush();
         setOffline(true);
         retry = window.setTimeout(connect, 1500);
       };
     };
     connect();
-    return () => { disposed = true; window.clearTimeout(retry); socket?.close(); };
+    return () => { disposed = true; itemBatch.reset(); window.clearTimeout(retry); socket?.close(); };
   }, [sessionId]);
 
   // Every second while working (live counter), every half minute otherwise (message times).
   useEffect(() => {
+    if (!active) return;
     setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), running ? 1000 : 30000);
     return () => window.clearInterval(timer);
-  }, [running]);
+  }, [running, active]);
 
   // Follow new output unless the user scrolled up to read.
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el || !items.length) return;
-    const signature = `${items.length}:${JSON.stringify(items.at(-1))}`;
-    const changed = !!lastOutput.current && lastOutput.current !== signature;
-    lastOutput.current = signature;
+    const changed = !!lastOutput.current && lastOutput.current !== items;
+    lastOutput.current = items;
     if (jumpToSaved()) { restored.current = true; return; }
     if (!restored.current) {
       restored.current = true;
@@ -430,6 +451,10 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   // The task list of the turn in progress stays pinned above the live counter, like Claude's.
   const liveTodos = running && lastUser ? [...turnItems].reverse().find((item): item is TodosItem => item.kind === 'todos') : undefined;
   const pendingPermissions = items.filter((item): item is PermissionItem => item.kind === 'permission' && item.status === 'pending');
+  const workingTool = [...turnItems].reverse().find((item): item is ToolItem => item.kind === 'tool' && item.status === 'running');
+  const workingLabel = pendingPermissions.length ? 'รอคำอนุญาต'
+    : activity?.quiet ? 'รอข้อมูลเพิ่มเติม'
+      : workingTool ? `กำลังทำงาน: ${stepLabel(workingTool.title)}` : `กำลังทำงานกับ ${name}`;
   const popupPermission = active && pendingPermissions.find(item => !dismissedPermissions.includes(item.id));
   const queueAction = (id: string, action: 'send' | 'remove') => {
     post(`/api/terminals/${sessionId}/chat/queue/${id}/${action}`).catch((error) => setProblem((error as Error).message));
@@ -462,7 +487,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
               <small>เลือก Model, Effort, /skills และเข้าสู่ระบบได้ที่ช่องคำสั่งด้านล่าง เมื่อเลือก session นี้อยู่</small>
             </div>
           )}
-          {blocks(items).map((block) => {
+          {groupedBlocks.map((block) => {
             if (block.kind === 'user')
               return (
                 <UserMessageItem
@@ -479,7 +504,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
               const latest = block.id === lastReply?.id && !!lastUser && replyIndex > items.indexOf(lastUser);
               const currentTurn = !!lastUser && items.indexOf(block) > items.indexOf(lastUser);
               return <div key={block.id} data-message-id={block.id}>
-                <div className="chat-assistant" data-message-body={block.id}><Markdown text={block.text} /></div>
+                <div className="chat-assistant" data-message-body={block.id}><Markdown text={hideQuestionBlock(block.text)} /></div>
                 {!(running && currentTurn) && <ResponseActions text={block.text} at={block.at} now={now} disabled={pending || offline || running}
                   agentName={name}
                   currentSessionId={sessionId}
@@ -491,14 +516,15 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
             }
             if (block.kind === 'tools') return <ToolGroup key={block.id} tools={block.tools} />;
             if (block.kind === 'permission') return <PermissionCard key={block.id} item={block} sessionId={sessionId} name={name} />;
-            if (block.kind === 'todos') return block === liveTodos ? null : <TaskList key={block.id} item={block} live={false} />;
+            if (block.kind === 'question') return <QuestionCard key={block.id} item={block} sessionId={sessionId} onError={setProblem} />;
+            if (block.kind === 'todos') return block === liveTodos || !block.todos.length ? null : <TaskList key={block.id} item={block} live={false} items={items} />;
             if (block.kind === 'error') {
               const oldTimeout = lastUser && items.indexOf(block) < items.indexOf(lastUser) && /ไม่มีข้อมูลใหม่.*จึงหยุดรอบนี้/.test(block.text);
               return <div key={block.id} role={oldTimeout ? undefined : 'alert'} className={oldTimeout ? 'chat-notice' : 'chat-error'}><AlertTriangle size={14} /><span>{oldTimeout ? `รอบก่อนถูกหยุด: ${block.text}` : block.text}</span></div>;
             }
             return <div key={block.id} className="chat-notice">{block.text}</div>;
           })}
-          {liveTodos && <TaskList key={liveTodos.id} item={liveTodos} live />}
+          {liveTodos && liveTodos.todos.length > 0 && <TaskList key={liveTodos.id} item={liveTodos} live items={items} />}
           {running && activity?.quiet && !pendingPermissions.length && <div className="chat-idle-warning" role="status" aria-label="รอข้อมูลจากงานปัจจุบัน">
             <div><Clock3 size={16} /><strong>ยังไม่ได้รับข้อมูลใหม่ครบ {Math.max(1, Math.ceil(activity.quiet.timeoutMs / 60000))} นาที</strong></div>
             <p>โปรแกรมยังไม่หยุดงาน อาจกำลังรอเครื่องมือหรือ Subagent และยังยืนยันไม่ได้ว่างานค้าง</p>
@@ -511,8 +537,8 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
           {running && (
             <div className="chat-working" role="status" title={`${name} ${activity?.quiet ? 'รอข้อมูลเพิ่มเติม' : 'กำลังทำงาน'} · กดหยุดได้ที่ช่องคำสั่งด้านล่าง`}>
               {activity?.quiet ? <Clock3 size={14} aria-hidden="true" /> : <span className="chat-pulse" aria-hidden="true"><i /><i /><i /></span>}
-              {/* Codex reports tokens only when its turn ends: show the time alone until then. */}
-              <span>{activity?.quiet ? 'รอข้อมูล · ' : ''}{activity?.outputTokens ? `${tokenLabel(activity.outputTokens)} tokens · ` : ''}{seconds >= 60 ? `${Math.floor(seconds / 60)} นาที ${seconds % 60} วิ` : `${seconds} วิ`}</span>
+              {/* Activity describes observed state; token counts appear only when supplied. */}
+              <span>{workingLabel} · {activity?.outputTokens ? `${tokenLabel(activity.outputTokens)} tokens · ` : ''}{seconds >= 60 ? `${Math.floor(seconds / 60)} นาที ${seconds % 60} วิ` : `${seconds} วิ`}</span>
             </div>
           )}
           {queued.length > 0 && (

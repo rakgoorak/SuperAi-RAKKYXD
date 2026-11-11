@@ -3054,3 +3054,9 @@ img.small-brand { width: 18px; height: auto; background: none; border-radius: 0;
 .seat-picker > .account-picker { grid-column: 1 / -1; }
 .session-account-name { font-size: 11px; color: var(--dim); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .usage-card > .account-picker { padding: 0 12px 8px; }
+
+/* "Ask before working" toggle in the chat composer footer. */
+.chat-ask-first { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 3px 7px; border: 0; border-radius: 6px; background: transparent; color: var(--dim); font-size: 12px; cursor: pointer; }
+.chat-ask-first:hover:not(:disabled) { background: var(--raised); color: var(--text); }
+.chat-ask-first.on { color: var(--accent); background: var(--raised); }
+#root .work-canvas .composer-area.composer-balanced .chat-ask-first { order: 1; }
