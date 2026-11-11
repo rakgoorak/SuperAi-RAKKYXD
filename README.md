@@ -123,7 +123,7 @@ Install Agent Skills from Anthropic, OpenAI, Vercel (skills.sh), and Cloudflare 
 - Every asset ships with a `.sha256` checksum.
 - The [website](https://rakgoorak.github.io/SuperAi-RAKKYXD/) detects your OS and recommends the right file.
 
-> **Windows SmartScreen / macOS Gatekeeper:** the current builds are not code-signed yet. On Windows choose **More info → Run anyway**; on macOS open **System Settings → Privacy & Security → Open Anyway**. Signed and notarized builds are in progress.
+> **Windows SmartScreen / macOS Gatekeeper:** the current builds are not code-signed yet. On Windows choose **More info → Run anyway**; on macOS open **System Settings → Privacy & Security → Open Anyway**. Verify the download against its `.sha256` file first.
 
 ---
 
@@ -154,7 +154,7 @@ The setup guide checks and installs what you need:
 - **Project data:** settings and chat history live in `%USERPROFILE%\.opencode-multi` on Windows or `~/.opencode-multi` on macOS.
 - **Safe attachments:** files are stored under `.superai/attachments/` inside the project; add `.superai/` to `.gitignore`.
 
-Full details are in [PRIVACY.md](PRIVACY.md). Windows builds follow the [code signing policy](CODE_SIGNING_POLICY.md) (free code signing provided by SignPath.io, certificate by SignPath Foundation). See [SECURITY.md](SECURITY.md) for the vulnerability reporting policy and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the open-source software the app uses.
+Full details are in [PRIVACY.md](PRIVACY.md). See [SECURITY.md](SECURITY.md) for the vulnerability reporting policy and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the open-source software the app uses.
 
 ---
 

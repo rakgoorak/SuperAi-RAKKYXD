@@ -200,7 +200,7 @@
     <div class="note">
       <b>Heads-up:</b> current builds are not code-signed yet. On Windows choose
       <b>More info → Run anyway</b>; on macOS use <b>System Settings → Privacy &amp; Security → Open Anyway</b>.
-      Signed and notarized builds are in progress. See the <a href="#code-signing">code signing policy</a>.
+      Check the download against its SHA-256 checksum before opening it.
     </div>
   </section>
 
@@ -241,7 +241,7 @@ npm start</pre>
       </details>
       <details>
         <summary>Why does Windows SmartScreen or macOS Gatekeeper warn me?</summary>
-        <p>The current builds are not code-signed yet. Verify the SHA-256 checksum, then allow the app once. Signed and notarized builds are being set up.</p>
+        <p>The current builds are not code-signed yet. Verify the SHA-256 checksum, then allow the app once.</p>
       </details>
       <details>
         <summary>Which platforms are supported?</summary>
@@ -250,17 +250,6 @@ npm start</pre>
     </div>
   </section>
 
-  <section id="code-signing">
-    <div class="section-head">
-      <h2>Code signing policy</h2>
-      <p>Free code signing provided by <a href="https://about.signpath.io/">SignPath.io</a>, certificate by <a href="https://signpath.org/">SignPath Foundation</a>.</p>
-    </div>
-    <div class="note">
-      Windows builds are made from this repository on GitHub-hosted runners and signed only after the maintainer approves each release.
-      Authors, reviewers and approvers: <a href="https://github.com/rakgoorak">rakgoorak</a>.
-      Privacy: <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD/blob/main/PRIVACY.md">privacy policy</a>. Full details: <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD/blob/main/CODE_SIGNING_POLICY.md">CODE_SIGNING_POLICY.md</a>.
-    </div>
-  </section>
 
   <footer class="footer">
     <div class="footer-links">

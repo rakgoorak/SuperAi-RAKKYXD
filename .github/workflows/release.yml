@@ -37,7 +37,7 @@ jobs:
     timeout-minutes: ${{ matrix.runner == 'windows-2022' && 150 || 30 }}
     env:
       TARGET_ARCH: ${{ matrix.target_arch }}
-      # Windows builds are signed by SignPath Foundation (free for open source); see CODE_SIGNING_POLICY.md.
+      # Optional SignPath signing: skipped unless SIGNPATH_API_TOKEN and SIGNPATH_ORGANIZATION_ID are set.
       HAS_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' }}
     steps:
@@ -248,7 +248,7 @@ jobs:
         shell: bash
         run: |
           awk '/^---[[:space:]]*$/ {exit} {print}' docs/RELEASE.md > release-notes.md
-          printf '\n---\n[Code signing policy](https://github.com/rakgoorak/SuperAi-RAKKYXD/blob/main/CODE_SIGNING_POLICY.md) · [Privacy](https://github.com/rakgoorak/SuperAi-RAKKYXD/blob/main/PRIVACY.md)\n' >> release-notes.md
+          printf '\n---\n[Privacy](https://github.com/rakgoorak/SuperAi-RAKKYXD/blob/main/PRIVACY.md)\n' >> release-notes.md
 
       - name: Publish tested downloads
         env:
