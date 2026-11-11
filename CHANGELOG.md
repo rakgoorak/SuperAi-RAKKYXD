@@ -6,6 +6,24 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.0.40] - 2026-11-11
+
+### Added
+- Several accounts for Claude, Codex and OpenCode, chosen per tab or seat
+  (Settings > AI accounts).
+- OpenRouter, DeepSeek and Groq in Agent and Chat with your own API key, checked
+  before saving and stored encrypted (Settings > API Key).
+- Remaining credit for OpenRouter and DeepSeek in the Usage panel.
+
+### Fixed
+- OpenCode chats that stopped without an answer when a skill left a file in the
+  temp folder; any turn that still ends without an answer now says why.
+- Codex quota stuck on old figures; it is now read live from the account.
+- The running-step label showed `@'` for PowerShell scripts.
+
+### Changed
+- OpenCode messages start about 2 seconds sooner (no account check per message).
+
 ## [1.0.39] - 2026-11-10
 
 ### Fixed
