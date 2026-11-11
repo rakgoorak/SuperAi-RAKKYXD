@@ -7,270 +7,206 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg" alt="Node Version" /></a>
-  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD/actions"><img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="Build Status" /></a>
+  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD/actions/workflows/ci.yml"><img src="https://github.com/rakgoorak/SuperAi-RAKKYXD/actions/workflows/ci.yml/badge.svg?branch=main" alt="Build Status" /></a>
   <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases"><img src="https://img.shields.io/github/downloads/rakgoorak/SuperAi-RAKKYXD-releases/total?color=2563eb&label=Downloads&logo=github" alt="Total Downloads" /></a>
+  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest"><img src="https://img.shields.io/github/v/release/rakgoorak/SuperAi-RAKKYXD-releases?label=release&color=blueviolet" alt="Latest Release" /></a>
+  <a href="https://rakgoorak.github.io/SuperAi-RAKKYXD/"><img src="https://img.shields.io/badge/website-live-success.svg" alt="Website" /></a>
   <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-orange.svg" alt="PRs Welcome" /></a>
-  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest"><img src="https://img.shields.io/badge/release-v1.0.36-blueviolet.svg" alt="Latest Release" /></a>
-  <a href="https://rakgoorak.github.io/SuperAi-RAKKYXD-releases/"><img src="https://img.shields.io/badge/website-live-success.svg" alt="Website" /></a>
 </p>
 
 <p align="center">
-  <b>🇹🇭 ภาษาไทย</b> &nbsp;|&nbsp; <a href="README_EN.md">🇬🇧 English</a> &nbsp;|&nbsp; 🇯🇵 日本語 &nbsp;|&nbsp; 🇨🇳 简体中文
+  <b>🇬🇧 English</b> &nbsp;|&nbsp; <a href="README_TH.md">🇹🇭 ภาษาไทย</a> &nbsp;|&nbsp; 🇯🇵 日本語 (in-app) &nbsp;|&nbsp; 🇨🇳 简体中文 (in-app)
 </p>
 
 <p align="center">
-  <b>AI ทุกตัวของคุณ ในหน้าต่างเดียว — ดีไซน์ใหม่ Minimal เรียบหรู โฟกัสกับงาน (v1.0.36)</b><br />
-  Claude · ChatGPT (Codex) · Antigravity · OpenCode · Freebuff · Ollama<br />
-  Windows และ macOS · รองรับหลายภาษา (ไทย, อังกฤษ, ญี่ปุ่น, จีน) · รันบนเครื่องคุณ 100% · ใช้บัญชี AI ของคุณเอง
+  <b>All your AI coding assistants in a single, minimal, local-first desktop workspace.</b><br />
+  Claude Code · ChatGPT (Codex) · Antigravity · OpenCode · Freebuff · Local Ollama<br />
+  Windows &amp; macOS · Multi-language UI (EN / TH / JA / ZH) · 100% local-first · Bring your own account
 </p>
 
 <p align="center">
-  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-Setup.exe"><b>⬇ ดาวน์โหลดสำหรับ Windows</b></a>
+  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-Setup.exe"><b>⬇ Download for Windows (Setup.exe)</b></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.dmg"><b>Mac (Apple Silicon)</b></a>
+  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.dmg"><b>macOS (Apple Silicon)</b></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.dmg"><b>Mac (Intel)</b></a>
+  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.dmg"><b>macOS (Intel)</b></a>
 </p>
 
 <p align="center">
-  <img src="docs/images/workspace.png" alt="หน้าหลักของ SuperAi & RAKKYXD ในโหมด Minimal UI" width="900" style="border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.4);" />
+  <a href="https://rakgoorak.github.io/SuperAi-RAKKYXD/"><b>Website</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest"><b>All downloads &amp; SHA-256</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD/issues"><b>Issues</b></a>
 </p>
 
 <p align="center">
-  <img src="docs/images/agent.png" alt="หน้าต่างโหมด Agent Team" width="445" style="border-radius: 10px; border: 1px solid #1e2d38;" />
-  <img src="docs/images/chat.png" alt="หน้าต่างโหมด Multi-AI Chat" width="445" style="border-radius: 10px; border: 1px solid #1e2d38;" />
+  <img src="docs/images/workspace.png" alt="SuperAi & RAKKYXD minimal workspace" width="900" style="border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.4);" />
 </p>
 
-ถ้าคุณใช้ AI หลายตัวพร้อมกันแล้วต้องเปิดหลายโปรแกรมสลับไปมา **SuperAi & RAKKYXD** รวมทุกเครื่องมือไว้ในหน้าต่างเดียว: ให้ทีม AI ช่วยกันเขียนโค้ดและแก้งาน, เปิด CLI หลายเซสชันพร้อมกัน, ค้นหาประวัติแชตทุกค่าย, ควบคุม Git Worktrees คู่ขนาน และตรวจสอบโควตาคงเหลือของแต่ละเจ้าได้ทันที
+<p align="center">
+  <img src="docs/images/agent.png" alt="Agent Team mode" width="445" style="border-radius: 10px; border: 1px solid #1e2d38;" />
+  <img src="docs/images/chat.png" alt="Multi-AI Chat mode" width="445" style="border-radius: 10px; border: 1px solid #1e2d38;" />
+</p>
 
 ---
 
-## สารบัญ
+## Why SuperAi & RAKKYXD
 
-- [ดาวน์โหลดและติดตั้ง](#ดาวน์โหลดและติดตั้ง)
-- [ไฮไลต์การปรับปรุงดีไซน์ใหม่ (Minimal Interface)](#ไฮไลต์การปรับปรุงดีไซน์ใหม่-minimal-interface)
-- [ฟีเจอร์เด่น](#ฟีเจอร์เด่น)
-  - [1. สามโหมดการทำงาน (Agent, Code, Chat)](#1-สามโหมดการทำงาน-agent-code-chat)
-  - [2. Quick Provider Chat & Safe Mode](#2-quick-provider-chat--safe-mode)
-  - [3. ประวัติการสนทนารวมและค้นหาข้อความ (Unified History & Search)](#3-ประวัติการสนทนารวมและค้นหาข้อความ-unified-history--search)
-  - [4. ซ่อนเซสชันโดยไม่ต้องลบ (Session Hide & Restore)](#4-ซ่อนเซสชันโดยไม่ต้องลบ-session-hide--restore)
-  - [5. Git Worktrees & Branch Switcher ในตัว](#5-git-worktrees--branch-switcher-ในตัว)
-  - [6. Ctrl + Click เปิด URL ทันที (เหมือน Claude App)](#6-ctrl--click-เปิด-url-ทันที-เหมือน-claude-app)
-  - [7. Interactive Artifacts Preview](#7-interactive-artifacts-preview)
-  - [8. พูดเพื่อพิมพ์ภาษาไทย (Local Whisper Thonburian)](#8-พูดเพื่อพิมพ์ภาษาไทย-local-whisper-thonburian)
-  - [9. ดูโควตาคงเหลือ (Usage Tracker)](#9-ดูโควตาคงเหลือ-usage-tracker)
-- [เริ่มใช้งานครั้งแรก](#เริ่มใช้งานครั้งแรก)
-- [ระบบอัปเดตอัตโนมัติ](#ระบบอัปเดตอัตโนมัติ)
-- [ความเป็นส่วนตัวและความปลอดภัย](#ความเป็นส่วนตัวและความปลอดภัย)
-- [แก้ปัญหาที่พบบ่อย](#แก้ปัญหาที่พบบ่อย)
-- [สำหรับนักพัฒนา](#สำหรับนักพัฒนา)
+Using several AI assistants usually means juggling 5–10 browser tabs, separate terminal windows, and a different subscription or API key for every provider. **SuperAi & RAKKYXD** puts them in one desktop window:
+
+- **One workspace, every assistant** — Claude Code, Codex, Antigravity, OpenCode, Freebuff, and local Ollama side by side.
+- **Local-first by design** — no relay servers, no analytics, no telemetry. Your prompts and code talk directly to the providers with your own account.
+- **Multi-agent orchestration** — split a large task into parallel sub-agent workstreams and merge the result.
+- **Multi-AI arena** — ask one question, compare answers from several models, then synthesize the best one.
+- **Native developer tooling** — Git worktrees, branch switching, terminal tabs, artifact previews, and quota tracking.
 
 ---
 
-## ดาวน์โหลดและติดตั้ง
+## Features
 
-| แพลตฟอร์ม | ไฟล์ติดตั้ง | ขนาด | รูปแบบ |
-| :--- | :--- | :--- | :--- |
-| **Windows 10 / 11 (64-bit)** | [SuperAi-RAKKYXD-Setup.exe](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-Setup.exe) | ≈91 MB | ตัวติดตั้งอัตโนมัติ (NSIS) |
-| **Mac Apple Silicon (M1/M2/M3/M4)** | [SuperAi-RAKKYXD-macos-arm64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.dmg) | ≈110 MB | Drag & Drop DMG |
-| **Mac Intel** | [SuperAi-RAKKYXD-macos-x64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.dmg) | ≈115 MB | Drag & Drop DMG |
-
-- ไฟล์ทั้งหมดชี้ไปที่เวอร์ชันล่าสุดเสมอ ไม่จำเป็นต้องล็อกอิน GitHub
-- หรือเปิด [หน้าเว็บไซต์ดาวน์โหลด](https://rakgoorak.github.io/SuperAi-RAKKYXD-releases/) ที่ตรวจจับระบบและแนะนำไฟล์ที่ตรงกับเครื่องของคุณ
-- 📊 ตรวจสอบสถิติและยอดดาวน์โหลดสดแบบละเอียดได้ที่ [GitHub Releases Stats (Grev)](https://hanadigital.github.io/grev/?user=rakgoorak&repo=SuperAi-RAKKYXD-releases)
-- มีไฟล์ ZIP แบบไม่ต้องติดตั้ง (Portable) ให้ดาวน์โหลดในหน้า [Releases](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest)
-- มีไฟล์ `.sha256` คู่กันทุกไฟล์สำหรับการตรวจสอบความถูกต้องของข้อมูล
-
----
-
-## ไฮไลต์การปรับปรุงดีไซน์ใหม่ (Minimal Interface)
-
-SuperAi & RAKKYXD ได้รับการปรับโฉมครั้งใหญ่สู่ **Warm Charcoal Minimal Interface**:
-- **สวิตช์ 3 โหมดแบบ Compact 3-Icon Switch:** สลับระหว่างโหมด Agent, Code และ Chat ได้อย่างรวดเร็ว พร้อม Tooltips บอกฟังก์ชันชัดเจน
-- **ลด Visual Clutter:** จัดโครงสร้างเส้นขอบและการ์ดให้เรียบแบน สบายตา คมชัด และไม่แย่งสมาธิจากการทำงานหลัก
-- **Composer Options ปรับปรุงใหม่:** รวมการตั้งค่า Effort, สิทธิ์การเขียนไฟล์ และสถานะบัญชี AI ไว้ในจุดเดียว พร้อมรองรับการกด `Escape` เพื่อปิด
-- **แถบเครื่องมือและไอคอน Flat Design:** ขนาดกะทัดรัด ประหยัดพื้นที่หน้าจอ เพิ่มพื้นที่มองโค้ดและการสนทนาให้กว้างขวางที่สุด
-
----
-
-## ฟีเจอร์เด่น
-
-### 1. สามโหมดการทำงาน (Agent, Code, Chat)
-
-| โหมด | ลักษณะการใช้งาน | ความสามารถพิเศษ |
+### 1. Three working modes
+| Mode | What it is | Highlights |
 | :--- | :--- | :--- |
-| **🤖 Agent** | สั่งงานโครงการใหญ่ ให้ทีม AI ช่วยกันวางแผนและรันงาน | Main Agent แจกจ่ายงานให้ Sub-agents (1–6 ตัว) ทำงานคู่ขนาน พร้อมสรุปผลงานเมื่อเสร็จสิ้น |
-| **💻 Code** | หน้าต่าง Terminal & AI CLI แบบมัลติแท็บ | รัน Claude Code, Codex, Antigravity (`agy`), OpenCode, Freebuff หรือ Terminal ทั่วไป ส่งคำสั่งรวมได้ |
-| **💬 Chat** | ถามคำถามเดียว ให้ AI หลายตัวช่วยกันตอบและสรุป | เปรียบเทียบมุมมองของ AI แต่ละค่าย พร้อมระบบ Synthesis รวมจุดเด่นและตัดจุดอ่อนออก |
+| **Agent** | Autonomous team workspace | A Main Agent plans, asks clarifying questions, delegates to 1–6 sub-agents, and merges results |
+| **Code** | Multi-tab AI CLI manager | Claude Code, Codex, Antigravity (`agy`), OpenCode, Freebuff, or plain terminals |
+| **Chat** | Multi-AI arena | Send one prompt to several models, compare side by side, synthesize the best answer |
 
-### 2. Quick Provider Chat & Safe Mode
-- เริ่มพิมพ์คำถามและคุยกับ AI ได้ทันทีตั้งแต่เปิดแอป โดยไม่ต้องสร้างโฟลเดอร์หรือตั้งค่าโปรเจกต์ก่อน
-- มีโหมด **Safe Read-Only** อัตโนมัติเมื่อคุยทั่วไป ป้องกันไม่ให้ AI เผลอแก้ไขไฟล์สำคัญในเครื่องโดยไม่ตั้งใจ
-- มีป้ายระบุตัวตนผู้ให้บริการ (**Provider Badges**) แสดงชัดเจนทั้งในแถบด้านข้าง แท็บเซสชัน และช่องพิมพ์คำสั่ง
+### 2. Quick chat and Safe Mode
+Start typing immediately — no project folder required. Safe read-only mode is enabled by default for casual chat, so the AI cannot modify files by accident.
 
-### 3. ประวัติการสนทนารวมและค้นหาข้อความ (Unified History & Search)
-- รวมประวัติการคุยของทุกเซสชันและทุก AI ไว้ในแผงประวัติเดียว
-- รองรับการค้นหาข้อความแบบเจาะลึก (**Full-Text Search**) พิมพ์ค้นหาคำหรือโค้ดที่เคยคุยไว้ได้ทันที
-- กรองดูเฉพาะ AI แต่ละค่ายได้ และคลิกเพื่อเปิดเซสชันเดิมกลับมาคุยต่อได้ทันที
+### 3. Unified history and full-text search
+Every session from every provider in one searchable timeline. Filter by provider and reopen any conversation.
 
-### 4. ซ่อนเซสชันโดยไม่ต้องลบ (Session Hide & Restore)
-- หากเปิดหลายเซสชันแล้วหน้าจอดูแน่น สามารถกดปุ่ม **ซ่อนเซสชัน (`EyeOff`)** บนหัวหน้าต่าง เพื่อพับเก็บเฉพาะเซสชันที่ไม่ใช้งานออกจากหน้าจอหลัก
-- ประวัติการแชตและโปรเซสการทำงานของ AI ยังคงทำงานต่ออย่างสมบูรณ์ 100% ไม่ถูกตัดการเชื่อมต่อ
-- กู้คืนกลับมาแสดงบนหน้าจอหลักได้ตลอดเวลาผ่านชิปด้านบน หรือคลิกจากแถบรายการเซสชันทางด้านซ้าย
+### 4. Session hide and restore
+Hide busy sessions without killing them. Background work keeps running and can be restored at any time.
 
-### 5. Git Worktrees & Branch Switcher ในตัว
-- สลับ Git Branch จริงของโปรเจกต์ได้โดยตรงจากแถบเหนือช่องพิมพ์คำสั่ง พร้อมระบบความปลอดภัย ป้องกันการสลับขณะ AI รันงาน
-- สร้าง **Parallel Git Worktrees** เพื่อพัฒนาหลายฟีเจอร์แยกโฟลเดอร์คู่ขนานได้พร้อมกัน
-- แถบ **Smart Merge Banner** ในหน้าต่างสรุปไฟล์ที่เปลี่ยน ช่วยตรวจสอบความถูกต้องและ Merge โค้ดกลับเข้าสู่ `main` พร้อมทำความสะอาด Worktree ได้ในคลิกเดียว
+### 5. Native Git worktrees
+Switch real branches and create parallel worktrees without stash collisions. A smart merge banner helps land changes back on `main` and clean up.
 
-### 6. Ctrl + Click เปิด URL ทันที (เหมือน Claude App)
-- ในช่องพิมพ์ข้อความ (Composer) หากมี URL สามารถกด **Ctrl + Click** (หรือ **Cmd + Click** บน Mac) บนลิงก์ เพื่อเปิดเว็บในเบราว์เซอร์หลักของระบบได้ทันที
-- มีแถบ **🔗 Quick Link Chips** แสดงลิงก์ที่ตรวจพบใต้ช่องพิมพ์คำสั่ง ให้คลิกเปิดได้สะดวก
-- ข้อความแชทของผู้ใช้ (Chat Bubbles) แปลง URL เป็นลิงก์ที่คลิกเปิดได้อัตโนมัติ
+### 6. Interactive artifact preview
+Live preview for HTML, SVG, Tailwind CSS, and Mermaid diagrams, plus an interactive React/JSX/TSX runtime.
 
-### 7. Interactive Artifacts Preview
-- หน้าต่างพรีวิวโค้ดและผลงานแบบสด: HTML, SVG, Tailwind CSS, และไดอะแกรม Mermaid
-- รองรับการทดสอบโค้ด React / JSX / TSX แบบอินเทอร์แอคทีฟบนเครื่องด้วย Local Runtime
-- โหมดขยายดูเต็มจอ (Fullscreen) พร้อมการซูมและจัดขนาดไดอะแกรม
+### 7. Local voice dictation
+Offline speech-to-text with Whisper (including Thonburian Thai). Audio never leaves your machine.
 
-### 8. พูดเพื่อพิมพ์ภาษาไทย (Local Whisper Thonburian)
-- กดปุ่มไมโครโฟนค้างไว้แล้วพูดภาษาไทยหรือภาษาอังกฤษ
-- ระบบแปลงเสียงเป็นข้อความด้วยโมเดล Whisper Thonburian บนเครื่อง 100% ปลอดภัย ข้อมูลเสียงไม่ถูกส่งออกภายนอก
+### 8. Usage and quota tracker
+Live 5-hour and weekly quota windows for Claude, Codex, and Antigravity.
 
-### 9. ดูโควตาคงเหลือ (Usage Tracker)
-- ตรวจสอบโควตาคงเหลือของ Claude, Codex, Antigravity แบบเรียลไทม์
-- แสดงแถบสถานะและเวลารีเซ็ตโควตารอบ 5 ชั่วโมงและรอบสัปดาห์อย่างแม่นยำ ด้วยโทนสีเรียบหรูอ่านง่าย
+### 9. Tool permissions
+Read-only / plan mode for safe exploration, or edit mode when you want agents to write code and run commands. Sub-agent file access is a separate switch.
 
-<p align="center">
-  <img src="docs/images/usage.png" alt="หน้าต่างตรวจสอบโควตาการใช้งาน" width="860" style="border-radius: 12px; border: 1px solid #1e2d38;" />
-</p>
+### 10. Cross-agent review and security audit
+Have one agent review another agent's work (for example, Claude writes and Codex reviews), with localhost and folder-trust checks.
 
-### 10. Agent Workspace & Clarifying Questions (v1.0.35)
-- ระบบวิเคราะห์ความชัดเจนของเป้าหมายงานก่อนลงมือทำ หากโจทย์กำกวม AI จะถามกลับพร้อมตัวเลือก (Multiple-choice) ก่อนเริ่มวางแผน
-- แสดงสถานะการทำงานแบบคู่ขนานของทีม Agent พร้อมบอร์ดจัดแบ่งงานอัตโนมัติ
+### 11. Self-healing test loop
+Run the test suite, analyze failures, patch the code, and repeat until green.
 
-### 11. ตัวควบคุมสิทธิ์เครื่องมือและความปลอดภัย (Tool Permission Control)
-- สลับโหมดปลอดภัย (**Safe Read-only** / Plan mode) เพื่อให้ AI อ่านโค้ดและวางแผนโดยไม่แตะต้องไฟล์จริง
-- หรือเปิดโหมดลงมือทำ (**Edit mode**) เมื่อต้องการให้ Agent เขียนโค้ด รันเทสต์ และแก้ไขไฟล์ได้อิสระ
-
-### 12. Cross-Agent Review & Security Audit
-- ให้ AI ช่วยตรวจสอบและวิเคราะห์โค้ดซึ่งกันและกัน (เช่น Claude เขียนแล้วให้ Antigravity หรือ Codex ช่วยรีวิวหาช่องโหว่)
-- ตรวจจับความปลอดภัยเครือข่าย Localhost และตรวจสอบสิทธิ์ Folder Trust ก่อนรันคำสั่ง
-
-### 13. Self-Healing Automated Test Loop
-- วนรอบรันทดสอบและซ่อมแซมโค้ดอัตโนมัติเมื่อเกิดข้อผิดพลาด โดย AI จะวิเคราะห์ Failure Summary และดำเนินการแก้จนกว่าจะผ่าน
-
-### 14. Curated Skills Ecosystem
-- ติดตั้งและจัดการชุดคำสั่งพิเศษ (Agent Skills) จาก Anthropic, OpenAI, Vercel (skills.sh) และ Cloudflare Security Audit ได้ในคลิกเดียว
+### 12. Curated skills ecosystem
+Install Agent Skills from Anthropic, OpenAI, Vercel (skills.sh), and Cloudflare security audit sources in one click.
 
 ---
 
-## เริ่มใช้งานครั้งแรก
+## Download
 
-เมื่อเปิดโปรแกรมครั้งแรก หน้าต่าง **เริ่มต้นใช้งาน (Setup Guide)** จะช่วยตรวจเช็กและติดตั้งสิ่งที่จำเป็นบนเครื่องให้อัตโนมัติ:
+| Platform | Installer | Size | Format |
+| :--- | :--- | :--- | :--- |
+| **Windows 10 / 11 (64-bit)** | [SuperAi-RAKKYXD-Setup.exe](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-Setup.exe) | ≈91 MB | NSIS installer |
+| **macOS Apple Silicon (M1–M4)** | [SuperAi-RAKKYXD-macos-arm64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.dmg) | ≈110 MB | Drag &amp; drop DMG |
+| **macOS Intel (x64)** | [SuperAi-RAKKYXD-macos-x64.dmg](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.dmg) | ≈115 MB | Drag &amp; drop DMG |
 
-1. **Node.js 22 & Git** (ตรวจสอบและติดตั้งอัตโนมัติหากยังไม่มี)
-2. **AI CLI ที่ต้องการใช้งาน:** เลือกล็อกอินตัวที่ต้องการ เช่น Claude Code, Codex, Antigravity (`agy`), OpenCode หรือ Freebuff
-3. **เลือกโฟลเดอร์โปรเจกต์** หรือเริ่มคุยในโหมด Quick Chat ทั่วไปได้ทันที
-4. **Starter Skills (ตัวเลือกเสริม):** ให้ AI ช่วยแนะนำชุดคำสั่งพิเศษที่เหมาะสมกับโปรเจกต์ของคุณ
+- Every link points at the latest release. No GitHub account required.
+- Portable ZIP builds are on the [Releases page](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest).
+- Every asset ships with a `.sha256` checksum.
+- The [website](https://rakgoorak.github.io/SuperAi-RAKKYXD/) detects your OS and recommends the right file.
 
----
-
-## ระบบอัปเดตอัตโนมัติ
-
-โปรแกรมมีระบบตรวจเช็กอัปเดตอัตโนมัติในตัว โดยไม่ต้องดาวน์โหลดไฟล์มาติดตั้งใหม่ทุกรอบ:
-- ตรวจสอบเวอร์ชันใหม่เมื่อเปิดโปรแกรมและทุก 30 นาที
-- แจ้งเตือนผ่านการ์ดมุมล่างขวา พร้อมดาวน์โหลดเบื้องหลังและตรวจสอบ SHA-256 ก่อนอัปเดต
-- เซสชันการทำงาน, ประวัติ และข้อมูลโปรเจกต์จะถูกเก็บไว้อย่างปลอดภัยและเปิดกลับมาคุยต่อได้ทันทีหลังอัปเดต
+> **Windows SmartScreen / macOS Gatekeeper:** the current builds are not code-signed yet. On Windows choose **More info → Run anyway**; on macOS open **System Settings → Privacy & Security → Open Anyway**. Signed and notarized builds are in progress.
 
 ---
 
-## ความเป็นส่วนตัวและความปลอดภัย
+## First run
 
-- **Local-First Architecture:** โปรแกรมรันบนเครื่องของคุณทั้งหมด ไม่มีเซิร์ฟเวอร์กลางคอยดักจับข้อมูล
-- **รันผ่านบัญชีของคุณเอง:** การเชื่อมต่อ AI ทุกตัวทำงานผ่าน CLI ด้วย Session และ API Key ของคุณเอง
-- **ข้อมูลโปรเจกต์:** ข้อมูลการตั้งค่าและประวัติแชตจัดเก็บอยู่ในเครื่องที่ `%USERPROFILE%\.opencode-multi` (Windows) หรือ `~/.opencode-multi` (macOS)
-- **ปลอดภัยเมื่อแชร์โค้ด:** ไฟล์แนบจะถูกแยกเก็บไว้ในโฟลเดอร์ `.superai/attachments/` ภายในโปรเจกต์ (แนะนำให้ใส่ `.superai/` ใน `.gitignore`)
+The setup guide checks and installs what you need:
 
----
-
-## แก้ปัญหาที่พบบ่อย
-
-| อาการ | วิธีแก้ไข |
-| :--- | :--- |
-| **Windows ขึ้น “Windows protected your PC”** | คลิก **More info** แล้วเลือก **Run anyway** (โปรแกรมยังไม่มีใบรับรองดิจิทัลแบบชำระเงิน) |
-| **macOS แจ้งเตือนว่าเปิดแอปไม่ได้** | ไปที่ **System Settings → Privacy & Security** แล้วคลิก **Open Anyway** |
-| **AI แจ้งว่า Model ไม่รองรับบัญชี** | กดปุ่ม Composer Options เพื่อเปลี่ยน Model หรือปล่อยว่างเพื่อใช้ค่าเริ่มต้นของ CLI |
-| **หน้าต่าง Usage ไม่ขึ้นข้อมูล** | ใช้งาน CLI ตัวนั้นอย่างน้อยหนึ่งครั้ง แล้วกดปุ่ม Refresh ในหน้าต่าง Usage |
-| **สลับ Git Branch ไม่ได้** | ตรวจสอบว่าไม่มี AI กำลังรันงานอยู่ และไม่มีไฟล์ Uncommitted ในโฟลเดอร์ |
+1. **Node.js 22 and Git** — detected and installed if missing.
+2. **AI CLI providers** — sign in to Claude Code, Codex, Antigravity (`agy`), OpenCode, or Freebuff.
+3. **Project folder** — open a repo, or stay in Quick Chat.
+4. **Starter skills (optional)** — recommended skills for your project.
 
 ---
 
-## สำหรับนักพัฒนา
+## Auto-update
 
-### ความต้องการของระบบ
-- Node.js 22 ขึ้นไป
-- Git for Windows / macOS
+- Checks on launch and every 30 minutes.
+- Downloads in the background and verifies SHA-256 before installing.
+- Sessions, history, and project data survive updates.
 
-### การติดตั้งและพัฒนา
+---
+
+## Privacy and security
+
+- **Local-first architecture:** everything runs on your machine. No middleman server.
+- **Your accounts, your keys:** providers are reached through their CLIs using your own sessions and API keys.
+- **Project data:** settings and chat history live in `%USERPROFILE%\.opencode-multi` on Windows or `~/.opencode-multi` on macOS.
+- **Safe attachments:** files are stored under `.superai/attachments/` inside the project; add `.superai/` to `.gitignore`.
+
+See [SECURITY.md](SECURITY.md) for the vulnerability reporting policy.
+
+---
+
+## Build from source
+
+Requirements: Node.js 22+, Git, and Windows 10/11 or macOS 12+.
+
 ```bash
-# ติดตั้ง dependencies
+git clone https://github.com/rakgoorak/SuperAi-RAKKYXD.git
+cd SuperAi-RAKKYXD
+
 npm install
-
-# Build ทุกแพ็กเกจ
 npm run build
-
-# เปิดแอปพลิเคชัน
-npm start
-
-# รันชุดการทดสอบทั้งหมด
-npm test
-npm run test:provider-conversation
-npm run test:conversation-ui
+npm start          # launch the Electron app
+npm test           # run the full test suite
 ```
 
-### โครงสร้างแพ็กเกจ
-```
-AgentBuild/
-├── packages/
-│   ├── core/              # โมดูลแกนกลาง Agent, Providers และ Tools
-│   ├── studio/
-│   │   ├── server/        # Express, WebSocket, node-pty, CLI Managers
-│   │   └── client/        # Minimal UI (React, Vite, Tailwind, Lucide)
-│   └── desktop/           # Electron Shell, Updater, File Previews, Native Tests
-├── installer/             # NSIS Installer Script & DMG Assets
-└── scripts/               # Build, Package & Release Scripts
+Package a release:
+
+```bash
+npm run package:release
+npm run archive:release
+npm run installer:release
 ```
 
----
+### Repository layout
 
-## การมีส่วนร่วม (Contributing)
-
-ยินดีต้อนรับการมีส่วนร่วมจากนักพัฒนาทุกคน! สามารถอ่านรายละเอียดเพิ่มเติมเกี่ยวกับแนวทางการส่ง Pull Request, การแจ้งบั๊ก, และ Code of Conduct ได้ที่ [CONTRIBUTING.md](CONTRIBUTING.md)
-
----
-
-## ความปลอดภัย (Security)
-
-หากพบช่องโหว่ด้านความปลอดภัย โปรดอ่านนโยบายการรายงานช่องโหว่อย่างปลอดภัยได้ที่ [SECURITY.md](SECURITY.md)
-
----
-
-## ข้อจำกัดความรับผิดชอบ (Disclaimer)
-
-- **SuperAi & RAKKYXD** เป็นซอฟต์แวร์เครื่องมือ Desktop Workspace ที่อำนวยความสะดวกในการสั่งการ AI Agent และ CLI บนเครื่องคอมพิวเตอร์ของคุณ
-- โค้ด คำสั่ง shell หรือการเปลี่ยนแปลงไฟล์ที่สร้างขึ้นโดย AI จะถูกรันบนสภาพแวดล้อมเครื่องของคุณตามสิทธิ์ที่คุณอนุญาต ผู้ใช้ควรตรวจสอบคำสั่งก่อนให้ Agent ดำเนินการ
-- การใช้งานโมเดล AI แต่ละค่ายอยู่ภายใต้ข้อกำหนดการให้บริการ (Terms of Service) และนโยบายราคาของผู้ให้บริการนั้นๆ
+```
+packages/
+├── core/              # agents, providers, tools
+├── studio/
+│   ├── server/        # Express, WebSocket, node-pty, CLI managers
+│   └── client/        # React + Vite + Tailwind UI
+└── desktop/           # Electron shell, updater, native tests
+installer/             # NSIS installer and DMG assets
+scripts/               # build, package, release, signing
+```
 
 ---
 
-## สัญญาอนุญาต (License)
+## Contributing
 
-ซอฟต์แวร์นี้เผยแพร่ภายใต้สัญญาอนุญาตแบบ [MIT License](LICENSE) &copy; 2026 RAKKYXD &amp; SuperAi Contributors.
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), then open an issue or a pull request.
+
+Good places to start: documentation, translations, provider adapters, and `good first issue` labels.
 
 ---
 
-<p align="center">
-  พัฒนาด้วยความใส่ใจเพื่อประสบการณ์การพัฒนาซอฟต์แวร์ด้วย AI ที่คล่องตัวและทรงพลังที่สุด<br />
-  <b>SuperAi &amp; RAKKYXD Team</b>
-</p>
+## Disclaimer
+
+SuperAi & RAKKYXD is an independent open-source project. It is **not affiliated with, endorsed by, or sponsored by** Anthropic, OpenAI, Google, or any other AI provider. All product names and trademarks belong to their respective owners.
+
+AI output and shell commands run on your machine with the permissions you grant. Review commands before approving them. Use of each AI provider is governed by that provider's terms of service and pricing.
+
+---
+
+## License
+
+[MIT License](LICENSE) © 2026 RAKKYXD &amp; SuperAi Contributors.

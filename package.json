@@ -40,6 +40,7 @@
     "test:team": "node packages/desktop/test/team-smoke.mjs",
     "test:voice": "node packages/desktop/test/voice-smoke.mjs",
     "installer:release": "node scripts/build-installer.mjs",
+    "manifests:update": "node scripts/generate-package-manifests.mjs",
     "test:session-controls": "node packages/desktop/test/session-controls-smoke.mjs",
     "test:conversation-ui": "node packages/desktop/test/conversation-workspace-smoke.mjs",
     "test:conversation-interactions": "node packages/desktop/test/conversation-interactions-smoke.mjs",
