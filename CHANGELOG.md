@@ -6,6 +6,15 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.0.41] - 2026-11-11
+
+### Fixed
+- Saving an API key failed with "encryption not ready" when the stored credentials
+  file could not be decrypted on this machine; the file is now set aside and a new
+  one started, and errors show the real reason.
+- The update prompt had no styles: the mandatory update is a full-window screen
+  again and the optional update a small card.
+
 ## [1.0.40] - 2026-11-11
 
 ### Added
