@@ -20,6 +20,10 @@ const MARKER = ".superai-install";
 // Tests point these somewhere harmless instead of the real registry and Start menu.
 const REGKEY = process.env.SUPERAI_INSTALL_REGKEY || `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${APPID}`;
 const SHORTCUT_DIR = process.env.SUPERAI_INSTALL_SHORTCUT_DIR || "";
+// The app's anonymous usage-count setting (see packages/desktop/usage.mjs); set from the installer.
+const USAGE_FILE = process.env.SUPERAI_INSTALL_USAGE_FILE || path.join(app.getPath("appData"), APPNAME, "usage.json");
+const PRIVACY_URL = "https://github.com/rakgoorak/SuperAi-RAKKYXD/blob/main/PRIVACY.md";
+const readUsage = () => { try { return JSON.parse(fs.readFileSync(USAGE_FILE, "utf8")); } catch { return {}; } };
 
 // Keep installer state out of the real app's profile and single-instance lock.
 app.setPath("userData", path.join(os.tmpdir(), `superai-installer-${process.pid}`));
@@ -94,7 +98,7 @@ ipcMain.handle("installer:info", async (e) => {
     const s = await fsp.statfs(path.parse(dir).root);
     free = s.bavail * s.bsize;
   } catch {}
-  return { version, dir, existing: !!existing, required: manifest.bytes, free };
+  return { version, dir, existing: !!existing, required: manifest.bytes, free, usage: readUsage().enabled !== false };
 });
 
 ipcMain.handle("installer:pick", async (e, current) => {
@@ -193,6 +197,11 @@ async function install(opts) {
     if (opts?.desktop) await shortcut(desktopLink, exe);
     else await fsp.rm(desktopLink, { force: true });
 
+    if (typeof opts?.usage === "boolean") {
+      // Keeps the install ID; the app creates one if there is none yet.
+      await fsp.mkdir(path.dirname(USAGE_FILE), { recursive: true });
+      await fsp.writeFile(USAGE_FILE, JSON.stringify({ ...readUsage(), enabled: opts.usage }), { mode: 0o600 });
+    }
     send("installer:progress", { step: "register" });
     if (!fs.existsSync(path.join(dir, UNINSTALLER))) throw new Error("ไม่พบตัวถอนการติดตั้งในไฟล์ติดตั้ง");
     await register(dir, Math.round(manifest.bytes / 1024));
@@ -202,6 +211,11 @@ async function install(opts) {
     busy = false;
   }
 }
+
+ipcMain.handle("installer:privacy", (e) => {
+  trusted(e);
+  return shell.openExternal(PRIVACY_URL);
+});
 
 ipcMain.handle("installer:launch", async (e, exe) => {
   trusted(e);
@@ -239,7 +253,7 @@ else
   app.whenReady().then(() => {
     window = new BrowserWindow({
       width: 900,
-      height: 560,
+      height: 620,
       resizable: false,
       maximizable: false,
       frame: false,

@@ -33,6 +33,8 @@ async function load() {
   try {
     info = await api.info();
     showLocation(info.dir);
+    // An earlier choice to stop the usage count is kept when updating.
+    if (info.usage === false) $("usage").checked = false;
     $("meta").textContent = `เวอร์ชัน ${info.version} · ใช้พื้นที่ ${mb(info.required)}${info.free ? ` · ว่าง ${mb(info.free)}` : ""}`;
     if (info.existing) {
       $("install-label").textContent = "อัปเดตเป็นเวอร์ชันนี้";
@@ -85,7 +87,7 @@ $("install").addEventListener("click", async () => {
   $("percent").textContent = "0";
   setState("installing");
   try {
-    const result = await api.install({ dir: target, desktop: $("desktop").checked });
+    const result = await api.install({ dir: target, desktop: $("desktop").checked, usage: $("usage").checked });
     installedExe = result.exe;
     $("done-version").textContent = info ? `v${info.version}` : "";
     $("done-desktop").hidden = !$("desktop").checked;
@@ -109,3 +111,5 @@ document.querySelectorAll("[data-window]").forEach((button) =>
 
 setOrbit(0);
 void load();
+
+$("privacy").addEventListener("click", () => void api.privacy());
