@@ -10,6 +10,7 @@ import { ConversationInteractions } from './ConversationInteractions';
 import { ConversationExport } from './ConversationExport';
 import { ArrowDown, Pencil } from 'lucide-react';
 import { MessageAttachments } from './MessageAttachments';
+import { stepLabel } from '../stepLabel';
 import { ImageEndpointContext } from './MarkdownImage';
 import { ImageViewer } from './ImageViewer';
 import { renderTextWithLinks } from '../previewLinks';
@@ -137,7 +138,7 @@ function ToolGroup({ tools }: { tools: ToolItem[] }) {
       <div className="chat-tools-head">
         <button className="chat-tools-summary" onClick={() => setOpen(!open)} aria-expanded={open}>
           <span className={`chat-dot ${running ? 'running' : tools.some((t) => t.status === 'failed') ? 'failed' : ''}`} />
-          <span title={running ? running.title : undefined}>{running ? `กำลังทำงาน: ${running.title.split('\n')[0]}` : summary(tools)}</span>
+          <span title={running ? running.title : undefined}>{running ? `กำลังทำงาน: ${stepLabel(running.title)}` : summary(tools)}</span>
           <ChevronRight size={13} className={`chat-chevron ${open ? 'open' : ''}`} />
         </button>
         {!open && images.length > 0 && <span className="chat-thumbs">{images.slice(-3).map((src, i) => <Shot key={i} src={src} small />)}</span>}
