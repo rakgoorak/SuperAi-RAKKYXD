@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.singleton.1.6.0.schema.json
 PackageIdentifier: rakgoorak.SuperAiRAKKYXD
-PackageVersion: 1.0.39
+PackageVersion: 1.0.40
 PackageLocale: en-US
 Publisher: RAKKYXD
 PublisherUrl: https://github.com/rakgoorak
@@ -23,12 +23,12 @@ Tags:
   - llm
   - ollama
   - opencode
-ReleaseNotesUrl: https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/tag/v1.0.39
+ReleaseNotesUrl: https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/tag/v1.0.40
 Installers:
   - Architecture: x64
     InstallerType: nsis
-    InstallerUrl: https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/download/v1.0.39/SuperAi-RAKKYXD-Setup.exe
-    InstallerSha256: 16629A12393F48CE8E14B52A1D68BFA86354C5BBF9988691C001D95D2BF58EBF
+    InstallerUrl: https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/download/v1.0.40/SuperAi-RAKKYXD-Setup.exe
+    InstallerSha256: 1DB34D2365FEBA1FFACF430FC83EDB71D7B0386104490CF1B6EF8B8E6CD6F64A
     InstallerSwitches:
       Silent: /S
       SilentWithProgress: /S
