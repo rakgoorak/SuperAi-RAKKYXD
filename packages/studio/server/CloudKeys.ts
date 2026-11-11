@@ -59,7 +59,12 @@ export class CloudKeys {
     if (!value || value.length > 500 || /\s/.test(value)) throw new Error("API Key ไม่ถูกต้อง");
     await this.request(id, this.provider(id).check, value);
     try { this.store().saveApi(id, value); }
-    catch { throw new Error("บันทึก API Key ไม่ได้ ระบบเข้ารหัสของเครื่องยังไม่พร้อม (ใช้ได้เฉพาะในแอปเดสก์ท็อป)"); }
+    catch (error: any) {
+      const reason = String(error?.message || error);
+      throw new Error(/unavailable/i.test(reason)
+        ? "บันทึก API Key ไม่ได้ ระบบเข้ารหัสของเครื่องยังไม่พร้อม (ใช้ได้เฉพาะในแอปเดสก์ท็อป)"
+        : `บันทึก API Key ไม่ได้: ${reason}`);
+    }
     this.modelCache.delete(id);
     return this.status(id);
   }

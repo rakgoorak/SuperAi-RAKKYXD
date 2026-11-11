@@ -436,3 +436,24 @@ test('API keys are saved encrypted, limited to known providers, and can be remov
   store.forgetApi('openrouter');
   assert.equal(store.get('api', 'openrouter'), undefined);
 });
+
+test('a key can still be saved when the old store was encrypted with another key', t => {
+  const { dir } = fixture(t);
+  new CredentialStore(dir, cipher()).saveSession('chatgpt', token);
+  const store = new CredentialStore(dir, cipher());
+  assert.throws(() => store.get('api', 'openrouter'), /Unable to read/, 'reading still fails closed');
+  store.saveApi('openrouter', 'sk-or-new');
+  assert.equal(store.get('api', 'openrouter'), 'sk-or-new');
+  assert.equal(store.get('session', 'chatgpt'), undefined, 'nothing from the unreadable store is reused');
+  assert.equal(fs.readdirSync(dir).filter(f => f.startsWith('credentials.enc.unreadable-')).length, 1, 'the old file is kept aside');
+  const off = new CredentialStore(dir, { ...cipher(), isEncryptionAvailable: () => false });
+  assert.throws(() => off.saveApi('groq', 'gsk'), /unavailable/, 'no encryption: nothing is moved or written');
+  assert.equal(fs.readdirSync(dir).filter(f => f.startsWith('credentials.enc.unreadable-')).length, 1);
+});
+
+test('the store lives in the app data folder when one is set', () => {
+  const before = process.env.SUPERAI_DATA_DIR;
+  process.env.SUPERAI_DATA_DIR = path.join(os.tmpdir(), 'superai-data-x');
+  try { assert.equal((new CredentialStore() as any).directory, process.env.SUPERAI_DATA_DIR); }
+  finally { if (before === undefined) delete process.env.SUPERAI_DATA_DIR; else process.env.SUPERAI_DATA_DIR = before; }
+});
