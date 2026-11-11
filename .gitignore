@@ -27,3 +27,7 @@ packages/studio/client/public/ort/
 .claude/
 
 .wrangler/
+
+# AI planning notes written by skills during work sessions; not part of the public repo.
+docs/superpowers/
+.superpowers/
