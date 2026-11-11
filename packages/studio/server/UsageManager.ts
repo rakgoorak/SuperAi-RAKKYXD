@@ -294,7 +294,7 @@ const PROBES: Record<string, Probe> = {
 /** API providers bill per use: there is no quota window, so the card shows the credit that is left. */
 async function cloudBalance(id: string): ReturnType<Probe> {
   const details = (await cloudKeys.balance(id)) || [];
-  return { status: "unsupported", windows: [], details, source: `${CLOUD_PROVIDERS[id].name} API`, note: details.length ? "คิดเงินตามการใช้จริงจากเครดิตที่เติมไว้" : "ผู้ให้บริการไม่ได้ส่งยอดเครดิตกลับมา" };
+  return { status: "unsupported", windows: [], details, source: `${cloudKeys.status(id).name} API`, note: details.length ? "คิดเงินตามการใช้จริงจากเครดิตที่เติมไว้" : "ผู้ให้บริการไม่ได้ส่งยอดเครดิตกลับมา" };
 }
 
 export const USAGE_PROVIDERS = ["claude-code", "codex", "antigravity", "opencode", "freebuff", "openrouter", "deepseek"];
@@ -312,7 +312,7 @@ export class UsageManager {
     const running = this.pending.get(key);
     if (running) return running;
     const task = (async () => {
-      const name = isCloud(id) ? CLOUD_PROVIDERS[id].name : getCliDefinition(id).name;
+      const name = isCloud(id) ? cloudKeys.status(id).name : getCliDefinition(id).name;
       let result: ProviderUsage;
       if (!this.installed(id)) result = { id, name, status: "not-installed", windows: [], source: "-", note: isCloud(id) ? "ยังไม่ได้ใส่ API Key" : "ยังไม่ได้ติดตั้ง", updatedAt: Date.now() };
       else

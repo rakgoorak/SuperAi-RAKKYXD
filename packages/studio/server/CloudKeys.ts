@@ -1,4 +1,5 @@
-import { CredentialStore } from "@superai-rakkyxd/core";
+import { CredentialStore, OpenAiCompatibleProvider } from "@superai-rakkyxd/core";
+import { customProviders, isCustom } from './CustomProviders.js';
 
 /** API providers the user connects with their own key. Addresses are fixed: a key only ever goes to its provider. */
 export const CLOUD_PROVIDERS: Record<string, { name: string; base: string; env: string; keyPage: string; check: string }> = {
@@ -7,9 +8,9 @@ export const CLOUD_PROVIDERS: Record<string, { name: string; base: string; env: 
   groq: { name: "Groq", base: "https://api.groq.com/openai/v1", env: "GROQ_API_KEY", keyPage: "https://console.groq.com/keys", check: "/models" },
 };
 export const CLOUD_IDS = Object.keys(CLOUD_PROVIDERS);
-export const isCloud = (id: string) => Object.hasOwn(CLOUD_PROVIDERS, id);
+export const isCloud = (id: string) => Object.hasOwn(CLOUD_PROVIDERS, id) || isCustom(id);
 
-export interface CloudKeyStatus { id: string; name: string; hasKey: boolean; source: "settings" | "env" | null; keyPage: string; hint?: string }
+export interface CloudKeyStatus { id: string; name: string; hasKey: boolean; source: "settings" | "env" | null; keyPage: string; hint?: string; custom?: boolean; baseURL?: string; models?: string[] }
 interface KeyStore { get(kind: "api", provider: string): string | undefined; saveApi(provider: string, key: string): void; forgetApi(provider: string): void }
 type Http = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -20,6 +21,11 @@ export class CloudKeys {
   constructor(private store: () => KeyStore = () => new CredentialStore(), private http: Http = (url, init) => fetch(url, init)) {}
 
   private provider(id: string) {
+    if (isCustom(id)) {
+      const config = customProviders.get(id);
+      if (!config) throw new Error('ไม่พบ Custom Provider นี้');
+      return { name: config.name, base: config.baseURL, env: '', keyPage: '', check: '/models' };
+    }
     if (!isCloud(id)) throw new Error("ไม่รู้จักผู้ให้บริการ API นี้");
     return CLOUD_PROVIDERS[id];
   }
@@ -35,9 +41,33 @@ export class CloudKeys {
     const saved = this.stored(id);
     const key = saved || process.env[p.env] || "";
     // Enough to recognise which key is saved, never enough to use it.
-    return { id, name: p.name, hasKey: !!key, source: saved ? "settings" : key ? "env" : null, keyPage: p.keyPage, hint: key ? `…${key.slice(-4)}` : undefined };
+    const custom = customProviders.get(id);
+    return { id, name: p.name, hasKey: !!key, source: saved ? "settings" : key ? "env" : null, keyPage: p.keyPage, hint: key ? `…${key.slice(-4)}` : undefined,
+      ...(custom ? { custom: true, baseURL: custom.baseURL, models: custom.models } : {}) };
   }
-  all(): CloudKeyStatus[] { return CLOUD_IDS.map((id) => this.status(id)); }
+  all(): CloudKeyStatus[] { return [...CLOUD_IDS, ...customProviders.all().map(item => item.id)].map((id) => this.status(id)); }
+
+  create(id: string, model?: string, signal?: AbortSignal) {
+    const p = this.provider(id), key = this.key(id);
+    if (!key) throw new Error('ยังไม่ได้เชื่อมต่อ API Key ของผู้ให้บริการนี้');
+    const custom = customProviders.get(id);
+    if (!model && custom) model = custom.models[0];
+    return new OpenAiCompatibleProvider({ providerId: id, apiKey: key, baseURL: p.base, model, signal, throwErrors: true,
+      ...(custom ? { approvedOrigins: [new URL(custom.baseURL).origin] } : {}) });
+  }
+
+  async addCustom(value: any): Promise<CloudKeyStatus> {
+    const key = typeof value?.key === 'string' ? value.key.trim() : '';
+    if (!key || key.length > 500 || /\s/.test(key)) throw new Error('API Key ไม่ถูกต้อง');
+    const config = customProviders.add(value);
+    try { this.store().saveApi(config.id, key); }
+    catch { customProviders.remove(config.id); throw new Error('บันทึก key แบบเข้ารหัสไม่สำเร็จ'); }
+    return this.status(config.id);
+  }
+  removeCustom(id: string) {
+    if (!isCustom(id) || !customProviders.get(id)) throw new Error('ไม่พบ Custom Provider นี้');
+    this.remove(id); customProviders.remove(id);
+  }
 
   private async request(id: string, route: string, key: string): Promise<any> {
     const p = this.provider(id);
@@ -57,7 +87,7 @@ export class CloudKeys {
   async save(id: string, key: string): Promise<CloudKeyStatus> {
     const value = String(key || "").trim();
     if (!value || value.length > 500 || /\s/.test(value)) throw new Error("API Key ไม่ถูกต้อง");
-    await this.request(id, this.provider(id).check, value);
+    if (!isCustom(id)) await this.request(id, this.provider(id).check, value);
     try { this.store().saveApi(id, value); }
     catch (error: any) {
       const reason = String(error?.message || error);
@@ -82,6 +112,8 @@ export class CloudKeys {
 
   /** Model ids the provider offers right now (cached for five minutes). */
   async models(id: string): Promise<string[]> {
+    const custom = customProviders.get(id);
+    if (custom) return custom.models;
     const key = this.key(id);
     if (!key) return [];
     const cached = this.modelCache.get(id);

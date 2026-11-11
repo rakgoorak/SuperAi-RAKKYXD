@@ -55,9 +55,9 @@ export function SeatPicker({ seat, onChange, clis, ollamaModels, label, named = 
           })}
           <option value="ollama">Ollama บนเครื่อง</option>
           <optgroup label="API ภายนอก (ใช้ key ของคุณ)">
-            {CLOUD.map((id) => {
+            {[...new Set([...CLOUD, ...cloudKeys.map(key => key.id)])].map((id) => {
               const ready = cloudKeys.find((k) => k.id === id)?.hasKey;
-              return <option key={id} value={id} disabled={!ready && cloud !== id}>{PROVIDER_LABEL[id]}{ready ? "" : " · ยังไม่ใส่ API Key"}</option>;
+              return <option key={id} value={id} disabled={!ready && cloud !== id}>{cloudKeys.find(key => key.id === id)?.name || PROVIDER_LABEL[id] || id}{ready ? "" : " · ยังไม่ใส่ API Key"}</option>;
             })}
           </optgroup>
         </select>

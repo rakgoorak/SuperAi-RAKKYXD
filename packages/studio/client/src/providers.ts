@@ -34,10 +34,11 @@ export const EFFORTS: Record<string, string[]> = {
 
 /** API providers connected with the user's own key (Settings > API Key). */
 export const CLOUD = ["openrouter", "deepseek", "groq"];
-export const isCloud = (provider: string) => CLOUD.includes(provider);
-export interface CloudKeyStatus { id: string; name: string; hasKey: boolean; source: "settings" | "env" | null; keyPage: string; hint?: string }
+export const isCloud = (provider: string) => CLOUD.includes(provider) || /^custom-[a-f0-9]{12}$/.test(provider);
+export interface CloudKeyStatus { id: string; name: string; hasKey: boolean; source: "settings" | "env" | null; keyPage: string; hint?: string; custom?: boolean; baseURL?: string; models?: string[] }
 const CLOUD_EVENT = "superai:cloud-keys-changed";
 export function notifyCloudKeysChanged() {
+  cache.clear(); fetchedAt.clear();
   for (const id of CLOUD) {
     for (const key of cache.keys()) if (key.startsWith(`${id}:`)) { cache.delete(key); fetchedAt.delete(key); }
   }
@@ -48,7 +49,7 @@ export function useCloudKeys() {
   const [keys, setKeys] = useState<CloudKeyStatus[]>([]);
   useEffect(() => {
     let live = true;
-    const load = () => void api<CloudKeyStatus[]>("/api/cloud-keys").then((k) => live && setKeys(k)).catch(() => {});
+    const load = () => void api<CloudKeyStatus[]>("/api/cloud-keys").then((k) => { if (live) { k.forEach(item => { PROVIDER_LABEL[item.id] = item.name; }); setKeys(k); } }).catch(() => {});
     load();
     window.addEventListener(CLOUD_EVENT, load);
     return () => { live = false; window.removeEventListener(CLOUD_EVENT, load); };
@@ -100,7 +101,7 @@ export function confirmDefaults() {
 /** A seat for a CLI using the model/effort chosen in setup. */
 export function seatFor(cliId: string, name: string, defaults = loadDefaults()): Seat {
   const d = defaults[cliId] || { model: "", effort: "" };
-  return { name, provider: `cli:${cliId}`, model: d.model, effort: d.effort };
+  return { name, provider: isCloud(cliId) ? cliId : `cli:${cliId}`, model: d.model, effort: isCloud(cliId) ? '' : d.effort };
 }
 /** First installed headless CLI, preferring the order the user is most likely to want. */
 export function firstReady(clis: Cli[], skip: string[] = []) {

@@ -6,6 +6,25 @@ import {
 } from '../src/providers/OpenAiCompatibleProvider.js';
 import { createProvider, loadStoredAuth } from '../src/providers/index.js';
 
+test('custom endpoints receive only explicitly approved origins and retain cancellation', async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  let requests = 0;
+  globalThis.fetch = async (_url, init) => {
+    requests++;
+    assert.equal(init?.signal, controller.signal);
+    assert.equal(init?.redirect, 'error');
+    return new Response('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+  };
+  try {
+    const provider = new OpenAiCompatibleProvider({ providerId: 'custom', baseURL: 'https://custom.example/v1', apiKey: 'dummy-custom-token', model: 'demo', approvedOrigins: ['https://custom.example'], signal: controller.signal, throwErrors: true });
+    assert.equal((await provider.stream([{ role: 'user', content: 'hi' }], () => {})).text, 'ok');
+    provider.baseURL = 'https://other.example/v1';
+    await assert.rejects(provider.stream([{ role: 'user', content: 'hi' }], () => {}), /destination/);
+    assert.equal(requests, 1, 'the credential never reaches an unapproved destination');
+  } finally { globalThis.fetch = originalFetch; }
+});
+
 test('OpenAiCompatibleProvider initializes with correct defaults for DeepSeek, Groq, and OpenRouter', () => {
   const deepseek = new OpenAiCompatibleProvider({ providerId: 'deepseek' });
   assert.equal(deepseek.name, 'deepseek');

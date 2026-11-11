@@ -1,4 +1,5 @@
 import type { ChatPermission } from './chatControls';
+import { isCloud, PROVIDER_LABEL } from './providers';
 
 const IDENTITIES: Record<string, { label: string; short: string; connection: string; attachments: string }> = {
   'claude-code': { label: 'Claude', short: 'Claude', connection: 'เชื่อมผ่าน Claude Code CLI', attachments: 'แนบไฟล์ให้ CLI อ่านจากโฟลเดอร์ทำงานได้' },
@@ -11,10 +12,12 @@ const IDENTITIES: Record<string, { label: string; short: string; connection: str
 
 export function providerIdentity(id: string) {
   const key = id.replace(/^cli:/, '');
+  if (isCloud(key)) return { label: PROVIDER_LABEL[key] || key, short: PROVIDER_LABEL[key] || 'API', connection: 'เชื่อมด้วย API Key ที่บันทึกใน SuperAi', attachments: 'ใช้เครื่องมืออ่านไฟล์ข้อความในโปรเจกต์ได้ ยังไม่รองรับรูป/PDF แนบในห้อง API' };
   return IDENTITIES[key] || { label: key, short: key, connection: `เชื่อมผ่าน ${id.startsWith('cli:') ? 'CLI' : 'Ollama'}`, attachments: 'ความสามารถขึ้นอยู่กับรุ่นที่เลือก' };
 }
 
 export function permissionDescription(provider: string, permission: ChatPermission) {
+  if (isCloud(provider)) return permission === 'read' ? 'อ่านและค้นหาไฟล์ข้อความ ไม่มีเครื่องมือแก้ไฟล์หรือรันคำสั่ง' : permission === 'edit' ? 'อ่านและแก้ไฟล์ได้ ไม่มีเครื่องมือรันคำสั่ง' : 'ใช้เครื่องมืออ่าน แก้ไฟล์ และรันคำสั่งของ SuperAi ได้';
   if (permission === 'ask') return provider === 'codex' ? 'Codex ขออนุญาตรันคำสั่งและแก้ไฟล์ในแชท โดยใช้ sandbox และกฎสิทธิ์ของ Codex' : provider === 'opencode' ? 'แสดงคำขออนุญาตที่ OpenCode ส่งมา โดยยังใช้กฎสิทธิ์ของ OpenCode' : 'Claude ขออนุญาตสำหรับเครื่องมือที่ต้องอนุมัติในแชตก่อนทำงาน โดยยังใช้กฎสิทธิ์ที่ตั้งค่าไว้';
   if (permission === 'approve_all') return provider === 'opencode' ? 'OpenCode อนุมัติคำขออัตโนมัติ แต่กฎที่ตั้งเป็น deny ยังมีผล ต้องใช้ CLI รุ่นที่รองรับ --auto' : 'Antigravity อนุมัติเครื่องมืออัตโนมัติ ขอบเขตไฟล์และ sandbox ยังขึ้นอยู่กับการตั้งค่าของ CLI';
   if (permission === 'review') return 'Codex ตรวจคำขออนุมัติที่รองรับโดยอัตโนมัติภายใน sandbox ของโปรเจกต์ ขึ้นอยู่กับการรองรับของบัญชีและ CLI';

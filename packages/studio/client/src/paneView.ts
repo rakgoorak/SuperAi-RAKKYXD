@@ -4,5 +4,6 @@ export type PaneView = 'chat' | 'terminal';
 
 /** The server keeps each session's view, so it survives restarts and both views share one conversation. */
 export function paneView(session: { agentType?: string; view?: PaneView }): PaneView {
-  return session.view === 'chat' && CHAT_CLIS.includes(session.agentType || '') ? 'chat' : 'terminal';
+  return session.view === 'chat' && (CHAT_CLIS.includes(session.agentType || '') || isCloud(session.agentType || '')) ? 'chat' : 'terminal';
 }
+import { isCloud } from './providers';

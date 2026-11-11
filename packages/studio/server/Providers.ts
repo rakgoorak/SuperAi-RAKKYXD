@@ -141,6 +141,7 @@ export interface ModelList { models: string[]; efforts: string[]; modelEfforts?:
 
 /** Models a provider offers right now. Failures fall back to suggestions plus free typing. */
 export async function listModels(id: string, accountId = "system"): Promise<ModelList> {
+  if (isCloud(id)) return { models: await cloudKeys.models(id), efforts: [] };
   const env = accounts.environment(id, accountId);
   const profile = PROVIDER_PROFILES[id];
   if (!profile) throw new Error("ไม่รู้จักผู้ให้บริการนี้");

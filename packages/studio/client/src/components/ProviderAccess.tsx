@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Key, LogIn, RefreshCw } from "lucide-react";
 import { api, loginProvider, type CliAuthStatus } from "../api";
 import { fetchModels, PROVIDER_LABEL } from "../providers";
+import { isCloud } from '../providers';
 
 export const CLOUD_BYOK_PROVIDERS = ["deepseek", "groq", "openrouter", "openai_compatible"] as const;
 export function isCloudByok(provider: string): boolean {
-  return (CLOUD_BYOK_PROVIDERS as readonly string[]).includes(provider);
+  return isCloud(provider) || (CLOUD_BYOK_PROVIDERS as readonly string[]).includes(provider);
 }
 
 export function useProviderAccess(provider: string, accountId?: string) {

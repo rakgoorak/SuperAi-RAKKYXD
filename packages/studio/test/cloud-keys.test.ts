@@ -1,6 +1,29 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CloudKeys } from '../server/CloudKeys.js';
+import { customProviders } from '../server/CustomProviders.js';
+
+test('separate custom providers retain independent encrypted-store keys and manual models', async () => {
+  const f = fixture({});
+  f.saved.set('openrouter', 'built-in-test-key');
+  assert.throws(() => f.keys.removeCustom('openrouter'), /ไม่พบ Custom/);
+  assert.equal(f.saved.get('openrouter'), 'built-in-test-key');
+  const first = await f.keys.addCustom({ name: 'First', baseURL: 'https://first.example/v1', models: ['first-model'], key: 'first-test-key-12345' });
+  const second = await f.keys.addCustom({ name: 'Second', baseURL: 'https://second.example/v1', models: ['second-model'], key: 'second-test-key-67890' });
+  try {
+    assert.notEqual(first.id, second.id);
+    assert.equal(f.keys.key(first.id), 'first-test-key-12345');
+    assert.equal(f.keys.key(second.id), 'second-test-key-67890');
+    assert.deepEqual(await f.keys.models(first.id), ['first-model']);
+    assert.equal(f.calls.length, 0, 'saving a custom endpoint does not make paid or unsolicited requests');
+    assert.ok(!JSON.stringify(customProviders.all()).includes('test-key'));
+    f.keys.removeCustom(first.id);
+    assert.equal(f.keys.key(second.id), 'second-test-key-67890');
+  } finally {
+    if (customProviders.get(first.id)) f.keys.removeCustom(first.id);
+    f.keys.removeCustom(second.id);
+  }
+});
 
 function fixture(routes: Record<string, { status?: number; body?: unknown }>) {
   const saved = new Map<string, string>();

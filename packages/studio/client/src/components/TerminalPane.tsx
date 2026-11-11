@@ -7,6 +7,7 @@ import { attachMode, formatPath, isPdf, isSupportedAttachment, isSupportedImage,
 import { bufferText, loadTerminalThaiFont } from '../terminalText';
 import { CHAT_CLIS, paneView, type PaneView } from '../paneView';
 import { ChatView } from './ChatView';
+import { isCloud } from '../providers';
 
 export interface TerminalTab {
   authOnly?: boolean;
@@ -113,7 +114,8 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   const [readerText, setReaderText] = useState('');
   const readerRef = useRef<HTMLDivElement>(null);
   // Chat view (Codex, Antigravity): the same CLI driven through its JSON stream. The PTY keeps running underneath.
-  const chatCapable = !tab.authOnly && !!tab.sessionId && CHAT_CLIS.includes(tab.type) && !!onSwitchView;
+  const apiSession = isCloud(tab.type);
+  const chatCapable = !tab.authOnly && !!tab.sessionId && (CHAT_CLIS.includes(tab.type) || apiSession) && !!onSwitchView;
   const chatting = chatCapable && paneView({ agentType: tab.type, view: tab.view }) === 'chat';
 
   const showNotice = (next: AttachNotice | null) => {
@@ -128,7 +130,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
 
   // Create xterm + websocket once per session.
   useEffect(() => {
-    if (!containerRef.current || !tab.sessionId) return;
+    if (!containerRef.current || !tab.sessionId || apiSession) return;
 
     const term = new Terminal({
       theme: THEME,
@@ -477,7 +479,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
                 <span>{reading ? 'กลับไปพิมพ์' : 'อ่านแบบข้อความ'}</span>
               </button>
             )}
-            {chatCapable && (
+            {chatCapable && !apiSession && (
               <div className="pane-view-switch" role="group" aria-label="มุมมอง session">
                 <button aria-label="มุมมองแชต" aria-pressed={chatting} onClick={(event) => { event.stopPropagation(); setReading(false); if (!chatting) onSwitchView?.('chat'); }}
                   title="คุยแบบแชต · ปิด TUI แล้วคุยต่อจากบทสนทนาเดิม">
