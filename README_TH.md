@@ -178,7 +178,7 @@
 - **ข้อมูลโปรเจกต์:** เก็บที่ `%USERPROFILE%\.opencode-multi` (Windows) หรือ `~/.opencode-multi` (macOS)
 - **ไฟล์แนบ:** เก็บใน `.superai/attachments/` ภายในโปรเจกต์ (แนะนำให้ใส่ `.superai/` ใน `.gitignore`)
 
-รายละเอียดทั้งหมดอยู่ใน [PRIVACY.md](PRIVACY.md) อ่านนโยบายการรายงานช่องโหว่ได้ที่ [SECURITY.md](SECURITY.md) และรายชื่อซอฟต์แวร์โอเพนซอร์สที่ใช้ใน [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+รายละเอียดทั้งหมดอยู่ใน [PRIVACY.md](PRIVACY.md) การเซ็นโค้ดสำหรับ Windows เป็นไปตาม [Code signing policy](CODE_SIGNING_POLICY.md) อ่านนโยบายการรายงานช่องโหว่ได้ที่ [SECURITY.md](SECURITY.md) และรายชื่อซอฟต์แวร์โอเพนซอร์สที่ใช้ใน [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
 ---
 

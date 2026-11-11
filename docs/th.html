@@ -183,7 +183,7 @@
     <div class="note">
       <b>หมายเหตุ:</b> เวอร์ชันปัจจุบันยังไม่ได้ลงนามดิจิทัล บน Windows ให้เลือก
       <b>More info → Run anyway</b> บน macOS ไปที่ <b>System Settings → Privacy &amp; Security → Open Anyway</b>
-      (กำลังดำเนินการทำ signed/notarized build)
+      (กำลังดำเนินการทำ signed/notarized build) ดู<a href="#code-signing">นโยบายการเซ็นโค้ด</a>
     </div>
   </section>
 
@@ -230,6 +230,18 @@ npm start</pre>
         <summary>รองรับระบบใดบ้าง?</summary>
         <p>Windows 10/11 64-bit และ macOS 11 ขึ้นไปทั้ง Apple Silicon และ Intel ยังไม่รองรับ Linux อย่างเป็นทางการ</p>
       </details>
+    </div>
+  </section>
+
+  <section id="code-signing">
+    <div class="section-head">
+      <h2>Code signing policy (นโยบายการเซ็นโค้ด)</h2>
+      <p>Free code signing provided by <a href="https://about.signpath.io/">SignPath.io</a>, certificate by <a href="https://signpath.org/">SignPath Foundation</a>.</p>
+    </div>
+    <div class="note">
+      ไฟล์สำหรับ Windows สร้างจาก repo นี้บน runner ของ GitHub และเซ็นหลังผู้ดูแลอนุมัติทีละ release เท่านั้น
+      ผู้เขียน ผู้ตรวจ และผู้อนุมัติ: <a href="https://github.com/rakgoorak">rakgoorak</a>
+      ความเป็นส่วนตัว: <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD/blob/main/PRIVACY.md">นโยบายความเป็นส่วนตัว</a> รายละเอียดทั้งหมด: <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD/blob/main/CODE_SIGNING_POLICY.md">CODE_SIGNING_POLICY.md</a>
     </div>
   </section>
 
