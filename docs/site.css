@@ -195,3 +195,29 @@ pre .c { color: var(--dim); }
   .download-table th:nth-child(3),
   .download-table td:nth-child(3) { display: none; }
 }
+
+/* Live numbers under the download buttons (filled by stats.js). */
+.stats { display: grid; gap: 12px; max-width: 620px; margin: 22px auto 0; text-align: left; }
+.stats[hidden], .live[hidden] { display: none; }
+.stats-downloads, .live { padding: 16px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
+.stats-total { margin: 0 0 12px; color: var(--text-muted); font-size: 14px; }
+.stats-total strong { color: var(--text); font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; margin-right: 4px; }
+.stats-split { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.stats-split > div { display: grid; gap: 4px; min-width: 0; }
+.stats-split span { color: var(--dim); font-size: 12px; overflow-wrap: anywhere; }
+.stats-split b { color: var(--text); font-size: 18px; font-variant-numeric: tabular-nums; }
+.stats-split .bar { height: 4px; border-radius: 999px; background: var(--raised); overflow: hidden; }
+.stats-split .bar i { display: block; height: 100%; width: 0; background: var(--brand-gradient); border-radius: inherit; transition: width .6s ease; }
+.stats-note { margin: 10px 0 0; color: var(--dim); font-size: 12px; line-height: 1.5; }
+.live-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0; }
+.live-top strong { font-size: 32px; line-height: 1; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.live-top span { color: var(--text-muted); font-size: 14px; }
+.live-dot { width: 9px; height: 9px; border-radius: 50%; background: #34d399; box-shadow: 0 0 0 0 rgba(52, 211, 153, .6); animation: live-pulse 2s infinite; }
+@keyframes live-pulse { 0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, .55); } 70% { box-shadow: 0 0 0 9px rgba(52, 211, 153, 0); } 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); } }
+.live-sub { margin: 10px 0 0; color: var(--dim); font-size: 13px; }
+.live-countries { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.live-countries:empty { display: none; }
+.live-countries li { padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; color: var(--text-muted); }
+.live-countries li b { color: var(--text); font-weight: 600; margin-left: 4px; }
+@media (max-width: 520px) { .stats-split { gap: 8px; } .stats-split b { font-size: 16px; } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } .stats-split .bar i { transition: none; } }

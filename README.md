@@ -154,7 +154,7 @@ The setup guide checks and installs what you need:
 - **Project data:** settings and chat history live in `%USERPROFILE%\.opencode-multi` on Windows or `~/.opencode-multi` on macOS.
 - **Safe attachments:** files are stored under `.superai/attachments/` inside the project; add `.superai/` to `.gitignore`.
 
-See [SECURITY.md](SECURITY.md) for the vulnerability reporting policy.
+Full details are in [PRIVACY.md](PRIVACY.md). See [SECURITY.md](SECURITY.md) for the vulnerability reporting policy and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the open-source software the app uses.
 
 ---
 

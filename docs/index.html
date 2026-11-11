@@ -89,6 +89,22 @@
       Latest version <code data-latest-version>latest</code> · No account required ·
       <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest">SHA-256 checksums</a>
     </p>
+    <div class="stats" id="stats" hidden>
+      <div class="stats-downloads">
+        <p class="stats-total"><strong id="dl-total">0</strong> <span id="dl-label"></span></p>
+        <div class="stats-split">
+          <div data-split="windows"><span>Windows</span><b>0</b><div class="bar"><i></i></div></div>
+          <div data-split="mac-arm"><span>Mac Apple Silicon</span><b>0</b><div class="bar"><i></i></div></div>
+          <div data-split="mac-intel"><span>Mac Intel</span><b>0</b><div class="bar"><i></i></div></div>
+        </div>
+        <p class="stats-note" id="dl-note"></p>
+      </div>
+      <div class="live" id="live" hidden>
+        <p class="live-top"><i class="live-dot" aria-hidden="true"></i><strong id="live-online">0</strong> <span id="live-online-label"></span></p>
+        <p class="live-sub" id="live-sub"></p>
+        <ul class="live-countries" id="live-countries"></ul>
+      </div>
+    </div>
 
     <figure class="shot">
       <img src="images/workspace.png" alt="SuperAi & RAKKYXD workspace with the minimal three-mode interface" width="1080" height="675" fetchpriority="high">
@@ -217,7 +233,7 @@ npm start</pre>
       </details>
       <details>
         <summary>Does my code leave my machine?</summary>
-        <p>No middleware. Prompts and code go directly from your machine to the provider you choose, and local models run entirely offline through Ollama. The app only sends an anonymous usage count (a random install ID, the app version and the OS), which you can turn off in Settings.</p>
+        <p>No middleware. Prompts and code go directly from your machine to the provider you choose, and local models run entirely offline through Ollama. The app only sends an anonymous usage count (a random install ID, the app version and the OS), which you can turn off in Settings. <a href="https://github.com/rakgoorak/SuperAi-RAKKYXD/blob/main/PRIVACY.md">Privacy policy</a></p>
       </details>
       <details>
         <summary>Do I need API keys?</summary>
@@ -248,30 +264,6 @@ npm start</pre>
   </footer>
 
 </div>
-<script>
-(function () {
-  var ua = navigator.userAgent;
-  var os = /Windows/i.test(ua) ? 'windows'
-    : /Macintosh|Mac OS X/i.test(ua) ? 'mac-arm'
-    : null;
-  if (os) {
-    var btn = document.querySelector('[data-os="' + os + '"]');
-    if (btn) {
-      document.querySelectorAll('.btn.primary').forEach(function (b) { b.classList.remove('primary'); });
-      btn.classList.add('primary');
-    }
-  }
-
-  fetch('https://api.github.com/repos/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest')
-    .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (release) {
-      if (!release || !release.tag_name) return;
-      document.querySelectorAll('[data-latest-version]').forEach(function (el) {
-        el.textContent = release.tag_name;
-      });
-    })
-    .catch(function () {});
-})();
-</script>
+<script src="stats.js" defer></script>
 </body>
 </html>
