@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { chatSkills, skillPrompt } from '../server/ChatSkills.js';
+import { chatSkills, cliCommand, skillPrompt } from '../server/ChatSkills.js';
 
 test('skill discovery follows the provider and includes project, linked and global skills', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-skills-'));
@@ -38,6 +38,22 @@ test('skill discovery follows the provider and includes project, linked and glob
     assert.equal(skillPrompt('/cost', root, 'claude-code', undefined, home), '/cost');
     assert.equal(skillPrompt('/doctor', root, 'claude-code', undefined, home), '/doctor');
     assert.equal(skillPrompt('/compact 50%', root, 'claude-code', undefined, home), '/compact 50%');
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});
+
+test('/goal and /boost reach only the CLIs that run them from chat', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-commands-')), root = path.join(home, 'project');
+  try {
+    assert.equal(skillPrompt('/goal all tests pass', root, 'claude-code', undefined, home), '/goal all tests pass');
+    assert.equal(skillPrompt('/goal clear', root, 'antigravity', undefined, home), '/goal clear');
+    assert.equal(skillPrompt('/boost refactor the parser', root, 'antigravity', undefined, home), '/boost refactor the parser');
+    assert.throws(() => skillPrompt('/goal all tests pass', root, 'codex', undefined, home), /Terminal/);
+    assert.throws(() => skillPrompt('/boost x', root, 'claude-code', undefined, home), /ไม่มีคำสั่ง \/boost.*Antigravity/);
+    assert.throws(() => skillPrompt('/goal x', root, 'opencode', undefined, home), /ไม่มีคำสั่ง \/goal/);
+    assert.equal(cliCommand('/goal x', 'claude-code'), 'goal');
+    assert.equal(cliCommand('/boost x', 'claude-code'), undefined);
+    assert.equal(cliCommand('/compact', 'codex'), 'compact');
+    assert.equal(cliCommand('please /goal x', 'claude-code'), undefined);
   } finally { fs.rmSync(home, { recursive: true, force: true }); }
 });
 

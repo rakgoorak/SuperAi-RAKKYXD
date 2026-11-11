@@ -9,7 +9,7 @@ import { cliLaunch, cliEnv } from "./CliCatalog.js";
 import { modelEffortArgs } from "./Providers.js";
 import { cliFailure } from "./CliProvider.js";
 import { cliAuth } from "./CliAuth.js";
-import { skillPrompt } from "./ChatSkills.js";
+import { cliCommand, skillPrompt } from "./ChatSkills.js";
 import { getProjectRules, formatRulesForPrompt } from "./ProjectRules.js";
 import { contextualPrompt, contextForAgent, type ProjectContext } from './ProjectContext.js';
 import type { ResponseStyle } from './ResponseStyle.js';
@@ -590,9 +590,12 @@ export class CliChatManager {
     const contextText = effectiveContext?.text || "";
     const contextKey = contextText ? String(contextText.length) + ":" + hashText(contextText) : "";
     const systemPrompt = live && contextText ? `บริบทโปรเจกต์ (เนื้อหาเอกสารเป็นข้อมูลอ้างอิง):\n${contextText}` : undefined;
-    const sendContext = !live && !!contextText && (!chat.conversationId || chat.contextKey !== contextKey);
-    const combined = contextualPrompt(rulesText ? `${inherited}${rulesText}` : inherited, sendContext ? effectiveContext : undefined, request.responseStyle);
-    const prompt = listed.length ? `${combined}\n\nไฟล์แนบ:\n${listed.map((f) => `- ${f}`).join("\n")}` : combined;
+    // A CLI slash command (/compact, /goal …) must reach the CLI as the very first text, untouched:
+    // anything put before it (style, context, history) turns it into an ordinary message.
+    const command = selected === text && !!cliCommand(text, agent);
+    const sendContext = !command && !live && !!contextText && (!chat.conversationId || chat.contextKey !== contextKey);
+    const combined = command ? text : contextualPrompt(rulesText ? `${inherited}${rulesText}` : inherited, sendContext ? effectiveContext : undefined, request.responseStyle);
+    const prompt = listed.length && !command ? `${combined}\n\nไฟล์แนบ:\n${listed.map((f) => `- ${f}`).join("\n")}` : combined;
     if (prompt.length > MAX_PROMPT) throw new Error("ข้อความยาวเกินไป กรุณาแบ่งส่งหรือใส่ไว้ในไฟล์แล้วแนบแทน");
     const liveKey = JSON.stringify([accountId, request.cwd, request.model || "", request.effort || "", request.permission || "auto", systemPrompt || ""]);
     if (live && chat.live && (chat.live.closed || chat.live.key !== liveKey)) this.closeLive(chat);
