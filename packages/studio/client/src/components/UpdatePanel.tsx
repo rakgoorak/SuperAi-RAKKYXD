@@ -140,25 +140,40 @@ export function UpdatePrompt({ state, onError, onDetails }: { state: UpdateState
       {s === "waiting" ? (
         <>
           <button className="primary" disabled={busy} onClick={() => void run("force")}><RotateCw size={14} /> {hard ? "หยุดงานแล้วอัปเดตเลย" : "ติดตั้งเลยไม่ต้องรอ"}</button>
-          <button className="secondary" disabled={busy} onClick={() => void run("cancel")}><X size={14} /> ยกเลิก</button>
+          {!hard && <button className="secondary" disabled={busy} onClick={() => void run("cancel")}><X size={14} /> ยกเลิก</button>}
         </>
-      ) : (
+      ) : s === "installing" ? null : (
         <>
-          <button className="primary" disabled={busy} onClick={() => void run("apply")}><Download size={14} /> อัปเดตตอนนี้</button>
-          <button className="secondary" onClick={() => setLater(state!.latestVersion || "")}>ไว้ทีหลัง</button>
+          <button className="primary" disabled={busy || (hard && s !== "error")} onClick={() => void run("apply")}>
+            {s === "error" ? <><RefreshCw size={14} /> ลองอีกครั้ง</> : <><Download size={14} /> อัปเดตตอนนี้</>}
+          </button>
+          {!hard && <button className="secondary" onClick={() => setLater(state!.latestVersion || "")}>ไว้ทีหลัง</button>}
         </>
       )}
-      <button className="text-button" onClick={onDetails}><ExternalLink size={13} /> ดูรายละเอียด</button>
+      <button className="text-button" onClick={onDetails}>มีอะไรใหม่</button>
     </div>
   );
 
-  return (
-    <aside className={`update-prompt ${hard ? "hard" : "soft"}`} aria-label="แจ้งเตือนการอัปเดต">
-      <div className="update-prompt-head">
-        <strong>{hard ? "จำเป็นต้องอัปเดต" : `มีเวอร์ชันใหม่ v${state!.latestVersion}`}</strong>
-        {!hard && <button className="icon-button" onClick={() => setLater(state!.latestVersion || "")} title="ปิด"><X size={14} /></button>}
+  if (hard)
+    return (
+      <div className="update-gate" role="alertdialog" aria-modal="true" aria-labelledby="update-gate-title">
+        <section>
+          <span className="update-kind hard">ต้องอัปเดต</span>
+          <h2 id="update-gate-title">อัปเดตเป็น v{state!.latestVersion} ก่อนใช้งานต่อ</h2>
+          <p>เวอร์ชันนี้แก้ปัญหาสำคัญ จึงต้องอัปเดตก่อน โปรแกรมจะติดตั้งให้เองแล้วเปิดกลับมาที่เดิม แท็บที่เปิดอยู่จะคุยต่อจากเดิม</p>
+          <p className={`update-status ${s === "error" ? "danger-text" : ""}`} role="status">
+            {s !== "error" && <LoaderCircle size={14} className="spin" />} {s === "error" ? state!.error : statusLine(state!)}
+          </p>
+          {s === "downloading" && <progress max={100} value={state!.progress || 0} aria-label="ความคืบหน้าการดาวน์โหลด" />}
+          {actions}
+        </section>
       </div>
-      <p>{statusLine(state!)}</p>
+    );
+
+  return (
+    <aside className="update-toast" role="status" aria-live="polite">
+      <strong>มีเวอร์ชันใหม่ v{state!.latestVersion}</strong>
+      <small>{s === "available" || s === "ready" ? "อัปเดตแล้วโปรแกรมจะเปิดกลับมาที่เดิม งานไม่หาย" : statusLine(state!)}</small>
       {actions}
     </aside>
   );
