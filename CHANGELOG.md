@@ -6,7 +6,7 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
-## [1.0.46] - 2026-11-13
+## [1.0.47] - 2026-11-13
 
 ### Added
 - The whole app is available in English, Japanese and Chinese as well as Thai:
