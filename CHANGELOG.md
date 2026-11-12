@@ -6,6 +6,19 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.0.43] - 2026-11-12
+
+### Fixed
+- Codex could not edit files on Windows ("blocked by policy") when its account
+  folder had no Windows sandbox configured: every account added in the app, and
+  machines without the Codex desktop app. The app now enables the sandbox itself.
+
+### Changed
+- The permission menu offers the same short list for every AI: read only, ask
+  first, automatic, full access.
+- The "ask before working" switch is gone; the AI decides when to ask first.
+- Shorter chat options panel and footer.
+
 ## [1.0.42] - 2026-11-11
 
 ### Added
