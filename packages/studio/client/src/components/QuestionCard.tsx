@@ -57,7 +57,7 @@ export function QuestionCard({ item, sessionId, onError }: { item: QuestionItem;
         const prefs = chatPrefs(sessionId);
         await post(`/api/terminals/${sessionId}/chat`, {
           text: result.reply, model: prefs.model, effort: prefs.effort, permission: prefs.permission,
-          responseStyle: prefs.responseStyle, includeProjectContext: prefs.includeProjectContext, askFirst: false, queue: true,
+          responseStyle: prefs.responseStyle, includeProjectContext: prefs.includeProjectContext, queue: true,
         });
       }
     } catch (e) {

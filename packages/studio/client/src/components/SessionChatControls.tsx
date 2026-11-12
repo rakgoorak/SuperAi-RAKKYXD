@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
-import { CircleHelp, FileText, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { api, loginProvider } from '../api';
 import { useAccounts } from '../accounts';
 import { useModels, EFFORT_LABEL } from '../providers';
 import { isCloud } from '../providers';
 import { ModelCombo } from './ModelCombo';
 import { useProviderAccess } from './ProviderAccess';
-import { chatPrefs, hasChatPrefs, onChatCommand, setChatPrefs, PERMISSION_LABEL, type ChatPermission } from '../chatControls';
-import { permissionDescription, permissionLabel, providerIdentity } from '../providerIdentity';
+import { chatPrefs, hasChatPrefs, onChatCommand, permissionChoices, setChatPrefs, type ChatPermission } from '../chatControls';
 import { ProviderBadge } from './ProviderBadge';
 import { ComposerOptions } from './ComposerOptions';
 import { ResponseStyleSelect } from './ResponseStyleSelect';
@@ -27,7 +26,6 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
   const [permission, setPermission] = useState<ChatPermission>(chatPrefs(sessionId).permission);
   const [style, setStyle] = useState<ResponseStyle>(chatPrefs(sessionId).responseStyle);
   const [includeProjectContext, setIncludeProjectContext] = useState(chatPrefs(sessionId).includeProjectContext);
-  const [askFirst, setAskFirst] = useState(chatPrefs(sessionId).askFirst);
   const [ready, setReady] = useState(false);
   const [problem, setProblem] = useState('');
   const [busy, setBusy] = useState(false);
@@ -36,8 +34,15 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
   const { auth, checking, error: authError, check } = useProviderAccess(agent, accountId);
   const profileName = accountProviders.find(p => p.provider === agent)?.profiles.find(p => p.id === accountId)?.name || accountName;
   const efforts = (model && list?.modelEfforts?.[model]) || list?.efforts || [];
+  const choices = permissionChoices(agent);
+  const profiles = accountProviders.find(p => p.provider === agent)?.profiles.length || 0;
+  // A mode this AI no longer offers (saved by an older version) falls back to the default.
+  useEffect(() => {
+    if (!agent || choices.some(choice => choice.value === permission)) return;
+    setPermission('auto'); setChatPrefs(sessionId, { permission: 'auto' });
+  }, [agent, permission, sessionId]);
 
-  useEffect(() => { setIncludeProjectContext(chatPrefs(sessionId).includeProjectContext); setAskFirst(chatPrefs(sessionId).askFirst); }, [sessionId]);
+  useEffect(() => { setIncludeProjectContext(chatPrefs(sessionId).includeProjectContext); }, [sessionId]);
 
   useEffect(() => {
     api<{ rules: string; files: string[] }>(`/api/terminals/${sessionId}/rules`)
@@ -82,21 +87,15 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
 
   return (
     <div className="session-chat-controls" aria-label={`การตั้งค่าแชท ${name}`}>
-      {/* Claude-style footer: what the AI may do on the left; which AI, model and effort on the right. */}
+      {/* What the AI may do on the left; which AI, model and effort on the right. */}
       <select className="chat-permission-select" aria-label={`สิทธิ์ของ ${name} ในข้อความถัดไป`} value={permission} disabled={disabled}
-        title={agent ? permissionDescription(agent, permission) : 'CLI ที่ทำงานเบื้องหลังถามก่อนไม่ได้ จึงเลือกไว้ล่วงหน้า'}
+        title={choices.find(choice => choice.value === permission)?.hint || 'สิ่งที่ AI ทำได้เองในข้อความถัดไป'}
         onChange={(e) => { const value = e.target.value as ChatPermission; setPermission(value); setChatPrefs(sessionId, { permission: value }); }}>
-        {(Object.keys(PERMISSION_LABEL) as ChatPermission[]).filter(p => p === 'review' ? agent === 'codex' : p === 'full' ? agent === 'codex' || agent === 'claude-code' : p === 'ask' ? agent === 'claude-code' || agent === 'codex' || agent === 'opencode' : p === 'approve_all' ? agent === 'opencode' || agent === 'antigravity' : true).map((p) => <option key={p} value={p}>{p === 'auto' ? 'Auto' : permissionLabel(agent, p)}</option>)}
-        {agent === 'antigravity' && <option value="ask-unavailable" disabled>Ask for approval (ใช้ใน Terminal)</option>}
+        {choices.map(choice => <option key={choice.value} value={choice.value} title={choice.hint}>{choice.label}</option>)}
       </select>
-      <button type="button" className={`chat-ask-first ${askFirst ? 'on' : ''}`} aria-pressed={askFirst} disabled={disabled}
-        title={askFirst ? 'AI จะถามเรื่องที่ยังไม่ชัดเป็นตัวเลือกก่อนเริ่มงาน กดเพื่อปิด' : 'ให้ AI ถามเรื่องที่ยังไม่ชัดเป็นตัวเลือกก่อนเริ่มงาน'}
-        onClick={() => { const next = !askFirst; setAskFirst(next); setChatPrefs(sessionId, { askFirst: next }); }}>
-        <CircleHelp size={13} /> ถามก่อนทำ
-      </button>
       {problem && <div className="chat-composer-problem" role="alert">{problem}<button type="button" onClick={() => setProblem('')} aria-label="ปิดข้อความ"><X size={12} /></button></div>}
       {agent && <ProviderBadge provider={agent} />}
-      {ready && <span className="session-account-name" title="การเชื่อมต่อของห้องนี้">{isCloud(agent) ? 'API Key' : profileName}</span>}
+      {ready && profiles > 1 && <span className="session-account-name" title="บัญชีที่ห้องนี้ใช้">{profileName}</span>}
       <div className="chat-model-controls">
         <label>Model<ModelCombo label={`Model ในแชท ${name}`} value={model} options={list?.models || []} onOpen={refreshModels} placeholder="ค่าเริ่มต้นของ CLI" disabled={disabled || !ready}
           onChange={(value) => { setModel(value); setEffort(''); }} /></label>
@@ -106,27 +105,13 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
       </div>
       <ComposerOptions label="ตัวเลือก AI" attention={!!authError || auth?.status === 'login-required' || auth?.status === 'not-installed'}>
         <ResponseStyleSelect value={style} disabled={disabled || !ready} onChange={value => { setStyle(value); setChatPrefs(sessionId, { responseStyle: value }); }} />
-        <label><input type="checkbox" checked={includeProjectContext} disabled={disabled} onChange={e => { setIncludeProjectContext(e.target.checked); setChatPrefs(sessionId, { includeProjectContext: e.target.checked }); }} /> แนบบริบทโปรเจกต์จาก SuperAi</label>
-        <small>ปิดเพื่อลดบริบทที่ SuperAi เพิ่มในการส่งครั้งถัดไป CLI อาจอ่านกฎของตัวเองและเก็บบริบทที่ส่งไปแล้วในประวัติ</small>
-        {agent && <p className="permission-description">{permissionLabel(agent, permission)} · {permissionDescription(agent, permission)}</p>}
+        <label title="ปิดเพื่อลดข้อความที่ SuperAi แนบไปกับข้อความถัดไป"><input type="checkbox" checked={includeProjectContext} disabled={disabled} onChange={e => { setIncludeProjectContext(e.target.checked); setChatPrefs(sessionId, { includeProjectContext: e.target.checked }); }} /> แนบบริบทโปรเจกต์{rules?.files?.length ? ` และกฎ (${rules.files.join(', ')})` : ''}</label>
         <section className={`composer-option-account ${auth?.status || ''}`} aria-label="บัญชีของ session">
-          <strong>{profileName || 'บัญชี AI'}</strong>
+          <strong>{isCloud(agent) ? 'API Key' : profileName || 'บัญชี AI'}</strong>
           <p>{authError || auth?.note || (agent ? 'กำลังตรวจบัญชี…' : 'กำลังโหลดการตั้งค่า…')}</p>
           <button type="button" className="text-button" disabled={checking || busy || !agent} onClick={() => void check(true)}>ตรวจบัญชีอีกครั้ง</button>
           {!isCloud(agent) && auth?.status !== 'authenticated' && auth?.status !== 'not-installed' && <button type="button" className="text-button" disabled={!agent || busy || disabled} onClick={() => void login()}>เข้าสู่ระบบใน Terminal</button>}
         </section>
-        {rules?.files && rules.files.length > 0 && (
-          <section className="composer-option-rules" aria-label="กฎประจำโปรเจกต์" style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, margin: '8px 0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--accent)' }}>
-              <FileText size={13} />
-              <strong>กฎโปรเจกต์: {rules.files.join(', ')}</strong>
-            </div>
-            <small style={{ color: 'var(--dim)', fontSize: 11, display: 'block', marginTop: 2 }}>
-              ส่งคำสั่งและแนวทางจากไฟล์ให้ AI อัตโนมัติ
-            </small>
-          </section>
-        )}
-        {agent && <section className="composer-option-capabilities"><p>{providerIdentity(agent).connection}</p><p>{providerIdentity(agent).attachments}</p><small>{agent === 'claude-code' ? 'เครื่องมือที่เกินสิทธิ์ที่เลือก Claude จะขออนุญาตในแชทก่อน' : agent === 'codex' ? 'Ask for approval แสดงคำขอรันคำสั่งและแก้ไฟล์ในแชท คำขอชนิดอื่นอาจต้องใช้ Terminal' : agent === 'opencode' ? 'Ask for approval แสดงคำขอที่ OpenCode ส่งมา โดยยังใช้กฎสิทธิ์ที่ตั้งไว้' : 'ตั้งสิทธิ์ไว้ล่วงหน้า · ยังไม่ถามอนุมัติเป็นรายเครื่องมือ'}</small></section>}
       </ComposerOptions>
       {modelError && <small className="muted">{modelError} · พิมพ์ชื่อ Model เองได้</small>}
     </div>

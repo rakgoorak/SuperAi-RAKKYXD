@@ -119,7 +119,7 @@ try {
   const target = page.getByLabel('เป้าหมายคำสั่ง', { exact: true });
   await target.selectOption('active');
   await page.locator('.session-tabs .session-tab').filter({ hasText: 'One' }).locator('button').first().click();
-  check(JSON.stringify(await target.locator('option').allTextContents().then(items => items.map(text => text.trim()))) === JSON.stringify(['ที่เลือก', 'ทุก session']), 'composer offers exactly selected-session and all-session targets');
+  check(JSON.stringify(await target.locator('option').allTextContents().then(items => items.map(text => text.trim()))) === JSON.stringify(['ห้องนี้', 'ทุกห้อง']), 'composer offers exactly selected-session and all-session targets');
   const composer = page.getByLabel('คำสั่ง', { exact: true });
   const pane = page.locator('[data-session-id="ui-0"]');
   // A provider burst must preserve its final text and leave the composer usable.

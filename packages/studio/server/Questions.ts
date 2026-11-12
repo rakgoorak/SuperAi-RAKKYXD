@@ -73,14 +73,12 @@ export function parseQuestions(raw: string | object): { intro: string; questions
 export const QUESTION_FENCE = "superai-questions";
 
 /**
- * What every chat turn tells the AI. Works in any permission mode because it is only text.
- * `askFirst`: the user wants all open questions settled before any work starts.
+ * What every chat turn tells the AI. Works in any permission mode because it is only text. The AI
+ * decides for itself whether a request needs questions first; there is no switch for it.
  */
-export function questionRules(askFirst: boolean): string {
+export function questionRules(): string {
   return [
-    askFirst
-      ? "ผู้ใช้ขอให้ถามก่อนเริ่มงานเสมอ: ก่อนแก้ไฟล์หรือรันคำสั่งใด ๆ ให้ตรวจคำขอและโปรเจกต์ก่อน ถ้ายังมีเรื่องที่ต้องให้ผู้ใช้ตัดสินใจ (เป้าหมาย ขอบเขต วิธีทำ) ให้ถามทั้งหมดในครั้งเดียวแล้วหยุดรอคำตอบ ถ้าทุกอย่างชัดแล้วให้ลงมือได้เลยโดยไม่ต้องถาม"
-      : "ถ้าทำต่อไม่ได้อย่างสมเหตุสมผลโดยไม่ให้ผู้ใช้ตัดสินใจก่อน ให้ถามแล้วหยุดรอคำตอบ นอกนั้นให้ทำงานต่อได้เลย",
+    "ตัดสินใจเองว่าต้องถามผู้ใช้ก่อนหรือไม่: ถ้าคำขอชัดเจนหรือเป็นงานเล็ก ให้ลงมือทำเลยโดยไม่ต้องถาม ถ้าเป็นงานที่ต้องแก้หลายส่วนและยังมีเรื่องที่ผู้ใช้ต้องตัดสินใจ (เป้าหมาย ขอบเขต วิธีทำ) ซึ่งเดาผิดแล้วต้องทำใหม่ ให้ถามทั้งหมดในครั้งเดียวก่อนแก้ไฟล์หรือรันคำสั่ง แล้วหยุดรอคำตอบ",
     `เวลาถาม ให้เขียนคำถามเป็นบล็อกโค้ดภาษา ${QUESTION_FENCE} ที่มี JSON อยู่ข้างใน ไว้ท้ายข้อความ แล้วจบข้อความทันที โปรแกรมจะแสดงเป็นตัวเลือกให้ผู้ใช้กด`,
     ASK_RULES,
   ].join("\n");

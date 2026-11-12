@@ -187,7 +187,8 @@ test('the manager streams items, resumes the next turn and rejects overlapping t
 
   chats.send('s1', { agent: 'codex', cwd: process.cwd(), text: 'ต่อ' });
   const resumed = fake.calls[1].args;
-  assert.deepEqual(resumed.slice(resumed.indexOf('exec'), resumed.indexOf('exec') + 3), ['exec', 'resume', 'th-1']);
+  assert.ok(resumed.indexOf('resume') > resumed.indexOf('exec') && resumed.indexOf('resume') < resumed.indexOf('--json'), 'resume comes right after exec and its options');
+  assert.equal(resumed[resumed.indexOf('resume') + 1], 'th-1');
   fake.finish(fake.calls[1].proc, [], 1, '{"message":"usage limit reached"}');
   await settle(chats, 's1');
   const last = chats.snapshot('s1').items.at(-1)!;

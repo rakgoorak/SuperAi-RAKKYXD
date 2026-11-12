@@ -127,10 +127,10 @@ try {
   await page.locator('.session-chat-controls .provider-badge[aria-label="ChatGPT (Codex)"]').waitFor();
   // Claude-style footer: permission on the left, provider/model/effort on the right, the rest folded.
   check(await page.locator('.session-chat-controls .chat-permission-select').isVisible() && await page.locator('.session-chat-controls .chat-effort-select').isVisible(), 'permission and effort sit in the footer under the composer');
-  await page.locator('.session-chat-controls .chat-permission-select').selectOption('edit');
+  await page.locator('.session-chat-controls .chat-permission-select').selectOption('auto');
   await page.locator('.session-chat-controls .chat-effort-select').selectOption('low');
   await page.locator('.session-chat-controls .composer-options > summary').click();
-  check(await page.locator('.permission-description').innerText().then(text => text.includes('ไม่ได้แยกสิทธิ์')), 'Codex permission explanation states that edit also permits command execution');
+  check(await page.locator('.session-chat-controls .chat-permission-select option').allTextContents().then(items => JSON.stringify(items) === JSON.stringify(['อ่านอย่างเดียว', 'ถามก่อนทำ', 'ทำเองอัตโนมัติ', 'เต็มสิทธิ์'])), 'every AI offers the same short list of permissions');
   await page.screenshot({ path: path.join(output, 'options-desktop.png') });
   await page.keyboard.press('Escape');
   check(await page.locator('.session-chat-controls .composer-options > summary').evaluate(element => element === document.activeElement), 'Escape restores focus to the options control');

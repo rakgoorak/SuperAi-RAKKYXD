@@ -702,7 +702,6 @@ export function App() {
               permission: prefs.permission,
               responseStyle: prefs.responseStyle,
               includeProjectContext: prefs.includeProjectContext,
-              askFirst: prefs.askFirst,
               ...(skillId ? { skillId } : {}),
               attachments: saved.map((file) => file.path),
               // Ctrl+Enter: wait behind a running turn instead of being refused.
@@ -1814,10 +1813,10 @@ export function App() {
                         onChange={(e) => setTarget(e.target.value === "all" ? "all" : "active")}
                       >
                         <option value="active">
-                          ที่เลือก
+                          ห้องนี้
                         </option>
                         <option value="all">
-                          ทุก session
+                          ทุกห้อง
                         </option>
                       </select>
                     )}

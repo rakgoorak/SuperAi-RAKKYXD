@@ -23,7 +23,7 @@ test('OpenCode may read the temp folder; the user keeps their own rules', () => 
 test('what OpenCode refused is read from its stderr', () => {
   const stderr = '\x1b[93m\x1b[1m! \x1b[0mpermission requested: external_directory (C:\Users\me\*); auto-rejecting\n';
   assert.deepEqual(rejectedPermissions(stderr), ['เข้าถึงโฟลเดอร์นอกโปรเจกต์ C:\Users\me\*']);
-  assert.match(openCodeNoAnswer(stderr, false), /หยุดก่อนตอบ.*C:\Users\me\\*.*Ask for approval/s);
+  assert.match(openCodeNoAnswer(stderr, false), /หยุดก่อนตอบ.*C:\Users\me\\*.*ถามก่อนทำ/s);
   assert.match(openCodeNoAnswer('', true), /หยุดก่อนตอบ/);
   assert.match(openCodeNoAnswer('', false), /ไม่ส่งคำตอบกลับมา/);
 });

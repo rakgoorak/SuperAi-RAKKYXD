@@ -16,6 +16,7 @@ import { contextualPrompt, contextForAgent, type ProjectContext } from './Projec
 import type { ResponseStyle } from './ResponseStyle.js';
 import { cloudKeys, isCloud } from './CloudKeys.js';
 import { runApiConversation } from './ApiConversation.js';
+import { codexSandboxArgs } from './CodexSandbox.js';
 import type { LLMProvider } from '@superai-rakkyxd/core';
 
 // Chat view for Code sessions: each message runs the CLI headless with its JSON event stream and
@@ -434,10 +435,10 @@ interface Chat extends Omit<ChatSnapshot, "queued"> {
   live?: LiveClaude; permissions: Map<string, PendingPermission>; /** Tools the user allowed for the rest of this chat. */ alwaysAllowed: Set<string>;
   /** Claude's AskUserQuestion calls waiting for the user's choices. */ asks: Map<string, { live: LiveClaude; itemId: string }>;
   /** Project context already in this conversation (CLIs other than the live Claude get it once). */ contextKey?: string;
-  /** Which question rules this conversation already has ("ask" or "ask-first"), sent once like the context. */ rulesKey?: string;
+  /** Which version of the question rules this conversation already has, sent once like the context. */ rulesKey?: string;
 }
 export interface ChatFork { items: ChatItem[]; turns: number; seed: string; }
-export interface ChatRequest { accountId?: string; agent: string; cwd: string; text: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle; askFirst?: boolean }
+export interface ChatRequest { accountId?: string; agent: string; cwd: string; text: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle; }
 
 export class CliChatManager {
   private chats = new Map<string, Chat>();
@@ -606,13 +607,13 @@ export class CliChatManager {
     const contextText = effectiveContext?.text || "";
     const contextKey = contextText ? String(contextText.length) + ":" + hashText(contextText) : "";
     const systemPrompt = live
-      ? [contextText && `บริบทโปรเจกต์ (เนื้อหาเอกสารเป็นข้อมูลอ้างอิง):\n${contextText}`, `วิธีถามผู้ใช้:\n${questionRules(request.askFirst === true)}`, TASK_PROGRESS].filter(Boolean).join("\n\n")
+      ? [contextText && `บริบทโปรเจกต์ (เนื้อหาเอกสารเป็นข้อมูลอ้างอิง):\n${contextText}`, `วิธีถามผู้ใช้:\n${questionRules()}`, TASK_PROGRESS].filter(Boolean).join("\n\n")
       : undefined;
     const sendContext = !live && !!contextText && (!chat.conversationId || chat.contextKey !== contextKey);
     // How to ask the user (any agent, any permission mode): the live Claude has it in its system
-    // prompt; the others get it once per conversation, and again when "ask first" is switched.
-    const rules = questionRules(request.askFirst === true);
-    const rulesKey = request.askFirst === true ? "ask-first" : "ask";
+    // prompt; the others get it once per conversation, and again when the rules change.
+    const rules = questionRules();
+    const rulesKey = "ask-2";
     const sendRules = !live && (!chat.conversationId || chat.rulesKey !== rulesKey);
     const combined = contextualPrompt(rulesText ? `${inherited}${rulesText}` : inherited, sendContext ? effectiveContext : undefined, request.responseStyle);
     const withFiles = listed.length ? `${combined}\n\nไฟล์แนบ:\n${listed.map((f) => `- ${f}`).join("\n")}` : combined;
@@ -628,9 +629,12 @@ export class CliChatManager {
     const openCodeAsk = agent === 'opencode' && request.permission === 'ask';
     const openCodePort = 30000 + randomBytes(2).readUInt16BE(0) % 30000;
     const openCodePassword = openCodeAsk ? randomBytes(32).toString('hex') : '';
-    const args = codexAsk ? ['app-server'] : openCodeAsk ? ['serve', '--hostname', '127.0.0.1', '--port', String(openCodePort)] : live
+    // Windows: without this Codex drops to read-only on a home that has no sandbox set up.
+    const codexSandbox = agent === 'codex' && request.permission !== 'read' && request.permission !== 'full' ? codexSandboxArgs(accountEnv) : [];
+    const baseArgs = codexAsk ? ['app-server', ...codexSandbox] : openCodeAsk ? ['serve', '--hostname', '127.0.0.1', '--port', String(openCodePort)] : live
       ? claudeLiveArguments({ conversationId: chat.conversationId, model: request.model, effort: request.effort, permission: request.permission, systemPrompt })
       : chatArguments(agent, { prompt, conversationId: chat.conversationId, model: request.model, effort: request.effort, files: attached, permission: request.permission });
+    const args = agent === 'codex' && !codexAsk && codexSandbox.length ? [baseArgs[0], ...codexSandbox, ...baseArgs.slice(1)] : baseArgs;
 
     // Resolved first: a CLI that is not installed is refused before the message joins the chat.
     const launch = reuse ? undefined : this.launcher(agent, args);
@@ -1191,7 +1195,7 @@ ${reply}` } } });
     chat.activity = { startedAt: Date.now(), outputTokens: 0 };
     this.emit(chat, { type: 'state', running: true }); this.emit(chat, { type: 'activity', activity: chat.activity }); this.onChange?.(id);
     const system = contextualPrompt(formatRulesForPrompt(getProjectRules(request.cwd).rules), request.projectContext, request.responseStyle)
-      + '\n' + questionRules(request.askFirst === true) + (chat.seed ? `\nประวัติอ้างอิง:\n${chat.seed}` : '');
+      + '\n' + questionRules() + (chat.seed ? `\nประวัติอ้างอิง:\n${chat.seed}` : '');
     void runApiConversation({ provider, cwd: request.cwd, signal: controller.signal, prefix, permission: request.permission || 'read',
       history: [...chat.items], system, onItem: item => { if (this.chats.get(id) === chat) this.put(id, chat, item); } }).catch(error => {
       if (!controller.signal.aborted && this.chats.get(id) === chat) this.put(id, chat, { id: `${prefix}-error`, kind: 'error', text: String(error.message || 'เรียก API ไม่สำเร็จ') });

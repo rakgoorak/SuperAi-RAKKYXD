@@ -44,8 +44,7 @@ test('a question block is split from the reply text; anything else is left alone
   assert.equal(asked!.questions[0].options[0].recommended, true);
   assert.deepEqual(takeQuestions('```js\nconsole.log(1)\n```'), { text: '```js\nconsole.log(1)\n```', asked: null });
   assert.equal(takeQuestions('```superai-questions\nnot json\n```').asked, null, 'a broken block stays visible as text');
-  assert.match(questionRules(true), /ก่อนแก้ไฟล์หรือรันคำสั่ง/);
-  assert.doesNotMatch(questionRules(false), /ก่อนแก้ไฟล์หรือรันคำสั่ง/);
+  assert.match(questionRules(), /ตัดสินใจเองว่าต้องถามผู้ใช้ก่อนหรือไม่/, 'the AI decides; there is no switch');
 });
 
 test('answers are checked against the options before going back to the AI', () => {
@@ -62,10 +61,9 @@ test('answers are checked against the options before going back to the AI', () =
 test('any agent in any permission mode: the rules go with the prompt and the block becomes a card', async () => {
   const fake = spawner();
   const chats = new CliChatManager(fake.spawn as any, undefined, launch);
-  chats.send('c', { agent: 'codex', cwd: process.cwd(), text: 'ทำระบบ API key', permission: 'auto', askFirst: true });
+  chats.send('c', { agent: 'codex', cwd: process.cwd(), text: 'ทำระบบ API key', permission: 'auto' });
   const sentPrompt = fake.calls[0].stdin;
   assert.match(sentPrompt, /^ทำระบบ API key/);
-  assert.match(sentPrompt, /ก่อนแก้ไฟล์หรือรันคำสั่ง/, 'ask-first is on');
   assert.match(sentPrompt, /superai-questions/);
   fake.end(fake.calls[0].proc, [
     { type: 'thread.started', thread_id: 'th1' },

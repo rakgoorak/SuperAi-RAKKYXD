@@ -39,6 +39,6 @@ export function openCodeNoAnswer(stderr: string, toolRejected: boolean): string 
   const asked = rejectedPermissions(stderr);
   if (asked.length || toolRejected)
     return `OpenCode หยุดก่อนตอบ เพราะขอสิทธิ์ที่โหมดแชตตอบให้ไม่ได้${asked.length ? `: ${asked.join(", ")}` : ""} `
-      + "เลือกสิทธิ์ \"Ask for approval\" เพื่อให้มีปุ่มอนุมัติในแชต หรือ \"อนุมัติทั้งหมด\" แล้วส่งใหม่";
+      + "เลือกสิทธิ์ \"ถามก่อนทำ\" เพื่อให้มีปุ่มอนุมัติในแชต หรือ \"เต็มสิทธิ์\" แล้วส่งใหม่";
   return "OpenCode จบงานโดยไม่ส่งคำตอบกลับมา ลองส่งใหม่ หรือเปลี่ยนรุ่นในช่อง Model";
 }

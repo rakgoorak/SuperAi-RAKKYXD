@@ -15,17 +15,31 @@ export interface ChatPrefs {
   note: string;
   /** What the CLI may do on its own: read only, edit files, or edit and run commands. */
   permission: ChatPermission;
-  /** Ask all open questions (as a choice card) before starting any work. */
-  askFirst: boolean;
 }
 
 export type ChatPermission = 'read' | 'edit' | 'auto' | 'review' | 'full' | 'ask' | 'approve_all';
-export const PERMISSION_LABEL: Record<ChatPermission, string> = { read: 'อ่านอย่างเดียว', edit: 'แก้ไฟล์ได้', auto: 'อัตโนมัติ', review: 'Approve for me', full: 'Full access', ask: 'Ask for approval', approve_all: 'อนุมัติเครื่องมืออัตโนมัติ' };
+export const PERMISSION_LABEL: Record<ChatPermission, string> = { read: 'อ่านอย่างเดียว', edit: 'แก้ไฟล์ได้', auto: 'ทำเองอัตโนมัติ', review: 'Approve for me', full: 'เต็มสิทธิ์', ask: 'ถามก่อนทำ', approve_all: 'เต็มสิทธิ์' };
+
+/**
+ * The choices the composer offers: the same three or four for every AI, most careful first. The
+ * provider-specific modes behind them (Codex "review", "edit" without commands) are no longer
+ * offered; a session that saved one falls back to "auto".
+ */
+export function permissionChoices(agent: string): { value: ChatPermission; label: string; hint: string }[] {
+  const asks = ['claude-code', 'codex', 'opencode'].includes(agent);
+  const full: ChatPermission | null = agent === 'claude-code' || agent === 'codex' ? 'full' : agent === 'opencode' || agent === 'antigravity' ? 'approve_all' : null;
+  return [
+    { value: 'read', label: 'อ่านอย่างเดียว', hint: 'อ่านและวางแผนได้ ไม่แก้ไฟล์และไม่รันคำสั่ง' },
+    ...(asks ? [{ value: 'ask' as const, label: 'ถามก่อนทำ', hint: 'ขออนุญาตในแชตก่อนแก้ไฟล์หรือรันคำสั่งทุกครั้ง' }] : []),
+    { value: 'auto', label: 'ทำเองอัตโนมัติ', hint: 'แก้ไฟล์และรันคำสั่งในโฟลเดอร์โปรเจกต์ได้เอง (แนะนำ)' },
+    ...(full ? [{ value: full, label: 'เต็มสิทธิ์', hint: 'ไม่ถามและไม่จำกัดเฉพาะโฟลเดอร์โปรเจกต์ ใช้เมื่อไว้ใจงานนี้เท่านั้น' }] : []),
+  ];
+}
 const isPermission = (value: unknown): value is ChatPermission => typeof value === 'string' && Object.prototype.hasOwnProperty.call(PERMISSION_LABEL, value);
 
 const prefs = new Map<string, ChatPrefs>();
 const choices = new Set<string>();
-const EMPTY: ChatPrefs = { model: '', effort: '', skillId: '', blocked: false, note: '', permission: 'auto', responseStyle: 'normal', includeProjectContext: true, askFirst: false };
+const EMPTY: ChatPrefs = { model: '', effort: '', skillId: '', blocked: false, note: '', permission: 'auto', responseStyle: 'normal', includeProjectContext: true };
 
 export function hasChatPrefs(sessionId: string): boolean { chatPrefs(sessionId); return choices.has(sessionId); }
 
@@ -41,7 +55,7 @@ export function chatPrefs(sessionId: string): ChatPrefs {
     try {
       const saved = JSON.parse(localStorage.getItem(`superai-chat-prefs:${sessionId}`) || 'null');
       if (saved && typeof saved.model === 'string' && typeof saved.effort === 'string') {
-        prefs.set(sessionId, { ...EMPTY, model: saved.model, effort: saved.effort, permission: isPermission(saved.permission) ? saved.permission : 'auto', responseStyle: ['normal', 'concise', 'explanatory'].includes(saved.responseStyle) ? saved.responseStyle : 'normal', includeProjectContext: saved.includeProjectContext !== false, askFirst: saved.askFirst === true });
+        prefs.set(sessionId, { ...EMPTY, model: saved.model, effort: saved.effort, permission: isPermission(saved.permission) ? saved.permission : 'auto', responseStyle: ['normal', 'concise', 'explanatory'].includes(saved.responseStyle) ? saved.responseStyle : 'normal', includeProjectContext: saved.includeProjectContext !== false });
         choices.add(sessionId);
       }
     } catch {}
@@ -52,8 +66,8 @@ export function chatPrefs(sessionId: string): ChatPrefs {
 export function setChatPrefs(sessionId: string, patch: Partial<ChatPrefs>) {
   if ("model" in patch || "effort" in patch) choices.add(sessionId);
   prefs.set(sessionId, { ...chatPrefs(sessionId), ...patch });
-  if ("model" in patch || "effort" in patch || "permission" in patch || 'responseStyle' in patch || 'includeProjectContext' in patch || 'askFirst' in patch) {
-    try { const value = prefs.get(sessionId)!; localStorage.setItem(`superai-chat-prefs:${sessionId}`, JSON.stringify({ model: value.model, effort: value.effort, permission: value.permission, responseStyle: value.responseStyle, includeProjectContext: value.includeProjectContext, askFirst: value.askFirst })); } catch {}
+  if ("model" in patch || "effort" in patch || "permission" in patch || 'responseStyle' in patch || 'includeProjectContext' in patch) {
+    try { const value = prefs.get(sessionId)!; localStorage.setItem(`superai-chat-prefs:${sessionId}`, JSON.stringify({ model: value.model, effort: value.effort, permission: value.permission, responseStyle: value.responseStyle, includeProjectContext: value.includeProjectContext })); } catch {}
   }
   listeners.get(sessionId)?.forEach(listener => listener());
 }

@@ -10,7 +10,7 @@ test('Codex app-server asks and receives allow or deny without changing the sand
   let input='';proc.stdin.on('data',(c:Buffer)=>input+=c.toString());
   const calls=()=>input.split('\n').filter(Boolean).map(line=>JSON.parse(line));
   const say=(x:unknown)=>proc.stdout.write(JSON.stringify(x)+'\n');
-  const chats=new CliChatManager((()=>proc) as any,undefined,((_id:string,args:string[])=>{assert.deepEqual(args,['app-server']);return {command:'codex',args}}) as any);
+  const chats=new CliChatManager((()=>proc) as any,undefined,((_id:string,args:string[])=>{assert.deepEqual(args.filter((a,i)=>a!=='-c'&&args[i-1]!=='-c'),['app-server']);return {command:'codex',args}}) as any);
   chats.send('room',{agent:'codex',cwd:process.cwd(),text:'test',permission:'ask'});
   assert.equal(calls()[0].method,'initialize');say({id:1,result:{}});
   assert.equal(calls().find(m=>m.id===2).params.approvalPolicy,'untrusted');

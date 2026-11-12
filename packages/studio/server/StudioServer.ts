@@ -1167,7 +1167,6 @@ export class StudioServer {
           attachments,
           projectContext: req.body.includeProjectContext === false ? { text: '', instructions: false, files: [], preparedAt: Date.now(), chunks: [] } : buildProjectContext(session.wsId ? this.workspaceRegistry.getWorkspace(session.wsId) : undefined, session.cwd, { native: nativeRuleFiles(agent) }),
           responseStyle: style,
-          askFirst: req.body?.askFirst === true,
         // Enter while the chat is answering interrupts it (like Claude); Ctrl+Enter (`queue`) waits instead.
         }, { queue: req.body.queue === true, interrupt: req.body.queue !== true && req.body.interrupt !== false });
         session.restart = { ...session.restart, ...chosen };

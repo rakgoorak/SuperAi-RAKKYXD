@@ -1,3 +1,4 @@
+import { codexSandboxArgs } from "./CodexSandbox.js";
 import { accounts } from "./Accounts.js";
 import { openCodePermissionEnv } from "./OpenCodePermissions.js";
 import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptions } from "node:child_process";
@@ -156,11 +157,14 @@ export class CliProvider implements LLMProvider {
       const inline = longInline && inputFile
         ? `Read the full request from the file "${inputFile}" and follow it. Answer in Thai.`
         : prompt;
+      const promptArgs = promptArguments(id, this.allowTools, inputFile, this.modelOverride, this.allowReadTools, this.attachments, { effort: this.effort, prompt: inline });
+      // Windows: without this Codex drops to read-only on a home that has no sandbox set up.
+      const sandbox = id === "codex" && this.allowTools ? codexSandboxArgs(accounts.environment(id, this.accountId)) : [];
       const launch = this.dependencies.launch(
         id,
         [
           ...(longInline && temporary ? ["--add-dir", temporary] : []),
-          ...promptArguments(id, this.allowTools, inputFile, this.modelOverride, this.allowReadTools, this.attachments, { effort: this.effort, prompt: inline }),
+          ...(sandbox.length ? [promptArgs[0], ...sandbox, ...promptArgs.slice(1)] : promptArgs),
         ],
       );
       return await new Promise<LLMResponse>((resolve, reject) => {
