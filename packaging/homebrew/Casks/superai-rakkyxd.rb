@@ -1,17 +1,17 @@
 cask "superai-rakkyxd" do
-  version "1.0.44"
+  version "1.0.45"
   name "SuperAi & RAKKYXD"
   desc "Local-first desktop workspace for multiple AI coding assistants"
   homepage "https://github.com/rakgoorak/SuperAi-RAKKYXD"
 
   on_arm do
-    sha256 "9bd107d1a287e98608882fbfc7a2bcec1cc609511140aa9145acb5bcf6495caf"
+    sha256 "6281360fa355e8f832daec5852771a1fcfc184271d07afad68ce9b4dc54120e7"
     url "https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/download/v#{version}/SuperAi-RAKKYXD-macos-arm64.dmg",
         verified: "github.com/rakgoorak/SuperAi-RAKKYXD-releases/"
   end
 
   on_intel do
-    sha256 "b03ac3068b9a1af867b1452e1f692154f2647f1ab6a388e4392ff8ecad6576a7"
+    sha256 "b8eefd63e6a3074faaa3d078dc18dcbb6c7e12a3438425628855a7149d983c5b"
     url "https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/download/v#{version}/SuperAi-RAKKYXD-macos-x64.dmg",
         verified: "github.com/rakgoorak/SuperAi-RAKKYXD-releases/"
   end

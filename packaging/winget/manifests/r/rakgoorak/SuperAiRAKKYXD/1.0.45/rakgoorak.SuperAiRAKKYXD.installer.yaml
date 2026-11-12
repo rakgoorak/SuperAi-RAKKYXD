@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.10.0.schema.json
 PackageIdentifier: rakgoorak.SuperAiRAKKYXD
-PackageVersion: 1.0.44
+PackageVersion: 1.0.45
 InstallerLocale: en-US
 Platform:
   - Windows.Desktop
@@ -18,7 +18,7 @@ UpgradeBehavior: install
 ReleaseDate: 2026-11-12
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/download/v1.0.44/SuperAi-RAKKYXD-Setup.exe
-    InstallerSha256: D0E83BBCB3CE4C09BB026B4419ECCF43E45FF56CC06A13B12A411B1AA55661C7
+    InstallerUrl: https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/download/v1.0.45/SuperAi-RAKKYXD-Setup.exe
+    InstallerSha256: BE73BED73E652224EE1E89E5505FFEA409E710F13CF0B37F5B82584D4212D8C8
 ManifestType: installer
 ManifestVersion: 1.10.0
