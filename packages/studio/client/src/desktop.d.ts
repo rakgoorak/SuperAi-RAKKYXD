@@ -14,6 +14,7 @@ export interface UpdateState {
   status: "idle" | "checking" | "latest" | "none" | "available" | "unsupported" | "downloading" | "extracting" | "ready" | "waiting" | "installing" | "error";
   currentVersion: string;
   packaged: boolean;
+  storeManaged?: boolean;
   latestVersion?: string;
   /** Hard update: this version must be updated before the app can be used. */
   mandatory?: boolean;

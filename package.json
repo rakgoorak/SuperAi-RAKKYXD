@@ -32,7 +32,9 @@
     "test:conversation-ui": "node packages/desktop/test/conversation-workspace-smoke.mjs",
     "test:conversation-interactions": "node packages/desktop/test/conversation-interactions-smoke.mjs",
     "test:project-usability": "node packages/desktop/test/project-usability-smoke.mjs",
-    "test:provider-conversation": "node packages/desktop/test/provider-conversation-smoke.mjs"
+    "test:provider-conversation": "node packages/desktop/test/provider-conversation-smoke.mjs",
+    "package:msix": "node scripts/package-msix.mjs",
+    "test:msix": "node --test scripts/package-msix.test.mjs"
   },
   "devDependencies": {
     "@electron/packager": "^18.3.6",

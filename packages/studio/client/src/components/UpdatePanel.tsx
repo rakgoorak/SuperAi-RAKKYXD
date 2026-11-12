@@ -49,6 +49,15 @@ function statusLine(state: UpdateState) {
 export function UpdatePanel({ state, onError }: { state: UpdateState | null; onError: (m: string) => void }) {
   const { busy, run } = useUpdateAction(onError);
   if (!state) return <p className="muted">ปุ่มอัปเดตใช้ได้ในแอป Desktop เท่านั้น</p>;
+  if (state.storeManaged) return (
+    <div className="update-panel">
+      <p>เวอร์ชันที่ใช้อยู่: v{state.currentVersion}</p>
+      <p role="status">แอปนี้รับการอัปเดตผ่าน Microsoft Store</p>
+      <button className="secondary" disabled={busy} onClick={() => void run("check")}>
+        <ExternalLink size={14} /> เปิด Microsoft Store
+      </button>
+    </div>
+  );
   const s = state.status;
   return (
     <div className="update-panel">

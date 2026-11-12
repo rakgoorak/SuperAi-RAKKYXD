@@ -25,10 +25,13 @@ if (process.env.SUPERAI_TEST_MODE === "1" || process.argv.includes("--disable-gp
 }
 app.commandLine.appendSwitch("disable-gpu-process-crash-limit");
 // Same id as the installer's shortcuts: Windows groups the taskbar button with them and shows our toasts.
-if (process.platform === "win32" && app.isPackaged) app.setAppUserModelId("com.rakgoorak.superai");
+const appMetadata = JSON.parse(await fs.readFile(path.join(app.getAppPath(), "package.json"), "utf8"));
+const storeManaged = process.windowsStore === true || appMetadata.distribution === "microsoft-store";
+if (process.platform === "win32" && app.isPackaged && !storeManaged) app.setAppUserModelId("com.rakgoorak.superai");
 let window, server, browser;
 const updater = new Updater({
   currentVersion: app.getVersion(),
+  storeManaged,
   // SUPERAI_UPDATE_TEST lets a dev build exercise the real download/install path.
   packaged: app.isPackaged || process.env.SUPERAI_UPDATE_TEST === "1",
   onState: (state) => window?.webContents.send("update:state", state),
@@ -117,6 +120,11 @@ async function checkForUpdate() {
 ipcMain.handle("update:action", async (e, action) => {
   trusted(e);
   if (action === "state") return updater.state;
+  if (storeManaged) {
+    if (["check", "download", "apply", "force"].includes(action))
+      await shell.openExternal("https://apps.microsoft.com/detail/9NZH79QL515K");
+    return updater.state;
+  }
   if (action === "check") return updater.check();
   if (action === "download") return updater.download();
   if (action === "apply") return applyUpdate();
@@ -288,7 +296,7 @@ else {
         if (error?.code !== "ERR_ABORTED" && error?.errno !== -3) throw error;
       });
       await log(`SuperAi & RAKKYXD ${app.getVersion()} started at ${appUrl}`);
-      if (updater.packaged && !process.env.SUPERAI_TEST_MODE) {
+      if (updater.packaged && !storeManaged && !process.env.SUPERAI_TEST_MODE) {
         setTimeout(() => void checkForUpdate(), 4000);
         setInterval(() => void checkForUpdate(), 30 * 60_000);
       }
