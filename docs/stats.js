@@ -6,10 +6,12 @@
   var th = document.documentElement.lang === 'th';
   var T = th ? {
     downloads: 'ดาวน์โหลดแล้ว', installs: 'ติดตั้งใหม่ {n} ครั้ง · ไฟล์ ZIP และอัปเดตในแอป {m} ครั้ง',
-    online: 'คนกำลังใช้งานอยู่ตอนนี้', active: 'ผู้ใช้จริง', today: 'วันนี้', week: '7 วัน', month: '30 วัน'
+    online: 'กำลังใช้งานแอปอยู่ตอนนี้', countryNote: 'ประเทศนับจากอุปกรณ์ที่ออนไลน์ใน 15 นาทีล่าสุด',
+    noCountry: 'ไม่มีข้อมูลประเทศของอุปกรณ์ที่ออนไลน์ตอนนี้'
   } : {
     downloads: 'downloads', installs: '{n} new installs · {m} ZIP downloads and in-app updates',
-    online: 'using the app right now', active: 'Active users', today: 'today', week: '7 days', month: '30 days'
+    online: 'using the app right now', countryNote: 'Countries reflect devices online in the last 15 minutes',
+    noCountry: 'Country information is unavailable for current devices'
   };
   var locale = th ? 'th-TH' : 'en-US';
   var fmt = function (n) { return Number(n || 0).toLocaleString(locale); };
@@ -91,24 +93,38 @@
   function loadLive() {
     if (document.hidden) return;
     fetch(USAGE).then(function (r) { return r.ok ? r.json() : Promise.reject(); }).then(function (s) {
-      if (!s || !(s.month > 0)) return;
-      $('live-online').textContent = fmt(s.online);
+      if (!s || s.online == null) return;
+      var online = Number(s.online) || 0;
+      $('live-online').textContent = fmt(online);
       $('live-online-label').textContent = T.online;
-      $('live-sub').textContent = T.active + ' · ' + T.today + ' ' + fmt(s.today) + ' · ' + T.week + ' ' + fmt(s.week) + ' · ' + T.month + ' ' + fmt(s.month);
       var names = null;
       try { names = new Intl.DisplayNames([th ? 'th' : 'en'], { type: 'region' }); } catch (e) {}
       var list = $('live-countries');
       list.textContent = '';
-      (s.countries || []).forEach(function (c) {
-        if (!/^[A-Z]{2}$/.test(c.country)) return;
+      var countries = Array.isArray(s.onlineCountries) ? s.onlineCountries : null;
+      var represented = 0;
+      function addCountry(name, count) {
         var li = document.createElement('li'), b = document.createElement('b');
-        var name = c.country;
-        try { name = (names && names.of(c.country)) || c.country; } catch (e) {}
         li.textContent = name;
-        b.textContent = fmt(c.users);
+        b.textContent = fmt(count);
         li.appendChild(b);
         list.appendChild(li);
-      });
+      }
+      if (countries) {
+        countries.forEach(function (c) {
+          if (!c || !/^[A-Z]{2}$/.test(c.country)) return;
+          var count = Number(c.users) || 0;
+          if (count <= 0) return;
+          var name = c.country;
+          try { name = (names && names.of(c.country)) || c.country; } catch (e) {}
+          represented += count;
+          addCountry(name, count);
+        });
+        if (represented < online) addCountry(th ? 'ไม่ทราบประเทศ' : 'Location unavailable', online - represented);
+        $('live-note').textContent = T.countryNote;
+      } else {
+        $('live-note').textContent = T.noCountry;
+      }
       $('live').hidden = false;
       $('stats').hidden = false;
     }).catch(function () {});
