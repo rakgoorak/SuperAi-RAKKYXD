@@ -80,7 +80,7 @@ try {
  await page.waitForTimeout(150);
  assert.equal(await model.inputValue(),'');assert.equal(await page.getByLabel('Effort ในแชท One',{exact:true}).inputValue(),'');
  const firstChat=page.locator('[data-session-id="fixture-0"] .chat-view');
- await firstChat.getByRole('button',{name:'แก้ข้อความแล้วส่งใหม่',exact:true}).click();
+ await firstChat.getByRole('button',{name:'แก้ไขข้อความ',exact:true}).first().click();
  assert.equal(await page.getByLabel('คำสั่ง',{exact:true}).inputValue(),'previous fixture-0');
  const beforeRetry=sent.length;
  await firstChat.getByRole('button',{name:'สร้างคำตอบใหม่',exact:true}).click();

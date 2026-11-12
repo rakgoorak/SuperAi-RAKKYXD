@@ -543,6 +543,10 @@ try {
   await openTeam('Chat');
   check(await page.locator('.conversation-scroll .seat-picker, .chat-model-menu').count() === 0, 'Chat has one team editor and no duplicate model picker in the conversation or composer');
   const summaryToggle = teamDialog.getByRole('checkbox', { name: 'ให้ AI สรุปผลรวม', exact: true });
+  // A new Chat team has no summarizer; turn it on and save so there is a saved choice to restore.
+  await summaryToggle.check();
+  await teamDialog.getByRole('button', { name: 'บันทึกทีม', exact: true }).click();
+  await openTeam('Chat');
   await summaryToggle.uncheck();
   check(await teamDialog.getByLabel('ชื่อผู้สรุป', { exact: true }).count() === 0, 'turning off summarization hides its model fields');
   await teamDialog.getByRole('button', { name: 'ยกเลิก', exact: true }).click();

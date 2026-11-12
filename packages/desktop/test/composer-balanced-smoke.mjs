@@ -57,11 +57,11 @@ try {
   await page.locator('.session-tab').filter({ hasText: 'Codex ·' }).locator('button').first().click();
   const composer = page.getByLabel('คำสั่ง', { exact: true });
   const footer = page.getByLabel('การตั้งค่าข้อความ', { exact: true });
-  await footer.getByLabel('Model ในแชท Codex · gpt-6.1-sol', { exact: true }).waitFor();
+  await footer.getByRole('combobox', { name: 'Model ในแชท Codex · gpt-6.1-sol', exact: true }).waitFor();
   await page.locator('.chat-model-controls .model-combo-toggle').click();
   await page.getByRole('option', { name: 'gpt-6.1-terra', exact: true }).waitFor();
   check(modelReads > 1, 'opening the model picker refreshes the provider catalog without restarting');
-  check(await footer.getByLabel('Model ในแชท Codex · gpt-6.1-sol', { exact: true }).inputValue() === 'gpt-6.1-sol', 'refreshing the model catalog preserves the selected model');
+  check(await footer.getByRole('combobox', { name: 'Model ในแชท Codex · gpt-6.1-sol', exact: true }).inputValue() === 'gpt-6.1-sol', 'refreshing the model catalog preserves the selected model');
   await page.keyboard.press('Escape');
   check(!await page.getByRole('region', { name: 'บริบทและการทำงาน', exact: true }).isVisible(), 'project context starts folded without a floating pin row');
   check(await composer.getAttribute('placeholder') === 'พิมพ์ข้อความ…', 'short placeholder is independent of the room title');
@@ -116,7 +116,8 @@ try {
   await page.locator('.right-dock:visible').waitFor();
   const narrow = await geometry();
   check(Math.abs(middle(narrow.field) - middle(narrow.mic)) < 4 && narrow.box.height <= 60, 'narrow preview keeps writing and actions on the same row');
-  check(Math.abs(middle(narrow.permission) - middle(narrow.options)) < 4, 'narrow metadata wraps into two complete rows without a stranded options icon');
+  await page.screenshot({ path: path.join(output, 'narrow.png') });
+  check(Math.abs(middle(narrow.folder) - middle(narrow.options)) < 4 && narrow.options.right > narrow.model.x && narrow.footer.height <= 62 && narrow.permission.y > narrow.folder.y, 'narrow metadata wraps into two complete rows: folder and branch with the options icon, then the AI settings');
   const footerBounds = await footer.boundingBox();
   check(footerBounds.x >= 0 && footerBounds.x + footerBounds.width <= 1024 && await composer.isVisible(), 'narrow preview pane retains the writing area and metadata controls');
   await page.screenshot({ path: path.join(output, 'preview.png') });
