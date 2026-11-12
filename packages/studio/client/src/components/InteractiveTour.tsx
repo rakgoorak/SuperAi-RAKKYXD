@@ -310,6 +310,7 @@ export function InteractiveTour({ active, onClose }: Props) {
                 onClick={handleClose}
                 className="ml-1 p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                 title={t('tour.skip', 'ข้ามทัวร์ (Esc)')}
+                aria-label={t('tour.skip', 'ข้ามทัวร์ (Esc)')}
               >
                 <X size={16} />
               </button>
