@@ -1492,6 +1492,9 @@ const text: Record<string, string> = {
   "เปิดไมโครโฟนไม่ได้: {0}": "无法打开麦克风: {0}",
   "ยังไม่ได้เปิดไมโครโฟน": "麦克风尚未打开",
   "ระบบแปลงเสียงหยุดทำงาน": "语音转换系统已停止工作",
-  "ปิดโหมดเสียงแล้ว": "语音模式已关闭"
+  "ปิดโหมดเสียงแล้ว": "语音模式已关闭",
+  "อัปเดตผ่าน Microsoft Store": "通过 Microsoft Store 更新",
+  "แอปนี้รับการอัปเดตผ่าน Microsoft Store": "此应用通过 Microsoft Store 获取更新",
+  "เปิด Microsoft Store": "打开 Microsoft Store"
 };
 export default text;

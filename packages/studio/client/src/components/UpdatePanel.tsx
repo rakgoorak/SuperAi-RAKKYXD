@@ -69,6 +69,17 @@ export function UpdatePanel({ state, onError }: { state: UpdateState | null; onE
   }, []);
 
   if (!state) return <p className="muted">{tr("ปุ่มอัปเดตใช้ได้ในแอป Desktop เท่านั้น")}</p>;
+  if (state.storeManaged) return (
+    <div className="update-panel">
+      <div className="update-versions">
+        <div><small>{t("updates.current_version", "เวอร์ชันที่ใช้อยู่")}</small><strong>v{state.currentVersion}</strong></div>
+      </div>
+      <p className="update-status" role="status">{tr("แอปนี้รับการอัปเดตผ่าน Microsoft Store")}</p>
+      <button className="secondary" disabled={busy} onClick={() => void run("check")}>
+        <ExternalLink size={14} /> {tr("เปิด Microsoft Store")}
+      </button>
+    </div>
+  );
   const s = state.status;
   return (
     <div className="update-panel">

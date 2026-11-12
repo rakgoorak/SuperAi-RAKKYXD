@@ -36,6 +36,20 @@ test("checksum lines and install targets are parsed safely", () => {
 
 const release = (version, assets) => new Response(JSON.stringify({ tag_name: `v${version}`, body: "notes", html_url: "https://github.com/x/y/releases/tag/v" + version, assets }));
 
+test("Store builds never request GitHub updates or write an update payload", async () => {
+  let requests = 0;
+  const u = new Updater({ currentVersion: "1.0.33", packaged: true, storeManaged: true,
+    http: async () => { requests++; throw new Error("Store must not fetch GitHub"); } });
+  assert.equal((await u.check()).storeManaged, true);
+  assert.equal(requests, 0);
+  // Even stale or forged ready state must not reach download/install filesystem operations.
+  u.set({ status: "available", asset: { url: "https://github.com/fake.zip" } });
+  await assert.rejects(u.download(), /Microsoft Store/);
+  u.set({ status: "ready", source: "unused", work: "unused" });
+  await assert.rejects(u.install(), /Microsoft Store/);
+  assert.equal(requests, 0);
+});
+
 test("check reports available, latest and missing releases without downloading", async () => {
   const assets = [{ name: `SuperAi-RAKKYXD-v2.0.0-${process.platform === "win32" ? "windows" : "macos"}-${process.arch}.zip`, size: 10, browser_download_url: "https://github.com/a.zip" }];
   let u = new Updater({ currentVersion: "1.0.0", packaged: true, http: async () => release("2.0.0", assets) });

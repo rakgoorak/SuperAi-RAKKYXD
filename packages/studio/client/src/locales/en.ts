@@ -1492,6 +1492,9 @@ const text: Record<string, string> = {
   "เปิดไมโครโฟนไม่ได้: {0}": "Cannot open the microphone: {0}",
   "ยังไม่ได้เปิดไมโครโฟน": "The microphone is not on yet",
   "ระบบแปลงเสียงหยุดทำงาน": "The speech system stopped working",
-  "ปิดโหมดเสียงแล้ว": "Voice mode turned off"
+  "ปิดโหมดเสียงแล้ว": "Voice mode turned off",
+  "อัปเดตผ่าน Microsoft Store": "Updates through the Microsoft Store",
+  "แอปนี้รับการอัปเดตผ่าน Microsoft Store": "This app gets updates through the Microsoft Store",
+  "เปิด Microsoft Store": "Open Microsoft Store"
 };
 export default text;

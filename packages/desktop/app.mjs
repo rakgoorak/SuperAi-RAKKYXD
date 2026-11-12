@@ -38,10 +38,14 @@ const chosenLanguage = (() => {
 const startLanguage = process.env.SUPERAI_LANG || chosenLanguage;
 if (/^[a-z]{2}(-[A-Za-z]{2})?$/.test(startLanguage)) app.commandLine.appendSwitch("lang", startLanguage);
 // Same id as the installer's shortcuts: Windows groups the taskbar button with them and shows our toasts.
-if (process.platform === "win32") app.setAppUserModelId("com.rakgoorak.superai");
+// Microsoft Store (MSIX) builds: identity comes from the package, updates come from the Store.
+const appMetadata = JSON.parse(readFileSync(path.join(app.getAppPath(), "package.json"), "utf8"));
+const storeManaged = process.windowsStore === true || appMetadata.distribution === "microsoft-store";
+if (process.platform === "win32" && !storeManaged) app.setAppUserModelId("com.rakgoorak.superai");
 let window, server, browser, trayController, browserAutomation, computer;
 const updater = new Updater({
   currentVersion: app.getVersion(),
+  storeManaged,
   // SUPERAI_UPDATE_TEST lets a dev build exercise the real download/install path.
   packaged: app.isPackaged || process.env.SUPERAI_UPDATE_TEST === "1",
   onState: (state) => window?.webContents.send("update:state", state),
@@ -152,6 +156,11 @@ async function checkForUpdate() {
 ipcMain.handle("update:action", async (e, action) => {
   trusted(e);
   if (action === "state") return updater.state;
+  if (storeManaged) {
+    if (["check", "download", "apply", "force"].includes(action))
+      await shell.openExternal("https://apps.microsoft.com/detail/9NZH79QL515K");
+    return updater.state;
+  }
   if (action === "check") return updater.check();
   if (action === "download") return updater.download();
   if (action === "apply") return applyUpdate();
@@ -369,7 +378,7 @@ else {
       });
       await log(`SuperAi & RAKKYXD ${app.getVersion()} started at ${appUrl}`);
       usagePing().start();
-      if (updater.packaged && !process.env.SUPERAI_TEST_MODE) {
+      if (updater.packaged && !storeManaged && !process.env.SUPERAI_TEST_MODE) {
         setTimeout(() => void checkForUpdate(), 4000);
         setInterval(() => void checkForUpdate(), 30 * 60_000);
       }

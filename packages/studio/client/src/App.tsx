@@ -1300,7 +1300,7 @@ export function App() {
               </button>
               {update && (
                 <button onClick={() => setDialog("update")} className={update.status === "available" || update.status === "ready" ? "update-ready" : ""}
-                  title={tr("ตรวจและติดตั้งเวอร์ชันใหม่จาก GitHub Releases")}>
+                  title={update.storeManaged ? tr("อัปเดตผ่าน Microsoft Store") : tr("ตรวจและติดตั้งเวอร์ชันใหม่จาก GitHub Releases")}>
                   {update.status === "checking" ? (
                     <LoaderCircle size={17} className="spin" />
                   ) : update.status === "latest" ? (

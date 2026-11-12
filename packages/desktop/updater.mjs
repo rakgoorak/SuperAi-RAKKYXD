@@ -92,13 +92,14 @@ export async function payloadVersion(source, platform = process.platform) {
 }
 
 export class Updater {
-  constructor({ currentVersion, packaged, onState, http = (...a) => fetch(...a), tempDir = os.tmpdir() }) {
+  constructor({ currentVersion, packaged, storeManaged = process.windowsStore === true, onState, http = (...a) => fetch(...a), tempDir = os.tmpdir() }) {
     this.currentVersion = currentVersion;
     this.packaged = packaged;
+    this.storeManaged = storeManaged;
     this.onState = onState || (() => {});
     this.http = http;
     this.tempDir = tempDir;
-    this.state = { status: "idle", currentVersion, packaged };
+    this.state = { status: "idle", currentVersion, packaged, storeManaged };
     this.controller = null;
   }
   set(patch) {
@@ -108,6 +109,7 @@ export class Updater {
   }
 
   async check() {
+    if (this.storeManaged) return this.state;
     if (["downloading", "extracting", "ready", "waiting", "installing"].includes(this.state.status)) return this.state;
     this.set({ status: "checking", error: "" });
     try {
@@ -148,6 +150,7 @@ export class Updater {
   }
 
   async download() {
+    if (this.storeManaged) throw new Error(tr("อัปเดตแอปนี้ผ่าน Microsoft Store เท่านั้น"));
     const asset = this.state.asset;
     if (this.state.status !== "available" && this.state.status !== "error") return this.state;
     if (!asset) throw new Error(tr("ตรวจอัปเดตก่อน"));
@@ -222,6 +225,7 @@ export class Updater {
 
   /** Start the detached copier; the caller must quit the app right after this returns. */
   async install({ execPath = process.execPath, pid = process.pid } = {}) {
+    if (this.storeManaged) throw new Error(tr("อัปเดตแอปนี้ผ่าน Microsoft Store เท่านั้น"));
     if (!["ready", "waiting"].includes(this.state.status)) throw new Error(tr("ดาวน์โหลดอัปเดตให้เสร็จก่อน"));
     const target = installTarget(execPath);
     if (!target) throw new Error(tr("ไม่พบตำแหน่งที่ติดตั้งโปรแกรม"));
