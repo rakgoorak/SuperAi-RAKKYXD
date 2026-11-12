@@ -6,6 +6,19 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.0.46] - 2026-11-13
+
+### Added
+- The whole app is available in English, Japanese and Chinese as well as Thai:
+  every screen and every message. The first run uses the computer's language
+  (English when it is not one of these), and the getting-started screen has a
+  language picker.
+- The AI can use the browser panel inside the app: Claude, Codex and OpenCode
+  can open pages, read them, click, type, choose options, scroll and take
+  screenshots while you watch. Nothing to set up.
+- MCP servers can be added by pasting the usual "mcpServers" JSON, to several
+  AIs at once.
+
 ## [1.0.45] - 2026-11-12
 
 ### Fixed
