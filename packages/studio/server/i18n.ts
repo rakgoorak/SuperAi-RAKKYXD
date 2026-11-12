@@ -17,7 +17,8 @@ const isLocale = (value: unknown): value is Locale => typeof value === "string" 
 const file = () => path.join(process.env.SUPERAI_DATA_DIR || path.join(os.homedir(), ".opencode-multi"), "locale.txt");
 
 // Until the window reports its choice: the computer's language when supported, otherwise English.
-const system = String(Intl.DateTimeFormat().resolvedOptions().locale || "").toLowerCase().slice(0, 2);
+// SUPERAI_LANG (the same switch the desktop app takes) wins, e.g. for tests that check the Thai text.
+const system = String(process.env.SUPERAI_LANG || Intl.DateTimeFormat().resolvedOptions().locale || "").toLowerCase().slice(0, 2);
 let locale: Locale = system === "th" || system === "ja" || system === "zh" ? system : "en";
 try {
   const saved = fs.readFileSync(file(), "utf8").trim();
