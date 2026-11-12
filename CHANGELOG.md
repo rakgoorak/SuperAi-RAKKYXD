@@ -6,6 +6,12 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.0.45] - 2026-11-12
+
+### Fixed
+- With a side panel open, the row under the message box wrapped into three rows
+  and left the options icon alone on the last one. It is now two full rows.
+
 ## [1.0.44] - 2026-11-12
 
 ### Changed
