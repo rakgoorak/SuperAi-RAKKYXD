@@ -93,7 +93,7 @@ jobs:
       - name: Stage app executable for signing
         if: runner.os == 'Windows' && env.HAS_SIGNPATH == 'true'
         id: unsigned-app
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: unsigned-app
           path: ${{ env.APP_EXE }}
@@ -147,7 +147,7 @@ jobs:
       - name: Stage installer for signing
         if: runner.os == 'Windows' && env.HAS_SIGNPATH == 'true'
         id: unsigned-installer
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: unsigned-installer
           path: release-assets/SuperAi-RAKKYXD-Setup.exe
@@ -192,7 +192,7 @@ jobs:
           DMG=$(find release-assets -maxdepth 1 -name '*.dmg' | head -1)
           xcrun stapler validate "$DMG"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: release-${{ matrix.label }}
           path: release-assets/*
@@ -200,7 +200,7 @@ jobs:
           compression-level: 0
           retention-days: 14
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: failure()
         with:
           name: diagnostics-${{ matrix.label }}
