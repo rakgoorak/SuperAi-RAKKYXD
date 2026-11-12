@@ -8,23 +8,43 @@ npm run manifests:update
 
 This writes:
 
-- `packaging/winget/rakgoorak.SuperAiRAKKYXD.yaml` — singleton manifest for
-  [winget-pkgs](https://github.com/microsoft/winget-pkgs).
+- `packaging/winget/manifests/r/rakgoorak/SuperAiRAKKYXD/<version>/` — multi-file
+  manifests in the exact layout [winget-pkgs](https://github.com/microsoft/winget-pkgs)
+  expects (`version`, `installer`, and `defaultLocale`).
 - `packaging/homebrew/Casks/superai-rakkyxd.rb` — cask for
   [homebrew-cask](https://github.com/Homebrew/homebrew-cask).
 
+The winget installer is `nullsoft` (NSIS), per-user scope, with `/S` silent
+switches. `npm run manifests:update` reads the checksums from the release assets,
+so a release must be published before you regenerate.
+
+## Validate
+
+```powershell
+winget validate --manifest packaging\winget\manifests\r\rakgoorak\SuperAiRAKKYXD\<version>
+```
+
+Validation must print `Manifest validation succeeded.` before you submit.
+
 ## Submitting to winget
 
-1. Install [wingetcreate](https://github.com/microsoft/winget-create) or use `wingetcreate submit`.
-2. Run `wingetcreate submit packaging/winget/rakgoorak.SuperAiRAKKYXD.yaml`.
-3. Or open a PR against `microsoft/winget-pkgs` with the manifest under
-   `manifests/r/rakgoorak/SuperAiRAKKYXD/<version>/`.
+```powershell
+winget install Microsoft.WingetCreate
+wingetcreate submit --token <GITHUB_TOKEN> packaging\winget\manifests\r\rakgoorak\SuperAiRAKKYXD\<version>
+```
+
+`wingetcreate` opens the PR against `microsoft/winget-pkgs` for you. Or fork the
+repo and copy the version folder to
+`manifests/r/rakgoorak/SuperAiRAKKYXD/<version>/` manually.
 
 Users can then install with:
 
 ```powershell
 winget install rakgoorak.SuperAiRAKKYXD
 ```
+
+Winget requires a new `<version>` directory for every release. Never edit the
+previous version's folder.
 
 ## Submitting to Homebrew
 
@@ -42,6 +62,9 @@ brew install --cask superai-rakkyxd
 
 ## Release checklist
 
-After every release, run `npm run manifests:update` and submit the updated
-manifests. Winget requires a new version directory; Homebrew updates the existing
-cask file.
+After every release:
+
+1. `npm run manifests:update`
+2. `winget validate --manifest packaging\winget\manifests\r\rakgoorak\SuperAiRAKKYXD\<version>`
+3. Submit the winget PR (`wingetcreate submit`).
+4. Update the Homebrew cask PR (only after the DMG is signed and notarized).

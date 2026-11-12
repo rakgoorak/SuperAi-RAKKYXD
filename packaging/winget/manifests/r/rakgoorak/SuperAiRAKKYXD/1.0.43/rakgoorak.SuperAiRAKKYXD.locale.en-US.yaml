@@ -1,6 +1,6 @@
-# yaml-language-server: $schema=https://aka.ms/winget-manifest.singleton.1.6.0.schema.json
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.10.0.schema.json
 PackageIdentifier: rakgoorak.SuperAiRAKKYXD
-PackageVersion: 1.0.41
+PackageVersion: 1.0.43
 PackageLocale: en-US
 Publisher: RAKKYXD
 PublisherUrl: https://github.com/rakgoorak
@@ -11,7 +11,7 @@ PackageUrl: https://github.com/rakgoorak/SuperAi-RAKKYXD
 License: MIT
 LicenseUrl: https://github.com/rakgoorak/SuperAi-RAKKYXD/blob/main/LICENSE
 Copyright: Copyright (c) 2026 RAKKYXD & SuperAi Contributors
-ShortDescription: All your AI coding assistants in one local-first desktop workspace.
+ShortDescription: All your AI coding assistants in one local-first desktop workspace
 Description: Open-source desktop workspace for Claude Code, Codex, Antigravity, OpenCode, Freebuff, and local Ollama. Includes multi-agent teams, Git worktrees, artifact previews, voice dictation, and quota tracking. Runs locally with your own accounts.
 Moniker: superai
 Tags:
@@ -23,14 +23,6 @@ Tags:
   - llm
   - ollama
   - opencode
-ReleaseNotesUrl: https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/tag/v1.0.41
-Installers:
-  - Architecture: x64
-    InstallerType: nsis
-    InstallerUrl: https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/download/v1.0.41/SuperAi-RAKKYXD-Setup.exe
-    InstallerSha256: E8BAFDCD7317937FB35AC8E2824F86C110B32D303DC7C53DD843BBF6751C02B7
-    InstallerSwitches:
-      Silent: /S
-      SilentWithProgress: /S
-ManifestType: singleton
-ManifestVersion: 1.6.0
+ReleaseNotesUrl: https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/tag/v1.0.43
+ManifestType: defaultLocale
+ManifestVersion: 1.10.0

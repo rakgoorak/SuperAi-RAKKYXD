@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const REPO = 'rakgoorak/SuperAi-RAKKYXD-releases';
 const API = `https://api.github.com/repos/${REPO}/releases/latest`;
+const MANIFEST_VERSION = '1.10.0';
 const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'superai-manifest-updater' };
 if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
 
@@ -12,6 +13,7 @@ const response = await fetch(API, { headers });
 if (!response.ok) throw new Error(`GitHub API ${response.status}: ${await response.text()}`);
 const release = await response.json();
 const version = String(release.tag_name).replace(/^v/, '');
+const releaseDate = String(release.published_at || new Date().toISOString()).slice(0, 10);
 const assets = new Map(release.assets.map((asset) => [asset.name, asset]));
 
 const required = {
@@ -43,9 +45,22 @@ const [winHash, armHash, intelHash] = await Promise.all([
 
 const download = (name) => `https://github.com/${REPO}/releases/download/v${version}/${name}`;
 const sourceUrl = 'https://github.com/rakgoorak/SuperAi-RAKKYXD';
+const packageIdentifier = 'rakgoorak.SuperAiRAKKYXD';
+const schema = (type) => `https://aka.ms/winget-manifest.${type}.${MANIFEST_VERSION}.schema.json`;
 
-const winget = `# yaml-language-server: $schema=https://aka.ms/winget-manifest.singleton.1.6.0.schema.json
-PackageIdentifier: rakgoorak.SuperAiRAKKYXD
+const shortDescription = 'All your AI coding assistants in one local-first desktop workspace';
+const description = 'Open-source desktop workspace for Claude Code, Codex, Antigravity, OpenCode, Freebuff, and local Ollama. Includes multi-agent teams, Git worktrees, artifact previews, voice dictation, and quota tracking. Runs locally with your own accounts.';
+
+const wingetVersion = `# yaml-language-server: $schema=${schema('version')}
+PackageIdentifier: ${packageIdentifier}
+PackageVersion: ${version}
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: ${MANIFEST_VERSION}
+`;
+
+const wingetLocale = `# yaml-language-server: $schema=${schema('defaultLocale')}
+PackageIdentifier: ${packageIdentifier}
 PackageVersion: ${version}
 PackageLocale: en-US
 Publisher: RAKKYXD
@@ -57,8 +72,8 @@ PackageUrl: ${sourceUrl}
 License: MIT
 LicenseUrl: ${sourceUrl}/blob/main/LICENSE
 Copyright: Copyright (c) 2026 RAKKYXD & SuperAi Contributors
-ShortDescription: All your AI coding assistants in one local-first desktop workspace.
-Description: Open-source desktop workspace for Claude Code, Codex, Antigravity, OpenCode, Freebuff, and local Ollama. Includes multi-agent teams, Git worktrees, artifact previews, voice dictation, and quota tracking. Runs locally with your own accounts.
+ShortDescription: ${shortDescription}
+Description: ${description}
 Moniker: superai
 Tags:
   - ai
@@ -70,16 +85,34 @@ Tags:
   - ollama
   - opencode
 ReleaseNotesUrl: https://github.com/${REPO}/releases/tag/v${version}
+ManifestType: defaultLocale
+ManifestVersion: ${MANIFEST_VERSION}
+`;
+
+const wingetInstaller = `# yaml-language-server: $schema=${schema('installer')}
+PackageIdentifier: ${packageIdentifier}
+PackageVersion: ${version}
+InstallerLocale: en-US
+Platform:
+  - Windows.Desktop
+MinimumOSVersion: 10.0.0.0
+InstallerType: nullsoft
+Scope: user
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+InstallerSwitches:
+  Silent: /S
+  SilentWithProgress: /S
+UpgradeBehavior: install
+ReleaseDate: ${releaseDate}
 Installers:
   - Architecture: x64
-    InstallerType: nsis
     InstallerUrl: ${download(required.windows)}
     InstallerSha256: ${winHash.toUpperCase()}
-    InstallerSwitches:
-      Silent: /S
-      SilentWithProgress: /S
-ManifestType: singleton
-ManifestVersion: 1.6.0
+ManifestType: installer
+ManifestVersion: ${MANIFEST_VERSION}
 `;
 
 const cask = `cask "superai-rakkyxd" do
@@ -110,10 +143,15 @@ const cask = `cask "superai-rakkyxd" do
 end
 `;
 
-await fs.mkdir(path.resolve('packaging/winget'), { recursive: true });
+// winget-pkgs expects this exact directory layout. Copy the folder into a fork of
+// microsoft/winget-pkgs (or let wingetcreate submit it) to open the PR.
+const wingetDir = path.resolve('packaging/winget/manifests/r/rakgoorak/SuperAiRAKKYXD', version);
+await fs.mkdir(wingetDir, { recursive: true });
 await fs.mkdir(path.resolve('packaging/homebrew/Casks'), { recursive: true });
-await fs.writeFile(path.resolve('packaging/winget/rakgoorak.SuperAiRAKKYXD.yaml'), winget);
+await fs.writeFile(path.join(wingetDir, `${packageIdentifier}.yaml`), wingetVersion);
+await fs.writeFile(path.join(wingetDir, `${packageIdentifier}.installer.yaml`), wingetInstaller);
+await fs.writeFile(path.join(wingetDir, `${packageIdentifier}.locale.en-US.yaml`), wingetLocale);
 await fs.writeFile(path.resolve('packaging/homebrew/Casks/superai-rakkyxd.rb'), cask);
 console.log(`Updated manifests for v${version}`);
-console.log(`  packaging/winget/rakgoorak.SuperAiRAKKYXD.yaml`);
+console.log(`  packaging/winget/manifests/r/rakgoorak/SuperAiRAKKYXD/${version}/`);
 console.log(`  packaging/homebrew/Casks/superai-rakkyxd.rb`);
