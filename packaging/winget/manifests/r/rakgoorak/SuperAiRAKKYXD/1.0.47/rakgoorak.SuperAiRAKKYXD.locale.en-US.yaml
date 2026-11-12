@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.10.0.schema.json
 PackageIdentifier: rakgoorak.SuperAiRAKKYXD
-PackageVersion: 1.0.45
+PackageVersion: 1.0.47
 PackageLocale: en-US
 Publisher: RAKKYXD
 PublisherUrl: https://github.com/rakgoorak
@@ -23,6 +23,6 @@ Tags:
   - llm
   - ollama
   - opencode
-ReleaseNotesUrl: https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/tag/v1.0.45
+ReleaseNotesUrl: https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/tag/v1.0.47
 ManifestType: defaultLocale
 ManifestVersion: 1.10.0
