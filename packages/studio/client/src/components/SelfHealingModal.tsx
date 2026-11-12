@@ -21,6 +21,7 @@ import {
   type SelfHealResult,
   type Session,
 } from '../api';
+import { tr } from '../i18n';
 
 export function SelfHealingModal({
   workspaceId,
@@ -53,15 +54,15 @@ export function SelfHealingModal({
   const handleRunVerify = async () => {
     setIsRunning(true);
     setCurrentStep('verifying');
-    setStatusMessage('กำลังรันคำสั่งตรวจสอบโปรเจกต์...');
+    setStatusMessage(tr("กำลังรันคำสั่งตรวจสอบโปรเจกต์..."));
     setProblem('');
     try {
       const res = await verifyProject(workspaceId, command);
       setVerifyResult(res);
       if (res.passed) {
-        setStatusMessage('✓ การทดสอบทั้งหมดผ่านสมบูรณ์ 100%');
+        setStatusMessage(tr("✓ การทดสอบทั้งหมดผ่านสมบูรณ์ 100%"));
       } else {
-        setStatusMessage(`พบข้อผิดพลาดในการทดสอบ (Exit code ${res.exitCode})`);
+        setStatusMessage(tr`พบข้อผิดพลาดในการทดสอบ (Exit code ${res.exitCode})`);
       }
     } catch (err: any) {
       setProblem(err.message);
@@ -73,12 +74,12 @@ export function SelfHealingModal({
 
   const handleStartSelfHeal = async () => {
     if (!selectedSessionId) {
-      setProblem('กรุณาเลือก Agent ที่ต้องการให้ทำการแก้ไขโค้ด');
+      setProblem(tr("กรุณาเลือก Agent ที่ต้องการให้ทำการแก้ไขโค้ด"));
       return;
     }
     setIsRunning(true);
     setCurrentStep('healing');
-    setStatusMessage('เริ่มต้น Self-Healing Loop: กำลังทดสอบและส่งผลให้ AI แก้ไขโค้ดอัตโนมัติ...');
+    setStatusMessage(tr("เริ่มต้น Self-Healing Loop: กำลังทดสอบและส่งผลให้ AI แก้ไขโค้ดอัตโนมัติ..."));
     setProblem('');
     try {
       const res = await selfHealProject(workspaceId, {
@@ -88,9 +89,9 @@ export function SelfHealingModal({
       });
       setHealResult(res);
       if (res.success) {
-        setStatusMessage(`✓ ซ่อมแซมโค้ดสำเร็จในรอบที่ ${res.totalAttempts}! การทดสอบผ่านสมบูรณ์`);
+        setStatusMessage(tr`✓ ซ่อมแซมโค้ดสำเร็จในรอบที่ ${res.totalAttempts}! การทดสอบผ่านสมบูรณ์`);
       } else {
-        setStatusMessage(`ไม่สามารถแก้โค้ดให้ผ่านได้หลังพยายาม ${res.totalAttempts} รอบ`);
+        setStatusMessage(tr`ไม่สามารถแก้โค้ดให้ผ่านได้หลังพยายาม ${res.totalAttempts} รอบ`);
       }
       // Refresh verify result to reflect latest state
       if (res.attempts.length > 0) {
@@ -128,7 +129,7 @@ export function SelfHealingModal({
                 </span>
               </h3>
               <p className="text-xs text-slate-400">
-                รันคำสั่งทดสอบเบื้องหลังอัตโนมัติ หาก Test พังจะดึงข้อผิดพลาดส่งให้ AI ซ่อมแซมโค้ดจนกว่าจะผ่าน
+                {tr("รันคำสั่งทดสอบเบื้องหลังอัตโนมัติ หาก Test พังจะดึงข้อผิดพลาดส่งให้ AI ซ่อมแซมโค้ดจนกว่าจะผ่าน")}
               </p>
             </div>
           </div>
@@ -146,7 +147,7 @@ export function SelfHealingModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-lg bg-white/[0.02] border border-white/5">
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                คำสั่งทดสอบ (Verification Command):
+                {tr("คำสั่งทดสอบ (Verification Command):")}
               </label>
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
@@ -156,7 +157,7 @@ export function SelfHealingModal({
                     value={command}
                     onChange={(e) => setCommand(e.target.value)}
                     disabled={isRunning}
-                    placeholder="เช่น npm test หรือ npm run build"
+                    placeholder={tr("เช่น npm test หรือ npm run build")}
                     className="w-full pl-8 pr-3 py-1.5 bg-[#0e1216] border border-white/10 rounded-md text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500/50"
                   />
                 </div>
@@ -165,7 +166,7 @@ export function SelfHealingModal({
 
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                Agent ที่จะสั่งให้ซ่อมโค้ด:
+                {tr("Agent ที่จะสั่งให้ซ่อมโค้ด:")}
               </label>
               <select
                 value={selectedSessionId}
@@ -178,23 +179,23 @@ export function SelfHealingModal({
                     {s.name || s.agentType || 'Session'} ({s.agentType || 'CLI'})
                   </option>
                 ))}
-                {!sessions.length && <option value="">ไม่มีเซสชันที่เปิดอยู่</option>}
+                {!sessions.length && <option value="">{tr("ไม่มีเซสชันที่เปิดอยู่")}</option>}
               </select>
             </div>
           </div>
 
           <div className="flex items-center justify-between px-3.5 py-2 rounded-lg bg-white/[0.02] border border-white/5 text-xs text-slate-400">
-            <span>จำนวนรอบสูงสุดที่อนุญาตให้ AI ลองแก้ (Max Attempts):</span>
+            <span>{tr("จำนวนรอบสูงสุดที่อนุญาตให้ AI ลองแก้ (Max Attempts):")}</span>
             <select
               value={maxAttempts}
               onChange={(e) => setMaxAttempts(Number(e.target.value))}
               disabled={isRunning}
               className="px-2 py-1 bg-[#0e1216] border border-white/10 rounded text-xs text-slate-200 font-medium"
             >
-              <option value={1}>1 รอบ</option>
-              <option value={2}>2 รอบ</option>
-              <option value={3}>3 รอบ (แนะนำ)</option>
-              <option value={5}>5 รอบ</option>
+              <option value={1}>{tr("1 รอบ")}</option>
+              <option value={2}>{tr("2 รอบ")}</option>
+              <option value={3}>{tr("3 รอบ (แนะนำ)")}</option>
+              <option value={5}>{tr("5 รอบ")}</option>
             </select>
           </div>
 
@@ -232,7 +233,7 @@ export function SelfHealingModal({
             <div className="rounded-lg bg-[#0e1216] border border-white/10 overflow-hidden">
               <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-white/10 bg-white/[0.02]">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-xs text-slate-300">ผลการรัน:</span>
+                  <span className="font-medium text-xs text-slate-300">{tr("ผลการรัน:")}</span>
                   <span className="font-mono text-xs text-slate-400">`{verifyResult.command}`</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -255,14 +256,14 @@ export function SelfHealingModal({
                 <div className="p-3.5">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-rose-400 flex items-center gap-1.5">
-                      <AlertTriangle size={13} /> จุดที่พัง (Failure Clues):
+                      <AlertTriangle size={13} /> {tr("จุดที่พัง (Failure Clues):")}
                     </span>
                     <button
                       onClick={handleCopyError}
                       className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-200 transition-colors"
                     >
                       {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                      {copied ? 'คัดลอกแล้ว' : 'คัดลอก Error'}
+                      {copied ? tr("คัดลอกแล้ว") : tr("คัดลอก Error")}
                     </button>
                   </div>
                   <pre className="p-2.5 rounded bg-black/40 border border-rose-500/20 text-rose-200 text-xs font-mono overflow-x-auto max-h-48 whitespace-pre-wrap leading-relaxed">
@@ -278,11 +279,11 @@ export function SelfHealingModal({
                   className="flex items-center gap-1.5 w-full px-3.5 py-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-white/[0.02] transition-colors"
                 >
                   {expandedLog ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  <span>ดูบันทึก Log ฉบับเต็ม ({verifyResult.output.length.toLocaleString()} อักขระ)</span>
+                  <span>{tr("ดูบันทึก Log ฉบับเต็ม (")}{verifyResult.output.length.toLocaleString()} {tr("อักขระ)")}</span>
                 </button>
                 {expandedLog && (
                   <pre className="p-3.5 bg-black/60 border-t border-white/5 text-[11px] font-mono text-slate-300 overflow-x-auto max-h-60 whitespace-pre-wrap leading-relaxed">
-                    {verifyResult.output || '(ไม่มีข้อความจากคำสั่ง)'}
+                    {verifyResult.output || tr("(ไม่มีข้อความจากคำสั่ง)")}
                   </pre>
                 )}
               </div>
@@ -293,7 +294,7 @@ export function SelfHealingModal({
           {healResult && healResult.attempts.length > 0 && (
             <div className="space-y-2">
               <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                ประวัติการแก้ไขใน Loop ({healResult.attempts.length} รอบ):
+                {tr("ประวัติการแก้ไขใน Loop (")}{healResult.attempts.length} {tr("รอบ):")}
               </h4>
               <div className="space-y-2">
                 {healResult.attempts.map((att) => (
@@ -312,13 +313,13 @@ export function SelfHealingModal({
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold text-slate-200">รอบที่ {att.attempt}</span>
+                        <span className="font-semibold text-slate-200">{tr("รอบที่")} {att.attempt}</span>
                         <span
                           className={`text-[10px] font-medium ${
                             att.verification.passed ? 'text-emerald-400' : 'text-amber-400'
                           }`}
                         >
-                          {att.verification.passed ? 'ผ่านสมบูรณ์' : 'พบข้อผิดพลาด → ส่งให้ AI แก้'}
+                          {att.verification.passed ? tr("ผ่านสมบูรณ์") : tr("พบข้อผิดพลาด → ส่งให้ AI แก้")}
                         </span>
                       </div>
                       {!att.verification.passed && att.verification.failureSummary && (
@@ -342,7 +343,7 @@ export function SelfHealingModal({
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50 text-xs font-medium"
           >
             <RefreshCw size={13} className={isRunning && currentStep === 'verifying' ? 'animate-spin' : ''} />
-            <span>รันตรวจสอบใหม่</span>
+            <span>{tr("รันตรวจสอบใหม่")}</span>
           </button>
 
           <div className="flex items-center gap-2">
@@ -355,14 +356,14 @@ export function SelfHealingModal({
                 }}
                 className="px-3 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 transition-colors text-xs font-medium"
               >
-                ดู Session
+                {tr("ดู Session")}
               </button>
             )}
             <button
               onClick={onClose}
               className="px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 transition-colors text-xs font-medium"
             >
-              ปิด
+              {tr("ปิด")}
             </button>
             <button
               onClick={handleStartSelfHeal}
@@ -372,12 +373,12 @@ export function SelfHealingModal({
               {isRunning && currentStep === 'healing' ? (
                 <>
                   <LoaderCircle size={14} className="animate-spin" />
-                  <span>กำลังซ่อมแซม...</span>
+                  <span>{tr("กำลังซ่อมแซม...")}</span>
                 </>
               ) : (
                 <>
                   <Wrench size={14} />
-                  <span>เริ่ม Self-Healing Loop</span>
+                  <span>{tr("เริ่ม Self-Healing Loop")}</span>
                 </>
               )}
             </button>

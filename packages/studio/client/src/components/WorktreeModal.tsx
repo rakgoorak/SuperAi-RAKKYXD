@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { GitBranch, Plus, Trash2, X, LoaderCircle, CheckCircle2, AlertCircle, FolderGit2 } from 'lucide-react';
 import { getWorktrees, createWorktree, deleteWorktree, type WorktreeInfo } from '../api';
 import '../worktree-modal.css';
+import { tr } from '../i18n';
 
 export interface WorktreeModalProps {
   open: boolean;
@@ -28,7 +29,7 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
       const data = await getWorktrees(wsId);
       setWorktrees(Array.isArray(data?.worktrees) ? data.worktrees : []);
     } catch (err: any) {
-      setError(err.message || 'อ่านข้อมูล Worktree ไม่สำเร็จ');
+      setError(err.message || tr("อ่านข้อมูล Worktree ไม่สำเร็จ"));
     } finally {
       setLoading(false);
     }
@@ -59,7 +60,7 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
     e.preventDefault();
     const branch = newBranch.trim();
     if (!branch) {
-      setError('กรุณาระบุชื่อ Branch');
+      setError(tr("กรุณาระบุชื่อ Branch"));
       return;
     }
     setCreating(true);
@@ -68,13 +69,13 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
     try {
       const res = await createWorktree(wsId, branch);
       setNewBranch('');
-      setNotice(`สร้าง Worktree "${branch}" สำเร็จแล้ว`);
+      setNotice(tr`สร้าง Worktree "${branch}" สำเร็จแล้ว`);
       await fetchWorktrees();
       if (onWorktreeCreated && res.worktree) {
         onWorktreeCreated(res.worktree);
       }
     } catch (err: any) {
-      setError(err.message || 'สร้าง Worktree ไม่สำเร็จ');
+      setError(err.message || tr("สร้าง Worktree ไม่สำเร็จ"));
     } finally {
       setCreating(false);
     }
@@ -82,15 +83,15 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
 
   const handleDelete = async (wt: WorktreeInfo) => {
     if (wt.isMain) return;
-    if (!window.confirm(`ต้องการลบ Worktree "${wt.branch}" และโฟลเดอร์นี้ใช่ไหม?`)) return;
+    if (!window.confirm(tr`ต้องการลบ Worktree "${wt.branch}" และโฟลเดอร์นี้ใช่ไหม?`)) return;
     setDeletingPath(wt.path);
     setError(null);
     try {
       await deleteWorktree(wsId, wt.path, true);
-      setNotice(`ลบ Worktree "${wt.branch}" เรียบร้อยแล้ว`);
+      setNotice(tr`ลบ Worktree "${wt.branch}" เรียบร้อยแล้ว`);
       await fetchWorktrees();
     } catch (err: any) {
-      setError(err.message || 'ลบ Worktree ไม่สำเร็จ');
+      setError(err.message || tr("ลบ Worktree ไม่สำเร็จ"));
     } finally {
       setDeletingPath(null);
     }
@@ -110,18 +111,18 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
       }}
       role="dialog"
       aria-modal="true"
-      aria-label="จัดการ Git Worktrees"
+      aria-label={tr("จัดการ Git Worktrees")}
     >
       <div className="worktree-modal-card" onClick={e => e.stopPropagation()}>
         <header className="worktree-modal-header">
           <div className="worktree-modal-title">
             <FolderGit2 size={18} className="worktree-title-icon" />
             <div>
-              <h3>จัดการ Git Worktrees (คู่ขนาน)</h3>
-              <p>แยกโฟลเดอร์ทำงานเพื่อแก้โค้ดพร้อมกันได้ 100% โดยไม่ทับซ้อนกัน</p>
+              <h3>{tr("จัดการ Git Worktrees (คู่ขนาน)")}</h3>
+              <p>{tr("แยกโฟลเดอร์ทำงานเพื่อแก้โค้ดพร้อมกันได้ 100% โดยไม่ทับซ้อนกัน")}</p>
             </div>
           </div>
-          <button type="button" className="worktree-modal-close" onClick={onClose} aria-label="ปิดหน้าต่าง">
+          <button type="button" className="worktree-modal-close" onClick={onClose} aria-label={tr("ปิดหน้าต่าง")}>
             <X size={16} />
           </button>
         </header>
@@ -141,13 +142,13 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
         )}
 
         <form className="worktree-create-form" onSubmit={handleCreate}>
-          <label htmlFor="wt-branch-input" className="sr-only">ชื่อ Worktree หรือ Branch</label>
+          <label htmlFor="wt-branch-input" className="sr-only">{tr("ชื่อ Worktree หรือ Branch")}</label>
           <div className="worktree-input-group">
             <GitBranch size={14} className="input-icon" />
             <input
               id="wt-branch-input"
               type="text"
-              placeholder="ตั้งชื่อ Branch ใหม่ เช่น feature-auth, fix-login"
+              placeholder={tr("ตั้งชื่อ Branch ใหม่ เช่น feature-auth, fix-login")}
               value={newBranch}
               onChange={e => setNewBranch(e.target.value)}
               disabled={creating}
@@ -156,23 +157,23 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
           </div>
           <button type="submit" className="btn-create-worktree" disabled={creating || !newBranch.trim()}>
             {creating ? <LoaderCircle size={14} className="spin" /> : <Plus size={14} />}
-            <span>สร้าง Worktree</span>
+            <span>{tr("สร้าง Worktree")}</span>
           </button>
         </form>
 
         <div className="worktree-list-container">
           <div className="worktree-list-head">
-            <span>Worktrees ที่มีอยู่ ({worktrees.length})</span>
+            <span>{tr("Worktrees ที่มีอยู่ (")}{worktrees.length})</span>
           </div>
 
           {loading ? (
             <div className="worktree-loading">
               <LoaderCircle size={18} className="spin" />
-              <span>กำลังโหลดข้อมูล Worktrees...</span>
+              <span>{tr("กำลังโหลดข้อมูล Worktrees...")}</span>
             </div>
           ) : worktrees.length === 0 ? (
             <div className="worktree-empty">
-              <span>ไม่พบข้อมูล Worktrees หรือยังไม่ได้เปิดเป็น Git Repository</span>
+              <span>{tr("ไม่พบข้อมูล Worktrees หรือยังไม่ได้เปิดเป็น Git Repository")}</span>
             </div>
           ) : (
             <div className="worktree-items">
@@ -185,7 +186,7 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
                         <GitBranch size={14} />
                         <strong>{wt.branch}</strong>
                         {wt.isMain && <span className="badge-main">Main Repo</span>}
-                        {wt.isCurrent && <span className="badge-current">กำลังใช้งาน</span>}
+                        {wt.isCurrent && <span className="badge-current">{tr("กำลังใช้งาน")}</span>}
                       </div>
                       <div className="worktree-item-meta">
                         <span className="commit-hash" title={`Commit: ${wt.commit}`}>{wt.commit}</span>
@@ -202,9 +203,9 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
                             onSelectWorktree(wt);
                             onClose();
                           }}
-                          title="สลับไปยัง Worktree นี้"
+                          title={tr("สลับไปยัง Worktree นี้")}
                         >
-                          สลับ
+                          {tr("สลับ")}
                         </button>
                       )}
                       {!wt.isMain && (
@@ -213,8 +214,8 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
                           className="btn-delete-wt"
                           onClick={() => handleDelete(wt)}
                           disabled={isDeleting}
-                          title="ลบ Worktree นี้"
-                          aria-label={`ลบ Worktree ${wt.branch}`}
+                          title={tr("ลบ Worktree นี้")}
+                          aria-label={tr`ลบ Worktree ${wt.branch}`}
                         >
                           {isDeleting ? <LoaderCircle size={13} className="spin" /> : <Trash2 size={13} />}
                         </button>
@@ -229,7 +230,7 @@ export function WorktreeModal({ open, onClose, wsId, onSelectWorktree, onWorktre
 
         <footer className="worktree-modal-footer">
           <small>
-            โฟลเดอร์ <code>.worktrees/</code> จะถูกป้องกันใน <code>.gitignore</code> ให้อัตโนมัติ ไม่ต้องกังวลเรื่องไฟล์หลุดเข้า Git
+            {tr("โฟลเดอร์")} <code>.worktrees/</code> {tr("จะถูกป้องกันใน")} <code>.gitignore</code> {tr("ให้อัตโนมัติ ไม่ต้องกังวลเรื่องไฟล์หลุดเข้า Git")}
           </small>
         </footer>
       </div>

@@ -10,6 +10,7 @@ import {
   splitLines,
 } from '../diffUtils';
 import '../diff-viewer.css';
+import { tr, useTranslation } from '../i18n';
 
 export interface VisualDiffViewerProps {
   workspaceId: string;
@@ -41,6 +42,7 @@ export function VisualDiffViewer({
   onActionComplete,
   onError,
 }: VisualDiffViewerProps) {
+  const { locale } = useTranslation();
   const [mode, setMode] = useState<'side-by-side' | 'inline' | 'file'>('side-by-side');
   const [copied, setCopied] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -74,13 +76,13 @@ export function VisualDiffViewer({
   // Status Badge
   const statusBadge = useMemo(() => {
     if (deleted) {
-      return { label: 'ลบแล้ว', className: 'badge-deleted' };
+      return { label: tr("ลบแล้ว"), className: 'badge-deleted' };
     }
     if ((!original || original.trim() === '') && modified) {
-      return { label: 'สร้างใหม่', className: 'badge-added' };
+      return { label: tr("สร้างใหม่"), className: 'badge-added' };
     }
-    return { label: 'แก้ไข', className: 'badge-modified' };
-  }, [deleted, original, modified]);
+    return { label: tr("แก้ไข"), className: 'badge-modified' };
+  }, [deleted, original, modified, locale]);
 
   // Reset scroll and discard confirmation on file change
   useEffect(() => {
@@ -191,7 +193,7 @@ export function VisualDiffViewer({
             <span className={`diff-status-badge ${statusBadge.className}`}>
               {statusBadge.label}
             </span>
-            <div className="diff-stats" aria-label="สถิติการเปลี่ยนแปลง">
+            <div className="diff-stats" aria-label={tr("สถิติการเปลี่ยนแปลง")}>
               {stats.added > 0 && <span className="diff-stat-add">+{stats.added}</span>}
               {stats.del > 0 && <span className="diff-stat-del">-{stats.del}</span>}
             </div>
@@ -200,33 +202,33 @@ export function VisualDiffViewer({
 
         <div className="diff-toolbar-right">
           {/* View mode toggle */}
-          <div className="diff-btn-group" role="group" aria-label="โหมดแสดงผล">
+          <div className="diff-btn-group" role="group" aria-label={tr("โหมดแสดงผล")}>
             <button
               type="button"
               className={`diff-btn-group-item ${mode === 'side-by-side' ? 'active' : ''}`}
               onClick={() => setMode('side-by-side')}
-              title="Side-by-Side (เทียบ 2 ฝั่ง)"
+              title={tr("Side-by-Side (เทียบ 2 ฝั่ง)")}
             >
               <Columns2 size={13} />
-              <span>เทียบ 2 ฝั่ง</span>
+              <span>{tr("เทียบ 2 ฝั่ง")}</span>
             </button>
             <button
               type="button"
               className={`diff-btn-group-item ${mode === 'inline' ? 'active' : ''}`}
               onClick={() => setMode('inline')}
-              title="Inline (บรรทัดรวม)"
+              title={tr("Inline (บรรทัดรวม)")}
             >
               <AlignJustify size={13} />
-              <span>บรรทัดรวม</span>
+              <span>{tr("บรรทัดรวม")}</span>
             </button>
             <button
               type="button"
               className={`diff-btn-group-item ${mode === 'file' ? 'active' : ''}`}
               onClick={() => setMode('file')}
-              title="เปิดไฟล์ (ดูเนื้อหาไฟล์)"
+              title={tr("เปิดไฟล์ (ดูเนื้อหาไฟล์)")}
             >
               <FileText size={13} />
-              <span>เปิดไฟล์</span>
+              <span>{tr("เปิดไฟล์")}</span>
             </button>
           </div>
 
@@ -235,10 +237,10 @@ export function VisualDiffViewer({
             type="button"
             className="diff-btn"
             onClick={handleCopyPath}
-            title="คัดลอกที่อยู่ไฟล์"
+            title={tr("คัดลอกที่อยู่ไฟล์")}
           >
             {copied ? <Check size={13} /> : <Copy size={13} />}
-            <span>{copied ? 'คัดลอกแล้ว' : 'คัดลอกพาธ'}</span>
+            <span>{copied ? tr("คัดลอกแล้ว") : tr("คัดลอกพาธ")}</span>
           </button>
 
           {/* Action: Stage */}
@@ -247,7 +249,7 @@ export function VisualDiffViewer({
             className="diff-btn"
             onClick={handleStage}
             disabled={actionLoading}
-            title="Stage ไฟล์นี้ (git add)"
+            title={tr("Stage ไฟล์นี้ (git add)")}
           >
             <Plus size={13} />
             <span>Stage</span>
@@ -259,7 +261,7 @@ export function VisualDiffViewer({
             className="diff-btn"
             onClick={handleUnstage}
             disabled={actionLoading}
-            title="Unstage ไฟล์นี้ (git restore --staged)"
+            title={tr("Unstage ไฟล์นี้ (git restore --staged)")}
           >
             <Minus size={13} />
             <span>Unstage</span>
@@ -268,14 +270,14 @@ export function VisualDiffViewer({
           {/* Action: Discard with Confirmation */}
           {confirmDiscard ? (
             <div className="diff-discard-confirm">
-              <span className="diff-discard-warn">ยกเลิกการแก้ไขไฟล์นี้?</span>
+              <span className="diff-discard-warn">{tr("ยกเลิกการแก้ไขไฟล์นี้?")}</span>
               <button
                 type="button"
                 className="diff-btn-danger"
                 onClick={handleDiscard}
                 disabled={actionLoading}
               >
-                {actionLoading ? 'กำลังยกเลิก…' : 'ยืนยันยกเลิก'}
+                {actionLoading ? tr("กำลังยกเลิก…") : tr("ยืนยันยกเลิก")}
               </button>
               <button
                 type="button"
@@ -283,7 +285,7 @@ export function VisualDiffViewer({
                 onClick={() => setConfirmDiscard(false)}
                 disabled={actionLoading}
               >
-                ไม่ทำ
+                {tr("ไม่ทำ")}
               </button>
             </div>
           ) : (
@@ -292,10 +294,10 @@ export function VisualDiffViewer({
               className="diff-btn diff-btn-discard"
               onClick={() => setConfirmDiscard(true)}
               disabled={actionLoading}
-              title="ยกเลิกการแก้ไขไฟล์นี้และคืนค่าเดิมจาก HEAD"
+              title={tr("ยกเลิกการแก้ไขไฟล์นี้และคืนค่าเดิมจาก HEAD")}
             >
               <RotateCcw size={13} />
-              <span>ยกเลิกการแก้ไข</span>
+              <span>{tr("ยกเลิกการแก้ไข")}</span>
             </button>
           )}
         </div>
@@ -306,19 +308,19 @@ export function VisualDiffViewer({
         {mode === 'file' ? (
           <div className="diff-raw-file-container" style={{ padding: '14px', overflow: 'auto', height: '100%', boxSizing: 'border-box' }}>
             <pre tabIndex={0} style={{ margin: 0, fontFamily: 'monospace', fontSize: '12px', whiteSpace: 'pre-wrap', color: 'var(--text, #edece9)' }}>
-              {modified || (deleted ? 'ไฟล์นี้ถูกลบแล้ว' : 'ไฟล์ว่าง')}
+              {modified || (deleted ? tr("ไฟล์นี้ถูกลบแล้ว") : tr("ไฟล์ว่าง"))}
             </pre>
           </div>
         ) : diffLines.length === 0 ? (
           <div className="diff-empty-message">
-            ไม่มีการเปลี่ยนแปลงในไฟล์นี้ (ไฟล์ว่างหรือเนื้อหาตรงกับ HEAD)
+            {tr("ไม่มีการเปลี่ยนแปลงในไฟล์นี้ (ไฟล์ว่างหรือเนื้อหาตรงกับ HEAD)")}
           </div>
         ) : mode === 'side-by-side' ? (
           /* Side-by-Side View */
           <div className="diff-split-container">
             {/* Left Pane (Original / HEAD) */}
             <div className="diff-split-pane">
-              <div className="diff-pane-header">HEAD (ก่อนหน้า)</div>
+              <div className="diff-pane-header">{tr("HEAD (ก่อนหน้า)")}</div>
               <div
                 className="diff-scroll-pane"
                 ref={leftScrollRef}
@@ -341,7 +343,7 @@ export function VisualDiffViewer({
 
             {/* Right Pane (Modified / Working Copy) */}
             <div className="diff-split-pane">
-              <div className="diff-pane-header">Working Copy (ปัจจุบัน)</div>
+              <div className="diff-pane-header">{tr("Working Copy (ปัจจุบัน)")}</div>
               <div
                 className="diff-scroll-pane"
                 ref={rightScrollRef}

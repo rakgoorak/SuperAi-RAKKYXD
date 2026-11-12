@@ -11,6 +11,7 @@ import { cliLaunch, cliEnv } from "./CliCatalog.js";
 import { modelEffortArgs } from "./Providers.js";
 import { cliAuth, isAuthFailure } from "./CliAuth.js";
 import { createCliRunStream, type TokenUsage } from './CliRunStream.js';
+import { tr } from './i18n.js';
 
 // Windows limits a command line to 32,767 characters; agy only takes the prompt as an argument.
 const INLINE_PROMPT_LIMIT = 24000;
@@ -37,7 +38,7 @@ export function promptArguments(
         : ["--permission-mode", "plan", "--tools", allowReadTools ? "Read,Grep,Glob" : attachments.length ? "Read" : ""]),
     ];
   if (id === "antigravity") {
-    if (!extra.prompt) throw new Error("ไม่พบคำขอ");
+    if (!extra.prompt) throw new Error(tr("ไม่พบคำขอ"));
     return [
       ...modelEffortArgs(id, modelOverride, effort),
       // Headless agy cannot ask for permission, so commands need an explicit opt-in.
@@ -61,7 +62,7 @@ export function promptArguments(
       "-",
     ];
   if (id === "opencode") {
-    if (!inputFile) throw new Error("ไม่พบไฟล์คำขอ");
+    if (!inputFile) throw new Error(tr("ไม่พบไฟล์คำขอ"));
     return [
       "run",
       "--agent",
@@ -74,7 +75,7 @@ export function promptArguments(
       "อ่านคำขอและบริบททั้งหมดจากไฟล์แนบ แล้วตอบเป็นภาษาไทย",
     ];
   }
-  throw new Error("CLI นี้รองรับเฉพาะ terminal กรุณาใช้โหมดโค้ด");
+  throw new Error(tr("CLI นี้รองรับเฉพาะ terminal กรุณาใช้โหมดโค้ด"));
 }
 /** Short, actionable failure text: prefer the provider's own JSON error message over raw logs. */
 export function cliFailure(provider: string, model: string, errors: string, output: string, code: number | null, accountId = "system") {
@@ -82,22 +83,22 @@ export function cliFailure(provider: string, model: string, errors: string, outp
   const id = provider.replace(/^cli:/, "");
   const authText = `${errors}\n${output}`.replace(/\x1b\[[0-9;]*m/g, "");
   cliAuth.failure(id, authText, accountId);
-  if (isAuthFailure(authText)) return `${provider}: บัญชียังไม่พร้อมหรือหมดอายุ กรุณากดเข้าสู่ระบบในหน้าแชต หรือเปิด Terminal ของผู้ให้บริการแล้วเข้าสู่ระบบ จากนั้นกดตรวจอีกครั้ง`;
+  if (isAuthFailure(authText)) return tr`${provider}: บัญชียังไม่พร้อมหรือหมดอายุ กรุณากดเข้าสู่ระบบในหน้าแชต หรือเปิด Terminal ของผู้ให้บริการแล้วเข้าสู่ระบบ จากนั้นกดตรวจอีกครั้ง`;
 
   if (/Individual quota reached|quota reached|RESOURCE_EXHAUSTED/i.test(raw)) {
     const resetMatch = raw.match(/Resets in ([0-9a-zA-Z\s]+?)(?:\.|$|,)/i);
-    const resetInfo = resetMatch ? ` (รีเซ็ตใน ${resetMatch[1].trim()})` : "";
-    return `${provider}: โควตาการใช้งานเต็มแล้ว${resetInfo} กรุณารอหรือสลับไปใช้โมเดลอื่น`;
+    const resetInfo = resetMatch ? tr` (รีเซ็ตใน ${resetMatch[1].trim()})` : "";
+    return tr`${provider}: โควตาการใช้งานเต็มแล้ว${resetInfo} กรุณารอหรือสลับไปใช้โมเดลอื่น`;
   }
   if (/Unexpected server error/i.test(raw)) {
-    return `${provider}: เซิร์ฟเวอร์ของผู้ให้บริการมีปัญหาชั่วคราว (Unexpected server error) กรุณาลองใหม่อีกครั้งหรือสลับโมเดล`;
+    return tr`${provider}: เซิร์ฟเวอร์ของผู้ให้บริการมีปัญหาชั่วคราว (Unexpected server error) กรุณาลองใหม่อีกครั้งหรือสลับโมเดล`;
   }
 
   const message = [...raw.matchAll(/"message"\s*:\s*"([^"]{3,400})"/g)].at(-1)?.[1];
   const modelProblem = /model.*(not supported|not found|does not exist|unknown)|Model not found/i.test(message || raw);
   const detail = message || raw.trim().split("\n").slice(-6).join("\n") || `exit ${code}`;
   const hint = modelProblem
-    ? ` — รุ่น ${model || "ค่าเริ่มต้นของ CLI"} ใช้กับบัญชีนี้ไม่ได้ ลองเลือก model อื่นในช่อง Model`
+    ? tr` — รุ่น ${model || tr("ค่าเริ่มต้นของ CLI")} ใช้กับบัญชีนี้ไม่ได้ ลองเลือก model อื่นในช่อง Model`
     : "";
   return `${provider}: ${detail}${hint}`;
 }
@@ -107,11 +108,11 @@ export function attachmentProblem(provider: string, attachments: string[]): stri
   if (!attachments.length) return "";
   const id = provider.replace(/^cli:/, "");
   if (!provider.startsWith("cli:"))
-    return "รุ่น Ollama บนเครื่องและ API นอกอ่านรูปหรือ PDF ที่แนบไม่ได้ กรุณาเลือก Claude Code, Codex หรือ OpenCode ในการตั้งค่า หรือส่งไฟล์ในโหมดโค้ด";
+    return tr("รุ่น Ollama บนเครื่องและ API นอกอ่านรูปหรือ PDF ที่แนบไม่ได้ กรุณาเลือก Claude Code, Codex หรือ OpenCode ในการตั้งค่า หรือส่งไฟล์ในโหมดโค้ด");
   if (!["claude-code", "codex", "opencode", "antigravity"].includes(id))
-    return "CLI นี้รับไฟล์แนบในโหมดสนทนาไม่ได้ กรุณาใช้โหมดโค้ดแล้วแนบไฟล์ใน session";
+    return tr("CLI นี้รับไฟล์แนบในโหมดสนทนาไม่ได้ กรุณาใช้โหมดโค้ดแล้วแนบไฟล์ใน session");
   if (id === "codex" && attachments.some((file) => !/\.(png|jpe?g|gif|webp)$/i.test(file)))
-    return "Codex ในโหมดสนทนารับได้เฉพาะรูป ไม่รับ PDF กรุณาใช้ Claude Code หรือ OpenCode สำหรับ PDF";
+    return tr("Codex ในโหมดสนทนารับได้เฉพาะรูป ไม่รับ PDF กรุณาใช้ Claude Code หรือ OpenCode สำหรับ PDF");
   return "";
 }
 
@@ -137,7 +138,7 @@ export class CliProvider implements LLMProvider {
     messages: LLMMessage[],
     onChunk: (text: string) => void,
   ): Promise<LLMResponse> {
-    if (this.signal.aborted) throw new Error("ยกเลิกงานแล้ว");
+    if (this.signal.aborted) throw new Error(tr("ยกเลิกงานแล้ว"));
     const prompt = messages.map((m) => `${m.role}: ${m.content}`).join("\n\n");
     const id = this.model.replace(/^cli:/, "");
     const longInline = id === "antigravity" && prompt.length > INLINE_PROMPT_LIMIT;
@@ -150,10 +151,10 @@ export class CliProvider implements LLMProvider {
       : undefined;
     try {
       if (inputFile) await fs.writeFile(inputFile, prompt, "utf8");
-      if (this.signal.aborted) throw new Error("ยกเลิกงานแล้ว");
+      if (this.signal.aborted) throw new Error(tr("ยกเลิกงานแล้ว"));
       try { await cliAuth.requireReady(id, this.accountId); }
-      catch (error) { if (this.signal.aborted) throw new Error("ยกเลิกงานแล้ว"); throw error; }
-      if (this.signal.aborted) throw new Error("ยกเลิกงานแล้ว");
+      catch (error) { if (this.signal.aborted) throw new Error(tr("ยกเลิกงานแล้ว")); throw error; }
+      if (this.signal.aborted) throw new Error(tr("ยกเลิกงานแล้ว"));
       const inline = longInline && inputFile
         ? `Read the full request from the file "${inputFile}" and follow it. Answer in Thai.`
         : prompt;
@@ -225,7 +226,7 @@ export class CliProvider implements LLMProvider {
         });
         proc.on("close", (code) => {
           finish();
-          if (this.signal.aborted) return reject(new Error("ยกเลิกงานแล้ว"));
+          if (this.signal.aborted) return reject(new Error(tr("ยกเลิกงานแล้ว")));
           if (parser && pending.trim()) parser.line(pending);
           const parsed = parser?.result();
           if (parsed?.usage) this.onUsage?.(parsed.usage);
@@ -234,7 +235,7 @@ export class CliProvider implements LLMProvider {
             return reject(
               new Error(cliFailure(this.model, this.modelOverride, errors, output, code, this.accountId)),
             );
-          if (parsed && !parsed.finished) return reject(new Error(`${this.model}: CLI ไม่ส่งผลลัพธ์ที่สมบูรณ์`));
+          if (parsed && !parsed.finished) return reject(new Error(tr`${this.model}: CLI ไม่ส่งผลลัพธ์ที่สมบูรณ์`));
           resolve({ text: (parsed?.text ?? output).replace(/\x1b\[[0-9;]*m/g, "").trim() });
         });
       });

@@ -1,5 +1,6 @@
 import { createDefaultTools, type LLMProvider, type LLMMessage } from '@superai-rakkyxd/core';
 import type { NewItem } from './CliChat.js';
+import { tr } from './i18n.js';
 
 export async function runApiConversation(options: {
   provider: LLMProvider; cwd: string; signal: AbortSignal; prefix: string; permission: string;
@@ -23,9 +24,9 @@ export async function runApiConversation(options: {
     }, tools);
     signal.throwIfAborted();
     if (response.text) emit({ id: `${prefix}-api-${step}`, kind: 'assistant', text: response.text });
-    if (response.usage) emit({ id: `${prefix}-api-usage-${step}`, kind: 'notice', text: `Token จาก provider: input ${response.usage.promptTokens} · output ${response.usage.completionTokens}` });
+    if (response.usage) emit({ id: `${prefix}-api-usage-${step}`, kind: 'notice', text: tr`Token จาก provider: input ${response.usage.promptTokens} · output ${response.usage.completionTokens}` });
     if (!response.toolCalls?.length) {
-      if (!response.text.trim()) throw new Error('ผู้ให้บริการส่งคำตอบว่างกลับมา ลองเลือกโมเดลอื่น');
+      if (!response.text.trim()) throw new Error(tr("ผู้ให้บริการส่งคำตอบว่างกลับมา ลองเลือกโมเดลอื่น"));
       return;
     }
     messages.push({ role: 'assistant', content: response.text, toolCalls: response.toolCalls });
@@ -38,15 +39,15 @@ export async function runApiConversation(options: {
       emit({ id, kind: 'tool', tool: kind, title, status: 'running' });
       let output: string, success = false;
       try {
-        if (!tool) throw new Error('เครื่องมือนี้ไม่ได้รับอนุญาตในโหมดที่เลือก');
+        if (!tool) throw new Error(tr("เครื่องมือนี้ไม่ได้รับอนุญาตในโหมดที่เลือก"));
         const result = await tool.execute(call.arguments, { cwd, signal });
         success = result.success;
-        output = result.success ? result.output : `${result.error || 'เครื่องมือทำงานไม่สำเร็จ'}\n${result.output}`;
+        output = result.success ? result.output : `${result.error || tr("เครื่องมือทำงานไม่สำเร็จ")}\n${result.output}`;
       } catch (error) { output = (error as Error).message; }
       signal.throwIfAborted();
       emit({ id, kind: 'tool', tool: kind, title, status: success ? 'done' : 'failed', output });
       messages.push({ role: 'tool', content: output.slice(0, 60000), toolCallId: call.id });
     }
   }
-  throw new Error('ทำงานครบขีดจำกัด 20 ขั้นตอนแล้ว กรุณาตรวจผลและส่งข้อความเพื่อทำต่อ');
+  throw new Error(tr("ทำงานครบขีดจำกัด 20 ขั้นตอนแล้ว กรุณาตรวจผลและส่งข้อความเพื่อทำต่อ"));
 }

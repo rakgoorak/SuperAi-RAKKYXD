@@ -1,3 +1,4 @@
+import { tr } from './i18n.js';
 /**
  * Multiple-choice questions an AI asks the user, Claude-style. Used by Agent/Chat runs (before
  * planning) and by every CLI chat: the AI writes a ```superai-questions block, the app shows it
@@ -139,7 +140,7 @@ export function cleanAnswers(questions: ClarifyQuestion[], given: unknown): Reco
     const labels = q.options.map((o) => o.label);
     const selected = (Array.isArray(a.selected) ? a.selected : []).map(String).filter((s: string) => labels.includes(s));
     const other = typeof a.other === "string" ? a.other.trim().slice(0, 500) : "";
-    if (!q.multiSelect && selected.length + (other ? 1 : 0) > 1) throw new Error(`“${q.header || q.question}” เลือกได้ข้อเดียว`);
+    if (!q.multiSelect && selected.length + (other ? 1 : 0) > 1) throw new Error(tr`“${q.header || q.question}” เลือกได้ข้อเดียว`);
     if (selected.length || other) answers[q.id] = { selected: Array.from(new Set(selected)), other };
   }
   return answers;

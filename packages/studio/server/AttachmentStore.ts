@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { tr } from './i18n.js';
 
 /** Files the AI CLIs can read, detected from the file header (not the claimed type). */
 const SIGNATURES: { ext: string; test: (b: Buffer) => boolean }[] = [
@@ -10,7 +11,7 @@ const SIGNATURES: { ext: string; test: (b: Buffer) => boolean }[] = [
   { ext: "webp", test: (b) => b.subarray(0, 4).toString("latin1") === "RIFF" && b.subarray(8, 12).toString("latin1") === "WEBP" },
   { ext: "pdf", test: (b) => b.subarray(0, 5).toString("latin1") === "%PDF-" },
 ];
-const UNSUPPORTED = "รองรับเฉพาะรูป PNG, JPG, GIF, WEBP และไฟล์ PDF กรุณาแปลงไฟล์แล้วลองใหม่";
+const UNSUPPORTED = tr("รองรับเฉพาะรูป PNG, JPG, GIF, WEBP และไฟล์ PDF กรุณาแปลงไฟล์แล้วลองใหม่");
 
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const ATTACHMENT_DIR = path.join(".superai", "attachments");
@@ -38,9 +39,9 @@ export interface SavedAttachment {
  * new, unique name. Never overwrites or removes existing files.
  */
 export function saveAttachment(root: string, data: Buffer, now = new Date()): SavedAttachment {
-  if (!data.length) throw new AttachmentError("ไม่พบข้อมูลไฟล์ ลองคัดลอกหรือเลือกไฟล์ใหม่แล้วลองอีกครั้ง");
+  if (!data.length) throw new AttachmentError(tr("ไม่พบข้อมูลไฟล์ ลองคัดลอกหรือเลือกไฟล์ใหม่แล้วลองอีกครั้ง"));
   if (data.length > MAX_ATTACHMENT_BYTES)
-    throw new AttachmentError("ไฟล์ใหญ่เกิน 20 MB กรุณาย่อรูปหรือแยกไฟล์ PDF ให้เล็กลงแล้วลองใหม่", 413);
+    throw new AttachmentError(tr("ไฟล์ใหญ่เกิน 20 MB กรุณาย่อรูปหรือแยกไฟล์ PDF ให้เล็กลงแล้วลองใหม่"), 413);
   const ext = attachmentExtension(data);
   if (!ext) throw new AttachmentError(UNSUPPORTED, 415);
   const dir = path.join(root, ATTACHMENT_DIR);
@@ -53,7 +54,7 @@ export function saveAttachment(root: string, data: Buffer, now = new Date()): Sa
     fs.writeFileSync(file, data, { flag: "wx" });
   } catch (error: any) {
     throw new AttachmentError(
-      `บันทึกไฟล์แนบไม่สำเร็จ (${error.code || error.message}) ตรวจว่าโฟลเดอร์ ${dir} เขียนไฟล์ได้และพื้นที่ดิสก์ยังเหลือ`,
+      tr`บันทึกไฟล์แนบไม่สำเร็จ (${error.code || error.message}) ตรวจว่าโฟลเดอร์ ${dir} เขียนไฟล์ได้และพื้นที่ดิสก์ยังเหลือ`,
       500,
     );
   }
@@ -66,12 +67,12 @@ export function saveAttachment(root: string, data: Buffer, now = new Date()): Sa
  */
 export function resolveAttachments(root: string, paths: unknown): string[] {
   if (paths === undefined) return [];
-  if (!Array.isArray(paths) || paths.length > 20) throw new AttachmentError("แนบไฟล์ได้ครั้งละไม่เกิน 20 ไฟล์");
+  if (!Array.isArray(paths) || paths.length > 20) throw new AttachmentError(tr("แนบไฟล์ได้ครั้งละไม่เกิน 20 ไฟล์"));
   const dir = path.resolve(root, ATTACHMENT_DIR);
   return paths.map((value) => {
     const file = typeof value === "string" ? path.resolve(value) : "";
     if (!file || path.dirname(file) !== dir || !fs.existsSync(file))
-      throw new AttachmentError("ไม่พบไฟล์แนบในโปรเจกต์แล้ว กรุณาแนบไฟล์ใหม่อีกครั้ง");
+      throw new AttachmentError(tr("ไม่พบไฟล์แนบในโปรเจกต์แล้ว กรุณาแนบไฟล์ใหม่อีกครั้ง"));
     return file;
   });
 }

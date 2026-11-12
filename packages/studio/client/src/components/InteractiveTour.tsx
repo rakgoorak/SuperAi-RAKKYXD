@@ -295,7 +295,7 @@ export function InteractiveTour({ active, onClose }: Props) {
                 <button
                   key={lang.code}
                   type="button"
-                  onClick={() => setLocale(lang.code)}
+                  onClick={() => { try { sessionStorage.setItem('superai-tour-open', '1'); } catch {} setLocale(lang.code); }}
                   className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer ${
                     locale === lang.code
                       ? 'bg-indigo-600 text-white'

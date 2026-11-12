@@ -5,6 +5,7 @@ import { post, type Session } from '../api';
 import { messageContexts, saveMessageContexts } from '../conversationContext';
 import { prepareMessage } from '../recovery';
 import '../conversation-interactions.css';
+import { tr } from '../i18n';
 
 interface Message { id: string; kind: string; text?: string; }
 interface Chapter { id: string; label: string; }
@@ -181,7 +182,7 @@ export function ConversationInteractions({ sessionId, active, messages, revision
 
   const copy = async (text: string) => {
     try { await navigator.clipboard.writeText(text); setProblem(''); closeMenu(); }
-    catch { setProblem('คัดลอกไม่ได้ กรุณาลองอีกครั้งหรือกด Ctrl+C'); }
+    catch { setProblem(tr("คัดลอกไม่ได้ กรุณาลองอีกครั้งหรือกด Ctrl+C")); }
   };
   const attach = (target: MenuState) => {
     try {
@@ -190,7 +191,7 @@ export function ConversationInteractions({ sessionId, active, messages, revision
       if (!items.some(item => item.messageId === target.id && item.text === text)) saveMessageContexts(sessionId, [...items, { id: crypto.randomUUID(), messageId: target.id, text }]);
       setMenu(null); setSelection(null); setProblem('');
       prepareMessage('', sessionId, { append: true });
-    } catch { setProblem('บันทึกข้อความอ้างอิงไม่ได้ กรุณาตรวจพื้นที่จัดเก็บ'); }
+    } catch { setProblem(tr("บันทึกข้อความอ้างอิงไม่ได้ กรุณาตรวจพื้นที่จัดเก็บ")); }
   };
   const reply = (target: MenuState) => {
     const quote = (target.selection || target.plain).split('\n').map(line => `> ${line}`).join('\n');
@@ -199,7 +200,7 @@ export function ConversationInteractions({ sessionId, active, messages, revision
   };
   const saveChapters = (next: Chapter[]) => {
     try { localStorage.setItem(chapterKey, JSON.stringify(next)); setChapters(next); setProblem(''); return true; }
-    catch { setProblem('บันทึกหมุดไม่ได้ กรุณาตรวจพื้นที่จัดเก็บ'); return false; }
+    catch { setProblem(tr("บันทึกหมุดไม่ได้ กรุณาตรวจพื้นที่จัดเก็บ")); return false; }
   };
   const fork = async (target: MenuState, side = false) => {
     if (busy) return;
@@ -237,21 +238,21 @@ export function ConversationInteractions({ sessionId, active, messages, revision
   }}>
     <style>{`::highlight(${matchName}){background:#806c28;color:#fff}::highlight(${activeName}){background:#edaa42;color:#171715}`}</style>
     {children}
-    <button className="conversation-find-trigger" type="button" aria-label="ค้นหาในบทสนทนา" title="ค้นหาในบทสนทนา (Ctrl+F)" onClick={event => { returnFocus.current = event.currentTarget; setOpen(true); requestAnimationFrame(() => input.current?.focus()); }}><Search size={14} /></button>
-    {open && <div className="conversation-find" role="search" aria-label="ค้นหาในบทสนทนานี้">
-      <input ref={input} aria-label="คำค้นหาในบทสนทนา" placeholder="ค้นหา…" value={query} onChange={event => { setQuery(event.target.value); onSearch(event.target.value); setIndex(0); }} onKeyDown={event => {
+    <button className="conversation-find-trigger" type="button" aria-label={tr("ค้นหาในบทสนทนา")} title={tr("ค้นหาในบทสนทนา (Ctrl+F)")} onClick={event => { returnFocus.current = event.currentTarget; setOpen(true); requestAnimationFrame(() => input.current?.focus()); }}><Search size={14} /></button>
+    {open && <div className="conversation-find" role="search" aria-label={tr("ค้นหาในบทสนทนานี้")}>
+      <input ref={input} aria-label={tr("คำค้นหาในบทสนทนา")} placeholder={tr("ค้นหา…")} value={query} onChange={event => { setQuery(event.target.value); onSearch(event.target.value); setIndex(0); }} onKeyDown={event => {
         if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); move(event.shiftKey ? -1 : 1); }
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeFinder(); }
       }} />
       <span role="status" aria-live="polite">{query ? `${count ? index + 1 : 0}/${count}` : '0/0'}</span>
-      <button type="button" aria-label="ผลก่อนหน้า" disabled={!count} onClick={() => move(-1)}><ArrowUp size={14} /></button>
-      <button type="button" aria-label="ผลถัดไป" disabled={!count} onClick={() => move(1)}><ArrowDown size={14} /></button>
-      <button type="button" aria-label="ปิดค้นหา" onClick={closeFinder}><X size={14} /></button>
+      <button type="button" aria-label={tr("ผลก่อนหน้า")} disabled={!count} onClick={() => move(-1)}><ArrowUp size={14} /></button>
+      <button type="button" aria-label={tr("ผลถัดไป")} disabled={!count} onClick={() => move(1)}><ArrowDown size={14} /></button>
+      <button type="button" aria-label={tr("ปิดค้นหา")} onClick={closeFinder}><X size={14} /></button>
     </div>}
-    {selection && !menu && createPortal(<div className="conversation-selection" role="toolbar" aria-label="จัดการข้อความที่เลือก" style={{ left: selection.x, top: selection.y }} onPointerDown={event => event.preventDefault()}>
+    {selection && !menu && createPortal(<div className="conversation-selection" role="toolbar" aria-label={tr("จัดการข้อความที่เลือก")} style={{ left: selection.x, top: selection.y }} onPointerDown={event => event.preventDefault()}>
       <button type="button" disabled={busy} onClick={() => void fork(selection, true)}>Start a side chat</button><button type="button" onClick={() => reply(selection)}>Reply</button>
     </div>, document.body)}
-    {menu && createPortal(<div ref={menuElement} className="conversation-message-menu" role="menu" aria-label="ตัวเลือกข้อความ" style={{ left: menu.x, top: menu.y }} onKeyDown={event => {
+    {menu && createPortal(<div ref={menuElement} className="conversation-message-menu" role="menu" aria-label={tr("ตัวเลือกข้อความ")} style={{ left: menu.x, top: menu.y }} onKeyDown={event => {
       if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
         event.preventDefault(); const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
         const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
@@ -269,15 +270,15 @@ export function ConversationInteractions({ sessionId, active, messages, revision
       <button role="menuitem" disabled={busy} onClick={() => void fork(menu)}>Fork from here<small>Starts a new session, keeps this one</small></button>
     </div>, document.body)}
     {!!chapters.length && <div className="conversation-chapters">
-      <button type="button" aria-label="หมุดบทสนทนา" aria-expanded={chaptersOpen} onClick={() => setChaptersOpen(value => !value)}><Bookmark size={14} /><span>{chapters.length}</span></button>
-      {chaptersOpen && <div className="conversation-chapter-list" aria-label="รายการหมุด">{chapters.map(chapter => <div key={chapter.id}>
+      <button type="button" aria-label={tr("หมุดบทสนทนา")} aria-expanded={chaptersOpen} onClick={() => setChaptersOpen(value => !value)}><Bookmark size={14} /><span>{chapters.length}</span></button>
+      {chaptersOpen && <div className="conversation-chapter-list" aria-label={tr("รายการหมุด")}>{chapters.map(chapter => <div key={chapter.id}>
         <button type="button" onClick={() => {
           const body = Array.from(root.current?.querySelectorAll<HTMLElement>('[data-message-body]') || []).find(item => item.dataset.messageBody === chapter.id);
-          if (!body) { setProblem('ข้อความนี้ไม่ได้อยู่ในประวัติที่โหลดแล้ว'); return; }
+          if (!body) { setProblem(tr("ข้อความนี้ไม่ได้อยู่ในประวัติที่โหลดแล้ว")); return; }
           body.scrollIntoView({ block: 'center' }); setChaptersOpen(false);
-        }}>{chapter.label}</button><button type="button" aria-label="เอาหมุดออก" onClick={() => saveChapters(chapters.filter(item => item.id !== chapter.id))}><Trash2 size={13} /></button>
+        }}>{chapter.label}</button><button type="button" aria-label={tr("เอาหมุดออก")} onClick={() => saveChapters(chapters.filter(item => item.id !== chapter.id))}><Trash2 size={13} /></button>
       </div>)}</div>}
     </div>}
-    {problem && <div className="conversation-interaction-error" role="alert">{problem}<button type="button" aria-label="ปิดข้อความแจ้งเตือน" onClick={() => setProblem('')}><X size={13} /></button></div>}
+    {problem && <div className="conversation-interaction-error" role="alert">{problem}<button type="button" aria-label={tr("ปิดข้อความแจ้งเตือน")} onClick={() => setProblem('')}><X size={13} /></button></div>}
   </div>;
 }

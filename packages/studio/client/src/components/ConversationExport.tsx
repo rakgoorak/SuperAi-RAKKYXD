@@ -9,6 +9,7 @@ import {
   conversationSummaryText,
   exportFilename,
 } from '../conversationExport';
+import { tr } from '../i18n';
 
 export function ConversationExport({
   title,
@@ -108,12 +109,12 @@ export function ConversationExport({
 
   return (
     <details ref={root} className="conversation-export">
-      <summary aria-label="ส่งออกบทสนทนา" title="ส่งออกบทสนทนา">
+      <summary aria-label={tr("ส่งออกบทสนทนา")} title={tr("ส่งออกบทสนทนา")}>
         {busy ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
       </summary>
-      <div className="conversation-export-menu" role="group" aria-label="รูปแบบส่งออก">
+      <div className="conversation-export-menu" role="group" aria-label={tr("รูปแบบส่งออก")}>
         <button type="button" disabled={busy} onClick={() => void download('html')}>
-          เว็บเพจสวยงาม (.html)
+          {tr("เว็บเพจสวยงาม (.html)")}
         </button>
         <button type="button" disabled={busy} onClick={() => void download('md')}>
           Markdown (.md)
@@ -123,9 +124,9 @@ export function ConversationExport({
         </button>
         <button type="button" disabled={busy} onClick={() => void handleCopySummary()}>
           {copied ? <Check size={13} style={{ color: '#4ade80' }} /> : <Copy size={13} />}
-          {copied ? 'คัดลอกสรุปแล้ว!' : 'คัดลอกสรุปบทสนทนา'}
+          {copied ? tr("คัดลอกสรุปแล้ว!") : tr("คัดลอกสรุปบทสนทนา")}
         </button>
-        <small>ดาวน์โหลดหรือแชร์ข้อมูลจากห้องนี้</small>
+        <small>{tr("ดาวน์โหลดหรือแชร์ข้อมูลจากห้องนี้")}</small>
         {problem && <p role="alert">{problem}</p>}
       </div>
     </details>

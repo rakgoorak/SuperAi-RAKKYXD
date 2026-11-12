@@ -23,7 +23,7 @@ const errors = [];
 const check = (condition, label) => { assert.ok(condition, label); checks++; console.log('PASS ' + label); };
 try {
   browser = await chromium.launch({ channel: 'chrome', headless: true });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+  const page = await browser.newPage({ locale: 'th-TH',  viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
   page.setDefaultTimeout(12000);
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => {

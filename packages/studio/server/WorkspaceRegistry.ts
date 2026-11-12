@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
 import { Workspace, AgentThread } from "./types.js";
+import { tr } from './i18n.js';
 
 export class WorkspaceRegistry {
   private storagePath: string;
@@ -31,7 +32,7 @@ export class WorkspaceRegistry {
     const defaultWorkspaces: Workspace[] = [
       {
         id: "ws-default",
-        name: path.basename(cwd) || "โปรเจกต์ของฉัน",
+        name: path.basename(cwd) || tr("โปรเจกต์ของฉัน"),
         rootPath: cwd,
         threads: [],
       },
@@ -48,14 +49,14 @@ export class WorkspaceRegistry {
       if (fs.existsSync(this.storagePath)) {
         const data = fs.readFileSync(this.storagePath, "utf8");
         const list: Workspace[] = JSON.parse(data);
-        if(!Array.isArray(list)||list.some(ws=>typeof ws.id!=="string"||typeof ws.name!=="string"||typeof ws.rootPath!=="string"||!Array.isArray(ws.threads)))throw new Error("รูปแบบข้อมูลไม่ถูกต้อง");
+        if(!Array.isArray(list)||list.some(ws=>typeof ws.id!=="string"||typeof ws.name!=="string"||typeof ws.rootPath!=="string"||!Array.isArray(ws.threads)))throw new Error(tr("รูปแบบข้อมูลไม่ถูกต้อง"));
         for (const ws of list) {
           this.workspaces.set(ws.id, ws);
         }
         this.lastSaved=JSON.stringify(list);
       }
     } catch {
-      throw new Error(`อ่านข้อมูลโปรเจกต์ไม่ได้: ${this.storagePath} ไฟล์เดิมยังไม่ถูกแก้ไข กรุณาตรวจรูปแบบ JSON และสิทธิ์อ่าน`);
+      throw new Error(tr`อ่านข้อมูลโปรเจกต์ไม่ได้: ${this.storagePath} ไฟล์เดิมยังไม่ถูกแก้ไข กรุณาตรวจรูปแบบ JSON และสิทธิ์อ่าน`);
     }
   }
 
@@ -69,7 +70,7 @@ export class WorkspaceRegistry {
       this.lastSaved=content;
     } catch {
       if(this.lastSaved)this.workspaces=new Map((JSON.parse(this.lastSaved) as Workspace[]).map(ws=>[ws.id,ws]));
-      throw new Error(`บันทึกข้อมูลโปรเจกต์ไม่ได้: ${this.storagePath} กรุณาตรวจสิทธิ์เขียนและพื้นที่ว่าง`);
+      throw new Error(tr`บันทึกข้อมูลโปรเจกต์ไม่ได้: ${this.storagePath} กรุณาตรวจสิทธิ์เขียนและพื้นที่ว่าง`);
     }
   }
 
@@ -101,9 +102,9 @@ export class WorkspaceRegistry {
   ): Workspace | undefined {
     const ws = this.workspaces.get(id);
     if (!ws) return undefined;
-    if (updates.favorite !== undefined && typeof updates.favorite !== 'boolean') throw new Error('สถานะโปรเจกต์โปรดไม่ถูกต้อง');
+    if (updates.favorite !== undefined && typeof updates.favorite !== 'boolean') throw new Error(tr("สถานะโปรเจกต์โปรดไม่ถูกต้อง"));
     if (updates.name !== undefined) {
-      if (!updates.name.trim()) throw new Error("กรุณาระบุชื่อโปรเจกต์");
+      if (!updates.name.trim()) throw new Error(tr("กรุณาระบุชื่อโปรเจกต์"));
       ws.name = updates.name.trim();
     }
     if (updates.rootPath !== undefined) {
@@ -111,7 +112,7 @@ export class WorkspaceRegistry {
         !fs.existsSync(updates.rootPath) ||
         !fs.statSync(updates.rootPath).isDirectory()
       )
-        throw new Error("ไม่พบโฟลเดอร์โปรเจกต์");
+        throw new Error(tr("ไม่พบโฟลเดอร์โปรเจกต์"));
       ws.rootPath = path.resolve(updates.rootPath);
     }
     if (updates.instructions !== undefined) {

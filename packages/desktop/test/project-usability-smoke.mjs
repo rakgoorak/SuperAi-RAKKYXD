@@ -21,7 +21,7 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true });
 let checks = 0;
 const check = (condition, text) => { assert.ok(condition, text); checks++; console.log(`PASS ${text}`); };
 try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+  const page = await browser.newPage({ locale: 'th-TH',  viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
   page.setDefaultTimeout(12000);
   const errors = [], sends = [], teamSends = [];
   let renameFails = false, contextFails = false, exportFails = false;

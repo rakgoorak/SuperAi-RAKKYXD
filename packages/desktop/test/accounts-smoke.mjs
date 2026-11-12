@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url);
 const output = path.resolve('output/playwright');
 await fs.mkdir(output, { recursive: true });
 const data = await fs.mkdtemp(path.join(output, 'accounts-'));
-const app = await electron.launch({ executablePath: require('electron'), args: ['packages/desktop'], env: { ...process.env, SUPERAI_DATA_DIR: data, SUPERAI_TEST_MODE: '1' }, timeout: 60000 });
+const app = await electron.launch({ executablePath: require('electron'), args: ['packages/desktop'], env: { SUPERAI_LANG: 'th', ...process.env, SUPERAI_DATA_DIR: data, SUPERAI_TEST_MODE: '1' }, timeout: 60000 });
 try {
   const page = await app.firstWindow();
   page.setDefaultTimeout(15000);

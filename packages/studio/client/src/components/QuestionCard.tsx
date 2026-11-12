@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check, CircleHelp, LoaderCircle } from "lucide-react";
 import { post } from "../api";
 import { chatPrefs } from "../chatControls";
+import { tr } from '../i18n';
 
 // Mirrors server/Questions.ts and the "question" chat item in server/CliChat.ts.
 export type ChatQuestion = { id: string; header: string; question: string; multiSelect: boolean; options: { label: string; description: string; recommended: boolean }[] };
@@ -23,10 +24,10 @@ export function QuestionCard({ item, sessionId, onError }: { item: QuestionItem;
 
   if (!waiting) {
     return (
-      <section className="clarify-card done" aria-label={`คำถามจาก ${item.by}`}>
-        <header><CircleHelp size={14} /><strong>{item.by} ถาม</strong>
-          {item.status === "expired" && <span className="chip">หมดเวลาตอบ</span>}
-          {item.status === "skipped" && <span className="chip">ให้ AI ตัดสินใจ</span>}
+      <section className="clarify-card done" aria-label={tr`คำถามจาก ${item.by}`}>
+        <header><CircleHelp size={14} /><strong>{item.by} {tr("ถาม")}</strong>
+          {item.status === "expired" && <span className="chip">{tr("หมดเวลาตอบ")}</span>}
+          {item.status === "skipped" && <span className="chip">{tr("ให้ AI ตัดสินใจ")}</span>}
         </header>
         <ul className="clarify-summary">
           {item.questions.map((q) => {
@@ -35,7 +36,7 @@ export function QuestionCard({ item, sessionId, onError }: { item: QuestionItem;
             return (
               <li key={q.id}>
                 <strong>{q.question}</strong>
-                <span>{picked.length ? picked.join(", ") : item.status === "expired" ? "—" : "ให้ AI ตัดสินใจ"}</span>
+                <span>{picked.length ? picked.join(", ") : item.status === "expired" ? "—" : tr("ให้ AI ตัดสินใจ")}</span>
               </li>
             );
           })}
@@ -68,8 +69,8 @@ export function QuestionCard({ item, sessionId, onError }: { item: QuestionItem;
   };
 
   return (
-    <section className="clarify-card" aria-label={`คำถามจาก ${item.by}`}>
-      <header><CircleHelp size={14} /><strong>{item.by} ขอถามก่อนทำต่อ</strong><span className="chip">รอคำตอบ</span></header>
+    <section className="clarify-card" aria-label={tr`คำถามจาก ${item.by}`}>
+      <header><CircleHelp size={14} /><strong>{item.by} {tr("ขอถามก่อนทำต่อ")}</strong><span className="chip">{tr("รอคำตอบ")}</span></header>
       {item.intro && <p className="clarify-intro">{item.intro}</p>}
       {item.questions.map((q, index) => {
         const a = answers[q.id] || { selected: [], other: "" };
@@ -78,7 +79,7 @@ export function QuestionCard({ item, sessionId, onError }: { item: QuestionItem;
             <legend>
               {q.header && <span className="chip">{q.header}</span>}
               <span>{index + 1}. {q.question}</span>
-              {q.multiSelect && <small>(เลือกได้หลายข้อ)</small>}
+              {q.multiSelect && <small>{tr("(เลือกได้หลายข้อ)")}</small>}
             </legend>
             {q.options.map((o) => {
               const on = a.selected.includes(o.label);
@@ -89,13 +90,13 @@ export function QuestionCard({ item, sessionId, onError }: { item: QuestionItem;
                     : { selected: on ? [] : [o.label], other: "" })}>
                   <span className={`clarify-mark ${q.multiSelect ? "box" : ""}`}>{on && <Check size={11} />}</span>
                   <span className="clarify-option-text">
-                    <strong>{o.label}{o.recommended && <em> (แนะนำ)</em>}</strong>
+                    <strong>{o.label}{o.recommended && <em> {tr("(แนะนำ)")}</em>}</strong>
                     {o.description && <small>{o.description}</small>}
                   </span>
                 </button>
               );
             })}
-            <input className="clarify-other" placeholder="หรือพิมพ์คำตอบเอง…" value={a.other} disabled={sending} aria-label={`คำตอบอื่นสำหรับข้อ ${index + 1}`}
+            <input className="clarify-other" placeholder={tr("หรือพิมพ์คำตอบเอง…")} value={a.other} disabled={sending} aria-label={tr`คำตอบอื่นสำหรับข้อ ${index + 1}`}
               onChange={(e) => {
                 const other = e.target.value;
                 edit(q.id, (cur) => ({ selected: q.multiSelect ? cur.selected : [], other }));
@@ -104,9 +105,9 @@ export function QuestionCard({ item, sessionId, onError }: { item: QuestionItem;
         );
       })}
       <footer>
-        <button className="text-button" disabled={sending} onClick={() => void send(true)}>ให้ AI ตัดสินใจเอง</button>
+        <button className="text-button" disabled={sending} onClick={() => void send(true)}>{tr("ให้ AI ตัดสินใจเอง")}</button>
         <button className="primary compact" disabled={sending || !answered} onClick={() => void send(false)}>
-          {sending ? <LoaderCircle size={13} className="spin" /> : <Check size={13} />} ส่งคำตอบ ({answered}/{item.questions.length})
+          {sending ? <LoaderCircle size={13} className="spin" /> : <Check size={13} />} {tr("ส่งคำตอบ (")}{answered}/{item.questions.length})
         </button>
       </footer>
     </section>

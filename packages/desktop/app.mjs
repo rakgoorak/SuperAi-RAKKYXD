@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserController } from "./browser.mjs";
+import { createBrowserAutomation } from "./browser-automation.mjs";
 import { normalizeBrowserUrl } from "./browser-url.mjs";
 import { prepareDesktopPath } from "./platform-env.mjs";
 import { Updater } from "./updater.mjs";
@@ -26,9 +27,11 @@ if (process.env.SUPERAI_TEST_MODE === "1" || process.argv.includes("--disable-gp
   app.commandLine.appendSwitch("disable-software-rasterizer");
 }
 app.commandLine.appendSwitch("disable-gpu-process-crash-limit");
+// Start in a given interface language (tests, or anyone who wants it); otherwise the computer's.
+if (/^[a-z]{2}(-[A-Za-z]{2})?$/.test(process.env.SUPERAI_LANG || "")) app.commandLine.appendSwitch("lang", process.env.SUPERAI_LANG);
 // Same id as the installer's shortcuts: Windows groups the taskbar button with them and shows our toasts.
 if (process.platform === "win32") app.setAppUserModelId("com.rakgoorak.superai");
-let window, server, browser, trayController;
+let window, server, browser, trayController, browserAutomation;
 const updater = new Updater({
   currentVersion: app.getVersion(),
   // SUPERAI_UPDATE_TEST lets a dev build exercise the real download/install path.
@@ -250,6 +253,11 @@ else {
       for (const port of ports) {
         const candidate = new StudioServer({
           port,
+          // The AI's browser tools act on the side browser panel of this window.
+          browser: (tool, args) => {
+            if (!browserAutomation) return Promise.reject(new Error("The SuperAi window is not open yet"));
+            return browserAutomation(tool, args);
+          },
           customWorkspacePath: process.env.SUPERAI_DATA_DIR
             ? path.join(process.env.SUPERAI_DATA_DIR, "workspaces.json")
             : undefined,
@@ -292,6 +300,9 @@ else {
         },
       });
       browser = new BrowserController(window);
+      browserAutomation = createBrowserAutomation(browser, {
+        reveal: () => { if (!window.isDestroyed()) window.webContents.send("browser:reveal", {}); },
+      });
       try {
         // Windows picks the right size out of the .ico; elsewhere the 1024px PNG must be shrunk
         // to menu-bar size or it would cover the whole bar.

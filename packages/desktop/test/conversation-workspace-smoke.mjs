@@ -27,7 +27,7 @@ let checks = 0;
 const check = (value, message) => { assert.ok(value, message); checks++; console.log(`PASS ${message}`); };
 async function runChecks() {
 try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+  const page = await browser.newPage({ locale: 'th-TH',  viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
   page.setDefaultTimeout(10000);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));

@@ -14,7 +14,7 @@ const data = await fs.mkdtemp(path.resolve('output/audit-data-'));
 const app = await electron.launch({
   executablePath: require('electron'),
   args: ['packages/desktop'],
-  env: { ...process.env, SUPERAI_DATA_DIR: data },
+  env: { SUPERAI_LANG: 'th', ...process.env, SUPERAI_DATA_DIR: data },
   timeout: 60000,
 });
 

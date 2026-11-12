@@ -1,3 +1,4 @@
+import { tr } from './i18n';
 export async function api<T = any>(
   url: string,
   options?: RequestInit,
@@ -10,12 +11,12 @@ export async function api<T = any>(
     });
   } catch {
     throw new Error(
-      "เชื่อมต่อระบบไม่ได้ กรุณาตรวจว่าโปรแกรมหลักยังเปิดอยู่ แล้วลองใหม่",
+      tr("เชื่อมต่อระบบไม่ได้ กรุณาตรวจว่าโปรแกรมหลักยังเปิดอยู่ แล้วลองใหม่"),
     );
   }
   const body = await response.json().catch(() => null);
   if (!response.ok)
-    throw new Error(body?.error || `คำขอไม่สำเร็จ (${response.status})`);
+    throw new Error(body?.error || tr`คำขอไม่สำเร็จ (${response.status})`);
   return body;
 }
 export const post = <T = any>(url: string, body: unknown = {}) =>

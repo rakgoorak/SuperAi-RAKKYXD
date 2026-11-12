@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Download, ExternalLink, LoaderCircle, Sparkles, X } from 'lucide-react';
 import { api, post, type Cli } from '../api';
+import { tr } from '../i18n';
 
 interface Job {
   id: string;
@@ -77,10 +78,10 @@ export function CliInstaller({
   };
 
   return (
-    <section className="cli-installer" aria-label="ติดตั้งเครื่องมือ CLI">
+    <section className="cli-installer" aria-label={tr("ติดตั้งเครื่องมือ CLI")}>
       <h3>
         <Download size={14} />
-        ติดตั้งเครื่องมือที่ยังไม่มี
+        {tr("ติดตั้งเครื่องมือที่ยังไม่มี")}
       </h3>
       <div className="install-buttons">
         {clis
@@ -93,7 +94,7 @@ export function CliInstaller({
               onClick={() => void start(c.id)}
             >
               <Download size={13} />
-              {starting === c.id ? 'กำลังเริ่ม…' : `ติดตั้ง ${c.name}`}
+              {starting === c.id ? tr("กำลังเริ่ม…") : tr`ติดตั้ง ${c.name}`}
             </button>
           ))}
 
@@ -102,16 +103,16 @@ export function CliInstaller({
             className="secondary compact"
             disabled={!!starting || isRunning}
             onClick={() => void start('node')}
-            title="ดาวน์โหลดและติดตั้ง Node.js 22 LTS ลงโฟลเดอร์ส่วนตัวของ SuperAi อัตโนมัติ"
+            title={tr("ดาวน์โหลดและติดตั้ง Node.js 22 LTS ลงโฟลเดอร์ส่วนตัวของ SuperAi อัตโนมัติ")}
           >
             <Sparkles size={13} />
             {starting === 'node'
-              ? 'กำลังเริ่ม…'
-              : `⚡ ${nodeStatus?.version ? `อัปเดตเป็น Node.js 22+ (ปัจจุบัน: ${nodeStatus.version})` : 'ติดตั้ง Node.js 22+ อัตโนมัติ'}`}
+              ? tr("กำลังเริ่ม…")
+              : `⚡ ${nodeStatus?.version ? tr`อัปเดตเป็น Node.js 22+ (ปัจจุบัน: ${nodeStatus.version})` : tr("ติดตั้ง Node.js 22+ อัตโนมัติ")}`}
           </button>
         )}
 
-        {clis.every((c) => c.available) && <p>เครื่องมือทั้งหมดพร้อมเปิด session</p>}
+        {clis.every((c) => c.available) && <p>{tr("เครื่องมือทั้งหมดพร้อมเปิด session")}</p>}
 
         {!nodeReady && (
           <button
@@ -125,17 +126,17 @@ export function CliInstaller({
             }
           >
             <ExternalLink size={13} />
-            ติดตั้งเองจาก nodejs.org
+            {tr("ติดตั้งเองจาก nodejs.org")}
           </button>
         )}
 
         <button className="text-button" onClick={() => void onRefresh().catch((e) => onError(e.message))}>
-          ตรวจสอบอีกครั้ง
+          {tr("ตรวจสอบอีกครั้ง")}
         </button>
       </div>
 
       <p className="team-footnote">
-        ติดตั้งจากแพ็กเกจทางการลงโฟลเดอร์ส่วนตัวของ SuperAi · ตรวจสอบและติดตั้ง Node.js 22+ ให้อัตโนมัติเมื่อกดติดตั้ง · หลังติดตั้งให้เปิด CLI เพื่อล็อกอิน
+        {tr("ติดตั้งจากแพ็กเกจทางการลงโฟลเดอร์ส่วนตัวของ SuperAi · ตรวจสอบและติดตั้ง Node.js 22+ ให้อัตโนมัติเมื่อกดติดตั้ง · หลังติดตั้งให้เปิด CLI เพื่อล็อกอิน")}
       </p>
 
       {job && (
@@ -145,10 +146,10 @@ export function CliInstaller({
             {
               (
                 {
-                  running: 'กำลังติดตั้ง',
-                  completed: 'ติดตั้งสำเร็จ',
-                  failed: 'ติดตั้งไม่สำเร็จ',
-                  cancelled: 'ยกเลิกแล้ว',
+                  running: tr("กำลังติดตั้ง"),
+                  completed: tr("ติดตั้งสำเร็จ"),
+                  failed: tr("ติดตั้งไม่สำเร็จ"),
+                  cancelled: tr("ยกเลิกแล้ว"),
                 } as Record<string, string>
               )[job.status]
             }
@@ -162,7 +163,7 @@ export function CliInstaller({
             >
               <LoaderCircle size={13} className="spin" />
               <X size={13} />
-              ยกเลิกการติดตั้ง
+              {tr("ยกเลิกการติดตั้ง")}
             </button>
           )}
         </details>

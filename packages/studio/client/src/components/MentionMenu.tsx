@@ -12,6 +12,7 @@ import {
 import { createPortal } from 'react-dom';
 import { AtSign, FileCode, FileText, FileImage, File, X } from 'lucide-react';
 import { api } from '../api';
+import { tr } from '../i18n';
 
 export interface MentionMenuHandle {
   keyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
@@ -135,7 +136,7 @@ export const MentionMenu = forwardRef<MentionMenuHandle, Props>(function Mention
           if (!disposed) setFiles(res.files || []);
         })
         .catch(() => {
-          if (!disposed) setError('ค้นหาไฟล์ในโปรเจกต์ไม่สำเร็จ');
+          if (!disposed) setError(tr("ค้นหาไฟล์ในโปรเจกต์ไม่สำเร็จ"));
         })
         .finally(() => {
           if (!disposed) setLoading(false);
@@ -203,16 +204,16 @@ export const MentionMenu = forwardRef<MentionMenuHandle, Props>(function Mention
       <span ref={anchor} hidden />
       {open &&
         createPortal(
-          <div ref={popup} className="slash-menu mention-menu" aria-label="อ้างอิงไฟล์" style={position}>
+          <div ref={popup} className="slash-menu mention-menu" aria-label={tr("อ้างอิงไฟล์")} style={position}>
             <header>
               <strong>
-                <AtSign size={14} /> อ้างอิงไฟล์ในโปรเจกต์ <small>{files.length}</small>
+                <AtSign size={14} /> {tr("อ้างอิงไฟล์ในโปรเจกต์")} <small>{files.length}</small>
               </strong>
-              <button type="button" aria-label="ปิดรายการไฟล์" onClick={() => setDismissed(draft)}>
+              <button type="button" aria-label={tr("ปิดรายการไฟล์")} onClick={() => setDismissed(draft)}>
                 <X size={15} />
               </button>
             </header>
-            <div role="listbox" id={`${id}-list`} aria-label="เลือกไฟล์">
+            <div role="listbox" id={`${id}-list`} aria-label={tr("เลือกไฟล์")}>
               {files.map((file, index) => {
                 const parts = file.split('/');
                 const fileName = parts.pop() || file;
@@ -241,12 +242,12 @@ export const MentionMenu = forwardRef<MentionMenuHandle, Props>(function Mention
                 );
               })}
             </div>
-            {loading && <p role="status">กำลังค้นหาไฟล์…</p>}
+            {loading && <p role="status">{tr("กำลังค้นหาไฟล์…")}</p>}
             {error && <p role="alert">{error}</p>}
-            {!loading && !error && !files.length && <p>ไม่พบไฟล์ที่ตรงกับคำค้นหา</p>}
+            {!loading && !error && !files.length && <p>{tr("ไม่พบไฟล์ที่ตรงกับคำค้นหา")}</p>}
             <footer>
-              <span>↑ ↓ หรือ Tab เลือก · Enter เติม · Esc ปิด</span>
-              <span>อ้างอิงบริบทเข้าพร้อมคำสั่ง</span>
+              <span>{tr("↑ ↓ หรือ Tab เลือก · Enter เติม · Esc ปิด")}</span>
+              <span>{tr("อ้างอิงบริบทเข้าพร้อมคำสั่ง")}</span>
             </footer>
           </div>,
           document.body

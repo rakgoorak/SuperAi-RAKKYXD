@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { tr } from './i18n.js';
 
 export interface CustomProvider { id: string; name: string; baseURL: string; models: string[] }
 export class CustomProviders {
@@ -15,15 +16,15 @@ export class CustomProviders {
   }
   private validate(value: any, id: string): CustomProvider {
     const name = typeof value?.name === 'string' ? value.name.trim() : '';
-    if (!name || name.length > 60) throw new Error('ชื่อผู้ให้บริการต้องมี 1–60 ตัวอักษร');
+    if (!name || name.length > 60) throw new Error(tr("ชื่อผู้ให้บริการต้องมี 1–60 ตัวอักษร"));
     let url: URL;
-    try { url = new URL(value.baseURL); } catch { throw new Error('Base URL ไม่ถูกต้อง'); }
+    try { url = new URL(value.baseURL); } catch { throw new Error(tr("Base URL ไม่ถูกต้อง")); }
     const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
     if ((url.protocol !== 'https:' && !(local && url.protocol === 'http:')) || url.username || url.password || url.search || url.hash)
-      throw new Error('ใช้ HTTPS หรือ HTTP บน localhost และไม่ใส่ key ใน URL');
+      throw new Error(tr("ใช้ HTTPS หรือ HTTP บน localhost และไม่ใส่ key ใน URL"));
     const models = Array.isArray(value.models) ? [...new Set<string>(value.models.map((m: unknown) => String(m).trim()).filter(Boolean))] : [];
     if (!models.length || models.length > 100 || models.some(model => !/^[\w.:/@+-]{1,200}$/.test(model) || model.startsWith('-')))
-      throw new Error('ระบุชื่อโมเดลอย่างน้อยหนึ่งรุ่น (สูงสุด 100 รุ่น)');
+      throw new Error(tr("ระบุชื่อโมเดลอย่างน้อยหนึ่งรุ่น (สูงสุด 100 รุ่น)"));
     return { id, name, baseURL: url.href.replace(/\/+$/, ''), models };
   }
   private save(entries: CustomProvider[]) {

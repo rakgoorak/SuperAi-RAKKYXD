@@ -2,7 +2,8 @@ import { X } from "lucide-react";
 import { AccountPicker } from "./AccountPicker";
 import { ModelCombo } from "./ModelCombo";
 import type { Cli, Seat } from "../api";
-import { CLOUD, EFFORTS, EFFORT_LABEL, HEADLESS, PROVIDER_LABEL, isCloud, loadDefaults, useCloudKeys, useModels } from "../providers";
+import { CLOUD, EFFORTS, effortLabel, HEADLESS, PROVIDER_LABEL, isCloud, loadDefaults, useCloudKeys, useModels } from "../providers";
+import { tr } from '../i18n';
 
 interface Props {
   seat: Seat;
@@ -37,51 +38,51 @@ export function SeatPicker({ seat, onChange, clis, ollamaModels, label, named = 
     <div className={`seat-picker ${named ? "" : "unnamed"} ${fixedProvider ? "fixed" : ""}`}>
       {named && (
         <label>
-          ชื่อ
-          <input aria-label={`ชื่อ${label}`} value={seat.name} maxLength={60} disabled={disabled} onChange={(e) => onChange({ ...seat, name: e.target.value })} />
+          {tr("ชื่อ")}
+          <input aria-label={tr`ชื่อ${label}`} value={seat.name} maxLength={60} disabled={disabled} onChange={(e) => onChange({ ...seat, name: e.target.value })} />
         </label>
       )}
       {!fixedProvider && <label>
-        ผู้ให้บริการ
-        <select aria-label={`ผู้ให้บริการของ${label}`} value={cli ? seat.provider : cloud || "ollama"} disabled={disabled} onChange={(e) => pickProvider(e.target.value)}>
+        {tr("ผู้ให้บริการ")}
+        <select aria-label={tr`ผู้ให้บริการของ${label}`} value={cli ? seat.provider : cloud || "ollama"} disabled={disabled} onChange={(e) => pickProvider(e.target.value)}>
           {HEADLESS.map((cliId) => {
             const found = clis.find((c) => c.id === cliId);
             return (
               <option key={cliId} value={`cli:${cliId}`} disabled={!found?.available}>
                 {PROVIDER_LABEL[cliId]}
-                {found?.available ? "" : " · ยังไม่ติดตั้ง"}
+                {found?.available ? "" : tr(" · ยังไม่ติดตั้ง")}
               </option>
             );
           })}
-          <option value="ollama">Ollama บนเครื่อง</option>
-          <optgroup label="API ภายนอก (ใช้ key ของคุณ)">
+          <option value="ollama">{tr("Ollama บนเครื่อง")}</option>
+          <optgroup label={tr("API ภายนอก (ใช้ key ของคุณ)")}>
             {[...new Set([...CLOUD, ...cloudKeys.map(key => key.id)])].map((id) => {
               const ready = cloudKeys.find((k) => k.id === id)?.hasKey;
-              return <option key={id} value={id} disabled={!ready && cloud !== id}>{cloudKeys.find(key => key.id === id)?.name || PROVIDER_LABEL[id] || id}{ready ? "" : " · ยังไม่ใส่ API Key"}</option>;
+              return <option key={id} value={id} disabled={!ready && cloud !== id}>{cloudKeys.find(key => key.id === id)?.name || PROVIDER_LABEL[id] || id}{ready ? "" : tr(" · ยังไม่ใส่ API Key")}</option>;
             })}
           </optgroup>
         </select>
       </label>}
-      {cli && showAccount && <AccountPicker provider={cli} value={seat.accountId} disabled={disabled} label={`บัญชีของ${label}`} onChange={accountId => onChange({ ...seat, accountId })} />}
+      {cli && showAccount && <AccountPicker provider={cli} value={seat.accountId} disabled={disabled} label={tr`บัญชีของ${label}`} onChange={accountId => onChange({ ...seat, accountId })} />}
       <label>
-        รุ่น AI (Model)
+        {tr("รุ่น AI (Model)")}
         {cli || cloud ? (
-          <ModelCombo label={`model ของ${label}`} value={seat.model} options={list?.models || []} onOpen={refreshModels} placeholder="ใช้รุ่นเริ่มต้นได้" disabled={disabled}
+          <ModelCombo label={tr`model ของ${label}`} value={seat.model} options={list?.models || []} onOpen={refreshModels} placeholder={tr("ใช้รุ่นเริ่มต้นได้")} disabled={disabled}
             onChange={(model) => onChange({ ...seat, model: model.trim(), effort: efforts.includes(seat.effort) || !seat.effort ? seat.effort : "" })} />
         ) : (
-          <ModelCombo label={`model ของ${label}`} value={seat.provider} options={ollamaModels} maxLength={150} placeholder="ชื่อรุ่น Ollama" disabled={disabled}
+          <ModelCombo label={tr`model ของ${label}`} value={seat.provider} options={ollamaModels} maxLength={150} placeholder={tr("ชื่อรุ่น Ollama")} disabled={disabled}
             onChange={(model) => onChange({ ...seat, provider: model.trim() })} />
         )}
       </label>
       <label>
-        ระดับการคิด (Effort)
-        <select aria-label={`effort ของ${label}`} value={seat.effort} disabled={disabled || !cli || !efforts.length} onChange={(e) => onChange({ ...seat, effort: e.target.value })}>
-          <option value="">ค่าเริ่มต้น</option>
-          {efforts.map((level) => <option key={level} value={level}>{EFFORT_LABEL[level] || level} ({level})</option>)}
+        {tr("ระดับการคิด (Effort)")}
+        <select aria-label={tr`effort ของ${label}`} value={seat.effort} disabled={disabled || !cli || !efforts.length} onChange={(e) => onChange({ ...seat, effort: e.target.value })}>
+          <option value="">{tr("ค่าเริ่มต้น")}</option>
+          {efforts.map((level) => <option key={level} value={level}>{effortLabel(level)} ({level})</option>)}
         </select>
       </label>
       {onRemove && (
-        <button className="icon-button seat-remove" title={`เอา${label}ออก`} disabled={disabled} onClick={onRemove}>
+        <button className="icon-button seat-remove" title={tr`เอา${label}ออก`} disabled={disabled} onClick={onRemove}>
           <X size={14} />
         </button>
       )}

@@ -36,6 +36,9 @@ jobs:
       - name: Build Monorepo Workspaces
         run: npm run build
 
+      - name: Every interface text has its translations
+        run: npm run i18n:check
+
       - name: Run Test Suite (Core, Studio, Desktop)
         run: npm test
         timeout-minutes: 8

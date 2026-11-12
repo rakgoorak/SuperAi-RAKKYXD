@@ -2,12 +2,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { tr } from './i18n.js';
 
 export const ACCOUNT_CAPABILITIES = [
-  { provider: 'claude-code', supported: true, note: 'แยกล็อกอิน การตั้งค่า และประวัติต่อบัญชี (บัญชี claude.ai)' },
-  { provider: 'codex', supported: true, note: 'แยก CODEX_HOME และข้อมูลล็อกอินต่อบัญชี' },
-  { provider: 'opencode', supported: true, note: 'แยกพื้นที่ข้อมูลและการตั้งค่าของ OpenCode ต่อโปรไฟล์' },
-  { provider: 'antigravity', supported: false, note: 'agy ใช้ล็อกอินร่วมผ่าน OS keyring ยังยืนยันวิธีแยกบัญชีพร้อมกันไม่ได้' },
+  { provider: 'claude-code', supported: true, note: tr("แยกล็อกอิน การตั้งค่า และประวัติต่อบัญชี (บัญชี claude.ai)") },
+  { provider: 'codex', supported: true, note: tr("แยก CODEX_HOME และข้อมูลล็อกอินต่อบัญชี") },
+  { provider: 'opencode', supported: true, note: tr("แยกพื้นที่ข้อมูลและการตั้งค่าของ OpenCode ต่อโปรไฟล์") },
+  { provider: 'antigravity', supported: false, note: tr("agy ใช้ล็อกอินร่วมผ่าน OS keyring ยังยืนยันวิธีแยกบัญชีพร้อมกันไม่ได้") },
 ] as const;
 export interface AccountProfile { id: string; provider: string; name: string; createdAt: number; isDefault?: boolean; system?: boolean }
 interface Saved { profiles: AccountProfile[]; defaults: Record<string, string> }
@@ -21,7 +22,7 @@ export class AccountRegistry {
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (!Array.isArray(data.profiles) || !data.defaults || typeof data.defaults !== 'object' || Array.isArray(data.defaults)
       || data.profiles.some((p: AccountProfile) => !p || !/^[a-f0-9-]{36}$/.test(p.id) || !this.supported(p.provider) || typeof p.name !== 'string'))
-      throw new Error('อ่านรายการบัญชีไม่ได้ ไฟล์เดิมยังถูกเก็บไว้');
+      throw new Error(tr("อ่านรายการบัญชีไม่ได้ ไฟล์เดิมยังถูกเก็บไว้"));
     return data;
   }
   private write(data: Saved) {
@@ -33,21 +34,21 @@ export class AccountRegistry {
   supported(provider: string) { return ACCOUNT_CAPABILITIES.some(c => c.provider === provider && c.supported); }
   list(provider: string): AccountProfile[] {
     const data = this.read();
-    return [{ id: 'system', provider, name: 'บัญชีเดิมของเครื่อง', createdAt: 0, system: true }, ...data.profiles.filter(p => p.provider === provider)]
+    return [{ id: 'system', provider, name: tr("บัญชีเดิมของเครื่อง"), createdAt: 0, system: true }, ...data.profiles.filter(p => p.provider === provider)]
       .map(p => ({ ...p, isDefault: p.id === (data.defaults[provider] || 'system') }));
   }
   resolve(provider: string, id?: unknown): string {
-    if (id !== undefined && (typeof id !== 'string' || !id)) throw new Error('บัญชีไม่ถูกต้อง');
+    if (id !== undefined && (typeof id !== 'string' || !id)) throw new Error(tr("บัญชีไม่ถูกต้อง"));
     const selected = id === undefined ? this.read().defaults[provider] || 'system' : id;
     if (selected === 'system') return selected;
     if (!this.supported(provider) || !this.read().profiles.some(p => p.provider === provider && p.id === selected))
-      throw new Error('ไม่พบบัญชีของผู้ให้บริการนี้ กรุณาเลือกบัญชีใหม่');
+      throw new Error(tr("ไม่พบบัญชีของผู้ให้บริการนี้ กรุณาเลือกบัญชีใหม่"));
     return selected;
   }
   create(provider: string, name: string): AccountProfile {
-    if (!this.supported(provider)) throw new Error('ผู้ให้บริการนี้ยังไม่รองรับการแยกบัญชี');
+    if (!this.supported(provider)) throw new Error(tr("ผู้ให้บริการนี้ยังไม่รองรับการแยกบัญชี"));
     name = typeof name === 'string' ? name.trim() : '';
-    if (!name || name.length > 60 || /[\x00-\x1f]/.test(name)) throw new Error('ชื่อบัญชีต้องมี 1–60 ตัวอักษร');
+    if (!name || name.length > 60 || /[\x00-\x1f]/.test(name)) throw new Error(tr("ชื่อบัญชีต้องมี 1–60 ตัวอักษร"));
     const data = this.read();
     const profile = { id: randomUUID(), provider, name, createdAt: Date.now() };
     data.profiles.push(profile);
@@ -60,7 +61,7 @@ export class AccountRegistry {
   }
   rename(provider: string, id: string, name: string) {
     this.resolve(provider, id);
-    if (id === 'system' || typeof name !== 'string' || !name.trim() || name.trim().length > 60 || /[\x00-\x1f]/.test(name)) throw new Error('ชื่อบัญชีไม่ถูกต้อง');
+    if (id === 'system' || typeof name !== 'string' || !name.trim() || name.trim().length > 60 || /[\x00-\x1f]/.test(name)) throw new Error(tr("ชื่อบัญชีไม่ถูกต้อง"));
     const data = this.read(); data.profiles.find(p => p.id === id)!.name = name.trim(); this.write(data);
   }
   setDefault(provider: string, id: string) {
@@ -69,7 +70,7 @@ export class AccountRegistry {
   }
   remove(provider: string, id: string) {
     this.resolve(provider, id);
-    if (id === 'system') throw new Error('นำบัญชีเดิมของเครื่องออกไม่ได้');
+    if (id === 'system') throw new Error(tr("นำบัญชีเดิมของเครื่องออกไม่ได้"));
     const data = this.read(); data.profiles = data.profiles.filter(p => p.id !== id);
     if (data.defaults[provider] === id) delete data.defaults[provider];
     this.write(data); // Retain CLI data and history; no recursive deletion or implicit logout.

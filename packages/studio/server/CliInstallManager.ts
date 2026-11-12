@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { cliEnv, cliInstallEnv, findExecutable, getCliDefinition, incompleteInstall, INSTALL_PACKAGES, INSTALL_SCRIPTS, managedCliPrefix } from './CliCatalog.js';
 import { installNode22 } from './NodeInstaller.js';
 import { installPortableGit } from './GitInstaller.js';
+import { tr } from './i18n.js';
 
 export interface InstallJob {
   id: string;
@@ -109,10 +110,10 @@ export class CliInstallManager {
       const label = cliId === 'node' ? 'Node.js 22 LTS' : 'Git for Windows';
       const installer = cliId === 'node' ? this.dependencies.installNode : this.dependencies.installGit;
       if (this.child || this.currentAbort) {
-        throw new Error('กำลังติดตั้งเครื่องมืออื่น กรุณารอหรือยกเลิกก่อน');
+        throw new Error(tr("กำลังติดตั้งเครื่องมืออื่น กรุณารอหรือยกเลิกก่อน"));
       }
       if (!installer) {
-        throw new Error(`ระบบติดตั้ง ${label} อัตโนมัติไม่พร้อมใช้งาน`);
+        throw new Error(tr`ระบบติดตั้ง ${label} อัตโนมัติไม่พร้อมใช้งาน`);
       }
 
       this.pruneOldJobs();
@@ -120,7 +121,7 @@ export class CliInstallManager {
         id: randomUUID(),
         cliId,
         status: 'running',
-        log: `กำลังเตรียมดาวน์โหลดและติดตั้ง ${label}...\n`,
+        log: tr`กำลังเตรียมดาวน์โหลดและติดตั้ง ${label}...\n`,
       };
       this.jobs.set(job.id, job);
 
@@ -140,13 +141,13 @@ export class CliInstallManager {
           });
           if (job.status === 'cancelled') return;
           job.status = 'completed';
-          job.log += `\n${label} (${res.version}) ติดตั้งสำเร็จและพร้อมใช้งาน`;
+          job.log += tr`\n${label} (${res.version}) ติดตั้งสำเร็จและพร้อมใช้งาน`;
         } catch (e: any) {
           if (job.status === 'cancelled') return;
           job.status = 'failed';
           job.error = ac.signal.aborted
-            ? `ยกเลิกการติดตั้ง ${label} แล้ว`
-            : e.message || `ติดตั้ง ${label} ไม่สำเร็จ`;
+            ? tr`ยกเลิกการติดตั้ง ${label} แล้ว`
+            : e.message || tr`ติดตั้ง ${label} ไม่สำเร็จ`;
         } finally {
           if (this.currentAbort === ac) {
             this.currentAbort = null;
@@ -161,18 +162,18 @@ export class CliInstallManager {
     const cli = getCliDefinition(cliId);
     const pkg = INSTALL_PACKAGES[cliId];
     const script = INSTALL_SCRIPTS[cliId];
-    if (!pkg && !script) throw new Error('Terminal มาพร้อมระบบปฏิบัติการ ไม่ต้องติดตั้ง');
+    if (!pkg && !script) throw new Error(tr("Terminal มาพร้อมระบบปฏิบัติการ ไม่ต้องติดตั้ง"));
     if (this.child || this.currentAbort) {
-      throw new Error('กำลังติดตั้งเครื่องมืออื่น กรุณารอหรือยกเลิกก่อน');
+      throw new Error(tr("กำลังติดตั้งเครื่องมืออื่น กรุณารอหรือยกเลิกก่อน"));
     }
     // An incomplete install (e.g. Claude Code without its claude.exe) is shown as missing: let it reinstall.
     const existing = this.dependencies.find(cli.command);
     if (existing && !incompleteInstall(cliId, existing)) {
-      throw new Error('เครื่องมือนี้ติดตั้งแล้ว กดตรวจสอบอีกครั้งได้');
+      throw new Error(tr("เครื่องมือนี้ติดตั้งแล้ว กดตรวจสอบอีกครั้งได้"));
     }
     if (script) {
       this.pruneOldJobs();
-      const job: InstallJob = { id: randomUUID(), cliId, status: 'running', log: `ติดตั้ง ${cli.name} ด้วยสคริปต์ทางการของ Google
+      const job: InstallJob = { id: randomUUID(), cliId, status: 'running', log: tr`ติดตั้ง ${cli.name} ด้วยสคริปต์ทางการของ Google
 ` };
       this.jobs.set(job.id, job);
       if (process.platform === 'win32')
@@ -196,9 +197,9 @@ export class CliInstallManager {
     if (needsNode) {
       if (!this.dependencies.installNode || this.dependencies.autoInstallNode === false) {
         if (!node || !npm) {
-          throw new Error('ต้องติดตั้ง Node.js 22+ และ npm ก่อน แล้วเปิดโปรแกรมใหม่');
+          throw new Error(tr("ต้องติดตั้ง Node.js 22+ และ npm ก่อน แล้วเปิดโปรแกรมใหม่"));
         }
-        if (nodeMajor < 22) throw new Error('ต้องใช้ Node.js 22 ขึ้นไป');
+        if (nodeMajor < 22) throw new Error(tr("ต้องใช้ Node.js 22 ขึ้นไป"));
       }
 
       fs.mkdirSync(this.dependencies.prefix, { recursive: true });
@@ -207,7 +208,7 @@ export class CliInstallManager {
         id: randomUUID(),
         cliId,
         status: 'running',
-        log: `ตรวจพบ Node.js ต่ำกว่า 22 หรือยังไม่ได้ติดตั้ง\n[1/2] กำลังดาวน์โหลดและติดตั้ง Node.js 22 LTS อัตโนมัติ...\n`,
+        log: tr("ตรวจพบ Node.js ต่ำกว่า 22 หรือยังไม่ได้ติดตั้ง\n[1/2] กำลังดาวน์โหลดและติดตั้ง Node.js 22 LTS อัตโนมัติ...\n"),
       };
       this.jobs.set(job.id, job);
 
@@ -227,18 +228,18 @@ export class CliInstallManager {
             signal: ac.signal,
           });
           if (job.status === 'cancelled' || ac.signal.aborted) return;
-          job.log += `\n[2/2] Node.js 22 พร้อมใช้งานแล้ว กำลังติดตั้ง ${pkg} จาก npm registry...\n`;
+          job.log += tr`\n[2/2] Node.js 22 พร้อมใช้งานแล้ว กำลังติดตั้ง ${pkg} จาก npm registry...\n`;
 
           const readyNode = this.dependencies.find('node');
           const readyNpm = this.dependencies.find('npm');
           if (!readyNode || !readyNpm) {
-            throw new Error('ติดตั้ง Node.js 22 แล้วแต่ไม่พบ executable กรุณาเปิดโปรแกรมใหม่');
+            throw new Error(tr("ติดตั้ง Node.js 22 แล้วแต่ไม่พบ executable กรุณาเปิดโปรแกรมใหม่"));
           }
           this.executeNpmInstall(job, cli, pkg, readyNode, readyNpm);
         } catch (e: any) {
           if (job.status === 'cancelled') return;
           job.status = 'failed';
-          job.error = ac.signal.aborted ? 'ยกเลิกการติดตั้งแล้ว' : e.message || 'ติดตั้งไม่สำเร็จ';
+          job.error = ac.signal.aborted ? tr("ยกเลิกการติดตั้งแล้ว") : e.message || tr("ติดตั้งไม่สำเร็จ");
           this.currentAbort = null;
           this.stopCurrent = null;
         }
@@ -253,7 +254,7 @@ export class CliInstallManager {
       id: randomUUID(),
       cliId,
       status: 'running',
-      log: `ติดตั้ง ${pkg} จาก npm registry\n`,
+      log: tr`ติดตั้ง ${pkg} จาก npm registry\n`,
     };
     this.jobs.set(job.id, job);
 
@@ -277,7 +278,7 @@ export class CliInstallManager {
 
     if (!entry) {
       job.status = 'failed';
-      job.error = 'หา npm-cli.js ไม่พบ กรุณาติดตั้ง Node.js/npm ใหม่';
+      job.error = tr("หา npm-cli.js ไม่พบ กรุณาติดตั้ง Node.js/npm ใหม่");
       this.currentAbort = null;
       this.stopCurrent = null;
       return;
@@ -319,7 +320,7 @@ export class CliInstallManager {
     this.stopCurrent = kill;
 
     const timer = setTimeout(() => {
-      job.error = 'ติดตั้งเกินเวลาที่กำหนด กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่';
+      job.error = tr("ติดตั้งเกินเวลาที่กำหนด กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่");
       kill();
     }, this.dependencies.timeout);
 
@@ -347,11 +348,11 @@ export class CliInstallManager {
         job.error =
           job.error ||
           (code === 0
-            ? 'ติดตั้งเสร็จแต่ยังหา executable ไม่พบ กรุณาตรวจ log'
-            : `ติดตั้งไม่สำเร็จ (exit ${code})`);
+            ? tr("ติดตั้งเสร็จแต่ยังหา executable ไม่พบ กรุณาตรวจ log")
+            : tr`ติดตั้งไม่สำเร็จ (exit ${code})`);
       } else {
         job.status = 'completed';
-        job.log += '\nติดตั้งสำเร็จ · เปิด CLI เพื่อเข้าสู่ระบบด้วยบัญชีของคุณ';
+        job.log += tr("\nติดตั้งสำเร็จ · เปิด CLI เพื่อเข้าสู่ระบบด้วยบัญชีของคุณ");
       }
     });
   }

@@ -6,6 +6,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { cliLaunch, listOpenCodeModels } from "./CliCatalog.js";
+import { tr } from './i18n.js';
 
 /** One AI seat: which tool runs it, which model and how hard it should think. */
 export interface Seat {
@@ -47,7 +48,7 @@ export const PROVIDER_PROFILES: Record<string, ProviderProfile> = {
     id: "opencode",
     efforts: ["minimal", "low", "medium", "high", "max"],
     suggestedModels: [],
-    effortNote: "OpenCode ส่ง effort เป็น --variant ซึ่งแต่ละผู้ให้บริการรองรับต่างกัน",
+    effortNote: tr("OpenCode ส่ง effort เป็น --variant ซึ่งแต่ละผู้ให้บริการรองรับต่างกัน"),
   },
   freebuff: { id: "freebuff", efforts: [], suggestedModels: [] },
   deepseek: {
@@ -68,21 +69,21 @@ export const PROVIDER_PROFILES: Record<string, ProviderProfile> = {
 };
 
 const SAFE = /^[\w.:/@+-]*$/;
-export function validateSeat(value: unknown, label = "ผู้ช่วย"): Seat {
+export function validateSeat(value: unknown, label = tr("ผู้ช่วย")): Seat {
   const s = value as any;
   if (!s || typeof s.provider !== "string" || !s.provider.trim() || s.provider.length > 150)
-    throw new Error(`${label}: กรุณาเลือกผู้ให้บริการ`);
+    throw new Error(tr`${label}: กรุณาเลือกผู้ให้บริการ`);
   const name = typeof s.name === "string" && s.name.trim() ? s.name.trim().slice(0, 60) : label;
   const model = typeof s.model === "string" ? s.model.trim() : "";
   const effort = typeof s.effort === "string" ? s.effort.trim() : "";
-  if (model.length > 200 || !SAFE.test(model) || model.startsWith("-")) throw new Error(`${label}: ชื่อรุ่นไม่ถูกต้อง`);
+  if (model.length > 200 || !SAFE.test(model) || model.startsWith("-")) throw new Error(tr`${label}: ชื่อรุ่นไม่ถูกต้อง`);
   const provider = s.provider.trim();
   if (provider.startsWith("cli:")) {
     const id = provider.slice(4);
     if (!HEADLESS_CLIS.includes(id))
-      throw new Error(`${label}: CLI นี้ใช้ได้เฉพาะโหมด Code (ไม่มีโหมดสั่งงานเบื้องหลัง)`);
-    if (effort && !PROVIDER_PROFILES[id].efforts.includes(effort)) throw new Error(`${label}: ระดับ effort ไม่ถูกต้อง`);
-  } else if (!SAFE.test(provider) || provider.startsWith("-")) throw new Error(`${label}: ชื่อรุ่น Ollama ไม่ถูกต้อง`);
+      throw new Error(tr`${label}: CLI นี้ใช้ได้เฉพาะโหมด Code (ไม่มีโหมดสั่งงานเบื้องหลัง)`);
+    if (effort && !PROVIDER_PROFILES[id].efforts.includes(effort)) throw new Error(tr`${label}: ระดับ effort ไม่ถูกต้อง`);
+  } else if (!SAFE.test(provider) || provider.startsWith("-")) throw new Error(tr`${label}: ชื่อรุ่น Ollama ไม่ถูกต้อง`);
   return { name, provider, model, effort: provider.startsWith("cli:") ? effort : "", ...(provider.startsWith("cli:") ? { accountId: accounts.resolve(provider.slice(4), s.accountId) } : {}) };
 }
 
@@ -144,26 +145,26 @@ export async function listModels(id: string, accountId = "system"): Promise<Mode
   if (isCloud(id)) return { models: await cloudKeys.models(id), efforts: [] };
   const env = accounts.environment(id, accountId);
   const profile = PROVIDER_PROFILES[id];
-  if (!profile) throw new Error("ไม่รู้จักผู้ให้บริการนี้");
+  if (!profile) throw new Error(tr("ไม่รู้จักผู้ให้บริการนี้"));
   const base = { efforts: profile.efforts, note: profile.effortNote };
   try {
     if (id === "codex") {
       const cached = codexCachedModels(env);
-      return { ...base, models: cached.models, modelEfforts: cached.efforts, note: cached.models.length ? "รายชื่อมาจาก Codex บางรุ่นอาจใช้กับแพ็กเกจ ChatGPT ของคุณไม่ได้" : "ยังไม่พบรายชื่อรุ่น เปิด Codex ในโหมด Code หนึ่งครั้งเพื่อให้ CLI ดึงรายชื่อ หรือพิมพ์ชื่อรุ่นเอง" };
+      return { ...base, models: cached.models, modelEfforts: cached.efforts, note: cached.models.length ? tr("รายชื่อมาจาก Codex บางรุ่นอาจใช้กับแพ็กเกจ ChatGPT ของคุณไม่ได้") : tr("ยังไม่พบรายชื่อรุ่น เปิด Codex ในโหมด Code หนึ่งครั้งเพื่อให้ CLI ดึงรายชื่อ หรือพิมพ์ชื่อรุ่นเอง") };
     }
     if (id === "antigravity") {
       const models = await antigravityModels();
       // A model named with its level leaves nothing to choose, so the effort box is hidden for it.
       const modelEfforts = Object.fromEntries(models.filter((m) => AGY_LEVEL.test(m)).map((m) => [m, []]));
-      return { ...base, efforts: ANTIGRAVITY_EFFORTS, models, modelEfforts, note: "ชื่อรุ่นของ Antigravity บอกระดับ effort อยู่แล้ว (-low / -medium / -high) จึงไม่ต้องเลือก effort ซ้ำ" };
+      return { ...base, efforts: ANTIGRAVITY_EFFORTS, models, modelEfforts, note: tr("ชื่อรุ่นของ Antigravity บอกระดับ effort อยู่แล้ว (-low / -medium / -high) จึงไม่ต้องเลือก effort ซ้ำ") };
     }
     if (id === "opencode") return { ...base, models: await listOpenCodeModels(env) };
     if (isCloud(id)) {
       const models = await cloudKeys.models(id);
-      return models.length ? { ...base, models } : { ...base, models: profile.suggestedModels, note: "ใส่ API Key ที่ การตั้งค่า > API Key เพื่อดูรายชื่อรุ่นทั้งหมด" };
+      return models.length ? { ...base, models } : { ...base, models: profile.suggestedModels, note: tr("ใส่ API Key ที่ การตั้งค่า > API Key เพื่อดูรายชื่อรุ่นทั้งหมด") };
     }
   } catch {
-    return { ...base, ...(id === "antigravity" ? { efforts: ANTIGRAVITY_EFFORTS } : {}), models: profile.suggestedModels, note: "ดึงรายชื่อรุ่นจาก CLI ไม่สำเร็จ ตรวจการติดตั้ง/เข้าสู่ระบบ หรือพิมพ์ชื่อรุ่นเอง" };
+    return { ...base, ...(id === "antigravity" ? { efforts: ANTIGRAVITY_EFFORTS } : {}), models: profile.suggestedModels, note: tr("ดึงรายชื่อรุ่นจาก CLI ไม่สำเร็จ ตรวจการติดตั้ง/เข้าสู่ระบบ หรือพิมพ์ชื่อรุ่นเอง") };
   }
   return { ...base, models: profile.suggestedModels };
 }

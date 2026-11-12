@@ -15,6 +15,7 @@ import {
 import type { BrowserState } from "../desktop";
 import { parsePreviewTarget, type PreviewRequest } from '../previewLinks';
 import { ProjectFilePreview, type FilePreviewRequest } from './ProjectFilePreview';
+import { tr } from '../i18n';
 const ArtifactPreview = React.lazy(() => import('./ArtifactPreview').then(module => ({ default: module.ArtifactPreview })));
 
 interface ArtifactState {
@@ -55,6 +56,11 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
   }, []);
   const area = useRef<HTMLDivElement>(null);
   const native = window.superai;
+  // When the AI acts on the browser, show the live page (not a file or artifact) and say so.
+  const [aiAt, setAiAt] = useState(0);
+  const [, tick] = useState(0);
+  useEffect(() => native?.onBrowserReveal?.(() => { setArtifact(null); setFileRequest(undefined); setAiAt(Date.now()); setTimeout(() => tick(v => v + 1), 4100); }), [native]);
+  const aiActive = Date.now() - aiAt < 4000;
   const tab = state.tabs.find((t) => t.id === state.activeId);
   const currentTab = useRef(tab);
   currentTab.current = tab;
@@ -145,13 +151,13 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
             : "https://" + value;
         const parsed = new URL(value);
         if (!["http:", "https:"].includes(parsed.protocol))
-          throw new Error("ใช้ได้เฉพาะ http/https");
+          throw new Error(tr("ใช้ได้เฉพาะ http/https"));
         setArtifact(null);
         setWebUrl(parsed.href);
         setUrl(parsed.href);
         setRevision((v) => v + 1);
       } catch {
-        onError("URL ไม่ถูกต้อง กรุณาระบุ http:// หรือ https://");
+        onError(tr("URL ไม่ถูกต้อง กรุณาระบุ http:// หรือ https://"));
       }
     }
   };
@@ -189,7 +195,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
         className="resize-handle"
         onPointerDown={resize}
         role="separator"
-        aria-label="ปรับขนาด Preview"
+        aria-label={tr("ปรับขนาด Preview")}
         aria-orientation="vertical"
         tabIndex={0}
         onKeyDown={(e) => {
@@ -199,11 +205,11 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
       />
       <div className="panel-heading">
         <span>
-          <Globe size={15} /> เว็บ Preview
+          <Globe size={15} /> {tr("เว็บ Preview")}
         </span>
         <div className="inline">
-          <span className="subtle-tag">{native ? "Chromium" : "เว็บ"}</span>
-          <button className="icon-button" title="ปิด Preview" onClick={onClose}>
+          <span className="subtle-tag">{native ? "Chromium" : tr("เว็บ")}</span>
+          <button className="icon-button" title={tr("ปิด Preview")} onClick={onClose}>
             <PanelRightClose size={16} />
           </button>
         </div>
@@ -226,7 +232,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
               <span>{t.title}</span>
             </button>
             <button
-              title="ปิดแท็บ"
+              title={tr("ปิดแท็บ")}
               onClick={() => action("close", { id: t.id })}
             >
               <X size={12} />
@@ -236,7 +242,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
         {native && (
           <button
             className="icon-button"
-            title="เพิ่มแท็บเว็บ"
+            title={tr("เพิ่มแท็บเว็บ")}
             onClick={() => action("create", { url: "https://www.google.com" })}
           >
             <Plus size={16} />
@@ -247,7 +253,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
         <button
           type="button"
           className="icon-button"
-          title="ย้อนกลับ"
+          title={tr("ย้อนกลับ")}
           disabled={!tab?.canBack}
           onClick={() => action("back")}
         >
@@ -256,7 +262,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
         <button
           type="button"
           className="icon-button"
-          title="ถัดไป"
+          title={tr("ถัดไป")}
           disabled={!tab?.canForward}
           onClick={() => action("forward")}
         >
@@ -265,7 +271,7 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
         <button
           type="button"
           className="icon-button"
-          title="รีโหลดเว็บ"
+          title={tr("รีโหลดเว็บ")}
           disabled={!tab && !webUrl}
           onClick={() =>
             native ? action("reload") : setRevision((v) => v + 1)
@@ -274,18 +280,18 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
           <RotateCw size={14} className={tab?.loading ? "spin" : ""} />
         </button>
         <input
-          aria-label="URL เว็บไซต์"
+          aria-label={tr("URL เว็บไซต์")}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="localhost:3000 หรือเว็บไซต์"
+          placeholder={tr("localhost:3000 หรือเว็บไซต์")}
         />
-        <button type="submit" className="icon-button" title="เปิด URL">
+        <button type="submit" className="icon-button" title={tr("เปิด URL")}>
           <ArrowRight size={15} />
         </button>
         <button
           type="button"
           className="icon-button"
-          title="เปิดใน browser ภายนอก"
+          title={tr("เปิดใน browser ภายนอก")}
           disabled={!!fileRequest || !!artifact}
           onClick={external}
         >
@@ -294,21 +300,21 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
       </form>
       {!native && !fileRequest && !artifact && (
         <div className="browser-note">
-          โหมดเว็บใช้ iframe บางเว็บไซต์อาจไม่อนุญาตให้แสดง กดเปิดภายนอกได้
+          {tr("โหมดเว็บใช้ iframe บางเว็บไซต์อาจไม่อนุญาตให้แสดง กดเปิดภายนอกได้")}
         </div>
       )}
       <div className="browser-canvas" ref={area}>
-        {artifact ? <React.Suspense fallback={<div className="preview-empty" role="status">กำลังเปิดชิ้นงาน…</div>}><ArtifactPreview key={artifact.id} title={artifact.title} language={artifact.language} content={artifact.content} onClose={() => setArtifact(null)} /></React.Suspense> : fileRequest ? <ProjectFilePreview request={fileRequest} /> : native ? (
+        {artifact ? <React.Suspense fallback={<div className="preview-empty" role="status">{tr("กำลังเปิดชิ้นงาน…")}</div>}><ArtifactPreview key={artifact.id} title={artifact.title} language={artifact.language} content={artifact.content} onClose={() => setArtifact(null)} /></React.Suspense> : fileRequest ? <ProjectFilePreview request={fileRequest} /> : native ? (
           tab?.error ? (
             <div className="preview-empty">
               <AlertTriangle size={30} />
-              <h3>เปิดหน้าเว็บไม่ได้</h3>
+              <h3>{tr("เปิดหน้าเว็บไม่ได้")}</h3>
               <p>{tab.error}</p>
               <button className="secondary" onClick={() => action("reload")}>
-                ลองใหม่
+                {tr("ลองใหม่")}
               </button>
               <button className="text-button" onClick={external}>
-                เปิดใน browser ภายนอก
+                {tr("เปิดใน browser ภายนอก")}
               </button>
             </div>
           ) : !tab ? (
@@ -316,14 +322,14 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
               <div className="empty-orbit">
                 <Globe size={35} />
               </div>
-              <h3>ดูผลงานได้ในหน้าต่างนี้</h3>
+              <h3>{tr("ดูผลงานได้ในหน้าต่างนี้")}</h3>
               <p>
-                เริ่มเว็บของคุณจาก terminal แล้วกรอก URL
+                {tr("เริ่มเว็บของคุณจาก terminal แล้วกรอก URL")}
                 <br />
-                หรือเปิดเว็บไซต์เพื่อค้นหาข้อมูล
+                {tr("หรือเปิดเว็บไซต์เพื่อค้นหาข้อมูล")}
               </p>
               <button className="secondary" onClick={() => navigate()}>
-                เปิด localhost:3000 <ArrowRight size={14} />
+                {tr("เปิด localhost:3000")} <ArrowRight size={14} />
               </button>
               <button
                 className="text-button"
@@ -331,34 +337,36 @@ export function PreviewPanel({ onClose, suspended, onError, embedded = false, re
                   action("create", { url: "https://www.google.com" })
                 }
               >
-                <Search size={14} /> ค้นหาบนเว็บ
+                <Search size={14} /> {tr("ค้นหาบนเว็บ")}
               </button>
             </div>
           ) : null
         ) : webUrl ? (
           <iframe
             key={revision}
-            title="เว็บไซต์ Preview"
+            title={tr("เว็บไซต์ Preview")}
             src={webUrl}
             sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-downloads"
           />
         ) : (
           <div className="preview-empty">
             <Globe size={32} />
-            <h3>เปิดหน้าเว็บของคุณ</h3>
-            <p>กรอก URL แล้วกด Enter เพื่อเริ่ม Preview</p>
+            <h3>{tr("เปิดหน้าเว็บของคุณ")}</h3>
+            <p>{tr("กรอก URL แล้วกด Enter เพื่อเริ่ม Preview")}</p>
           </div>
         )}
       </div>
       <div className="preview-footer">
         <span className={`status-dot ${tab?.loading ? "pending" : ""}`} />
-        {artifact ? `Artifact · ${artifact.title} (${artifact.language.toUpperCase()})` : fileRequest ? 'ไฟล์ในโปรเจกต์ · Preview'
+        {artifact ? `Artifact · ${artifact.title} (${artifact.language.toUpperCase()})` : fileRequest ? tr("ไฟล์ในโปรเจกต์ · Preview")
           : tab?.loading
-          ? "กำลังโหลดเว็บไซต์…"
+          ? tr("กำลังโหลดเว็บไซต์…")
+          : aiActive
+            ? tr("AI กำลังใช้ Browser นี้")
           : tab
-            ? "Browser ภายในพร้อมใช้งาน"
-            : "พร้อมเปิดเว็บไซต์"}
-        <span className="push">{state.tabs.length} แท็บ</span>
+            ? tr("Browser ภายในพร้อมใช้งาน")
+            : tr("พร้อมเปิดเว็บไซต์")}
+        <span className="push">{state.tabs.length} {tr("แท็บ")}</span>
       </div>
     </aside>
   );

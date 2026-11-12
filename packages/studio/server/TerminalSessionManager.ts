@@ -21,6 +21,7 @@ import os from "node:os";
 import { TerminalSession, SpawnSessionOptions, PtyProcess, RestoredSession } from "./types.js";
 import { resumeArgs, claudeTranscriptExists, findCodexSession } from "./SessionRestore.js";
 import { getCliDefinition, cliLaunch } from "./CliCatalog.js";
+import { tr } from './i18n.js';
 
 // Prebuilt node-pty (no Visual Studio / node-gyp needed). If it can't load,
 // we fall back to plain stdio pipes so the app still works.
@@ -58,7 +59,7 @@ export class TerminalSessionManager {
       ).length;
       if (count >= definition.maxSessions)
         throw new Error(
-          `${definition.name} เปิดได้สูงสุด ${definition.maxSessions} session กรุณาปิด session เดิมก่อน`,
+          tr`${definition.name} เปิดได้สูงสุด ${definition.maxSessions} session กรุณาปิด session เดิมก่อน`,
         );
       if (!options.command) {
         // Claude Code takes the conversation id up front, so the exact tab can be resumed later.
@@ -226,8 +227,8 @@ export class TerminalSessionManager {
    */
   public restartSession(id: string, resume?: string): TerminalSession {
     const session = this.sessions.get(id);
-    if (!session?.restart) throw new Error("ไม่พบ session");
-    if (session.status === "running" || session.status === "stopping") throw new Error("session ยังทำงานอยู่");
+    if (!session?.restart) throw new Error(tr("ไม่พบ session"));
+    if (session.status === "running" || session.status === "stopping") throw new Error(tr("session ยังทำงานอยู่"));
     this.sessions.delete(id);
     try {
       return this.spawnSession({ ...session.restart, name: session.name, id, resume: resume || this.resumeFor(session, new Set()) });
@@ -272,7 +273,7 @@ export class TerminalSessionManager {
     const session = this.sessions.get(id);
     if (!session) return false;
     if (session.closeRequested || (session.status === "stopping" && !session.sleeping))
-      throw new Error("session กำลังปิด กรุณารอให้ปิดเสร็จก่อน");
+      throw new Error(tr("session กำลังปิด กรุณารอให้ปิดเสร็จก่อน"));
     if (!session.sleeping && session.status === "running") {
       session.sleeping = true;
       session.status = "stopping";
@@ -282,13 +283,13 @@ export class TerminalSessionManager {
       const deadline = Date.now() + timeoutMs;
       while (!session.exitObserved || !session.terminationConfirmed) {
         if (this.sessions.get(id) !== session || session.closeRequested)
-          throw new Error("session เปลี่ยนไปแล้ว กรุณาลองใหม่");
+          throw new Error(tr("session เปลี่ยนไปแล้ว กรุณาลองใหม่"));
         if (Date.now() >= deadline)
-          throw new Error("Terminal ยังปิดไม่เสร็จ กรุณารอสักครู่แล้วลองสลับเป็นแชตอีกครั้ง");
+          throw new Error(tr("Terminal ยังปิดไม่เสร็จ กรุณารอสักครู่แล้วลองสลับเป็นแชตอีกครั้ง"));
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
       if (this.sessions.get(id) !== session || session.closeRequested)
-        throw new Error("session เปลี่ยนไปแล้ว กรุณาลองใหม่");
+        throw new Error(tr("session เปลี่ยนไปแล้ว กรุณาลองใหม่"));
       session.sleeping = false;
       session.status = "exited";
       session.exitCode = null;
@@ -503,7 +504,7 @@ export class TerminalSessionManager {
           if (error && !session.exitObserved) {
             session.status = "error";
             const message =
-              "\r\n[ปิด process ลูกไม่สำเร็จ ยังไม่คืนสิทธิ์เปิด session กรุณาลองปิดอีกครั้ง]\r\n";
+              tr("\r\n[ปิด process ลูกไม่สำเร็จ ยังไม่คืนสิทธิ์เปิด session กรุณาลองปิดอีกครั้ง]\r\n");
             session.bufferedOutput += message;
             for (const subscriber of session.subscribers)
               try {

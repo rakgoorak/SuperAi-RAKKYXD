@@ -7,6 +7,7 @@ import { FileExplorerPanel } from './FileExplorerPanel';
 import type { PreviewRequest } from '../previewLinks';
 import { paneView } from '../paneView';
 import { dispatchHandoff, formatHandoffPrompt } from '../handoffUtils';
+import { tr } from '../i18n';
 
 export type DockView = 'dashboard' | 'tasks' | 'prompts' | 'files' | 'browser';
 interface SavedItem {
@@ -125,7 +126,7 @@ export function RightDock({
       localStorage.setItem(`superai-${kind}-v1`, JSON.stringify(items));
       (kind === 'tasks' ? setTasks : setPrompts)(items);
     } catch {
-      onError('บันทึกรายการบนเครื่องไม่ได้ กรุณาตรวจพื้นที่จัดเก็บ');
+      onError(tr("บันทึกรายการบนเครื่องไม่ได้ กรุณาตรวจพื้นที่จัดเก็บ"));
     }
   };
 
@@ -135,7 +136,7 @@ export function RightDock({
     try {
       localStorage.setItem('superai-dock-width', String(value));
     } catch {
-      onError('บันทึกขนาดแผงไม่ได้');
+      onError(tr("บันทึกขนาดแผงไม่ได้"));
     }
   };
 
@@ -187,17 +188,17 @@ export function RightDock({
         sessions.find(s => s.id === recipient && (!workspace || s.wsId === workspace.id) && isSessionActive(s)) ||
         sessions.find(s => (!workspace || s.wsId === workspace.id) && isSessionActive(s)) ||
         sessions.find(s => isSessionActive(s));
-      if (!target) throw new Error('ไม่พบ session ที่พร้อมใช้งานในขณะนี้ กรุณาเปิด session ก่อน');
+      if (!target) throw new Error(tr("ไม่พบ session ที่พร้อมใช้งานในขณะนี้ กรุณาเปิด session ก่อน"));
       const summary = (view === 'tasks' && attachLatestSummary) ? getLatestSummary() : null;
       const deliverText = summary
         ? formatHandoffPrompt({ agentName: summary.agentName, text: summary.text, nextInstruction: item.text })
         : item.text;
       if (paneView(target) === 'chat') {
         const result = await post<{ queued?: boolean }>(`/api/terminals/${target.id}/chat`, { text: deliverText });
-        if (!result) throw new Error('ส่งงานเข้าแชตไม่สำเร็จ กรุณาตรวจ session');
+        if (!result) throw new Error(tr("ส่งงานเข้าแชตไม่สำเร็จ กรุณาตรวจ session"));
       } else {
         const result = await post(`/api/terminals/${target.id}/input`, { input: deliverText + '\r' });
-        if (!result.success) throw new Error('ส่งงานเข้า Terminal ไม่สำเร็จ กรุณาตรวจ session');
+        if (!result.success) throw new Error(tr("ส่งงานเข้า Terminal ไม่สำเร็จ กรุณาตรวจ session"));
       }
       persist(kind, currentList.map(x => (x.id === item.id ? { ...x, state: 'sent', sessionId: target.id } : x)));
     } catch (e) {
@@ -211,11 +212,11 @@ export function RightDock({
   const stoppedCount = sessions.filter(s => !isSessionActive(s)).length;
 
   return (
-    <aside className={`right-dock ${open ? '' : 'not-visible'}`} style={{ width }} aria-label="แผงเครื่องมือ">
+    <aside className={`right-dock ${open ? '' : 'not-visible'}`} style={{ width }} aria-label={tr("แผงเครื่องมือ")}>
       <div
         className="dock-resize"
         role="separator"
-        aria-label="ปรับขนาดแผงด้านขวา"
+        aria-label={tr("ปรับขนาดแผงด้านขวา")}
         aria-orientation="vertical"
         tabIndex={0}
         onKeyDown={e => {
@@ -238,21 +239,21 @@ export function RightDock({
         }}
         onPointerCancel={() => setResizing(false)}
       />
-      <nav className="dock-tabs" aria-label="เครื่องมือด้านขวา">
+      <nav className="dock-tabs" aria-label={tr("เครื่องมือด้านขวา")}>
         {(
           [
-            ['dashboard', 'สถานะ', Activity],
-            ['tasks', 'งาน', ClipboardList],
-            ['prompts', 'พรอมป์ต์', MessageSquare],
-            ['files', 'ไฟล์', Folder],
-            ['browser', previewRequest?.target?.kind === 'artifact' ? 'Canvas (พรีวิวสด)' : 'Browser', previewRequest?.target?.kind === 'artifact' ? Sparkles : Globe],
+            ['dashboard', tr("สถานะ"), Activity],
+            ['tasks', tr("งาน"), ClipboardList],
+            ['prompts', tr("พรอมป์ต์"), MessageSquare],
+            ['files', tr("ไฟล์"), Folder],
+            ['browser', previewRequest?.target?.kind === 'artifact' ? tr("Canvas (พรีวิวสด)") : 'Browser', previewRequest?.target?.kind === 'artifact' ? Sparkles : Globe],
           ] as const
         ).map(([value, label, Icon]) => (
           <button key={value} aria-label={label} title={label} aria-pressed={view === value} onClick={() => setView(value)}>
             <Icon size={16} />
           </button>
         ))}
-        <button className="icon-button" title="ปิดแผงด้านขวา" onClick={close}>
+        <button className="icon-button" title={tr("ปิดแผงด้านขวา")} onClick={close}>
           <X size={14} />
         </button>
       </nav>
@@ -280,19 +281,19 @@ export function RightDock({
               <div className="dock-summary">
                 <strong>{sessions.length}</strong>
                 <div>
-                  <h2>session ทั้งหมด</h2>
+                  <h2>{tr("session ทั้งหมด")}</h2>
                   <p>
-                    {activeCount} session พร้อมใช้งาน · {stoppedCount} หยุด / ปิดแล้ว
+                    {activeCount} {tr("session พร้อมใช้งาน ·")} {stoppedCount} {tr("หยุด / ปิดแล้ว")}
                   </p>
                 </div>
               </div>
-              <p className="dock-note">สถานะ session ในโปรเจกต์ · แชตและ Terminal พร้อมรับคำสั่ง</p>
+              <p className="dock-note">{tr("สถานะ session ในโปรเจกต์ · แชตและ Terminal พร้อมรับคำสั่ง")}</p>
               <div className="dock-filters">
                 {[
-                  ['all', 'ทั้งหมด'],
-                  ['running', 'เปิดอยู่'],
-                  ['exited', 'จบแล้ว'],
-                  ['error', 'ผิดพลาด'],
+                  ['all', tr("ทั้งหมด")],
+                  ['running', tr("เปิดอยู่")],
+                  ['exited', tr("จบแล้ว")],
+                  ['error', tr("ผิดพลาด")],
                 ].map(([value, label]) => (
                   <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>
                     {label}
@@ -303,12 +304,12 @@ export function RightDock({
           ) : (
             <div className="dock-section-heading">
               <div>
-                <h2>{view === 'tasks' ? 'งานของโปรเจกต์' : 'พรอมป์ต์ที่บันทึก'}</h2>
-                <p>{workspace?.name || 'โปรเจกต์ปัจจุบัน'} · บันทึกบนเครื่อง</p>
+                <h2>{view === 'tasks' ? tr("งานของโปรเจกต์") : tr("พรอมป์ต์ที่บันทึก")}</h2>
+                <p>{workspace?.name || tr("โปรเจกต์ปัจจุบัน")} {tr("· บันทึกบนเครื่อง")}</p>
               </div>
               <button
                 className="icon-button"
-                title={view === 'tasks' ? 'เพิ่มงาน' : 'เพิ่มพรอมป์ต์'}
+                title={view === 'tasks' ? tr("เพิ่มงาน") : tr("เพิ่มพรอมป์ต์")}
                 onClick={() => edit()}
               >
                 <Plus size={16} />
@@ -319,8 +320,8 @@ export function RightDock({
           <label className="dock-search">
             <Search size={13} />
             <input
-              aria-label="ค้นหาในแผง"
-              placeholder="ค้นหา…"
+              aria-label={tr("ค้นหาในแผง")}
+              placeholder={tr("ค้นหา…")}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -343,45 +344,45 @@ export function RightDock({
                         <strong>{s.name}</strong>
                         <small>
                           {s.agentType} · {workspaces.find(w => w.id === s.wsId)?.name || s.cwd}{' '}
-                          {isChat ? '· แชต' : '· Terminal'}
+                          {isChat ? tr("· แชต") : '· Terminal'}
                         </small>
                       </span>
                       <small>
                         {s.status === 'error'
-                          ? 'ผิดพลาด'
+                          ? tr("ผิดพลาด")
                           : s.status === 'stopping'
-                            ? 'กำลังปิด'
+                            ? tr("กำลังปิด")
                             : isChat
-                              ? 'แชตพร้อมใช้'
+                              ? tr("แชตพร้อมใช้")
                               : s.status === 'running'
-                                ? 'เปิดอยู่'
-                                : 'จบแล้ว'}
+                                ? tr("เปิดอยู่")
+                                : tr("จบแล้ว")}
                       </small>
                     </button>
                   );
                 })}
-                {!matching.length && <p className="dock-empty">ยังไม่มี session ที่ตรงกับตัวกรอง</p>}
+                {!matching.length && <p className="dock-empty">{tr("ยังไม่มี session ที่ตรงกับตัวกรอง")}</p>}
               </div>
               {runs.length > 0 && (
                 <section className="dock-runs">
-                  <h3>ประวัติผู้ช่วยในโปรเจกต์นี้</h3>
+                  <h3>{tr("ประวัติผู้ช่วยในโปรเจกต์นี้")}</h3>
                   {runs.slice(0, 15).map(run => (
                     <button
                       key={run.id}
                       type="button"
                       className="dock-run-item"
-                      title="คลิกเพื่อนำคำสั่งนี้ไปใส่ในช่องคำสั่ง"
+                      title={tr("คลิกเพื่อนำคำสั่งนี้ไปใส่ในช่องคำสั่ง")}
                       onClick={() => onPrompt(run.prompt)}
                     >
                       <strong>{run.prompt}</strong>
                       <small>
                         {run.status === 'completed'
-                          ? 'เสร็จแล้ว'
+                          ? tr("เสร็จแล้ว")
                           : run.status === 'running'
-                            ? 'กำลังทำงาน'
+                            ? tr("กำลังทำงาน")
                             : run.status === 'failed'
-                              ? 'ผิดพลาด'
-                              : 'ยกเลิกแล้ว'}
+                              ? tr("ผิดพลาด")
+                              : tr("ยกเลิกแล้ว")}
                       </small>
                     </button>
                   ))}
@@ -393,16 +394,16 @@ export function RightDock({
               {view === 'tasks' && (
                 <div className="task-handoff-controls">
                   <label className="task-target">
-                    ส่งงานไปที่
+                    {tr("ส่งงานไปที่")}
                     <select
-                      aria-label="session รับงาน"
+                      aria-label={tr("session รับงาน")}
                       value={recipient}
                       onChange={e => setRecipient(e.target.value)}
                     >
-                      <option value="">เลือก session รับงาน</option>
+                      <option value="">{tr("เลือก session รับงาน")}</option>
                       {(projectActiveSessions.length ? projectActiveSessions : activeSessions).map(s => (
                         <option key={s.id} value={s.id}>
-                          {s.name} ({paneView(s) === 'chat' ? 'แชต' : 'Terminal'})
+                          {s.name} ({paneView(s) === 'chat' ? tr("แชต") : 'Terminal'})
                         </option>
                       ))}
                     </select>
@@ -413,7 +414,7 @@ export function RightDock({
                       checked={attachLatestSummary}
                       onChange={e => setAttachLatestSummary(e.target.checked)}
                     />
-                    <span>แนบข้อสรุปล่าสุดจาก AI อื่น</span>
+                    <span>{tr("แนบข้อสรุปล่าสุดจาก AI อื่น")}</span>
                   </label>
                 </div>
               )}
@@ -426,9 +427,9 @@ export function RightDock({
                   }}
                 >
                   <label>
-                    ชื่อ
+                    {tr("ชื่อ")}
                     <input
-                      aria-label="ชื่อรายการ"
+                      aria-label={tr("ชื่อรายการ")}
                       required
                       maxLength={120}
                       value={title}
@@ -436,9 +437,9 @@ export function RightDock({
                     />
                   </label>
                   <label>
-                    ข้อความ
+                    {tr("ข้อความ")}
                     <textarea
-                      aria-label="ข้อความรายการ"
+                      aria-label={tr("ข้อความรายการ")}
                       required
                       maxLength={20000}
                       rows={5}
@@ -448,10 +449,10 @@ export function RightDock({
                   </label>
                   <div className="inline">
                     <button className="primary compact" type="submit">
-                      บันทึกรายการ
+                      {tr("บันทึกรายการ")}
                     </button>
                     <button className="text-button" type="button" onClick={() => setEditing(null)}>
-                      ยกเลิก
+                      {tr("ยกเลิก")}
                     </button>
                   </div>
                 </form>
@@ -462,7 +463,7 @@ export function RightDock({
                     <div className="saved-item-heading">
                       <strong>{item.title}</strong>
                       {view === 'tasks' && (
-                        <small>{item.state === 'done' ? 'เสร็จแล้ว' : item.state === 'sent' ? 'ส่งแล้ว' : 'ยังไม่ส่ง'}</small>
+                        <small>{item.state === 'done' ? tr("เสร็จแล้ว") : item.state === 'sent' ? tr("ส่งแล้ว") : tr("ยังไม่ส่ง")}</small>
                       )}
                     </div>
                     <p>{item.text}</p>
@@ -473,7 +474,7 @@ export function RightDock({
                         onClick={() => void deliver(item)}
                       >
                         <Play size={12} />
-                        {sending === item.id ? 'กำลังส่ง…' : 'ส่งเข้า session'}
+                        {sending === item.id ? tr("กำลังส่ง…") : tr("ส่งเข้า session")}
                       </button>
                       <button
                         className="text-button"
@@ -485,17 +486,17 @@ export function RightDock({
                           onPrompt(promptText);
                         }}
                       >
-                        {view === 'tasks' ? 'ใส่ในช่องคำสั่ง' : 'ใช้พรอมป์ต์'}
+                        {view === 'tasks' ? tr("ใส่ในช่องคำสั่ง") : tr("ใช้พรอมป์ต์")}
                       </button>
                       {view === 'tasks' && (
                         <button
                           className="text-button"
-                          title="ส่งต่องานนี้พร้อมข้อสรุปไปยัง session ที่เลือก"
+                          title={tr("ส่งต่องานนี้พร้อมข้อสรุปไปยัง session ที่เลือก")}
                           onClick={() => {
                             const summary = getLatestSummary();
                             const promptText = summary
                               ? formatHandoffPrompt({ agentName: summary.agentName, text: summary.text, nextInstruction: item.text })
-                              : formatHandoffPrompt({ agentName: 'AI', text: item.text, nextInstruction: 'ช่วยดำเนินการต่อตามนี้' });
+                              : formatHandoffPrompt({ agentName: 'AI', text: item.text, nextInstruction: tr("ช่วยดำเนินการต่อตามนี้") });
                             if (recipient) {
                               dispatchHandoff(recipient, promptText);
                             } else {
@@ -504,7 +505,7 @@ export function RightDock({
                           }}
                         >
                           <Forward size={12} />
-                          ส่งต่องาน
+                          {tr("ส่งต่องาน")}
                         </button>
                       )}
                       {view === 'tasks' && (
@@ -518,15 +519,15 @@ export function RightDock({
                           }
                         >
                           <Check size={12} />
-                          {item.state === 'done' ? 'เปิดงานอีกครั้ง' : 'ทำเครื่องหมายเสร็จ'}
+                          {item.state === 'done' ? tr("เปิดงานอีกครั้ง") : tr("ทำเครื่องหมายเสร็จ")}
                         </button>
                       )}
                       <button className="text-button" onClick={() => edit(item)}>
-                        แก้ไข
+                        {tr("แก้ไข")}
                       </button>
                       <button
                         className="icon-button"
-                        title={`ลบ ${item.title}`}
+                        title={tr`ลบ ${item.title}`}
                         disabled={!!sending}
                         onClick={() => persist(kind, currentList.filter(x => x.id !== item.id))}
                       >
@@ -538,8 +539,8 @@ export function RightDock({
                 {!items.length && !editing && (
                   <p className="dock-empty">
                     {view === 'tasks'
-                      ? 'เพิ่มงานแล้วส่งคำสั่งให้ session ที่เลือก เมื่อทำเสร็จให้ทำเครื่องหมายด้วยตนเอง'
-                      : 'บันทึกคำสั่งที่ใช้บ่อย แล้วกดใช้เพื่อใส่ในช่องคำสั่งก่อนส่ง'}
+                      ? tr("เพิ่มงานแล้วส่งคำสั่งให้ session ที่เลือก เมื่อทำเสร็จให้ทำเครื่องหมายด้วยตนเอง")
+                      : tr("บันทึกคำสั่งที่ใช้บ่อย แล้วกดใช้เพื่อใส่ในช่องคำสั่งก่อนส่ง")}
                   </p>
                 )}
               </div>

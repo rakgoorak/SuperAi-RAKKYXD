@@ -33,7 +33,7 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true });
 const checks = [], errors = [];
 const check = (value, message) => { assert.ok(value, message); checks.push(message); console.log('PASS ' + message); };
 try {
-  const page = await browser.newPage({ viewport: { width: 620, height: 900 } });
+  const page = await browser.newPage({ locale: 'th-TH',  viewport: { width: 620, height: 900 } });
   page.setDefaultTimeout(7000);
   page.on('pageerror', error => { console.log('PAGEERROR', error.stack); errors.push(error.message); });
   // No external network is used. This stub verifies Mermaid loading/configuration/render wiring,

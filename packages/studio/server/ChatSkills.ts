@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { createHash } from "node:crypto";
+import { tr } from './i18n.js';
 
 export interface ChatSkill { id: string; name: string; description: string; source: string; path: string }
 const PROVIDERS = ["claude-code", "codex", "antigravity", "opencode"];
@@ -22,14 +23,14 @@ export function chatSkills(root: string, provider: string, home = os.homedir(), 
     : provider === "opencode" ? [".opencode/skills", ".claude/skills", ".agents/skills"] : [".agents/skills"];
   // Skills inherited from project ancestors follow the same nearest-first precedence.
   for (let parent = path.resolve(root); ; parent = path.dirname(parent)) {
-    for (const suffix of projectDirs) dirs.push({ dir: path.join(parent, suffix), source: parent === path.resolve(root) ? "โปรเจกต์" : "โฟลเดอร์แม่" });
+    for (const suffix of projectDirs) dirs.push({ dir: path.join(parent, suffix), source: parent === path.resolve(root) ? tr("โปรเจกต์") : tr("โฟลเดอร์แม่") });
     if (parent === path.dirname(parent) || parent === path.resolve(home)) break;
   }
   const globals = provider === "claude-code" ? [path.join(env.CLAUDE_CONFIG_DIR || path.join(home, ".claude"), "skills")]
     : provider === "codex" ? [path.join(env.CODEX_HOME || path.join(home, ".codex"), "skills"), path.join(home, ".agents/skills")]
     : provider === "antigravity" ? [path.join(home, ".gemini/antigravity-cli/skills"), path.join(home, ".gemini/config/skills")]
     : [path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), "opencode/skills"), path.join(env.CLAUDE_CONFIG_DIR || path.join(home, ".claude"), "skills"), path.join(home, ".agents/skills")];
-  globals.forEach((dir) => dirs.push({ dir, source: "ผู้ให้บริการ · ส่วนตัว" }));
+  globals.forEach((dir) => dirs.push({ dir, source: tr("ผู้ให้บริการ · ส่วนตัว") }));
 
   // Claude's registry lists installed versions, including externally installed plugins.
   // Scan only registered plugin roots, never every cached/removed plugin version.
@@ -88,11 +89,11 @@ export function skillPrompt(text: string, root: string, provider: string, skillI
     : skills.find((s) => s.name === (parts?.[1] || (!command ? direct?.[1] : inline ? inline[1] : "")));
   if (!skill) {
     if (direct && CLI_PASSTHROUGH_COMMANDS.has(direct[1].toLowerCase())) return text;
-    if (command) throw new Error("ไม่พบ skill ที่เลือก กรุณาเลือก skill จาก /skills แล้วพิมพ์ /skill ชื่อ งานที่ต้องการ");
-    if (direct || skillId) throw new Error("ไม่พบ skill นี้สำหรับผู้ให้บริการ กรุณาเปิด /skills เพื่อดูรายการ · คำสั่งของ Terminal ใช้ในหน้า Terminal");
+    if (command) throw new Error(tr("ไม่พบ skill ที่เลือก กรุณาเลือก skill จาก /skills แล้วพิมพ์ /skill ชื่อ งานที่ต้องการ"));
+    if (direct || skillId) throw new Error(tr("ไม่พบ skill นี้สำหรับผู้ให้บริการ กรุณาเปิด /skills เพื่อดูรายการ · คำสั่งของ Terminal ใช้ในหน้า Terminal"));
     return text;
   }
   const request = parts ? parts[2] || "" : direct && !command ? direct[2] || "" : text;
   // Paths go in as written: JSON.stringify would double every Windows backslash (C:\\Users\\...).
-  return `The user explicitly selected the skill ${JSON.stringify(skill.name)}. Read and follow its SKILL.md at "${skill.path}". Resolve its relative resources from "${path.dirname(skill.path)}". Use the provider's native skill mechanism where available and honor its tool permissions. Do not execute any action outside the user's request or bypass approval requirements.\n\nUser request / skill arguments:\n${request || "ใช้ skill นี้กับโปรเจกต์ปัจจุบัน"}`;
+  return `The user explicitly selected the skill ${JSON.stringify(skill.name)}. Read and follow its SKILL.md at "${skill.path}". Resolve its relative resources from "${path.dirname(skill.path)}". Use the provider's native skill mechanism where available and honor its tool permissions. Do not execute any action outside the user's request or bypass approval requirements.\n\nUser request / skill arguments:\n${request || tr("ใช้ skill นี้กับโปรเจกต์ปัจจุบัน")}`;
 }

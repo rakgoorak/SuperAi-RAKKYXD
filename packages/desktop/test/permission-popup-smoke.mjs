@@ -24,7 +24,7 @@ if (process.platform === 'win32') {
   await fs.writeFile(path.join(bin, 'claude.cmd'), `@"${process.execPath}" "%~dp0fake-claude.cjs" %*\r\n`);
 } else await fs.writeFile(path.join(bin, 'claude'), fake, { mode: 0o755 });
 const data = path.join(root, 'data');
-const launch = () => electron.launch({executablePath: require('electron'), args:['packages/desktop'], env:{...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, SUPERAI_DATA_DIR:data, SUPERAI_TEST_MODE:'1'}, timeout:60000});
+const launch = () => electron.launch({executablePath: require('electron'), args:['packages/desktop'], env:{SUPERAI_LANG: 'th', ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, SUPERAI_DATA_DIR:data, SUPERAI_TEST_MODE:'1'}, timeout:60000});
 const ready = async app => {const page=await app.firstWindow();await page.waitForSelector('.app-shell');await page.evaluate(()=>localStorage.setItem('superai-setup-dismissed','1'));return page};
 const post = (page, route, body) => page.evaluate(async ({route,body})=>{const r=await fetch(route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw Error(await r.text());return r.json()}, {route,body});
 let app;

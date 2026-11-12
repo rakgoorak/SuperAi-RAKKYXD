@@ -3,11 +3,12 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { X, Terminal as TerminalIcon, Bot, Sparkles, Cpu, Circle, ImagePlus, AlertTriangle, BookOpen, MessageSquare } from 'lucide-react';
-import { attachMode, formatPath, isPdf, isSupportedAttachment, isSupportedImage, pastedFiles, uploadAttachment, UNSUPPORTED_ATTACHMENT, type SavedAttachment } from '../attachments';
+import { attachMode, formatPath, isPdf, isSupportedAttachment, isSupportedImage, pastedFiles, uploadAttachment, unsupportedAttachmentMessage, type SavedAttachment } from '../attachments';
 import { bufferText, loadTerminalThaiFont } from '../terminalText';
 import { CHAT_CLIS, paneView, type PaneView } from '../paneView';
 import { ChatView } from './ChatView';
 import { isCloud } from '../providers';
+import { tr } from '../i18n';
 
 export interface TerminalTab {
   authOnly?: boolean;
@@ -179,14 +180,14 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'output') term.write(msg.data);
-        else if (msg.type === 'exit') { term.write('\r\n[จบการทำงาน]\r\n'); onExitRef.current(); }
+        else if (msg.type === 'exit') { term.write(`\r\n[${tr("จบการทำงาน")}]\r\n`); onExitRef.current(); }
         else if (msg.type === 'error') term.write(`\r\n\x1b[31m${msg.message}\x1b[0m\r\n`);
       } catch {
         term.write(String(event.data));
       }
     };
     ws.onclose = () => {
-      term.write('\r\n\x1b[90m[การเชื่อมต่อขาดหาย]\x1b[0m\r\n');
+      term.write('\r\n\u001b[90m[' + tr("เชื่อมต่อขาดหาย") + ']\u001b[0m\r\n');
       onExitRef.current();
     };
 
@@ -198,14 +199,14 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
       const native = window.superai;
       const images = files.filter(isSupportedImage);
       const firstImage = images[0];
-      showNotice({ kind: 'busy', text: 'กำลังแนบไฟล์…' });
+      showNotice({ kind: 'busy', text: tr("กำลังแนบไฟล์…") });
       try {
         let saved: SavedAttachment | undefined;
         let staged = 0;
         for (const file of files) {
           const existing = native?.pathForFile(file) || '';
           if (!isSupportedAttachment(file) && (file.type.startsWith('image/') || !existing)) {
-            throw new Error(file.type.startsWith('image/') ? UNSUPPORTED_ATTACHMENT : `ไฟล์ "${file.name}" ไม่มีตำแหน่งบนเครื่อง ให้บันทึกลงเครื่องก่อนแล้วลากมาวางใหม่`);
+            throw new Error(file.type.startsWith('image/') ? unsupportedAttachmentMessage() : tr`ไฟล์ "${file.name}" ไม่มีตำแหน่งบนเครื่อง ให้บันทึกลงเครื่องก่อนแล้วลากมาวางใหม่`);
           }
           if (mode === 'clipboard' && isSupportedImage(file)) {
             if (source === 'paste') {
@@ -233,19 +234,19 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
           saved = await upload(file);
           term.paste(formatPath(saved.path));
         }
-        const count = files.length > 1 ? ` ${files.length} ไฟล์` : '';
+        const count = files.length > 1 ? tr` ${files.length} ไฟล์` : '';
         showNotice({
           kind: 'ok',
-          text: firstImage ? `แนบรูปแล้ว${count}` : files.some(isPdf) ? `แนบ PDF แล้ว${count}` : 'ใส่ตำแหน่งไฟล์แล้ว',
+          text: firstImage ? tr`แนบรูปแล้ว${count}` : files.some(isPdf) ? tr`แนบ PDF แล้ว${count}` : tr("ใส่ตำแหน่งไฟล์แล้ว"),
           detail: saved
-            ? `บันทึกที่ ${saved.relativePath} · พิมพ์ข้อความต่อแล้วกด Enter เพื่อส่ง`
+            ? tr`บันทึกที่ ${saved.relativePath} · พิมพ์ข้อความต่อแล้วกด Enter เพื่อส่ง`
             : mode === 'clipboard' && firstImage
-              ? 'ส่งให้ Codex ผ่านคลิปบอร์ดแล้ว · พิมพ์ข้อความต่อแล้วกด Enter เพื่อส่ง'
-              : 'พิมพ์ข้อความต่อแล้วกด Enter เพื่อส่ง',
+              ? tr("ส่งให้ Codex ผ่านคลิปบอร์ดแล้ว · พิมพ์ข้อความต่อแล้วกด Enter เพื่อส่ง")
+              : tr("พิมพ์ข้อความต่อแล้วกด Enter เพื่อส่ง"),
           thumb: firstImage ? URL.createObjectURL(firstImage) : undefined,
         });
       } catch (error: any) {
-        showNotice({ kind: 'error', text: 'แนบไฟล์ไม่สำเร็จ', detail: error?.message || 'กรุณาลองใหม่อีกครั้ง' });
+        showNotice({ kind: 'error', text: tr("แนบไฟล์ไม่สำเร็จ"), detail: error?.message || tr("กรุณาลองใหม่อีกครั้ง") });
       } finally {
         term.focus();
       }
@@ -406,14 +407,14 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
         {dragging && (
           <div className="absolute inset-1.5 z-10 flex flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed border-cyan-400/80 bg-[#0a0d14]/85 text-cyan-200 text-sm pointer-events-none">
             <ImagePlus className="w-6 h-6" />
-            <span>วางไฟล์เพื่อแนบให้ {tab.name}</span>
-            <span className="text-[11px] text-slate-400">รูปหรือ PDF จะถูกบันทึกใน .superai/attachments ของโปรเจกต์</span>
+            <span>{tr("วางไฟล์เพื่อแนบให้")} {tab.name}</span>
+            <span className="text-[11px] text-slate-400">{tr("รูปหรือ PDF จะถูกบันทึกใน .superai/attachments ของโปรเจกต์")}</span>
           </div>
         )}
         {notice && (
           <div
             role={notice.kind === 'error' ? 'alert' : 'status'}
-            aria-label="สถานะการแนบไฟล์"
+            aria-label={tr("สถานะการแนบไฟล์")}
             className={`absolute right-3 top-3 z-10 max-w-[min(360px,calc(100%-24px))] flex items-center gap-2 rounded-md border px-2 py-1.5 text-[11px] shadow-lg ${
               notice.kind === 'error' ? 'border-rose-500/60 bg-[#2a1118] text-rose-100' : 'border-cyan-500/50 bg-[#0e1a26] text-slate-200'
             }`}
@@ -430,7 +431,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
               {notice.detail && <div className="text-slate-400 break-words">{notice.detail}</div>}
             </div>
             {notice.kind !== 'busy' && (
-              <button onClick={() => showNotice(null)} className="ml-1 p-0.5 text-slate-500 hover:text-slate-200 rounded shrink-0" title="ปิดข้อความ" aria-label="ปิดข้อความ">
+              <button onClick={() => showNotice(null)} className="ml-1 p-0.5 text-slate-500 hover:text-slate-200 rounded shrink-0" title={tr("ปิดข้อความ")} aria-label={tr("ปิดข้อความ")}>
                 <X className="w-3 h-3" />
               </button>
             )}
@@ -440,7 +441,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
           <div
             ref={readerRef}
             tabIndex={0}
-            aria-label={`ข้อความใน ${tab.name}`}
+            aria-label={tr`ข้อความใน ${tab.name}`}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
                 event.preventDefault();
@@ -449,8 +450,8 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
             }}
             className="terminal-reader absolute inset-1.5 z-[5] overflow-auto rounded-md bg-[#0a0d14] px-4 pt-3 pb-6 outline-none"
           >
-            <div className="mb-2 pr-32 text-[11px] text-slate-500 select-none">โหมดอ่าน · CLI ยังทำงานอยู่ · กด Esc หรือปุ่มมุมขวาบนเพื่อกลับไปพิมพ์</div>
-            {readerText || <span className="text-slate-500">ยังไม่มีข้อความ</span>}
+            <div className="mb-2 pr-32 text-[11px] text-slate-500 select-none">{tr("โหมดอ่าน · CLI ยังทำงานอยู่ · กด Esc หรือปุ่มมุมขวาบนเพื่อกลับไปพิมพ์")}</div>
+            {readerText || <span className="text-slate-500">{tr("ยังไม่มีข้อความ")}</span>}
           </div>
         )}
         {chatting && (
@@ -472,21 +473,21 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
                 className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium shadow-lg ring-1 ${
                   reading ? 'ring-cyan-400/70 bg-[#0e2a3a] text-cyan-100' : 'ring-cyan-500/40 bg-[#10202c] text-cyan-200 hover:bg-[#15303f] hover:text-cyan-100'
                 }`}
-                title={reading ? 'กลับไปพิมพ์ใน terminal (Esc)' : 'อ่านข้อความใน terminal แบบตัวหนังสือปกติ สระและวรรณยุกต์ไม่เพี้ยน'}
+                title={reading ? tr("กลับไปพิมพ์ใน terminal (Esc)") : tr("อ่านข้อความใน terminal แบบตัวหนังสือปกติ สระและวรรณยุกต์ไม่เพี้ยน")}
                 aria-pressed={reading}
               >
                 {reading ? <TerminalIcon className="w-3 h-3" /> : <BookOpen className="w-3 h-3" />}
-                <span>{reading ? 'กลับไปพิมพ์' : 'อ่านแบบข้อความ'}</span>
+                <span>{reading ? tr("กลับไปพิมพ์") : tr("อ่านแบบข้อความ")}</span>
               </button>
             )}
             {chatCapable && !apiSession && (
-              <div className="pane-view-switch" role="group" aria-label="มุมมอง session">
-                <button aria-label="มุมมองแชต" aria-pressed={chatting} onClick={(event) => { event.stopPropagation(); setReading(false); if (!chatting) onSwitchView?.('chat'); }}
-                  title="คุยแบบแชต · ปิด TUI แล้วคุยต่อจากบทสนทนาเดิม">
+              <div className="pane-view-switch" role="group" aria-label={tr("มุมมอง session")}>
+                <button aria-label={tr("มุมมองแชต")} aria-pressed={chatting} onClick={(event) => { event.stopPropagation(); setReading(false); if (!chatting) onSwitchView?.('chat'); }}
+                  title={tr("คุยแบบแชต · ปิด TUI แล้วคุยต่อจากบทสนทนาเดิม")}>
                   <MessageSquare className="w-3 h-3" />
                 </button>
-                <button aria-label="มุมมอง Terminal" aria-pressed={!chatting} onClick={(event) => { event.stopPropagation(); if (chatting) onSwitchView?.('terminal'); }}
-                  title="เปิด TUI ของ CLI ต่อจากบทสนทนาเดียวกัน">
+                <button aria-label={tr("มุมมอง Terminal")} aria-pressed={!chatting} onClick={(event) => { event.stopPropagation(); if (chatting) onSwitchView?.('terminal'); }}
+                  title={tr("เปิด TUI ของ CLI ต่อจากบทสนทนาเดียวกัน")}>
                   <TerminalIcon className="w-3 h-3" />
                 </button>
               </div>
@@ -497,7 +498,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
           <div ref={containerRef} className="w-full h-full" />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-xs text-slate-500">
-            {tab.status === 'error' ? 'เปิด terminal ไม่สำเร็จ' : 'กำลังเปิด terminal…'}
+            {tab.status === 'error' ? tr("เปิด terminal ไม่สำเร็จ") : tr("กำลังเปิด terminal…")}
           </div>
         )}
       </div>

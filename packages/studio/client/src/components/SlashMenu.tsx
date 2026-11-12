@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Command, X } from 'lucide-react';
 import { api, type ChatSkill } from '../api';
 import { setChatPrefs } from '../chatControls';
+import { tr } from '../i18n';
 
 export interface SlashMenuHandle { keyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean; }
 interface Props { draft: string; sessionId?: string; workspaceId?: string; providers: string[]; onDraft: (text: string) => void; }
@@ -65,7 +66,7 @@ export const SlashMenu = forwardRef<SlashMenuHandle, Props>(function SlashMenu({
       ? api<{ skills: ChatSkill[] }>(`/api/terminals/${sessionId}/chat/settings`).then(s => s.skills)
       : Promise.all(providers.map(key => { const [provider, accountId] = key.split(":"); return api<ChatSkill[]>(`/api/workspaces/${workspaceId}/chat-skills/${provider}${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`); })).then(lists => lists.flat());
     request.then(list => { if (!disposed) setSkills(list.filter((skill, index, all) => all.findIndex(s => s.name === skill.name) === index)); })
-      .catch(() => { if (!disposed) setError('โหลดรายการ skill ไม่สำเร็จ ลองพิมพ์ / ใหม่อีกครั้ง'); })
+      .catch(() => { if (!disposed) setError(tr("โหลดรายการ skill ไม่สำเร็จ ลองพิมพ์ / ใหม่อีกครั้ง")); })
       .finally(() => { if (!disposed) setLoading(false); });
     return () => { disposed = true; };
   }, [searching, sessionId, workspaceId, signature]);
@@ -75,12 +76,12 @@ export const SlashMenu = forwardRef<SlashMenuHandle, Props>(function SlashMenu({
     ...skills.map(skill => ({
       id: skill.id,
       label: skill.name,
-      description: skill.description || `Skill จาก ${skill.source}`,
+      description: skill.description || tr`Skill จาก ${skill.source}`,
       text: `/${skill.name} `,
       skillId: skill.id,
     })),
-    ...(sessionId ? [{ id: 'command-login', label: 'login', description: 'เปิดขั้นตอนเข้าสู่ระบบของ session นี้', text: '/login ' }] : []),
-    { id: 'command-skills', label: 'skills', description: 'เปิดหน้ารายการ Skills ของระบบเพื่อค้นหาหรือติดตั้งเพิ่ม', text: '/skills ' },
+    ...(sessionId ? [{ id: 'command-login', label: 'login', description: tr("เปิดขั้นตอนเข้าสู่ระบบของ session นี้"), text: '/login ' }] : []),
+    { id: 'command-skills', label: 'skills', description: tr("เปิดหน้ารายการ Skills ของระบบเพื่อค้นหาหรือติดตั้งเพิ่ม"), text: '/skills ' },
   ].filter(choice => {
     if (!query) return true;
     return `${choice.label} ${choice.description}`.toLowerCase().includes(query);
@@ -129,15 +130,15 @@ export const SlashMenu = forwardRef<SlashMenuHandle, Props>(function SlashMenu({
     return () => { for (const attr of ['role', 'aria-autocomplete', 'aria-expanded', 'aria-controls', 'aria-activedescendant']) input.removeAttribute(attr); };
   }, [open, active, id, choices.length]);
 
-  return <><span ref={anchor} hidden />{open && createPortal(<div ref={popup} className="slash-menu" aria-label="คำสั่งและ Skills" style={position}>
-    <header><strong><Command size={14} /> Skills และคำสั่ง <small>{choices.length}</small></strong><button type="button" aria-label="ปิดรายการคำสั่ง" onClick={() => setDismissed(draft)}><X size={15} /></button></header>
-    <div role="listbox" id={`${id}-list`} aria-label="เลือก skill หรือคำสั่ง">
+  return <><span ref={anchor} hidden />{open && createPortal(<div ref={popup} className="slash-menu" aria-label={tr("คำสั่งและ Skills")} style={position}>
+    <header><strong><Command size={14} /> {tr("Skills และคำสั่ง")} <small>{choices.length}</small></strong><button type="button" aria-label={tr("ปิดรายการคำสั่ง")} onClick={() => setDismissed(draft)}><X size={15} /></button></header>
+    <div role="listbox" id={`${id}-list`} aria-label={tr("เลือก skill หรือคำสั่ง")}>
       {choices.map((choice, index) => <button type="button" role="option" aria-selected={active === index} id={`${id}-${index}`} key={choice.id} className={active === index ? 'active' : ''}
         title={choice.description} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(index)} onClick={() => pick(choice)}><span className="slash-symbol">/</span><span className="slash-choice"><strong>{choice.label}</strong><small>{choice.description}</small></span></button>)}
     </div>
-    {loading && <p role="status">กำลังค้นหา skill ที่ใช้ได้…</p>}
+    {loading && <p role="status">{tr("กำลังค้นหา skill ที่ใช้ได้…")}</p>}
     {error && <p role="alert">{error}</p>}
-    {!loading && !error && !choices.length && <p>ไม่พบ skill ที่ตรงกัน · ติดตั้งเพิ่มได้จากหน้า Skills</p>}
-    <footer><span>↑ ↓ เลือก · Enter เติม · Esc ปิด</span><span>ยังไม่ส่งข้อความ</span></footer>
+    {!loading && !error && !choices.length && <p>{tr("ไม่พบ skill ที่ตรงกัน · ติดตั้งเพิ่มได้จากหน้า Skills")}</p>}
+    <footer><span>{tr("↑ ↓ เลือก · Enter เติม · Esc ปิด")}</span><span>{tr("ยังไม่ส่งข้อความ")}</span></footer>
   </div>, document.body)}</>;
 });

@@ -19,7 +19,7 @@ let checks = 0;
 try {
   app = await electron.launch({
     executablePath: require('electron'), args: ['packages/desktop'],
-    env: { ...process.env, SUPERAI_DATA_DIR: data, SUPERAI_TEST_MODE: '1' }, timeout: 60000,
+    env: { SUPERAI_LANG: 'th', ...process.env, SUPERAI_DATA_DIR: data, SUPERAI_TEST_MODE: '1' }, timeout: 60000,
   });
   const page = await app.firstWindow();
   const errors = [];

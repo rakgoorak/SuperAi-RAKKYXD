@@ -27,7 +27,7 @@ try {
   const base = `http://127.0.0.1:${server.getPort()}`;
   const ws = await (await fetch(base + '/api/workspaces', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'API Demo', rootPath: directory }) })).json();
   browser = await chromium.launch({ channel: 'chrome', headless: true });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const page = await browser.newPage({ locale: 'th-TH',  viewport: { width: 1440, height: 1000 } });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/clis', route => route.fulfill({ json: [] }));

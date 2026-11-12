@@ -1,6 +1,7 @@
 // Tells the user an Agent/Chat run or a CLI chat turn finished while they were in another window:
 // an OS notification, a taskbar flash (desktop) and an optional short chime.
 import type { Run } from "./api";
+import { tr } from './i18n';
 
 export interface NotifySettings { enabled: boolean; sound: boolean }
 export type NoticeTarget =
@@ -32,14 +33,14 @@ export const runNotice = (run: Pick<Run, "id" | "wsId" | "mode" | "status" | "pr
   const what = run.mode === "agent" ? "Agent" : "Chat";
   return {
     tag: `run:${run.id}`, failed,
-    title: `${what} ${failed ? "ทำงานไม่สำเร็จ" : "ทำงานเสร็จแล้ว"}${project ? ` · ${project}` : ""}`,
+    title: `${what} ${failed ? tr("ทำงานไม่สำเร็จ") : tr("ทำงานเสร็จแล้ว")}${project ? ` · ${project}` : ""}`,
     body: run.prompt.replace(/\s+/g, " ").trim().slice(0, 140),
     target: { kind: "run", id: run.id, wsId: run.wsId, mode: run.mode },
   };
 };
 
 export const sessionNotice = (id: string, name: string, at = Date.now()): DoneNotice => ({
-  tag: `session:${id}:${at}`, failed: false, title: `${name} ตอบเสร็จแล้ว`, body: "กดเพื่อเปิดบทสนทนา",
+  tag: `session:${id}:${at}`, failed: false, title: tr`${name} ตอบเสร็จแล้ว`, body: tr("กดเพื่อเปิดบทสนทนา"),
   target: { kind: "session", id },
 });
 

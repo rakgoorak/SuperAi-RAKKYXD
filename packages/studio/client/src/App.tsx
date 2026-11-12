@@ -106,6 +106,7 @@ import { providerIdentity } from "./providerIdentity";
 import { firstReady } from "./providers";
 import { loadQuickConversationState, saveQuickConversationState, type PendingQuickConversation } from "./quickConversationState";
 import { composerDraftKey, useComposerDrafts } from "./composerDrafts";
+import { tr } from './i18n';
 
 type Mode = "agent" | "code" | "chat";
 type Dialog = "history" | "changes" | "session-delete" | "session" | "settings" | "project" | "delete" | "clear" | "setup" | "skills" | "update" | null;
@@ -113,15 +114,6 @@ const modeLabels: Record<Mode, string> = {
   agent: "Agent",
   code: "Code",
   chat: "Chat",
-};
-const statusText: Record<string, string> = {
-  running: "กำลังทำงาน",
-  stopping: "กำลังปิด",
-  exited: "จบการทำงาน",
-  error: "มีข้อผิดพลาด",
-  completed: "เสร็จแล้ว",
-  failed: "ไม่สำเร็จ",
-  cancelled: "ยกเลิกแล้ว",
 };
 function initial(key: string, fallback: string) {
   try {
@@ -133,6 +125,15 @@ function initial(key: string, fallback: string) {
 
 export function App() {
   const { locale, setLocale, cycleLocale, t, languages } = useTranslation();
+  const statusText: Record<string, string> = {
+    running: tr("กำลังทำงาน"),
+    stopping: tr("กำลังปิด"),
+    exited: tr("จบการทำงาน"),
+    error: tr("มีข้อผิดพลาด"),
+    completed: tr("เสร็จแล้ว"),
+    failed: tr("ไม่สำเร็จ"),
+    cancelled: tr("ยกเลิกแล้ว"),
+  };
   const slashMenu = useRef<SlashMenuHandle>(null);
   const mentionMenu = useRef<MentionMenuHandle>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -172,7 +173,10 @@ export function App() {
   const [settingsTab, setSettingsTab] = useState("tools");
   const [usageOpen, setUsageOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [interactiveTourOpen, setInteractiveTourOpen] = useState(false);
+  // The tour's language buttons reload the window; it comes back open afterwards.
+  const [interactiveTourOpen, setInteractiveTourOpen] = useState(() => {
+    try { const resume = sessionStorage.getItem('superai-tour-open') === '1'; sessionStorage.removeItem('superai-tour-open'); return resume; } catch { return false; }
+  });
   useEffect(() => {
     const openTour = () => setInteractiveTourOpen(true);
     window.addEventListener("superai:open-tour", openTour);
@@ -272,7 +276,7 @@ export function App() {
     try {
       const updated = await togglePinnedFile(workspace.id, filePath);
       setWorkspaces((prev) => prev.map((w) => (w.id === updated.id ? updated : w)));
-      setNotice("อัปเดตไฟล์ปักหมุดแล้ว");
+      setNotice(tr("อัปเดตไฟล์ปักหมุดแล้ว"));
     } catch (err: any) {
       showError(err.message);
     }
@@ -300,7 +304,7 @@ export function App() {
       setSelected(nextVisible?.id || "");
       setZoomed(false);
     }
-    setNotice("ซ่อน session พับเก็บไว้แล้ว · คลิกชื่อในแถบซ้ายหรือแถบด้านบนเพื่อเปิดกลับมาได้ตลอดเวลา");
+    setNotice(tr("ซ่อน session พับเก็บไว้แล้ว · คลิกชื่อในแถบซ้ายหรือแถบด้านบนเพื่อเปิดกลับมาได้ตลอดเวลา"));
   }, [selected, workspaceSessions, hiddenSessions]);
   const unhideSession = useCallback((id: string) => {
     setHiddenSessions((prev) => prev.filter((item) => item !== id));
@@ -375,7 +379,7 @@ export function App() {
       setModels(data.models);
       if (!data.models.length)
         setModelError(
-          "ยังไม่มี model ใช้คำสั่ง ollama pull qwen2.5-coder:7b ใน terminal",
+          tr("ยังไม่มี model ใช้คำสั่ง ollama pull qwen2.5-coder:7b ใน terminal"),
         );
     } catch (e) {
       setModels([]);
@@ -533,16 +537,16 @@ export function App() {
   };
   const spawn = () =>
     task(async () => {
-      if (!workspace) throw new Error("กรุณาสร้างโปรเจกต์ก่อน");
+      if (!workspace) throw new Error(tr("กรุณาสร้างโปรเจกต์ก่อน"));
       const plan = launchPlan || [{ type: launchType, count }];
-      if (plan.some(seat => seat.type === "opencode") && openCodeModel === "auto" && !(launchPlan ? loadDefaults().opencode?.model : sessionSeat.model)) throw new Error("กำลังตรวจรุ่น OpenCode กรุณารอ หรือเลือกรุ่นเอง");
+      if (plan.some(seat => seat.type === "opencode") && openCodeModel === "auto" && !(launchPlan ? loadDefaults().opencode?.model : sessionSeat.model)) throw new Error(tr("กำลังตรวจรุ่น OpenCode กรุณารอ หรือเลือกรุ่นเอง"));
       const totals = new Map<string, number>();
       for (const seat of plan) totals.set(seat.type, (totals.get(seat.type) || 0) + seat.count);
       for (const [type, amount] of totals) {
         const cli = sessionProviders.find(c => c.id === type);
-        if (!cli?.available) throw new Error(`ไม่พบ CLI ${cli?.name || type} กรุณาติดตั้งก่อน`);
+        if (!cli?.available) throw new Error(tr`ไม่พบ CLI ${cli?.name || type} กรุณาติดตั้งก่อน`);
         const capacity = cli.maxSessions - sessions.filter(s => s.agentType === type && ["running", "stopping", "error"].includes(s.status)).length;
-        if (amount > capacity) throw new Error(`${cli.name} เปิดเพิ่มได้อีก ${Math.max(0, capacity)} session`);
+        if (amount > capacity) throw new Error(tr`${cli.name} เปิดเพิ่มได้อีก ${Math.max(0, capacity)} session`);
       }
       const remaining = plan.flatMap(seat => Array.from({ length: seat.count }, () => seat.type));
       let opened = 0;
@@ -558,7 +562,7 @@ export function App() {
               ...(supportsModel ? { model: chosen.model, effort: chosen.effort, accountId: chosen.accountId } : {}),
               trustFolder: trustFolders,
             });
-            if (session.status === "error") throw new Error(`เปิด ${cli.name} ไม่สำเร็จ กรุณาตรวจการติดตั้ง CLI`);
+            if (session.status === "error") throw new Error(tr`เปิด ${cli.name} ไม่สำเร็จ กรุณาตรวจการติดตั้ง CLI`);
             setSelected(session.id);
             remaining.shift(); opened++;
         }
@@ -569,20 +573,20 @@ export function App() {
         const pending = new Map<string, number>();
         remaining.forEach(type => pending.set(type, (pending.get(type) || 0) + 1));
         setLaunchPlan([...pending].map(([type, amount]) => ({ type, count: amount })));
-        throw new Error(`เปิดสำเร็จ ${opened} session · เหลือ ${remaining.length} session ที่ยังไม่ได้เปิด ลองใหม่จะเปิดเฉพาะที่เหลือ: ${(e as Error).message}`);
+        throw new Error(tr`เปิดสำเร็จ ${opened} session · เหลือ ${remaining.length} session ที่ยังไม่ได้เปิด ลองใหม่จะเปิดเฉพาะที่เหลือ: ${(e as Error).message}`);
       } finally {
         await refresh().catch(() => {
           setConnected(false);
-          setError("อ่านสถานะล่าสุดไม่ได้ กำลังลองเชื่อมต่อใหม่ · session ที่เปิดสำเร็จยังทำงานอยู่");
+          setError(tr("อ่านสถานะล่าสุดไม่ได้ กำลังลองเชื่อมต่อใหม่ · session ที่เปิดสำเร็จยังทำงานอยู่"));
         });
       }
-      setNotice(`เปิดแล้ว ${launchTotal} session`);
+      setNotice(tr`เปิดแล้ว ${launchTotal} session`);
     });
   const closeSession = (id: string) =>
     task(async () => {
       const result = await post(`/api/terminals/${id}/kill`);
       if (!result.success)
-        throw new Error("ปิด session ไม่สำเร็จ กรุณาลองใหม่");
+        throw new Error(tr("ปิด session ไม่สำเร็จ กรุณาลองใหม่"));
       if (pendingQuick.current?.session.id === id) {
         pendingQuick.current = undefined;
         saveQuickConversationState(starterDraftScopes.current);
@@ -627,7 +631,7 @@ export function App() {
     try { await task(async () => {
       if (!draft.trim() && !attachments.items.length) return;
       if (mode === "code" && target === "active" && !composerTarget) {
-        if (!quickProvider) throw new Error("ยังไม่มี AI พร้อมใช้ เปิดเริ่มต้นใช้งานเพื่อติดตั้งและเชื่อมบัญชีก่อน");
+        if (!quickProvider) throw new Error(tr("ยังไม่มี AI พร้อมใช้ เปิดเริ่มต้นใช้งานเพื่อติดตั้งและเชื่อมบัญชีก่อน"));
         const ws = workspace || await post<Workspace>("/api/workspaces/quick-chat");
         if (!workspace) {
           starterDraftScopes.current.set(ws.id, draftScope);
@@ -640,14 +644,14 @@ export function App() {
           session = await post<Session>("/api/terminals/spawn", { agentType: quickProvider, accountId: quickAccount, wsId: ws.id,
             name: draft.trim().split('\n')[0].slice(0, 60) || providerIdentity(quickProvider).label, model: chosen.model, effort: chosen.effort,
             view: "chat", trustFolder: false });
-          if (session.status === "error") throw new Error(`เปิด ${providerIdentity(quickProvider).label} ไม่สำเร็จ ตรวจการติดตั้งแล้วลองอีกครั้ง`);
+          if (session.status === "error") throw new Error(tr`เปิด ${providerIdentity(quickProvider).label} ไม่สำเร็จ ตรวจการติดตั้งแล้วลองอีกครั้ง`);
           pendingQuick.current = { session, wsId: ws.id, accountSelection: quickAccount || "" };
           saveQuickConversationState(starterDraftScopes.current, pendingQuick.current);
           setChatPrefs(session.id, { model: chosen.model, effort: chosen.effort, permission: "read", responseStyle: answerStyle });
         }
         const files: SavedAttachment[] = [];
         for (const item of attachments.items) files.push(await uploadAttachment(`/api/workspaces/${ws.id}/attachments`, item.file));
-        await post(`/api/terminals/${session.id}/chat`, { text: draft.trim() || "ดูไฟล์แนบนี้",
+        await post(`/api/terminals/${session.id}/chat`, { text: draft.trim() || tr("ดูไฟล์แนบนี้"),
           model: chosen.model, effort: chosen.effort, permission: "read", responseStyle: answerStyle, attachments: files.map(file => file.path) });
         setChatPrefs(session.id, { responseStyle: answerStyle });
         const created = session;
@@ -657,13 +661,13 @@ export function App() {
         setActiveWs(ws.id); setSelected(created.id); setTarget("active");
         setDraft(""); attachments.clear(); pendingQuick.current = undefined; starterDraftScopes.current.delete(ws.id);
         saveQuickConversationState(starterDraftScopes.current);
-        setNotice(`เริ่มคุยกับ ${providerIdentity(quickProvider).label} แล้ว`);
+        setNotice(tr`เริ่มคุยกับ ${providerIdentity(quickProvider).label} แล้ว`);
         return;
       }
       let queuedCount = 0, interruptedCount = 0;
-      if (!workspace) throw new Error("กรุณาสร้างโปรเจกต์ก่อน");
+      if (!workspace) throw new Error(tr("กรุณาสร้างโปรเจกต์ก่อน"));
       // Save attached images/PDFs into <project>/.superai/attachments first.
-      if (mode === "chat" && /^\/skills?\s*$/.test(draft.trim())) { setNotice("เลือก skill จากรายการเหนือช่องพิมพ์ แล้วระบุงานที่ต้องการ"); return; }
+      if (mode === "chat" && /^\/skills?\s*$/.test(draft.trim())) { setNotice(tr("เลือก skill จากรายการเหนือช่องพิมพ์ แล้วระบุงานที่ต้องการ")); return; }
       const saved: SavedAttachment[] = [];
       for (const item of attachments.items)
         saved.push(await uploadAttachment(`/api/workspaces/${workspace.id}/attachments`, item.file));
@@ -676,12 +680,12 @@ export function App() {
               );
         if (!recipients.length)
           throw new Error(
-            "ไม่มี terminal ที่กำลังทำงาน กรุณาเปิด session ก่อน",
+            tr("ไม่มี terminal ที่กำลังทำงาน กรุณาเปิด session ก่อน"),
           );
         for (const recipient of recipients) {
           // A pane in chat view takes the message as a chat turn; files go along as paths.
           if (paneView(recipient) === "chat") {
-            const text = draft.trim() || "ดูไฟล์แนบนี้";
+            const text = draft.trim() || tr("ดูไฟล์แนบนี้");
             const prefs = chatPrefs(recipient.id);
             // Composer commands for one chat: handled by its controls, not sent to the AI.
             if (recipients.length === 1 && /^\/(skills?|login)\s*$/.test(text)) {
@@ -689,8 +693,8 @@ export function App() {
               if (text.startsWith("/login")) setDraft("");
               return;
             }
-            if (recipients.length === 1 && text === "/model") throw new Error("เลือก Model จากช่องคำสั่งด้านล่าง ใช้กับข้อความถัดไป");
-            if (prefs.blocked) throw new Error(`${recipient.name}: ${prefs.note || "กรุณาเข้าสู่ระบบก่อนส่งข้อความ"}`);
+            if (recipients.length === 1 && text === "/model") throw new Error(tr("เลือก Model จากช่องคำสั่งด้านล่าง ใช้กับข้อความถัดไป"));
+            if (prefs.blocked) throw new Error(`${recipient.name}: ${prefs.note || tr("กรุณาเข้าสู่ระบบก่อนส่งข้อความ")}`);
             if (recipients.length === 1 && /^\/skills?\s*$/.test(text)) { setDialog("skills"); setDraft(""); return; }
             const hasSkill = /(?:^|\s)\/(?:skill\s+)?([\w.:-]+)/.test(text);
             const skillId = prefs.skillId && hasSkill ? prefs.skillId : "";
@@ -710,7 +714,7 @@ export function App() {
             if (result.queued) queuedCount++;
             if (result.interrupted) interruptedCount++;
             try { saveMessageContexts(recipient.id, []); }
-            catch { setNotice('ส่งข้อความแล้ว แต่ล้างบริบทที่บันทึกไว้ไม่ได้ กรุณาเอาบริบทออกก่อนส่งครั้งถัดไป'); }
+            catch { setNotice(tr("ส่งข้อความแล้ว แต่ล้างบริบทที่บันทึกไว้ไม่ได้ กรุณาเอาบริบทออกก่อนส่งครั้งถัดไป")); }
             if (prefs.skillId) setChatPrefs(recipient.id, { skillId: "" });
             continue;
           }
@@ -718,30 +722,30 @@ export function App() {
           const relative = attachMode(recipient.agentType) === "clipboard" && recipient.cwd === workspace.rootPath;
           const paths = saved.map((file) => formatPath(relative ? file.relativePath : file.path)).join("").trim();
           const result = await post(`/api/terminals/${recipient.id}/input`, {
-            input: [draft.trim() || (paths ? "ดูไฟล์แนบนี้" : ""), paths].filter(Boolean).join(" ") + "\r",
+            input: [draft.trim() || (paths ? tr("ดูไฟล์แนบนี้") : ""), paths].filter(Boolean).join(" ") + "\r",
           });
           if (!result.success)
             throw new Error(
-              `ส่งไป ${recipient.name} ไม่สำเร็จ กรุณาตรวจ session`,
+              tr`ส่งไป ${recipient.name} ไม่สำเร็จ กรุณาตรวจ session`,
             );
         }
         // A chat shows its own message at once; only say something when the send did more than that.
         const sentNotice = queuedCount
-          ? "ต่อคิวแล้ว · ส่งเองเมื่องานก่อนหน้าเสร็จ"
+          ? tr("ต่อคิวแล้ว · ส่งเองเมื่องานก่อนหน้าเสร็จ")
           : interruptedCount
-            ? "หยุดคำตอบเดิม แล้วส่งข้อความใหม่ทันที"
+            ? tr("หยุดคำตอบเดิม แล้วส่งข้อความใหม่ทันที")
             : target === "all"
-              ? `ส่งให้ ${recipients.length} session ในโปรเจกต์นี้แล้ว`
-              : recipients.every(r => paneView(r) === "chat") ? "" : "ส่งคำสั่งแล้ว";
+              ? tr`ส่งให้ ${recipients.length} session ในโปรเจกต์นี้แล้ว`
+              : recipients.every(r => paneView(r) === "chat") ? "" : tr("ส่งคำสั่งแล้ว");
         if (sentNotice) setNotice(sentNotice);
       } else {
-        const prompt = draft.trim() || "ช่วยดูไฟล์แนบนี้";
+        const prompt = draft.trim() || tr("ช่วยดูไฟล์แนบนี้");
         const files = saved.map((file) => file.path);
         if (mode === "agent") {
-          if (!agentConfig) throw new Error("กรุณาเลือก Main และ Sub-agent ก่อน");
+          if (!agentConfig) throw new Error(tr("กรุณาเลือก Main และ Sub-agent ก่อน"));
           await post(`/api/conversations/${workspace.id}`, { mode, prompt, attachments: files, allowTools: agentConfig.allowTools ?? allowTools, main: agentConfig.main, subagents: agentConfig.subagents, responseStyle: answerStyle, clarify: agentConfig.clarify });
         } else {
-          if (!chatConfig) throw new Error("กรุณาเลือก AI ที่จะถามก่อน");
+          if (!chatConfig) throw new Error(tr("กรุณาเลือก AI ที่จะถามก่อน"));
           await post(`/api/conversations/${workspace.id}`, { mode, prompt, attachments: files, panel: chatConfig.panel, summarizer: chatConfig.summarizer, summaryStyle: chatConfig.style, responseStyle: answerStyle, clarify: chatConfig.clarify });
         }
         setRuns(await api<Run[]>(`/api/conversations/${workspace.id}`));
@@ -801,7 +805,7 @@ export function App() {
         : current.filter(id => id !== session.id));
       setSelected(session.id); setTarget('active'); setMode('code'); setZoomed(false);
       setLayout(side ? 'split' : 'tabs');
-      setNotice(side ? 'เปิด Side chat แล้ว · บริบทพร้อมสำหรับข้อความถัดไป' : 'สร้างห้องแยกพร้อมประวัติแล้ว · ห้องเดิมยังอยู่');
+      setNotice(side ? tr("เปิด Side chat แล้ว · บริบทพร้อมสำหรับข้อความถัดไป") : tr("สร้างห้องแยกพร้อมประวัติแล้ว · ห้องเดิมยังอยู่"));
       requestAnimationFrame(() => composer.current?.focus());
     };
     const openLink = (event: Event) => {
@@ -822,6 +826,8 @@ export function App() {
       setDockView('browser'); setPreview(true);
     };
     const reload = () => { if (activeWs) void api<Run[]>(`/api/conversations/${activeWs}`).then(setRuns, error => showError(error.message)); };
+    // The AI's browser tools act on the side browser: open it so the user watches.
+    const stopReveal = window.superai?.onBrowserReveal?.(() => { setDockView('browser'); setPreview(true); });
     window.addEventListener("superai:prepare-composer", prepareComposer);
     window.addEventListener("superai:prepare-message", prepare);
     window.addEventListener("superai:show-changes", changes);
@@ -831,6 +837,7 @@ export function App() {
     window.addEventListener('superai:open-artifact', openArtifactEvent);
     window.addEventListener("superai:refresh-runs", reload);
     return () => {
+      stopReveal?.();
       window.removeEventListener("superai:prepare-composer", prepareComposer);
       window.removeEventListener("superai:prepare-message", prepare);
       window.removeEventListener("superai:show-changes", changes);
@@ -856,7 +863,7 @@ export function App() {
       e.preventDefault();
       attachToComposer(files);
       composer.current?.focus();
-      setNotice(`แนบรูปภาพจากคลิปบอร์ดแล้ว (${files.length} ไฟล์)`);
+      setNotice(tr`แนบรูปภาพจากคลิปบอร์ดแล้ว (${files.length} ไฟล์)`);
     };
     window.addEventListener('keydown', handlePaletteKey);
     window.addEventListener('paste', handleGlobalPaste);
@@ -876,7 +883,7 @@ export function App() {
     task(async () => {
       if (mode !== "code" && activeRun) {
         await post(`/api/runs/${activeRun.id}/cancel`);
-        setNotice("ส่งคำขอยกเลิกงานแล้ว");
+        setNotice(tr("ส่งคำขอยกเลิกงานแล้ว"));
       } else {
         const recipients =
           target === "all"
@@ -884,7 +891,7 @@ export function App() {
             : running.filter(
                 (s) => s.id === selected,
               );
-        if (!recipients.length) throw new Error("ไม่มี session ที่กำลังทำงาน");
+        if (!recipients.length) throw new Error(tr("ไม่มี session ที่กำลังทำงาน"));
         for (const s of recipients) {
           if (paneView(s) === "chat") {
             await post(`/api/terminals/${s.id}/chat/cancel`);
@@ -893,9 +900,9 @@ export function App() {
           const r = await post(`/api/terminals/${s.id}/input`, {
             input: "\u0003",
           });
-          if (!r.success) throw new Error("ส่งคำสั่งหยุดไม่สำเร็จ");
+          if (!r.success) throw new Error(tr("ส่งคำสั่งหยุดไม่สำเร็จ"));
         }
-        setNotice("ส่ง Ctrl+C ให้ session ที่เลือกแล้ว");
+        setNotice(tr("ส่ง Ctrl+C ให้ session ที่เลือกแล้ว"));
       }
     });
   const folder = () =>
@@ -905,14 +912,14 @@ export function App() {
         setProjectPath(value);
         if (!projectName)
           setProjectName(
-            value.split(/[\\/]/).filter(Boolean).at(-1) || "โปรเจกต์",
+            value.split(/[\\/]/).filter(Boolean).at(-1) || tr("โปรเจกต์"),
           );
       }
     });
   const saveProject = () =>
     task(async () => {
       if (!projectName.trim() || !projectPath.trim())
-        throw new Error("กรุณาระบุชื่อและโฟลเดอร์โปรเจกต์");
+        throw new Error(tr("กรุณาระบุชื่อและโฟลเดอร์โปรเจกต์"));
       const result = await api<Workspace>(
         editing ? `/api/workspaces/${editing}` : "/api/workspaces",
         {
@@ -928,7 +935,7 @@ export function App() {
       setActiveWs(result.id);
       setDialog(returnToSetup ? "setup" : null);
       setReturnToSetup(false);
-      setNotice(editing ? "แก้ไขโปรเจกต์แล้ว" : "เพิ่มโปรเจกต์แล้ว");
+      setNotice(editing ? tr("แก้ไขโปรเจกต์แล้ว") : tr("เพิ่มโปรเจกต์แล้ว"));
     });
   const openProject = (ws?: Workspace) => {
     setEditing(ws?.id || "");
@@ -960,20 +967,20 @@ export function App() {
   const startFromSetup = async (type: string, wsId: string, text: string) => {
     const ws = workspaces.find(w => w.id === wsId);
     const cli = clis.find(c => c.id === type && c.available);
-    if (!ws || !cli) throw new Error("ยังไม่พบโฟลเดอร์หรือผู้ช่วยที่เลือก กลับไปตรวจความพร้อมอีกครั้ง");
+    if (!ws || !cli) throw new Error(tr("ยังไม่พบโฟลเดอร์หรือผู้ช่วยที่เลือก กลับไปตรวจความพร้อมอีกครั้ง"));
     let session = sessions.find(s => s.wsId === wsId && s.agentType === type && s.status === "running");
     if (!session) {
       const chosen = seatFor(type, "");
       session = await post<Session>("/api/terminals/spawn", { agentType: type, wsId, name: cli.name,
         ...(HEADLESS.includes(type) ? { model: chosen.model, effort: chosen.effort } : {}), trustFolder: trustFolders });
-      if (session.status === "error") throw new Error(`เปิด ${cli.name} ไม่สำเร็จ ตรวจการติดตั้งและบัญชีแล้วลองอีกครั้ง`);
+      if (session.status === "error") throw new Error(tr`เปิด ${cli.name} ไม่สำเร็จ ตรวจการติดตั้งและบัญชีแล้วลองอีกครั้ง`);
       const created = session;
       setSessions(current => current.some(s => s.id === created.id) ? current : [...current, created]);
     }
     setActiveWs(wsId); setSelected(session.id); setTarget("active"); setMode("code");
     if (text.trim()) setDraftFor(composerDraftKey(wsId, "code", session.id, "active"), current => current.trim() && current !== text ? `${current}\n\n${text}` : text);
     confirmDefaults(); closeSetup();
-    await refresh().catch(() => showError("เปิดห้องคุยแล้ว แต่ยังอ่านสถานะล่าสุดไม่ได้ กรุณาตรวจการเชื่อมต่อ"));
+    await refresh().catch(() => showError(tr("เปิดห้องคุยแล้ว แต่ยังอ่านสถานะล่าสุดไม่ได้ กรุณาตรวจการเชื่อมต่อ")));
     requestAnimationFrame(() => composer.current?.focus());
   };
 
@@ -1013,7 +1020,7 @@ export function App() {
         </div>
 
         {/* Center: Sleek Compact Mode Switcher (Claude style) */}
-        <nav className="workspace-mode-tabs titlebar-mode-tabs" data-tour="mode-tabs" aria-label="โหมดทำงาน">
+        <nav className="workspace-mode-tabs titlebar-mode-tabs" data-tour="mode-tabs" aria-label={tr("โหมดทำงาน")}>
           {(["agent", "chat", "code"] as Mode[]).map((m) => (
             <button
               key={m}
@@ -1079,7 +1086,7 @@ export function App() {
             </button>
             <button
               className="toolbar-button titlebar-btn secondary compact"
-              aria-label="สร้าง session"
+              aria-label={tr("สร้าง session")}
               title={t("nav.terminal_desc", "เปิด Terminal หรือหลายห้อง")}
               disabled={!workspace}
               onClick={() => openSession()}
@@ -1089,7 +1096,7 @@ export function App() {
             </button>
             <button
               className="toolbar-button titlebar-btn primary compact"
-              aria-label="บทสนทนาใหม่"
+              aria-label={tr("บทสนทนาใหม่")}
               title={t("nav.new_desc", "บทสนทนาใหม่")}
               disabled={busy}
               onClick={() => {
@@ -1162,7 +1169,7 @@ export function App() {
                           )}
                           <Folder size={16} />
                           <span>{ws.name}</span>
-                          {ws.favorite && <Star size={12} className="project-favorite-mark" aria-label="โปรเจกต์โปรด" />}
+                          {ws.favorite && <Star size={12} className="project-favorite-mark" aria-label={tr("โปรเจกต์โปรด")} />}
                           {entries.filter((s) => s.status === "running")
                             .length > 0 && (
                             <small>
@@ -1175,7 +1182,7 @@ export function App() {
                         </button>
                         <button
                           className="icon-button project-more"
-                          title={`จัดการโปรเจกต์ ${ws.name}`}
+                          title={tr`จัดการโปรเจกต์ ${ws.name}`}
                           onClick={() => setMenu(menu === ws.id ? "" : ws.id)}
                         >
                           <MoreHorizontal size={15} />
@@ -1186,9 +1193,9 @@ export function App() {
                           <button onClick={() => void task(async () => {
                             const updated = await api<Workspace>(`/api/workspaces/${ws.id}`, { method: 'PATCH', body: JSON.stringify({ favorite: !ws.favorite }) });
                             setWorkspaces(current => current.map(item => item.id === ws.id ? updated : item)); setMenu('');
-                          })}><Star size={13} />{ws.favorite ? 'เอาออกจากโปรเจกต์โปรด' : 'เพิ่มในโปรเจกต์โปรด'}</button>
+                          })}><Star size={13} />{ws.favorite ? tr("เอาออกจากโปรเจกต์โปรด") : tr("เพิ่มในโปรเจกต์โปรด")}</button>
                           <button onClick={() => openProject(ws)}>
-                            <Pencil size={13} /> แก้ไขชื่อ / คำสั่งประจำโปรเจกต์
+                            <Pencil size={13} /> {tr("แก้ไขชื่อ / คำสั่งประจำโปรเจกต์")}
                           </button>
                           <button
                             className="danger-text"
@@ -1198,7 +1205,7 @@ export function App() {
                               setMenu("");
                             }}
                           >
-                            <Trash2 size={13} /> ลบจากรายการ
+                            <Trash2 size={13} /> {tr("ลบจากรายการ")}
                           </button>
                         </div>
                       )}
@@ -1210,22 +1217,22 @@ export function App() {
                               <div key={s.id} className={`sidebar-session-row ${isHidden ? "is-hidden" : ""}`}>
                                 <button
                                   className={`sidebar-session ${s.id === selected && mode === "code" && !isHidden ? "active" : ""} ${isHidden ? "is-hidden" : ""}`}
-                                  title={isHidden ? `${s.name} (ซ่อนอยู่ · คลิกเพื่อเปิดกลับมาแสดงบนหน้าจอ)` : s.name}
+                                  title={isHidden ? tr`${s.name} (ซ่อนอยู่ · คลิกเพื่อเปิดกลับมาแสดงบนหน้าจอ)` : s.name}
                                   onClick={() => {
                                     unhideSession(s.id);
                                   }}
                                 >
                                   <ProviderBadge provider={s.agentType} compact />
                                   <span className="sidebar-session-copy"><span>{s.name}</span><small>{providerIdentity(s.agentType).label}{paneView(s) === "terminal" ? ' · Terminal' : ''}</small></span>
-                                  {isHidden && <small className="sidebar-hidden-badge">ซ่อนอยู่</small>}
+                                  {isHidden && <small className="sidebar-hidden-badge">{tr("ซ่อนอยู่")}</small>}
                                   <span
                                     className={`status-dot ${s.status === "running" || paneView(s) === "chat" ? "" : s.status === "error" ? "bad" : "offline"}`}
                                   />
                                 </button>
                                 <button
                                   className={`sidebar-session-visibility ${isHidden ? "is-hidden" : ""}`}
-                                  title={isHidden ? `แสดง ${s.name} บนหน้าจอ` : `ซ่อน ${s.name} พับเก็บไว้ก่อน`}
-                                  aria-label={isHidden ? `แสดง ${s.name}` : `ซ่อน ${s.name}`}
+                                  title={isHidden ? tr`แสดง ${s.name} บนหน้าจอ` : tr`ซ่อน ${s.name} พับเก็บไว้ก่อน`}
+                                  aria-label={isHidden ? tr`แสดง ${s.name}` : tr`ซ่อน ${s.name}`}
                                   onClick={() => {
                                     if (isHidden) unhideSession(s.id);
                                     else hideSession(s.id);
@@ -1235,8 +1242,8 @@ export function App() {
                                 </button>
                                 <button
                                   className="sidebar-session-delete"
-                                  title={`ลบ ${s.name}`}
-                                  aria-label={`ลบ ${s.name}`}
+                                  title={tr`ลบ ${s.name}`}
+                                  aria-label={tr`ลบ ${s.name}`}
                                   disabled={busy}
                                   onClick={() => {
                                     setDeleteSession({id: s.id, name: s.name}); setDialog("session-delete");
@@ -1292,7 +1299,7 @@ export function App() {
               </button>
               {update && (
                 <button onClick={() => setDialog("update")} className={update.status === "available" || update.status === "ready" ? "update-ready" : ""}
-                  title="ตรวจและติดตั้งเวอร์ชันใหม่จาก GitHub Releases">
+                  title={tr("ตรวจและติดตั้งเวอร์ชันใหม่จาก GitHub Releases")}>
                   {update.status === "checking" ? (
                     <LoaderCircle size={17} className="spin" />
                   ) : update.status === "latest" ? (
@@ -1302,17 +1309,17 @@ export function App() {
                   )}
                   <span>
                     {update.status === "available"
-                      ? `อัปเดตเป็น v${update.latestVersion}`
+                      ? tr`อัปเดตเป็น v${update.latestVersion}`
                       : update.status === "ready"
-                      ? "พร้อมติดตั้งอัปเดต"
+                      ? tr("พร้อมติดตั้งอัปเดต")
                       : update.status === "checking"
-                      ? "กำลังตรวจอัปเดต…"
+                      ? tr("กำลังตรวจอัปเดต…")
                       : update.status === "latest"
-                      ? "เวอร์ชันล่าสุดแล้ว"
-                      : "อัปเดตโปรแกรม"}
-                    <small>{update.status === "downloading" ? `กำลังดาวน์โหลด ${update.progress || 0}%` : `เวอร์ชัน ${update.currentVersion}`}</small>
+                      ? tr("เวอร์ชันล่าสุดแล้ว")
+                      : tr("อัปเดตโปรแกรม")}
+                    <small>{update.status === "downloading" ? tr`กำลังดาวน์โหลด ${update.progress || 0}%` : tr`เวอร์ชัน ${update.currentVersion}`}</small>
                   </span>
-                  {(update.status === "available" || update.status === "ready") && <span className="update-dot" aria-label="มีอัปเดตใหม่" />}
+                  {(update.status === "available" || update.status === "ready") && <span className="update-dot" aria-label={tr("มีอัปเดตใหม่")} />}
                 </button>
               )}
             </div>
@@ -1329,11 +1336,11 @@ export function App() {
               {error ? <AlertCircle size={15} /> : <Check size={15} />}
               <span>{error || notice}{error && (() => {
                 const { hint, account } = toastRecovery(error);
-                return (hint || account) && <small className="banner-guidance">{hint}{account && <button onClick={() => setDialog("setup")}>ตรวจบัญชี</button>}</small>;
+                return (hint || account) && <small className="banner-guidance">{hint}{account && <button onClick={() => setDialog("setup")}>{tr("ตรวจบัญชี")}</button>}</small>;
               })()}</span>
               <button
                 className="icon-button"
-                title="ปิดข้อความแจ้งเตือน"
+                title={tr("ปิดข้อความแจ้งเตือน")}
                 onClick={() => {
                   setError("");
                   setNotice("");
@@ -1367,16 +1374,16 @@ export function App() {
                       : `${conversation.length} ${t("canvas.tasks_unit", "งาน")}`}
                   </span>
                   {mode === "code" && hiddenInWorkspace.length > 0 && (
-                    <div className="hidden-sessions-bar" role="group" aria-label="session ที่ซ่อนอยู่">
+                    <div className="hidden-sessions-bar" role="group" aria-label={tr("session ที่ซ่อนอยู่")}>
                       <span className="hidden-sessions-label">
-                        <EyeOff size={12} /> ซ่อนอยู่ {hiddenInWorkspace.length}:
+                        <EyeOff size={12} /> {tr("ซ่อนอยู่")} {hiddenInWorkspace.length}:
                       </span>
                       {hiddenInWorkspace.map((s) => (
                         <button
                           key={s.id}
                           type="button"
                           className="hidden-session-chip"
-                          title={`คลิกเพื่อแสดง ${s.name} กลับมาบนหน้าจอ`}
+                          title={tr`คลิกเพื่อแสดง ${s.name} กลับมาบนหน้าจอ`}
                           onClick={() => unhideSession(s.id)}
                         >
                           <Eye size={11} />
@@ -1387,10 +1394,10 @@ export function App() {
                         <button
                           type="button"
                           className="hidden-session-restore-all"
-                          title="แสดงทุก session ที่ซ่อนอยู่ในโปรเจกต์นี้"
+                          title={tr("แสดงทุก session ที่ซ่อนอยู่ในโปรเจกต์นี้")}
                           onClick={unhideAllWorkspaceSessions}
                         >
-                          แสดงทั้งหมด
+                          {tr("แสดงทั้งหมด")}
                         </button>
                       )}
                     </div>
@@ -1404,16 +1411,16 @@ export function App() {
                         {running.length} {t("canvas.running_unit", "กำลังทำงาน")}
                       </span>
                       {zoomed && (
-                        <button className="text-button" onClick={() => setZoomed(false)} title="กลับการจัดวางเดิม">
-                          <Minimize2 size={14} /> กลับการจัดวางเดิม
+                        <button className="text-button" onClick={() => setZoomed(false)} title={tr("กลับการจัดวางเดิม")}>
+                          <Minimize2 size={14} /> {tr("กลับการจัดวางเดิม")}
                         </button>
                       )}
-                      <div className="layout-switch" role="group" aria-label="การจัดวาง session">
+                      <div className="layout-switch" role="group" aria-label={tr("การจัดวาง session")}>
                         {([
-                          ["auto", "จัดพอดีจอ", SlidersHorizontal],
-                          ["tabs", "เต็มพื้นที่", PanelTop],
-                          ["stack", "เรียงแนวตั้ง", Rows2],
-                          ["split", "แบ่งสองคอลัมน์", LayoutGrid],
+                          ["auto", tr("จัดพอดีจอ"), SlidersHorizontal],
+                          ["tabs", tr("เต็มพื้นที่"), PanelTop],
+                          ["stack", tr("เรียงแนวตั้ง"), Rows2],
+                          ["split", tr("แบ่งสองคอลัมน์"), LayoutGrid],
                         ] as const).map(([value, label, Icon]) => (
                           <button key={value} className="icon-button" title={label}
                             aria-pressed={!zoomed && layout === value}
@@ -1422,8 +1429,8 @@ export function App() {
                           </button>
                         ))}
                       </div>
-                      <select className="column-select" aria-label="จำนวนคอลัมน์" value={layout} onChange={e => { setLayout(e.target.value as CanvasLayout); setZoomed(false); }}>
-                        <option value="auto">อัตโนมัติ</option><option value="tabs">เต็มพื้นที่</option><option value="stack">แนวตั้ง</option><option value="split">2 คอลัมน์</option><option value="3">3 คอลัมน์</option><option value="4">4 คอลัมน์</option>
+                      <select className="column-select" aria-label={tr("จำนวนคอลัมน์")} value={layout} onChange={e => { setLayout(e.target.value as CanvasLayout); setZoomed(false); }}>
+                        <option value="auto">{tr("อัตโนมัติ")}</option><option value="tabs">{tr("เต็มพื้นที่")}</option><option value="stack">{tr("แนวตั้ง")}</option><option value="split">{tr("2 คอลัมน์")}</option><option value="3">{tr("3 คอลัมน์")}</option><option value="4">{tr("4 คอลัมน์")}</option>
                       </select>
                     </>
                   ) : (
@@ -1433,13 +1440,13 @@ export function App() {
                       ) : (
                         <ChatConfigEditor key={`chat-${activeWs}`} workspaceId={activeWs} clis={clis} ollamaModels={models} disabled={!!activeRun || busy} onChange={setChatConfig} />
                       )}
-                      <button className="text-button" onClick={() => setDialog("skills")} disabled={!workspace} title="ให้ AI เลือก skill ที่จำเป็นต่อโปรเจกต์">
+                      <button className="text-button" onClick={() => setDialog("skills")} disabled={!workspace} title={tr("ให้ AI เลือก skill ที่จำเป็นต่อโปรเจกต์")}>
                         <Puzzle size={13} /> Skills
                       </button>
                       {workspace && <ConversationExport title={`${workspace.name}-${mode}`} workspaceId={workspace.id} mode={mode === 'agent' ? 'agent' : 'chat'} />}
                       <button
                         className="icon-button"
-                        title="ล้างประวัติ Agent และ Chat ของโปรเจกต์"
+                        title={tr("ล้างประวัติ Agent และ Chat ของโปรเจกต์")}
                         disabled={!!activeRun || !runs.length}
                         onClick={() => setDialog("clear")}
                       >
@@ -1489,7 +1496,7 @@ export function App() {
                       <article className="conversation-run" id={`run-${run.id}`} key={run.id}>
                         <div className={`user-message ${run.mode === "agent" ? "mission-brief" : ""}`}>
                           <span className="message-author">
-                            คุณ{" "}
+                            {tr("คุณ")}{" "}
                             <time>
                               {new Date(run.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}
                             </time>
@@ -1512,44 +1519,44 @@ export function App() {
                             {run.output ? (
                               <Markdown text={run.output} />
                             ) : run.status === "running" ? (
-                              <p className="muted">รอ Main สรุปเมื่อ Sub-agent ทำงานเสร็จ…</p>
+                              <p className="muted">{tr("รอ Main สรุปเมื่อ Sub-agent ทำงานเสร็จ…")}</p>
                             ) : null}
                           </div>
                         )}
                         <RunActions run={run} blocked={!!activeRun || busy} onRetry={retryRun} />
                         {run.id === latestRun?.id && !activeRun && <NextSteps items={suggestions} disabled={busy} onSelect={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />}
-                        {run.error && <div className="inline-error" role="alert">{run.error}<button className="secondary" onClick={() => setDialog("setup")}>ตรวจเครื่องมือและบัญชี</button></div>}
+                        {run.error && <div className="inline-error" role="alert">{run.error}<button className="secondary" onClick={() => setDialog("setup")}>{tr("ตรวจเครื่องมือและบัญชี")}</button></div>}
                       </article>
                     ))
                   )}
                 </div></ImageEndpointContext.Provider>
               )}
               <div className={`composer-area composer-balanced ${mode === "code" && !composerExpanded ? "compact-code" : ""} ${chatTarget ? "chat-minimal" : ""} ${chatBusy || mode !== 'code' && activeRun ? "chat-busy" : ""} ${draft.trim() || attachments.items.length ? "has-draft" : ""}`}>
-                <section className="composer-project-panel" aria-label="บริบทและการทำงาน" hidden={!composerPanelOpen} onKeyDown={event => {
+                <section className="composer-project-panel" aria-label={tr("บริบทและการทำงาน")} hidden={!composerPanelOpen} onKeyDown={event => {
                   if (event.key === 'Escape' && !event.defaultPrevented) {
                     event.stopPropagation();
                     if (pinnedPickerOpen) setPinnedPickerOpen(false);
                     else { setComposerPanelOpen(false); requestAnimationFrame(() => composer.current?.closest('.composer-area')?.querySelector<HTMLButtonElement>('.attach-menu > button')?.focus()); }
                   }
                 }}>
-                  <header><strong>บริบทและการทำงาน</strong><button type="button" aria-label="ปิดบริบทและการทำงาน" onClick={() => { setComposerPanelOpen(false); requestAnimationFrame(() => composer.current?.closest('.composer-area')?.querySelector<HTMLButtonElement>('.attach-menu > button')?.focus()); }}><X size={14} /></button></header>
+                  <header><strong>{tr("บริบทและการทำงาน")}</strong><button type="button" aria-label={tr("ปิดบริบทและการทำงาน")} onClick={() => { setComposerPanelOpen(false); requestAnimationFrame(() => composer.current?.closest('.composer-area')?.querySelector<HTMLButtonElement>('.attach-menu > button')?.focus()); }}><X size={14} /></button></header>
                 <div className="composer-context-tags">
                     {(mode !== 'code' || !composerTarget || chatTarget) && <ProjectContextStatus workspaceId={workspace?.id} sessionId={chatTarget?.id} revision={JSON.stringify([workspace?.instructions, workspace?.pinnedFiles])} />}
                   {workspace?.instructions && (
                     <button
                       type="button"
                       className="composer-instructions-pill"
-                      title={`คำสั่งประจำโปรเจกต์: ${workspace.instructions} (คลิกเพื่อแก้ไข)`}
+                      title={tr`คำสั่งประจำโปรเจกต์: ${workspace.instructions} (คลิกเพื่อแก้ไข)`}
                       onClick={() => openProject(workspace)}
                     >
                       <Sparkles size={12} />
-                      <span>กฎโปรเจกต์: {workspace.instructions}</span>
+                      <span>{tr("กฎโปรเจกต์:")} {workspace.instructions}</span>
                     </button>
                   )}
                   {workspace?.pinnedFiles && workspace.pinnedFiles.length > 0 && (
                     <div className="composer-pinned-group">
                       <span className="pinned-label">
-                        <Pin size={11} /> ปักหมุด ({workspace.pinnedFiles.length}):
+                        <Pin size={11} /> {tr("ปักหมุด (")}{workspace.pinnedFiles.length}):
                       </span>
                       {workspace.pinnedFiles.map((file) => {
                         const fileName = file.split(/[\\/]/).pop() || file;
@@ -1557,7 +1564,7 @@ export function App() {
                           <span
                             key={file}
                             className="composer-pinned-chip"
-                            title={`${file} (คลิกเพื่อเปิดดูใน Preview)`}
+                            title={tr`${file} (คลิกเพื่อเปิดดูใน Preview)`}
                           >
                             <span
                               className="pinned-chip-name"
@@ -1576,7 +1583,7 @@ export function App() {
                             <button
                               type="button"
                               className="pinned-chip-remove"
-                              title={`เลิกปักหมุด ${file}`}
+                              title={tr`เลิกปักหมุด ${file}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 void handleTogglePin(file);
@@ -1593,7 +1600,7 @@ export function App() {
                     <button
                       type="button"
                       className="composer-add-pin-btn"
-                      title="ปักหมุดไฟล์เป็น Context ให้ AI อัตโนมัติ"
+                      title={tr("ปักหมุดไฟล์เป็น Context ให้ AI อัตโนมัติ")}
                       onClick={() => {
                         setPinnedPickerOpen((v) => {
                           const next = !v;
@@ -1603,14 +1610,14 @@ export function App() {
                       }}
                     >
                       <Pin size={11} />
-                      <span>+ ปักหมุดไฟล์</span>
+                      <span>{tr("+ ปักหมุดไฟล์")}</span>
                     </button>
                     {pinnedPickerOpen && (
                       <div className="composer-pin-dropdown">
                         <div className="pin-dropdown-header">
                           <input
                             type="text"
-                            placeholder="ค้นหาไฟล์ในโปรเจกต์..."
+                            placeholder={tr("ค้นหาไฟล์ในโปรเจกต์...")}
                             value={pinnedSearch}
                             onChange={(e) => setPinnedSearch(e.target.value)}
                             autoFocus
@@ -1645,13 +1652,13 @@ export function App() {
                                   <span className="item-name">{fileName}</span>
                                   <span className="item-path">{filePath}</span>
                                   <span className="item-status">
-                                    {isPinned ? "✓ ปักหมุดแล้ว" : "+ ปักหมุด"}
+                                    {isPinned ? tr("✓ ปักหมุดแล้ว") : tr("+ ปักหมุด")}
                                   </span>
                                 </button>
                               );
                             })}
                           {projectFileList.length === 0 && (
-                            <div className="pin-dropdown-empty">กำลังโหลดไฟล์หรือไม่มีไฟล์ในโปรเจกต์...</div>
+                            <div className="pin-dropdown-empty">{tr("กำลังโหลดไฟล์หรือไม่มีไฟล์ในโปรเจกต์...")}</div>
                           )}
                         </div>
                       </div>
@@ -1666,8 +1673,8 @@ export function App() {
                         <Bot size={13} />
                         <span>
                           {mode === "agent"
-                            ? `Main: ${agentConfig?.main.name || "-"} · Sub-agent ${agentConfig?.subagents.length || 0} ตัว`
-                            : `ถาม ${chatConfig?.panel.length || 0} AI${chatConfig?.summarizer ? ` · สรุปโดย ${chatConfig.summarizer.name}` : ""}`}
+                            ? tr`Main: ${agentConfig?.main.name || "-"} · Sub-agent ${agentConfig?.subagents.length || 0} ตัว`
+                            : tr`ถาม ${chatConfig?.panel.length || 0} AI${chatConfig?.summarizer ? tr` · สรุปโดย ${chatConfig.summarizer.name}` : ""}`}
                         </span>
                         {mode === "agent" && (
                           <label className="tool-permission">
@@ -1677,7 +1684,7 @@ export function App() {
                               onChange={(e) => setAllowTools(e.target.checked)}
                               disabled={!!activeRun}
                             />{" "}
-                            อนุญาตให้ Sub-agent แก้ไฟล์และรันคำสั่ง
+                            {tr("อนุญาตให้ Sub-agent แก้ไฟล์และรันคำสั่ง")}
                           </label>
                         )}
                       </>
@@ -1687,10 +1694,10 @@ export function App() {
                 </section>
                 <div className={`composer-box ${chatTarget ? "has-session-controls" : ""}`}>
                   <div className="composer-leading"><AttachMenu onFiles={attachToComposer} disabled={busy || (!workspace && mode !== "code")} actions={[
-                    { label: 'บริบทและไฟล์ปักหมุด', selected: composerPanelOpen, onSelect: () => setComposerPanelOpen(value => !value) },
-                    ...(mode === 'code' && running.length || activeRun ? [{ label: 'หยุดงานปัจจุบัน', onSelect: interrupt }] : []),
-                    ...(mode === 'code' ? [{ label: composerExpanded ? 'ย่อช่องพิมพ์' : 'ขยายช่องพิมพ์', selected: composerExpanded, onSelect: () => { setComposerExpanded(value => !value); requestAnimationFrame(() => composer.current?.focus()); } }] : []),
-                    ...(nextPrompt ? [{ label: 'ใช้ข้อความแนะนำ (Tab)', onSelect: () => { setDraft(nextPrompt); requestAnimationFrame(() => composer.current?.focus()); } }] : []),
+                    { label: tr("บริบทและไฟล์ปักหมุด"), selected: composerPanelOpen, onSelect: () => setComposerPanelOpen(value => !value) },
+                    ...(mode === 'code' && running.length || activeRun ? [{ label: tr("หยุดงานปัจจุบัน"), onSelect: interrupt }] : []),
+                    ...(mode === 'code' ? [{ label: composerExpanded ? tr("ย่อช่องพิมพ์") : tr("ขยายช่องพิมพ์"), selected: composerExpanded, onSelect: () => { setComposerExpanded(value => !value); requestAnimationFrame(() => composer.current?.focus()); } }] : []),
+                    ...(nextPrompt ? [{ label: tr("ใช้ข้อความแนะนำ (Tab)"), onSelect: () => { setDraft(nextPrompt); requestAnimationFrame(() => composer.current?.focus()); } }] : []),
                   ]} /></div>
                   <div className="composer-attachments-row">
                   <AttachmentCards items={attachments.items} onRemove={attachments.remove} disabled={busy} />
@@ -1702,9 +1709,9 @@ export function App() {
                     <textarea
                       ref={composer}
                       rows={mode === "code" && !composerExpanded ? 1 : 3}
-                      aria-label="คำสั่ง"
+                      aria-label={tr("คำสั่ง")}
                       placeholder={mode === 'code' ? target === 'all' ? t("composer.placeholder_all", 'ส่งข้อความถึงทุกห้อง…') : t("composer.placeholder_code", 'พิมพ์ข้อความ…') : mode === 'agent' ? t("composer.placeholder_agent", 'บอกสิ่งที่ต้องการให้ทีมทำ…') : t("composer.placeholder_chat", 'ถาม AI ที่เลือก…')}
-                      title={nextPrompt ? 'มีข้อความแนะนำ: กด Tab เพื่อใช้ หรือเปิดเมนู + เพื่อดูตัวเลือก' : t("composer.shortcut_hint", 'Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่')}
+                      title={nextPrompt ? tr("มีข้อความแนะนำ: กด Tab เพื่อใช้ หรือเปิดเมนู + เพื่อดูตัวเลือก") : t("composer.shortcut_hint", 'Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่')}
                       value={draft}
                       onChange={(e) => {
                         setDraft(e.target.value);
@@ -1714,7 +1721,7 @@ export function App() {
                         if (!files.length) return;
                         e.preventDefault();
                         attachToComposer(files);
-                        setNotice(`แนบรูปภาพจากคลิปบอร์ดแล้ว (${files.length} ไฟล์)`);
+                        setNotice(tr`แนบรูปภาพจากคลิปบอร์ดแล้ว (${files.length} ไฟล์)`);
                       }}
                       onClick={(e) => {
                         if (e.ctrlKey || e.metaKey) {
@@ -1724,7 +1731,7 @@ export function App() {
                           if (url) {
                             e.preventDefault();
                             openExternalLink(url);
-                            setNotice(`เปิดลิงก์: ${url}`);
+                            setNotice(tr`เปิดลิงก์: ${url}`);
                           }
                         }
                       }}
@@ -1762,8 +1769,8 @@ export function App() {
                         className="icon-button composer-stop"
                         title={
                           mode === "code"
-                            ? "หยุดคำสั่ง (Ctrl+C)"
-                            : "หยุดงานของ AI ทุกตัว"
+                            ? tr("หยุดคำสั่ง (Ctrl+C)")
+                            : tr("หยุดงานของ AI ทุกตัว")
                         }
                         disabled={
                           busy ||
@@ -1775,7 +1782,7 @@ export function App() {
                       </button>
                       <button
                         className="send-button"
-                        aria-label="ส่งคำสั่ง (Enter)" title="ส่งคำสั่ง (Enter)"
+                        aria-label={tr("ส่งคำสั่ง (Enter)")} title={tr("ส่งคำสั่ง (Enter)")}
                         disabled={
                           busy ||
                           (!draft.trim() && !attachments.items.length) ||
@@ -1790,12 +1797,12 @@ export function App() {
                         ) : (
                           <Send size={16} />
                         )}
-                        <span className="send-label">ส่ง</span>
+                        <span className="send-label">{tr("ส่ง")}</span>
                       </button>
                     </div>
                   </div>
                 </div>
-                <div className="composer-meta" aria-label="การตั้งค่าข้อความ">
+                <div className="composer-meta" aria-label={tr("การตั้งค่าข้อความ")}>
                 <ComposerLocation workspace={workspace} workspaces={workspaces} recipients={mode === 'code' ? target === 'all' ? running : composerTarget ? [composerTarget] : [] : undefined}
                   onSelectWorkspace={id => { setActiveWs(id); setTarget('active'); }} onOpenFolder={() => openProject()}
                   onSelectWorktree={rootPath => { void task(async () => {
@@ -1807,33 +1814,33 @@ export function App() {
                     {mode === "code" && (composerTarget || target === "all") && (running.length > 1 || target !== "active") && (
                       <select
                         className="composer-target"
-                        aria-label="เป้าหมายคำสั่ง"
+                        aria-label={tr("เป้าหมายคำสั่ง")}
                         value={target}
-                        title={target === "all" ? `ส่งถึงทุก session ในโปรเจกต์นี้ (${running.length})` : `ส่งถึง ${selectedSession?.name || "session ที่เลือก"}`}
+                        title={target === "all" ? tr`ส่งถึงทุก session ในโปรเจกต์นี้ (${running.length})` : tr`ส่งถึง ${selectedSession?.name || tr("session ที่เลือก")}`}
                         onChange={(e) => setTarget(e.target.value === "all" ? "all" : "active")}
                       >
                         <option value="active">
-                          ห้องนี้
+                          {tr("ห้องนี้")}
                         </option>
                         <option value="all">
-                          ทุกห้อง
+                          {tr("ทุกห้อง")}
                         </option>
                       </select>
                     )}
                   {chatTarget && <SessionChatControls key={chatTarget.id} sessionId={chatTarget.id} name={chatTarget.name} disabled={busy} />}
                   {mode === "code" && !composerTarget && target === "active" && <QuickChatControls clis={clis} provider={quickProvider} accountId={quickAccount} onAccount={setQuickAccount} onProvider={id => { setQuickAccount(undefined); chooseQuickProvider(id); }} disabled={busy} onSetup={() => setDialog("setup")} style={answerStyle} onStyle={setAnswerStyle} />}
-                  {mode !== 'code' && <ComposerOptions label="ตัวเลือกคำตอบ"><ResponseStyleSelect value={answerStyle} onChange={setAnswerStyle} disabled={busy || !!activeRun} /></ComposerOptions>}
+                  {mode !== 'code' && <ComposerOptions label={tr("ตัวเลือกคำตอบ")}><ResponseStyleSelect value={answerStyle} onChange={setAnswerStyle} disabled={busy || !!activeRun} /></ComposerOptions>}
                   {mode === "code" && composerTarget && !chatTarget && <div className="terminal-provider-context"><ProviderBadge provider={composerTarget.agentType} /><span>{providerIdentity(composerTarget.agentType).connection}</span></div>}
                 </div>
                 {extractUrls(draft).length > 0 && (
                   <div className="composer-detected-links">
-                    <span className="detected-links-label">🔗 ลิงก์ที่พบ:</span>
+                    <span className="detected-links-label">{tr("🔗 ลิงก์ที่พบ:")}</span>
                     {extractUrls(draft).map((url, i) => (
                       <button
                         key={i}
                         type="button"
                         className="composer-link-chip"
-                        title={`คลิกหรือ Ctrl+Click ในช่องเพื่อเปิด ${url}`}
+                        title={tr`คลิกหรือ Ctrl+Click ในช่องเพื่อเปิด ${url}`}
                         onClick={() => openExternalLink(url)}
                       >
                         <ExternalLink size={11} />
@@ -1843,8 +1850,8 @@ export function App() {
                   </div>
                 )}
                 <div className="composer-hint">
-                  <span>Enter ส่ง{chatTarget ? " (ขณะ AI ทำงาน = แทรกทันที) · Ctrl+Enter ต่อคิว" : mode === "code" ? " · Ctrl+Enter ต่อคิว" : ""} · Shift + Enter ขึ้นบรรทัดใหม่ · Ctrl+Click เพื่อเปิดลิงก์</span>
-                  <span>ตรวจคำสั่งก่อนส่งเสมอ</span>
+                  <span>{tr("Enter ส่ง")}{chatTarget ? tr(" (ขณะ AI ทำงาน = แทรกทันที) · Ctrl+Enter ต่อคิว") : mode === "code" ? tr(" · Ctrl+Enter ต่อคิว") : ""} {tr("· Shift + Enter ขึ้นบรรทัดใหม่ · Ctrl+Click เพื่อเปิดลิงก์")}</span>
+                  <span>{tr("ตรวจคำสั่งก่อนส่งเสมอ")}</span>
                 </div>
               </div>
             </main>
@@ -1864,7 +1871,7 @@ export function App() {
               }} onError={showError} />
           </div>
           <div className="statusbar sr-only" style={{ display: "none" }} aria-hidden="true">
-            {connected ? "เชื่อมต่อแล้ว" : "เชื่อมต่อขาดหาย"}
+            {connected ? tr("เชื่อมต่อแล้ว") : tr("เชื่อมต่อขาดหาย")}
             {pty ? " · pty" : ""}
           </div>
         </div>
@@ -1915,44 +1922,44 @@ export function App() {
             <div className="dialog-heading">
               <div>
                 <h2 id="dialog-title">
-                  {dialog === "history" ? "ค้นหาประวัติบทสนทนา" : dialog === "changes" ? "ไฟล์ที่เปลี่ยนและผลงาน" : dialog === "session-delete" ? "ลบ session นี้?" : dialog === "session"
-                    ? "เปิด session ใหม่"
+                  {dialog === "history" ? tr("ค้นหาประวัติบทสนทนา") : dialog === "changes" ? tr("ไฟล์ที่เปลี่ยนและผลงาน") : dialog === "session-delete" ? tr("ลบ session นี้?") : dialog === "session"
+                    ? tr("เปิด session ใหม่")
                     : dialog === "settings"
-                      ? "การตั้งค่าพื้นที่ทำงาน"
+                      ? tr("การตั้งค่าพื้นที่ทำงาน")
                       : dialog === "project"
                         ? editing
-                          ? "แก้ไขโปรเจกต์"
-                          : "เพิ่มโปรเจกต์"
+                          ? tr("แก้ไขโปรเจกต์")
+                          : tr("เพิ่มโปรเจกต์")
                         : dialog === "delete"
-                          ? "ลบโปรเจกต์จากรายการ?"
+                          ? tr("ลบโปรเจกต์จากรายการ?")
                           : dialog === "setup"
-                            ? "เริ่มต้นใช้งาน SuperAi"
+                            ? tr("เริ่มต้นใช้งาน SuperAi")
                             : dialog === "skills"
-                              ? "Skills ของโปรเจกต์"
+                              ? tr("Skills ของโปรเจกต์")
                               : dialog === "update"
-                                ? "อัปเดตโปรแกรม"
-                              : "ล้างประวัติ Agent และ Chat?"}
+                                ? tr("อัปเดตโปรแกรม")
+                              : tr("ล้างประวัติ Agent และ Chat?")}
                 </h2>
                 <p>
                   {dialog === "session"
-                    ? "เลือกผู้ช่วยที่อยากคุยด้วย ใช้ค่ารุ่น AI เริ่มต้นได้ ห้องคุยแต่ละห้องแยกจากกัน"
+                    ? tr("เลือกผู้ช่วยที่อยากคุยด้วย ใช้ค่ารุ่น AI เริ่มต้นได้ ห้องคุยแต่ละห้องแยกจากกัน")
                     : dialog === "settings"
-                      ? "ตรวจเครื่องมือ และเลือก model กับ effort เริ่มต้นของแต่ละผู้ให้บริการ"
+                      ? tr("ตรวจเครื่องมือ และเลือก model กับ effort เริ่มต้นของแต่ละผู้ให้บริการ")
                       : dialog === "project"
-                        ? "เลือกโฟลเดอร์ที่ใช้ทำงานจริงบนเครื่อง"
+                        ? tr("เลือกโฟลเดอร์ที่ใช้ทำงานจริงบนเครื่อง")
                         : dialog === "setup"
-                          ? "เลือกโฟลเดอร์ เชื่อมต่อผู้ช่วย แล้วเริ่มคุยได้เลย"
+                          ? tr("เลือกโฟลเดอร์ เชื่อมต่อผู้ช่วย แล้วเริ่มคุยได้เลย")
                           : dialog === "skills"
-                            ? `${workspace?.name || ""} · AI เสนอ คุณเป็นคนกดติดตั้ง`
+                            ? tr`${workspace?.name || ""} · AI เสนอ คุณเป็นคนกดติดตั้ง`
                             : dialog === "update"
-                              ? "ดาวน์โหลดเวอร์ชันใหม่จาก GitHub Releases แล้วติดตั้งทับให้เอง"
-                            : dialog === "history" ? "ค้นหาข้อความและคำตอบที่บันทึกไว้ แล้วเปิดกลับไปทำงานต่อ" : dialog === "changes" ? "ตรวจไฟล์และ diff ของโปรเจกต์ หรือเปิดตัวอย่างผลงาน" : "กรุณาตรวจสอบก่อนดำเนินการ"}
+                              ? tr("ดาวน์โหลดเวอร์ชันใหม่จาก GitHub Releases แล้วติดตั้งทับให้เอง")
+                            : dialog === "history" ? tr("ค้นหาข้อความและคำตอบที่บันทึกไว้ แล้วเปิดกลับไปทำงานต่อ") : dialog === "changes" ? tr("ตรวจไฟล์และ diff ของโปรเจกต์ หรือเปิดตัวอย่างผลงาน") : tr("กรุณาตรวจสอบก่อนดำเนินการ")}
                 </p>
               </div>
               <button
                 className="icon-button"
-                title="ปิดหน้าต่าง"
-                aria-label="ปิดหน้าต่าง"
+                title={tr("ปิดหน้าต่าง")}
+                aria-label={tr("ปิดหน้าต่าง")}
                 disabled={busy}
                 onClick={closeDialog}
               >
@@ -1962,17 +1969,17 @@ export function App() {
             {error && (
               <div className="dialog-error" role="alert">
                 <AlertCircle size={15} />
-                {dialog === "setup" ? "ดำเนินการไม่สำเร็จ กรุณาตรวจเครื่องมือหรือลองใหม่" : error}
+                {dialog === "setup" ? tr("ดำเนินการไม่สำเร็จ กรุณาตรวจเครื่องมือหรือลองใหม่") : error}
               </div>
             )}
             {dialog === "history" && <HistoryPanel workspaces={workspaces} sessions={sessions} onSelect={openHistoryEntry} />}
             {dialog === "changes" && workspace && <ChangesPanel workspaceId={workspace.id} sessions={sessions} onSelectSession={(id) => { setSelected(id); setDialog(null); }} onPreview={() => { setDialog(null); setDockView("browser"); setPreview(true); }} />}
-            {dialog === "session-delete" && deleteSession && <><p className="confirm-description"><strong>{deleteSession.name}</strong><br />ประวัติแชตใน session นี้จะถูกลบด้วย (หากต้องการพักไว้ชั่วคราว กด “ซ่อนไว้ก่อน” เพื่อเปิดกลับมาใช้ทีหลังได้)</p><div className="dialog-footer"><button className="secondary" autoFocus onClick={closeDialog}>ยกเลิก</button><button className="secondary" disabled={busy} onClick={() => { hideSession(deleteSession.id); setDialog(null); }}><EyeOff size={15} /> ซ่อนไว้ก่อน (ไม่ลบ)</button><button className="danger-button" disabled={busy} onClick={() => { closeSession(deleteSession.id); setDialog(null); }}>ลบ session</button></div></>}
+            {dialog === "session-delete" && deleteSession && <><p className="confirm-description"><strong>{deleteSession.name}</strong><br />{tr("ประวัติแชตใน session นี้จะถูกลบด้วย (หากต้องการพักไว้ชั่วคราว กด “ซ่อนไว้ก่อน” เพื่อเปิดกลับมาใช้ทีหลังได้)")}</p><div className="dialog-footer"><button className="secondary" autoFocus onClick={closeDialog}>{tr("ยกเลิก")}</button><button className="secondary" disabled={busy} onClick={() => { hideSession(deleteSession.id); setDialog(null); }}><EyeOff size={15} /> {tr("ซ่อนไว้ก่อน (ไม่ลบ)")}</button><button className="danger-button" disabled={busy} onClick={() => { closeSession(deleteSession.id); setDialog(null); }}>{tr("ลบ session")}</button></div></>}
             {dialog === "session" && (
               <>
                 <CliInstaller clis={clis} onRefresh={checkClis} onError={showError}/>
                 <LaunchPresets clis={clis} type={launchType} count={count} onChoose={setLaunchPlan} onError={showError} />
-                {launchPlan && <div className="launch-plan"><strong>ชุดที่จะเปิด: {launchPlan.map(seat => `${clis.find(c => c.id === seat.type)?.name || seat.type} ×${seat.count}`).join(" + ")}</strong><button className="text-button" onClick={() => setLaunchPlan(null)}>เลือกเอง</button></div>}
+                {launchPlan && <div className="launch-plan"><strong>{tr("ชุดที่จะเปิด:")} {launchPlan.map(seat => `${clis.find(c => c.id === seat.type)?.name || seat.type} ×${seat.count}`).join(" + ")}</strong><button className="text-button" onClick={() => setLaunchPlan(null)}>{tr("เลือกเอง")}</button></div>}
                 <div className="cli-options">
                   {sessionProviders.map((c) => {
                     const active = sessions.filter(
@@ -2000,9 +2007,9 @@ export function App() {
                           <small>
                             {c.available
                               ? c.id === "freebuff"
-                                ? `เปิดได้ 1 session · ใช้อยู่ ${active}`
-                                : `พร้อมใช้ · กำลังทำงาน ${active}`
-                              : "ไม่พบคำสั่งในเครื่อง"}
+                                ? tr`เปิดได้ 1 session · ใช้อยู่ ${active}`
+                                : tr`พร้อมใช้ · กำลังทำงาน ${active}`
+                              : tr("ไม่พบคำสั่งในเครื่อง")}
                           </small>
                         </span>
                         {launchType === c.id ? (
@@ -2020,12 +2027,12 @@ export function App() {
                 {!launchPlan && (HEADLESS.includes(launchType) || isApiProvider(launchType)) && launchCli?.available && (
                   <div className="session-model">
                     <SeatPicker named={false} fixedProvider label={launchCli.name} clis={clis} ollamaModels={[]} seat={sessionSeat} onChange={setSessionSeat} />
-                    <small className="muted">ไม่แน่ใจว่าจะเลือกรุ่นไหน ใช้ค่าเริ่มต้นได้ แล้วค่อยเปลี่ยนทีหลัง</small>
+                    <small className="muted">{tr("ไม่แน่ใจว่าจะเลือกรุ่นไหน ใช้ค่าเริ่มต้นได้ แล้วค่อยเปลี่ยนทีหลัง")}</small>
                   </div>
                 )}
                 <div className="dialog-field-row">
                   <label>
-                    จำนวนห้องคุย (session)
+                    {tr("จำนวนห้องคุย (session)")}
                     <select
                       value={count}
                       onChange={(e) => { setLaunchPlan(null); setCount(Number(e.target.value)); }}
@@ -2041,20 +2048,19 @@ export function App() {
                     </select>
                   </label>
                   <p>
-                    แต่ละห้องคุยทำงานในโฟลเดอร์
+                    {tr("แต่ละห้องคุยทำงานในโฟลเดอร์")}
                     <br />
                     <strong>{workspace?.name}</strong>
                   </p>
                 </div>
                 {launchCli && !launchCli.available && (
                   <p className="inline-error">
-                    ยังไม่ได้ติดตั้ง {launchCli.name} ติดตั้ง CLI
-                    แล้วกดตรวจสอบเครื่องมือในตั้งค่า
+                    {tr("ยังไม่ได้ติดตั้ง")} {launchCli.name} {tr("ติดตั้ง CLI แล้วกดตรวจสอบเครื่องมือในตั้งค่า")}
                   </p>
                 )}
                 <div className="dialog-footer">
                   <button className="secondary" onClick={() => setDialog(null)}>
-                    ยกเลิก
+                    {tr("ยกเลิก")}
                   </button>
                   <button
                     className="primary"
@@ -2066,7 +2072,7 @@ export function App() {
                     ) : (
                       <Plus size={15} />
                     )}{" "}
-                    เปิด {launchTotal} session
+                    {tr("เปิด")} {launchTotal} session
                   </button>
                 </div>
               </>
@@ -2081,8 +2087,8 @@ export function App() {
                   }}
                   addProject={() => { setReturnToSetup(true); openProject(); }} openSkills={() => setDialog("skills")} />
                 <div className="dialog-footer">
-                  <span className="muted">เปิดหน้านี้อีกครั้งได้จากแถบซ้าย “เริ่มต้นใช้งาน”</span>
-                  <button className="secondary" onClick={closeSetup}>ปิดไว้ก่อน</button>
+                  <span className="muted">{tr("เปิดหน้านี้อีกครั้งได้จากแถบซ้าย “เริ่มต้นใช้งาน”")}</span>
+                  <button className="secondary" onClick={closeSetup}>{tr("ปิดไว้ก่อน")}</button>
                 </div>
               </>
             )}
@@ -2092,8 +2098,8 @@ export function App() {
                   <UpdatePanel state={update} onError={showError} />
                 </div>
                 <div className="dialog-footer">
-                  <span className="muted">ตรวจให้เองตอนเปิดโปรแกรมและทุก 30 นาที</span>
-                  <button className="primary" onClick={() => setDialog(null)}>ปิด <Check size={15} /></button>
+                  <span className="muted">{tr("ตรวจให้เองตอนเปิดโปรแกรมและทุก 30 นาที")}</span>
+                  <button className="primary" onClick={() => setDialog(null)}>{tr("ปิด")} <Check size={15} /></button>
                 </div>
               </>
             )}
@@ -2103,8 +2109,8 @@ export function App() {
                   <SkillsPanel workspace={workspace} clis={clis} ollamaModels={models} onError={showError} onNotice={setNotice} />
                 </div>
                 <div className="dialog-footer">
-                  <span className="muted">ตรวจไฟล์ของ skill บน GitHub ได้ก่อนติดตั้ง</span>
-                  <button className="primary" onClick={() => setDialog(null)}>เสร็จแล้ว <Check size={15} /></button>
+                  <span className="muted">{tr("ตรวจไฟล์ของ skill บน GitHub ได้ก่อนติดตั้ง")}</span>
+                  <button className="primary" onClick={() => setDialog(null)}>{tr("เสร็จแล้ว")} <Check size={15} /></button>
                 </div>
               </>
             )}
@@ -2117,20 +2123,20 @@ export function App() {
               >
                 <div className="dialog-fields">
                   <label>
-                    ชื่อโปรเจกต์
+                    {tr("ชื่อโปรเจกต์")}
                     <input
                       autoFocus
                       value={projectName}
                       onChange={(e) => setProjectName(e.target.value)}
-                      placeholder="เช่น เว็บไซต์ร้านของฉัน"
+                      placeholder={tr("เช่น เว็บไซต์ร้านของฉัน")}
                       required
                     />
                   </label>
                   <label>
-                    โฟลเดอร์โปรเจกต์
+                    {tr("โฟลเดอร์โปรเจกต์")}
                     <div className="input-action">
                       <input
-                        aria-label="โฟลเดอร์โปรเจกต์"
+                        aria-label={tr("โฟลเดอร์โปรเจกต์")}
                         value={projectPath}
                         onChange={(e) => setProjectPath(e.target.value)}
                         placeholder={window.superai?.platform === "darwin" ? "~/Projects/my-app" : "D:\\Projects\\my-app"}
@@ -2143,24 +2149,23 @@ export function App() {
                           disabled={busy}
                           onClick={folder}
                         >
-                          <FolderPlus size={16} /> เลือก
+                          <FolderPlus size={16} /> {tr("เลือก")}
                         </button>
                       )}
                     </div>
                   </label>
                   <label>
-                    คำแนะนำสำหรับ AI (ไม่บังคับ)
+                    {tr("คำแนะนำสำหรับ AI (ไม่บังคับ)")}
                     <textarea
                       rows={3}
                       value={projectInstructions}
                       onChange={(e) => setProjectInstructions(e.target.value)}
-                      placeholder="เช่น ตอบเป็นภาษาไทยเสมอ, เน้นเขียน TypeScript + React, ห้ามใช้ any..."
+                      placeholder={tr("เช่น ตอบเป็นภาษาไทยเสมอ, เน้นเขียน TypeScript + React, ห้ามใช้ any...")}
                     />
                   </label>
                   {editing && (
                     <p className="muted">
-                      session ที่เปิดอยู่จะใช้โฟลเดอร์เดิมจนกว่าจะเปิด session
-                      ใหม่
+                      {tr("session ที่เปิดอยู่จะใช้โฟลเดอร์เดิมจนกว่าจะเปิด session ใหม่")}
                     </p>
                   )}
                 </div>
@@ -2170,7 +2175,7 @@ export function App() {
                     className="secondary"
                     onClick={closeDialog}
                   >
-                    ยกเลิก
+                    {tr("ยกเลิก")}
                   </button>
                   <button className="primary" disabled={busy} type="submit">
                     {busy ? (
@@ -2178,7 +2183,7 @@ export function App() {
                     ) : (
                       <Check size={15} />
                     )}{" "}
-                    บันทึกโปรเจกต์
+                    {tr("บันทึกโปรเจกต์")}
                   </button>
                 </div>
               </form>
@@ -2186,7 +2191,7 @@ export function App() {
             {dialog === "settings" && (
               <>
                 <div className="mission-settings">
-<nav className="settings-nav" aria-label="หมวดการตั้งค่า">{[["language", t("settings.tab_language", "ภาษา / Language")], ["tools", t("settings.tab_tools", "เครื่องมือ AI")], ["accounts", "บัญชี AI"], ["apikeys", t("settings.tab_apikeys", "API Key")], ["mcp", t("settings.tab_mcp", "MCP Servers")], ["models", t("settings.tab_models", "Model และ Effort")], ["folders", t("settings.tab_folders", "โฟลเดอร์")], ["voice", t("settings.tab_voice", "เสียง")], ["notify", t("settings.tab_notify", "แจ้งเตือนและคำแนะนำ")]].map(([id, label]) => <button key={id} aria-current={settingsTab === id ? "page" : undefined} onClick={() => setSettingsTab(id)}>{label}</button>)}</nav>
+<nav className="settings-nav" aria-label={tr("หมวดการตั้งค่า")}>{[["language", t("settings.tab_language", "ภาษา / Language")], ["tools", t("settings.tab_tools", "เครื่องมือ AI")], ["accounts", tr("บัญชี AI")], ["apikeys", t("settings.tab_apikeys", "API Key")], ["mcp", t("settings.tab_mcp", "MCP Servers")], ["models", t("settings.tab_models", "Model และ Effort")], ["folders", t("settings.tab_folders", "โฟลเดอร์")], ["voice", t("settings.tab_voice", "เสียง")], ["notify", t("settings.tab_notify", "แจ้งเตือนและคำแนะนำ")]].map(([id, label]) => <button key={id} aria-current={settingsTab === id ? "page" : undefined} onClick={() => setSettingsTab(id)}>{label}</button>)}</nav>
 <div className="settings-content">
 {settingsTab === "accounts" && <section><AccountsPanel wsId={activeWs || undefined} /></section>}
 <section hidden={settingsTab !== "language"}>
@@ -2227,23 +2232,22 @@ export function App() {
 </section>
 <section hidden={settingsTab !== "tools"}>
                   <div className="settings-section-title">
-                    <h3>เครื่องมือ CLI</h3>
+                    <h3>{tr("เครื่องมือ CLI")}</h3>
                     <button
                       className="text-button"
                       disabled={busy}
                       onClick={() =>
                         task(async () => {
                           await checkClis();
-                          setNotice("ตรวจสอบเครื่องมือแล้ว");
+                          setNotice(tr("ตรวจสอบเครื่องมือแล้ว"));
                         })
                       }
                     >
-                      <RefreshCw size={13} /> ตรวจสอบอีกครั้ง
+                      <RefreshCw size={13} /> {tr("ตรวจสอบอีกครั้ง")}
                     </button>
                   </div>
                   <p className="muted">
-                    ใช้บัญชีและขั้นตอนเข้าสู่ระบบของแต่ละ CLI เปิด session
-                    แล้วทำตามคำแนะนำของเครื่องมือนั้นได้เลย
+                    {tr("ใช้บัญชีและขั้นตอนเข้าสู่ระบบของแต่ละ CLI เปิด session แล้วทำตามคำแนะนำของเครื่องมือนั้นได้เลย")}
                   </p>
                   <div className="cli-status-list">
                     {clis.map((c) => (
@@ -2251,39 +2255,37 @@ export function App() {
                         <span>{c.name}</span>
                         <code>{c.command}</code>
                         <span className={c.available ? "success-text" : "dim"}>
-                          {c.available ? "พร้อมใช้งาน" : "ยังไม่ติดตั้ง"}
+                          {c.available ? tr("พร้อมใช้งาน") : tr("ยังไม่ติดตั้ง")}
                         </span>
                       </div>
                     ))}
                   </div>
                   <CliVersionsPanel onError={showError} /></section><section hidden={settingsTab !== "folders"}>
                   <div className="settings-section-title">
-                    <h3>โฟลเดอร์โปรเจกต์</h3>
+                    <h3>{tr("โฟลเดอร์โปรเจกต์")}</h3>
                   </div>
                   <label className="tool-permission settings-toggle">
                     <input type="checkbox" checked={trustFolders} onChange={(e) => setTrustFolders(e.target.checked)} />
-                    เชื่อถือโฟลเดอร์โปรเจกต์ให้ CLI อัตโนมัติ (ไม่ต้องตอบ “trust this folder” ทุกครั้งที่เปิดแท็บ)
+                    {tr("เชื่อถือโฟลเดอร์โปรเจกต์ให้ CLI อัตโนมัติ (ไม่ต้องตอบ “trust this folder” ทุกครั้งที่เปิดแท็บ)")}
                   </label>
                   <p className="muted">
-                    ใช้กับ Claude Code, Codex และ Antigravity เฉพาะโฟลเดอร์ที่คุณเพิ่มเป็นโปรเจกต์ เทียบเท่ากับการกด “Yes, I trust this folder” เอง
-                    ปิดไว้ถ้าต้องการให้ CLI ถามก่อนทุกครั้ง
+                    {tr("ใช้กับ Claude Code, Codex และ Antigravity เฉพาะโฟลเดอร์ที่คุณเพิ่มเป็นโปรเจกต์ เทียบเท่ากับการกด “Yes, I trust this folder” เอง ปิดไว้ถ้าต้องการให้ CLI ถามก่อนทุกครั้ง")}
                   </p>
                   </section><section hidden={settingsTab !== "models"}><div className="settings-section-title">
-                    <h3>model และ effort เริ่มต้น</h3>
+                    <h3>{tr("model และ effort เริ่มต้น")}</h3>
                   </div>
                   <p className="muted">
-                    ใช้เป็นค่าตั้งต้นทุกครั้งที่เลือก AI ในโหมด Agent, Chat และเปิดแท็บในโหมด Code (เปลี่ยนแยกแต่ละตัวได้ภายหลัง) ·
-                    เว้นว่างเพื่อใช้ค่าที่ตั้งไว้ใน CLI · ค่าใช้จ่ายและโควตาขึ้นกับบัญชีของคุณ
+                    {tr("ใช้เป็นค่าตั้งต้นทุกครั้งที่เลือก AI ในโหมด Agent, Chat และเปิดแท็บในโหมด Code (เปลี่ยนแยกแต่ละตัวได้ภายหลัง) · เว้นว่างเพื่อใช้ค่าที่ตั้งไว้ใน CLI · ค่าใช้จ่ายและโควตาขึ้นกับบัญชีของคุณ")}
                   </p>
                   <ProviderDefaults clis={clis} />
                   <div className="settings-section-title">
-                    <h3>Ollama บนเครื่อง (ไม่บังคับ)</h3>
+                    <h3>{tr("Ollama บนเครื่อง (ไม่บังคับ)")}</h3>
                     <button className="text-button" disabled={checkingModels} onClick={loadModels}>
-                      <RefreshCw className={checkingModels ? "spin" : ""} size={13} /> ตรวจ model
+                      <RefreshCw className={checkingModels ? "spin" : ""} size={13} /> {tr("ตรวจ model")}
                     </button>
                   </div>
                   <p className="muted">
-                    {modelError ? modelError : models.length ? `พบ ${models.length} รุ่น: ${models.slice(0, 6).join(", ")} · เลือกได้ในช่องผู้ให้บริการ “Ollama บนเครื่อง”` : "ยังไม่พบ model"}
+                    {modelError ? modelError : models.length ? tr`พบ ${models.length} รุ่น: ${models.slice(0, 6).join(", ")} · เลือกได้ในช่องผู้ให้บริการ “Ollama บนเครื่อง”` : tr("ยังไม่พบ model")}
                   </p>
                   <div className="setup-command">
                     <Terminal size={14} />
@@ -2296,15 +2298,15 @@ export function App() {
                         setDialog(null);
                       }}
                     >
-                      ใส่ในช่องคำสั่ง
+                      {tr("ใส่ในช่องคำสั่ง")}
                     </button>
                   </div>
                   </section><section hidden={settingsTab !== "mcp"}><McpManagerPanel cwd={workspace?.rootPath} onError={showError} onNotice={setNotice} /></section><section hidden={settingsTab !== "voice"}><VoiceSettingsPanel settings={voiceSettings} onChange={setVoiceSettings} /></section><section hidden={settingsTab !== "notify"}><NotifySettingsPanel /></section><section hidden={settingsTab !== "apikeys"}><ApiKeysPanel onNotice={setNotice} /></section></div>
                 </div>
                 <div className="dialog-footer">
-                  <span className="muted">บันทึกการตั้งค่าอัตโนมัติ</span>
+                  <span className="muted">{tr("บันทึกการตั้งค่าอัตโนมัติ")}</span>
                   <button className="primary" onClick={() => setDialog(null)}>
-                    เสร็จแล้ว <Check size={15} />
+                    {tr("เสร็จแล้ว")} <Check size={15} />
                   </button>
                 </div>
               </>
@@ -2313,12 +2315,12 @@ export function App() {
               <>
                 <p className="confirm-description">
                   {dialog === "delete"
-                    ? `ลบ “${workspaces.find((w) => w.id === editing)?.name}” จากรายการและปิด session ที่เกี่ยวข้อง ไฟล์ในโฟลเดอร์จะยังอยู่`
-                    : "ล้างประวัติ Agent และ Chat ทั้งหมดของโปรเจกต์นี้ การล้างไม่ลบไฟล์โปรเจกต์"}
+                    ? tr`ลบ “${workspaces.find((w) => w.id === editing)?.name}” จากรายการและปิด session ที่เกี่ยวข้อง ไฟล์ในโฟลเดอร์จะยังอยู่`
+                    : tr("ล้างประวัติ Agent และ Chat ทั้งหมดของโปรเจกต์นี้ การล้างไม่ลบไฟล์โปรเจกต์")}
                 </p>
                 <div className="dialog-footer">
                   <button className="secondary" onClick={() => setDialog(null)}>
-                    ยกเลิก
+                    {tr("ยกเลิก")}
                   </button>
                   <button
                     className="danger-button"
@@ -2339,14 +2341,14 @@ export function App() {
                         setDialog(null);
                         setNotice(
                           dialog === "delete"
-                            ? "ลบจากรายการแล้ว"
-                            : "ล้างประวัติแล้ว",
+                            ? tr("ลบจากรายการแล้ว")
+                            : tr("ล้างประวัติแล้ว"),
                         );
                       })
                     }
                   >
                     <Trash2 size={15} />
-                    {dialog === "delete" ? "ลบจากรายการ" : "ล้างประวัติ"}
+                    {dialog === "delete" ? tr("ลบจากรายการ") : tr("ล้างประวัติ")}
                   </button>
                 </div>
               </>

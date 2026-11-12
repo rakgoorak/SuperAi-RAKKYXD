@@ -3,6 +3,7 @@ import { Sparkles, Copy, Check } from "lucide-react";
 import { openPreviewLink, openArtifact, parsePreviewTarget, openExternalLink } from '../previewLinks';
 import { ThinkingAccordion } from './ThinkingAccordion';
 import { MarkdownImage } from './MarkdownImage';
+import { tr } from '../i18n';
 
 function link(label: string, href: string, key: string): ReactNode {
   try {
@@ -12,7 +13,7 @@ function link(label: string, href: string, key: string): ReactNode {
         key={key}
         className="md-link"
         href={target.kind === 'web' ? target.url : '#preview-file'}
-        title={`คลิกเพื่อเปิดใน Preview (Ctrl+Click เพื่อเปิดในเบราว์เซอร์): ${href}`}
+        title={tr`คลิกเพื่อเปิดใน Preview (Ctrl+Click เพื่อเปิดในเบราว์เซอร์): ${href}`}
         onClick={(event) => {
           event.preventDefault();
           if (event.ctrlKey || event.metaKey) {
@@ -35,7 +36,7 @@ function link(label: string, href: string, key: string): ReactNode {
       ? <MarkdownImage key={`${key}-${target.path}`} path={target.path} label={label} fallback={anchor} /> : anchor;
   } catch {
     return (
-      <span key={key} title="ลิงก์ชนิดนี้ไม่รองรับ">
+      <span key={key} title={tr("ลิงก์ชนิดนี้ไม่รองรับ")}>
         {label}
       </span>
     );
@@ -73,17 +74,17 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
             <button
               type="button"
               className="md-artifact-btn md-canvas-btn"
-              title="เปิดดูผลลัพธ์สดๆ ใน Canvas (Side-by-Side)"
+              title={tr("เปิดดูผลลัพธ์สดๆ ใน Canvas (Side-by-Side)")}
               onClick={handleOpenArtifact}
             >
               <Sparkles size={12} />
-              <span>เปิดใน Canvas</span>
+              <span>{tr("เปิดใน Canvas")}</span>
             </button>
           )}
           <button
             type="button"
             className="md-copy-btn"
-            title="คัดลอกโค้ด"
+            title={tr("คัดลอกโค้ด")}
             onClick={copy}
           >
             {copied ? (
@@ -91,7 +92,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
             ) : (
               <Copy size={12} />
             )}
-            <span>{copied ? 'คัดลอกแล้ว' : 'คัดลอก'}</span>
+            <span>{copied ? tr("คัดลอกแล้ว") : tr("คัดลอก")}</span>
           </button>
         </div>
       </div>
@@ -131,9 +132,9 @@ function ArtifactCard({ title, language, content }: { title: string; language: s
           <small>{language ? language.toUpperCase() : 'INTERACTIVE PREVIEW'}</small>
         </div>
       </div>
-      <button type="button" className="md-artifact-btn md-canvas-btn" onClick={open} title="เปิดดูผลลัพธ์สดๆ ใน Canvas">
+      <button type="button" className="md-artifact-btn md-canvas-btn" onClick={open} title={tr("เปิดดูผลลัพธ์สดๆ ใน Canvas")}>
         <Sparkles size={12} />
-        <span>เปิดใน Canvas</span>
+        <span>{tr("เปิดใน Canvas")}</span>
       </button>
     </div>
   );

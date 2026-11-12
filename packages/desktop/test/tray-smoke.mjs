@@ -14,7 +14,7 @@ const guard = watchdog(90000, steps, () => closeApp(desktop, steps));
 try {
   steps.step('launch isolated real desktop');
   desktop = await electron.launch({ executablePath: require('electron'), args: [path.resolve('packages/desktop/test/tray-main.mjs')],
-    env: { ...process.env, SUPERAI_DATA_DIR: data }, timeout: 60000 });
+    env: { SUPERAI_LANG: 'th', ...process.env, SUPERAI_DATA_DIR: data }, timeout: 60000 });
   processHandle = desktop.process();
   processHandle.stderr?.on('data', chunk => steps.log(String(chunk).trim()));
   const page = await desktop.firstWindow();

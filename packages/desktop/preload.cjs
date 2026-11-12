@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('superai', {
   browser: (action, payload) => ipcRenderer.invoke('browser:action', action, payload),
   forgetSession: service => ipcRenderer.invoke('credentials:forget', service),
   onBrowser: callback => listen('browser:state', callback),
+  onBrowserReveal: callback => listen('browser:reveal', callback),
   pathForFile: file => { try { return webUtils.getPathForFile(file) || ''; } catch { return ''; } },
   stageClipboardImage: filePath => ipcRenderer.invoke('clipboard:stage-image', filePath),
   update: action => ipcRenderer.invoke('update:action', action),

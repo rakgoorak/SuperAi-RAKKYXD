@@ -5,6 +5,7 @@ import { ProviderAccess } from "./ProviderAccess";
 import { providerName } from "../providers";
 import { useEffect, useRef } from "react";
 import { Bot, ChevronDown } from "lucide-react";
+import { tr } from '../i18n';
 
 /** Per-message team controls; skills use the composer's shared slash picker. */
 export function ChatQuickControls({ workspaceId, config, onChange, clis, ollamaModels, disabled, onDraft }: {
@@ -24,14 +25,14 @@ export function ChatQuickControls({ workspaceId, config, onChange, clis, ollamaM
     return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', close); };
   }, []);
   return <div className="chat-quick-controls">
-    <details ref={menu} className="chat-model-menu"><summary><Bot size={14} />{config.panel.length} AI · ตัวเลือกข้อความ<ChevronDown size={12} /></summary>
+    <details ref={menu} className="chat-model-menu"><summary><Bot size={14} />{config.panel.length} {tr("AI · ตัวเลือกข้อความ")}<ChevronDown size={12} /></summary>
     <div className="chat-model-popover">
     {config.panel.map((seat, index) => <div key={index} className="chat-quick-seat"><strong>{seat.name}<small>{providerName(seat.provider)}</small></strong>
       <SeatPicker seat={seat} onChange={next => onChange({ ...config, panel: config.panel.map((current, at) => at === index ? next : current) })}
-        named={false} fixedProvider label={`ข้อความถัดไป ${seat.name}`} clis={clis} ollamaModels={ollamaModels} disabled={disabled} />
+        named={false} fixedProvider label={tr`ข้อความถัดไป ${seat.name}`} clis={clis} ollamaModels={ollamaModels} disabled={disabled} />
     </div>)}
-    <details><summary>บัญชีผู้ให้บริการ</summary>{providers.map(id => <ProviderAccess key={id} provider={id.split(":")[0]} accountId={id.split(":")[1] || undefined} wsId={workspaceId} />)}</details>
-    <button type="button" className="text-button" disabled={disabled} onClick={() => { if (menu.current) menu.current.open = false; onDraft('/'); }}>/skills · เลือก skill</button>
+    <details><summary>{tr("บัญชีผู้ให้บริการ")}</summary>{providers.map(id => <ProviderAccess key={id} provider={id.split(":")[0]} accountId={id.split(":")[1] || undefined} wsId={workspaceId} />)}</details>
+    <button type="button" className="text-button" disabled={disabled} onClick={() => { if (menu.current) menu.current.open = false; onDraft('/'); }}>{tr("/skills · เลือก skill")}</button>
     </div></details>
   </div>;
 }

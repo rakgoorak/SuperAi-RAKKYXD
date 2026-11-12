@@ -1,3 +1,4 @@
+import { getLocale, tr } from './i18n';
 type Item = {
   kind?: string;
   text?: string;
@@ -41,21 +42,21 @@ export function escapeHtml(s: string): string {
 
 export function conversationMarkdown(title: string, items: Item[]) {
   return `# ${title}\n\n${items.map(item => {
-    if (item.kind === 'user') return `## ผู้ใช้\n\n${item.text || ''}${item.attachments?.length ? `\n\nไฟล์แนบ: ${item.attachments.join(', ')}` : ''}`;
+    if (item.kind === 'user') return tr`## ผู้ใช้\n\n${item.text || ''}${item.attachments?.length ? tr`\n\nไฟล์แนบ: ${item.attachments.join(', ')}` : ''}`;
     if (item.kind === 'assistant') return `## AI\n\n${item.text || ''}`;
-    if (item.kind === 'tool') return `### เครื่องมือ: ${item.title || item.tool || ''} (${item.status || ''})\n\n${fence(item.output || '')}`;
-    if (item.kind === 'todos') return `### รายการงาน\n\n${(item.todos || []).map(todo => `- [${todo.status === 'completed' ? 'x' : ' '}] ${todo.text}`).join('\n')}`;
+    if (item.kind === 'tool') return tr`### เครื่องมือ: ${item.title || item.tool || ''} (${item.status || ''})\n\n${fence(item.output || '')}`;
+    if (item.kind === 'todos') return tr`### รายการงาน\n\n${(item.todos || []).map(todo => `- [${todo.status === 'completed' ? 'x' : ' '}] ${todo.text}`).join('\n')}`;
     return item.text ? `> ${item.text.split('\n').join('\n> ')}` : '';
   }).filter(Boolean).join('\n\n')}\n`;
 }
 
 export function teamMarkdown(title: string, runs: TeamRun[]) {
   return `# ${title}\n\n${runs.map(run => [
-    `## ผู้ใช้\n\n${run.prompt}`,
+    tr`## ผู้ใช้\n\n${run.prompt}`,
     ...(run.panel || []).map(answer => `### ${answer.seat.name} (${answer.seat.provider})\n\n${answer.output || answer.error || ''}`),
     ...(run.tasks || []).map(task => `### ${task.title}\n\n${task.output || task.error || ''}`),
-    run.output ? `## คำตอบสรุป\n\n${run.output}` : '',
-    run.error ? `> ข้อผิดพลาด: ${run.error}` : '',
+    run.output ? tr`## คำตอบสรุป\n\n${run.output}` : '',
+    run.error ? tr`> ข้อผิดพลาด: ${run.error}` : '',
   ].filter(Boolean).join('\n\n')).join('\n\n---\n\n')}\n`;
 }
 
@@ -64,7 +65,7 @@ export function conversationSummaryText(title: string, items: Item[]): string {
   const assistants = items.filter(i => i.kind === 'assistant');
   const lastUser = users[users.length - 1]?.text || '';
   const lastAssistant = assistants[assistants.length - 1]?.text || '';
-  return `### ${title}\n\n**คำขอ:** ${lastUser.slice(0, 500)}${lastUser.length > 500 ? '...' : ''}\n\n**ผลลัพธ์:**\n${lastAssistant.slice(0, 1500)}${lastAssistant.length > 1500 ? '...' : ''}\n\n_สร้างโดย SuperAi & RAKKYXD_`;
+  return tr`### ${title}\n\n**คำขอ:** ${lastUser.slice(0, 500)}${lastUser.length > 500 ? '...' : ''}\n\n**ผลลัพธ์:**\n${lastAssistant.slice(0, 1500)}${lastAssistant.length > 1500 ? '...' : ''}\n\n_สร้างโดย SuperAi & RAKKYXD_`;
 }
 
 const HTML_STYLE = `
@@ -102,10 +103,10 @@ const HTML_STYLE = `
 export function conversationHtml(title: string, items: Item[]): string {
   const content = items.map(item => {
     if (item.kind === 'user') {
-      const attachments = item.attachments?.length ? `<div style="margin-top:8px;font-size:12px;color:#8b949e">📎 ไฟล์แนบ: ${escapeHtml(item.attachments.join(', '))}</div>` : '';
+      const attachments = item.attachments?.length ? `<div style="margin-top:8px;font-size:12px;color:#8b949e">📎 ${escapeHtml(tr("ไฟล์แนบ"))}: ${escapeHtml(item.attachments.join(', '))}</div>` : '';
       return `
         <div class="entry user">
-          <div class="entry-header"><span>👤 ผู้ใช้</span></div>
+          <div class="entry-header"><span>👤 ${escapeHtml(tr("ผู้ใช้"))}</span></div>
           <div class="entry-body">${escapeHtml(item.text || '')}${attachments}</div>
         </div>
       `;
@@ -113,19 +114,23 @@ export function conversationHtml(title: string, items: Item[]): string {
     if (item.kind === 'assistant') {
       return `
         <div class="entry assistant">
-          <div class="entry-header"><span>🤖 ผู้ช่วย AI</span></div>
+          <div class="entry-header"><span>🤖 ${escapeHtml(tr("ผู้ช่วย AI"))}</span></div>
           <div class="entry-body">${escapeHtml(item.text || '')}</div>
         </div>
       `;
     }
     if (item.kind === 'tool') {
+      const status = item.status === 'failed' ? tr("ไม่สำเร็จ")
+        : item.status === 'completed' ? tr("เสร็จแล้ว")
+        : item.status === 'running' ? tr("กำลังทำงาน")
+        : item.status || 'done';
       return `
         <div class="entry tool">
-          <div class="entry-header"><span>🔧 เครื่องมือ: ${escapeHtml(item.title || item.tool || '')}</span><span style="font-size:11px;color:${item.status === 'failed' ? '#f85149' : '#8b949e'}">${escapeHtml(item.status || 'done')}</span></div>
+          <div class="entry-header"><span>🔧 ${escapeHtml(tr("เครื่องมือ"))}: ${escapeHtml(item.title || item.tool || '')}</span><span style="font-size:11px;color:${item.status === 'failed' ? '#f85149' : '#8b949e'}">${escapeHtml(status)}</span></div>
           <div class="entry-body">
             <details class="tool-details" open>
-              <summary>ผลลัพธ์เครื่องมือ</summary>
-              <pre><code>${escapeHtml(item.output || 'ไม่มีผลลัพธ์')}</code></pre>
+              <summary>${escapeHtml(tr("ผลลัพธ์เครื่องมือ"))}</summary>
+              <pre><code>${escapeHtml(item.output || tr("ไม่มีผลลัพธ์"))}</code></pre>
             </details>
           </div>
         </div>
@@ -135,7 +140,7 @@ export function conversationHtml(title: string, items: Item[]): string {
       const tasks = (item.todos || []).map(t => `<li><input type="checkbox" ${t.status === 'completed' ? 'checked' : ''} disabled /> ${escapeHtml(t.text)}</li>`).join('');
       return `
         <div class="entry todos">
-          <div class="entry-header"><span>📋 รายการงาน</span></div>
+          <div class="entry-header"><span>📋 ${escapeHtml(tr("รายการงาน"))}</span></div>
           <div class="entry-body"><ul class="todos-list">${tasks}</ul></div>
         </div>
       `;
@@ -143,8 +148,9 @@ export function conversationHtml(title: string, items: Item[]): string {
     return '';
   }).filter(Boolean).join('\n');
 
+  const locale = getLocale();
   return `<!DOCTYPE html>
-<html lang="th">
+<html lang="${locale}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -157,7 +163,7 @@ export function conversationHtml(title: string, items: Item[]): string {
       <h1>${escapeHtml(title)}</h1>
       <div class="meta">
         <span class="badge">SuperAi &amp; RAKKYXD</span>
-        <span>ส่งออกเมื่อ: ${new Date().toLocaleString('th-TH')}</span>
+        <span>${escapeHtml(tr("ส่งออกเมื่อ"))}: ${escapeHtml(new Date().toLocaleString(locale))}</span>
       </div>
     </header>
     <main>${content}</main>
@@ -183,20 +189,21 @@ export function teamHtml(title: string, runs: TeamRun[]): string {
 
     return `
       <div class="entry" style="margin-bottom: 28px;">
-        <div class="entry-header"><span>รอบที่ ${idx + 1} (${escapeHtml(run.mode)})</span></div>
+        <div class="entry-header"><span>${escapeHtml(tr`รอบที่ ${idx + 1} (${run.mode})`)}</span></div>
         <div class="entry-body">
-          <div style="font-weight: 600; margin-bottom: 6px; color: #58a6ff;">คำสั่งของผู้ใช้:</div>
+          <div style="font-weight: 600; margin-bottom: 6px; color: #58a6ff;">${escapeHtml(tr("คำสั่งของผู้ใช้:"))}</div>
           <div style="margin-bottom: 14px;">${escapeHtml(run.prompt)}</div>
-          ${answers ? `<div style="font-weight: 600; margin-bottom: 6px;">คำตอบจากแต่ละ AI:</div>${answers}` : ''}
-          ${tasks ? `<div style="font-weight: 600; margin: 12px 0 6px 0;">ผลงาน Sub-agents:</div>${tasks}` : ''}
-          ${run.output ? `<div style="margin-top: 14px; padding: 12px; background: rgba(56, 139, 253, 0.1); border: 1px solid rgba(56, 139, 253, 0.4); border-radius: 6px;"><div style="font-weight: 600; color: #58a6ff; margin-bottom: 4px;">สรุปผลลัพธ์:</div>${escapeHtml(run.output)}</div>` : ''}
+          ${answers ? `<div style="font-weight: 600; margin-bottom: 6px;">${escapeHtml(tr("คำตอบจากแต่ละ AI:"))}</div>${answers}` : ''}
+          ${tasks ? `<div style="font-weight: 600; margin: 12px 0 6px 0;">${escapeHtml(tr("ผลงาน Sub-agents:"))}</div>${tasks}` : ''}
+          ${run.output ? `<div style="margin-top: 14px; padding: 12px; background: rgba(56, 139, 253, 0.1); border: 1px solid rgba(56, 139, 253, 0.4); border-radius: 6px;"><div style="font-weight: 600; color: #58a6ff; margin-bottom: 4px;">${escapeHtml(tr("สรุปผลลัพธ์:"))}</div>${escapeHtml(run.output)}</div>` : ''}
         </div>
       </div>
     `;
   }).join('\n');
 
+  const locale = getLocale();
   return `<!DOCTYPE html>
-<html lang="th">
+<html lang="${locale}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -209,7 +216,7 @@ export function teamHtml(title: string, runs: TeamRun[]): string {
       <h1>${escapeHtml(title)}</h1>
       <div class="meta">
         <span class="badge">Team Report</span>
-        <span>ส่งออกเมื่อ: ${new Date().toLocaleString('th-TH')}</span>
+        <span>${escapeHtml(tr("ส่งออกเมื่อ"))}: ${escapeHtml(new Date().toLocaleString(locale))}</span>
       </div>
     </header>
     <main>${content}</main>

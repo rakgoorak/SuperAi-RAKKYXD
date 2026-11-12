@@ -27,7 +27,7 @@ await new Promise(resolve=>service.listen(0,'127.0.0.1',resolve));
 const steps=stepper('team');let page,failure=null;
 watchdog(150000,steps,()=>page&&snapshot(page,path.join(data,'watchdog.png'),steps));
 steps.step('launch app');
-const app=await electron.launch({executablePath:require('electron'),args:['packages/desktop'],env:{...process.env,SUPERAI_DATA_DIR:data,SUPERAI_OLLAMA_URL:`http://127.0.0.1:${service.address().port}`,SUPERAI_TEST_MODE:'1'},timeout:60000});
+const app=await electron.launch({executablePath:require('electron'),args:['packages/desktop'],env:{SUPERAI_LANG: 'th', ...process.env,SUPERAI_DATA_DIR:data,SUPERAI_OLLAMA_URL:`http://127.0.0.1:${service.address().port}`,SUPERAI_TEST_MODE:'1'},timeout:60000});
 const passed=[],errors=[];
 try{
  steps.step('first window');page=await app.firstWindow();page.on('pageerror',e=>{errors.push(e.message);steps.log(`pageerror: ${e.message}`);});watchPage(page,steps);

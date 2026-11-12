@@ -3,6 +3,7 @@ import { Key, LogIn, RefreshCw } from "lucide-react";
 import { api, loginProvider, type CliAuthStatus } from "../api";
 import { fetchModels, PROVIDER_LABEL } from "../providers";
 import { isCloud } from '../providers';
+import { tr } from '../i18n';
 
 export const CLOUD_BYOK_PROVIDERS = ["deepseek", "groq", "openrouter", "openai_compatible"] as const;
 export function isCloudByok(provider: string): boolean {
@@ -31,9 +32,9 @@ export function useProviderAccess(provider: string, accountId?: string) {
     } catch {
       if (!current()) return;
       if (isCloudByok(provider)) {
-        setError("ตรวจสถานะ API Key ไม่สำเร็จ เปิด การตั้งค่า > API Key เพื่อตรวจสอบ");
+        setError(tr("ตรวจสถานะ API Key ไม่สำเร็จ เปิด การตั้งค่า > API Key เพื่อตรวจสอบ"));
       } else {
-        setError("ตรวจบัญชีไม่สำเร็จ กรุณาลองใหม่หรือเปิด Terminal เพื่อตรวจสอบ");
+        setError(tr("ตรวจบัญชีไม่สำเร็จ กรุณาลองใหม่หรือเปิด Terminal เพื่อตรวจสอบ"));
       }
     }
     finally { if (current()) setChecking(false); }
@@ -63,28 +64,28 @@ export function ProviderAccess({ provider, wsId, sessionId, accountId, onStatus,
   return <div className={`provider-access ${auth?.status || "checking"}`}>
     <div>
       <strong>{PROVIDER_LABEL[provider] || provider}</strong>
-      <small>{error || (friendly && auth?.status === "unknown" ? "แอปตรวจบัญชีนี้อัตโนมัติไม่ได้ เปิดหน้าเข้าสู่ระบบแล้วทำตามคำแนะนำ" : auth?.note) || (isCloud ? "กำลังตรวจ API Key…" : "กำลังตรวจบัญชี…")}</small>
+      <small>{error || (friendly && auth?.status === "unknown" ? tr("แอปตรวจบัญชีนี้อัตโนมัติไม่ได้ เปิดหน้าเข้าสู่ระบบแล้วทำตามคำแนะนำ") : auth?.note) || (isCloud ? tr("กำลังตรวจ API Key…") : tr("กำลังตรวจบัญชี…"))}</small>
     </div>
     <button type="button" className="text-button" disabled={checking || opening} onClick={() => void check(true)}>
-      <RefreshCw size={12} className={checking ? "spin" : ""} /> ตรวจอีกครั้ง
+      <RefreshCw size={12} className={checking ? "spin" : ""} /> {tr("ตรวจอีกครั้ง")}
     </button>
     {!isCloud && auth?.status !== "not-installed" && (
       <button type="button" className="secondary" disabled={opening || (!wsId && !sessionId)} onClick={async () => {
         setOpening(true); setProblem("");
         try { await loginProvider(provider, { wsId, sessionId, accountId }); }
-        catch { setProblem("เปิดขั้นตอนเข้าสู่ระบบไม่สำเร็จ กรุณาตรวจโปรเจกต์และ CLI แล้วลองใหม่"); }
+        catch { setProblem(tr("เปิดขั้นตอนเข้าสู่ระบบไม่สำเร็จ กรุณาตรวจโปรเจกต์และ CLI แล้วลองใหม่")); }
         finally { setOpening(false); }
       }}>
-        <LogIn size={13} /> {auth?.status === "authenticated" ? "จัดการบัญชี" : friendly ? "เข้าสู่ระบบ" : "เข้าสู่ระบบใน Terminal"}
+        <LogIn size={13} /> {auth?.status === "authenticated" ? tr("จัดการบัญชี") : friendly ? tr("เข้าสู่ระบบ") : tr("เข้าสู่ระบบใน Terminal")}
       </button>
     )}
     {isCloud && (
-      <span className={`byok-badge ${auth?.status === "authenticated" ? "authenticated" : "pending"}`} title="ใส่ key ได้ที่ การตั้งค่า > API Key">
-        <Key size={12} /> {auth?.status === "authenticated" ? "API Key พร้อมใช้งาน" : "ใส่ key ที่ การตั้งค่า > API Key"}
+      <span className={`byok-badge ${auth?.status === "authenticated" ? "authenticated" : "pending"}`} title={tr("ใส่ key ได้ที่ การตั้งค่า > API Key")}>
+        <Key size={12} /> {auth?.status === "authenticated" ? tr("API Key พร้อมใช้งาน") : tr("ใส่ key ที่ การตั้งค่า > API Key")}
       </span>
     )}
     {!isCloud && auth?.status === "not-installed" && onInstall && (
-      <button className="secondary" onClick={onInstall}>ตรวจและติดตั้งเครื่องมือ</button>
+      <button className="secondary" onClick={onInstall}>{tr("ตรวจและติดตั้งเครื่องมือ")}</button>
     )}
     {problem && <small role="alert">{problem}</small>}
   </div>;

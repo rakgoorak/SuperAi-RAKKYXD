@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { tr } from './i18n.js';
 
 /**
  * `opencode run` cannot ask before acting, so it rejects every permission request, and one
@@ -30,7 +31,7 @@ export function openCodePermissionEnv(existing?: string, tmp = os.tmpdir()): Rec
 /** What OpenCode asked for when it refused itself, from its stderr ("permission requested: X (Y); auto-rejecting"). */
 export function rejectedPermissions(stderr: string): string[] {
   const found = [...stderr.replace(/\x1b\[[0-9;]*m/g, "").matchAll(/permission requested:\s*([\w-]+)\s*\(([^)\r\n]*)\)\s*;\s*auto-rejecting/gi)]
-    .map((m) => (m[1] === "external_directory" ? `เข้าถึงโฟลเดอร์นอกโปรเจกต์ ${m[2]}` : `${m[1]} ${m[2]}`.trim()));
+    .map((m) => (m[1] === "external_directory" ? tr`เข้าถึงโฟลเดอร์นอกโปรเจกต์ ${m[2]}` : `${m[1]} ${m[2]}`.trim()));
   return [...new Set(found)];
 }
 
@@ -38,7 +39,7 @@ export function rejectedPermissions(stderr: string): string[] {
 export function openCodeNoAnswer(stderr: string, toolRejected: boolean): string {
   const asked = rejectedPermissions(stderr);
   if (asked.length || toolRejected)
-    return `OpenCode หยุดก่อนตอบ เพราะขอสิทธิ์ที่โหมดแชตตอบให้ไม่ได้${asked.length ? `: ${asked.join(", ")}` : ""} `
-      + "เลือกสิทธิ์ \"ถามก่อนทำ\" เพื่อให้มีปุ่มอนุมัติในแชต หรือ \"เต็มสิทธิ์\" แล้วส่งใหม่";
-  return "OpenCode จบงานโดยไม่ส่งคำตอบกลับมา ลองส่งใหม่ หรือเปลี่ยนรุ่นในช่อง Model";
+    return tr`OpenCode หยุดก่อนตอบ เพราะขอสิทธิ์ที่โหมดแชตตอบให้ไม่ได้${asked.length ? `: ${asked.join(", ")}` : ""} `
+      + tr("เลือกสิทธิ์ \"ถามก่อนทำ\" เพื่อให้มีปุ่มอนุมัติในแชต หรือ \"เต็มสิทธิ์\" แล้วส่งใหม่");
+  return tr("OpenCode จบงานโดยไม่ส่งคำตอบกลับมา ลองส่งใหม่ หรือเปลี่ยนรุ่นในช่อง Model");
 }

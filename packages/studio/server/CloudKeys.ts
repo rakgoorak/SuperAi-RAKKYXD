@@ -1,5 +1,6 @@
 import { CredentialStore, OpenAiCompatibleProvider } from "@superai-rakkyxd/core";
 import { customProviders, isCustom } from './CustomProviders.js';
+import { tr } from './i18n.js';
 
 /** API providers the user connects with their own key. Addresses are fixed: a key only ever goes to its provider. */
 export const CLOUD_PROVIDERS: Record<string, { name: string; base: string; env: string; keyPage: string; check: string }> = {
@@ -23,10 +24,10 @@ export class CloudKeys {
   private provider(id: string) {
     if (isCustom(id)) {
       const config = customProviders.get(id);
-      if (!config) throw new Error('ไม่พบ Custom Provider นี้');
+      if (!config) throw new Error(tr("ไม่พบ Custom Provider นี้"));
       return { name: config.name, base: config.baseURL, env: '', keyPage: '', check: '/models' };
     }
-    if (!isCloud(id)) throw new Error("ไม่รู้จักผู้ให้บริการ API นี้");
+    if (!isCloud(id)) throw new Error(tr("ไม่รู้จักผู้ให้บริการ API นี้"));
     return CLOUD_PROVIDERS[id];
   }
   private stored(id: string): string {
@@ -49,7 +50,7 @@ export class CloudKeys {
 
   create(id: string, model?: string, signal?: AbortSignal) {
     const p = this.provider(id), key = this.key(id);
-    if (!key) throw new Error('ยังไม่ได้เชื่อมต่อ API Key ของผู้ให้บริการนี้');
+    if (!key) throw new Error(tr("ยังไม่ได้เชื่อมต่อ API Key ของผู้ให้บริการนี้"));
     const custom = customProviders.get(id);
     if (!model && custom) model = custom.models[0];
     return new OpenAiCompatibleProvider({ providerId: id, apiKey: key, baseURL: p.base, model, signal, throwErrors: true,
@@ -58,14 +59,14 @@ export class CloudKeys {
 
   async addCustom(value: any): Promise<CloudKeyStatus> {
     const key = typeof value?.key === 'string' ? value.key.trim() : '';
-    if (!key || key.length > 500 || /\s/.test(key)) throw new Error('API Key ไม่ถูกต้อง');
+    if (!key || key.length > 500 || /\s/.test(key)) throw new Error(tr("API Key ไม่ถูกต้อง"));
     const config = customProviders.add(value);
     try { this.store().saveApi(config.id, key); }
-    catch { customProviders.remove(config.id); throw new Error('บันทึก key แบบเข้ารหัสไม่สำเร็จ'); }
+    catch { customProviders.remove(config.id); throw new Error(tr("บันทึก key แบบเข้ารหัสไม่สำเร็จ")); }
     return this.status(config.id);
   }
   removeCustom(id: string) {
-    if (!isCustom(id) || !customProviders.get(id)) throw new Error('ไม่พบ Custom Provider นี้');
+    if (!isCustom(id) || !customProviders.get(id)) throw new Error(tr("ไม่พบ Custom Provider นี้"));
     this.remove(id); customProviders.remove(id);
   }
 
@@ -76,37 +77,37 @@ export class CloudKeys {
       // Never follow a redirect with the key attached.
       response = await this.http(p.base + route, { headers: { Authorization: `Bearer ${key}` }, redirect: "error", signal: AbortSignal.timeout(15000) });
     } catch {
-      throw new Error(`เชื่อมต่อ ${p.name} ไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่`);
+      throw new Error(tr`เชื่อมต่อ ${p.name} ไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่`);
     }
-    if (response.status === 401 || response.status === 403) throw new Error(`${p.name} ไม่ยอมรับ API Key นี้ ตรวจว่าคัดลอกครบและ key ยังไม่ถูกยกเลิก`);
-    if (!response.ok) throw new Error(`${p.name} ตอบกลับผิดปกติ (HTTP ${response.status}) ลองใหม่ภายหลัง`);
+    if (response.status === 401 || response.status === 403) throw new Error(tr`${p.name} ไม่ยอมรับ API Key นี้ ตรวจว่าคัดลอกครบและ key ยังไม่ถูกยกเลิก`);
+    if (!response.ok) throw new Error(tr`${p.name} ตอบกลับผิดปกติ (HTTP ${response.status}) ลองใหม่ภายหลัง`);
     return response.json().catch(() => ({}));
   }
 
   /** Checks the key with the provider before it is saved, so a typo is caught here and not in a chat. */
   async save(id: string, key: string): Promise<CloudKeyStatus> {
     const value = String(key || "").trim();
-    if (!value || value.length > 500 || /\s/.test(value)) throw new Error("API Key ไม่ถูกต้อง");
+    if (!value || value.length > 500 || /\s/.test(value)) throw new Error(tr("API Key ไม่ถูกต้อง"));
     if (!isCustom(id)) await this.request(id, this.provider(id).check, value);
     try { this.store().saveApi(id, value); }
     catch (error: any) {
       const reason = String(error?.message || error);
       throw new Error(/unavailable/i.test(reason)
-        ? "บันทึก API Key ไม่ได้ ระบบเข้ารหัสของเครื่องยังไม่พร้อม (ใช้ได้เฉพาะในแอปเดสก์ท็อป)"
-        : `บันทึก API Key ไม่ได้: ${reason}`);
+        ? tr("บันทึก API Key ไม่ได้ ระบบเข้ารหัสของเครื่องยังไม่พร้อม (ใช้ได้เฉพาะในแอปเดสก์ท็อป)")
+        : tr`บันทึก API Key ไม่ได้: ${reason}`);
     }
     this.modelCache.delete(id);
     return this.status(id);
   }
   remove(id: string): CloudKeyStatus {
     this.provider(id);
-    try { this.store().forgetApi(id); } catch { throw new Error("ลบ API Key ไม่สำเร็จ"); }
+    try { this.store().forgetApi(id); } catch { throw new Error(tr("ลบ API Key ไม่สำเร็จ")); }
     this.modelCache.delete(id);
     return this.status(id);
   }
   async test(id: string): Promise<void> {
     const key = this.key(id);
-    if (!key) throw new Error("ยังไม่ได้ใส่ API Key");
+    if (!key) throw new Error(tr("ยังไม่ได้ใส่ API Key"));
     await this.request(id, this.provider(id).check, key);
   }
 
@@ -133,19 +134,19 @@ export class CloudKeys {
       const out: { label: string; value: string }[] = [];
       const credits = (await this.request(id, "/credits", key).catch(() => null))?.data;
       if (credits && typeof credits.total_credits === "number" && typeof credits.total_usage === "number") {
-        out.push({ label: "เครดิตคงเหลือ", value: money(credits.total_credits - credits.total_usage) });
-        out.push({ label: "เติมไว้ทั้งหมด", value: money(credits.total_credits) });
+        out.push({ label: tr("เครดิตคงเหลือ"), value: money(credits.total_credits - credits.total_usage) });
+        out.push({ label: tr("เติมไว้ทั้งหมด"), value: money(credits.total_credits) });
       }
       const info = (await this.request(id, "/key", key))?.data;
-      if (typeof info?.usage === "number") out.push({ label: "key นี้ใช้ไปแล้ว", value: money(info.usage) });
-      if (typeof info?.limit_remaining === "number") out.push({ label: "วงเงินของ key เหลือ", value: money(info.limit_remaining) });
+      if (typeof info?.usage === "number") out.push({ label: tr("key นี้ใช้ไปแล้ว"), value: money(info.usage) });
+      if (typeof info?.limit_remaining === "number") out.push({ label: tr("วงเงินของ key เหลือ"), value: money(info.limit_remaining) });
       return out;
     }
     if (id === "deepseek") {
       const data = await this.request(id, "/user/balance", key);
       return (Array.isArray(data?.balance_infos) ? data.balance_infos : [])
         .filter((b: any) => b && b.total_balance !== undefined)
-        .map((b: any) => ({ label: `ยอดคงเหลือ (${String(b.currency || "").slice(0, 8)})`, value: String(b.total_balance).slice(0, 20) }));
+        .map((b: any) => ({ label: tr`ยอดคงเหลือ (${String(b.currency || "").slice(0, 8)})`, value: String(b.total_balance).slice(0, 20) }));
     }
     return null;
   }

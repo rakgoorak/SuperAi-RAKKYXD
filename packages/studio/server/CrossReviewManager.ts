@@ -6,6 +6,7 @@ import { Seat, validateSeat } from './Providers.js';
 import { CliProvider } from './CliProvider.js';
 import { LocalProvider } from './AgentRunManager.js';
 import { createProvider, LLMMessage } from '@superai-rakkyxd/core';
+import { tr } from './i18n.js';
 
 const execAsync = promisify(execFile);
 
@@ -216,7 +217,7 @@ export class CrossReviewManager {
         authorProvider: options.authorProvider,
         verdict: 'approved',
         score: 100,
-        summary: 'ไม่พบการเปลี่ยนแปลงของไฟล์ในโปรเจกต์ (ไม่มี Diff ให้ตรวจสอบ)',
+        summary: tr("ไม่พบการเปลี่ยนแปลงของไฟล์ในโปรเจกต์ (ไม่มี Diff ให้ตรวจสอบ)"),
         issues: [],
         reviewedAt: Date.now(),
         diffStats: { filesChanged: 0, diffSnippet: '' },

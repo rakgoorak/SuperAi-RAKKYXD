@@ -3,6 +3,7 @@ import { Gauge, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { api } from "../api";
 import { AccountPicker } from './AccountPicker';
 import { orderUsageWindows, usageResetLabel, type UsageWindow } from "../usageDisplay";
+import { tr } from '../i18n';
 
 interface ProviderUsage {
   id: string; name: string; status: "ok" | "unsupported" | "not-installed" | "error";
@@ -24,7 +25,7 @@ const level = (pct: number) => (pct > 50 ? "good" : pct >= 20 ? "warn" : "low");
 const ago = (t?: number) => {
   if (!t) return "";
   const min = Math.round((Date.now() - t) / 60_000);
-  return min < 1 ? "เมื่อสักครู่" : min < 60 ? `${min} นาทีที่แล้ว` : min < 1440 ? `${Math.round(min / 60)} ชม.ที่แล้ว` : `${Math.round(min / 1440)} วันที่แล้ว`;
+  return min < 1 ? tr("เมื่อสักครู่") : min < 60 ? tr`${min} นาทีที่แล้ว` : min < 1440 ? tr`${Math.round(min / 60)} ชม.ที่แล้ว` : tr`${Math.round(min / 1440)} วันที่แล้ว`;
 };
 
 /** Toolbar button + popover listing each provider's remaining quota. */
@@ -68,21 +69,21 @@ export function UsageButton({ open, onOpenChange: setOpen }: { open: boolean; on
 
   return (
     <div className="usage" ref={root}>
-        <button className={`toolbar-button ${open ? "selected" : ""}`} aria-label="Usage" aria-expanded={open} aria-haspopup="dialog" title="โควตาการใช้งานของแต่ละผู้ให้บริการ" onClick={() => setOpen(!open)}>
+        <button className={`toolbar-button ${open ? "selected" : ""}`} aria-label="Usage" aria-expanded={open} aria-haspopup="dialog" title={tr("โควตาการใช้งานของแต่ละผู้ให้บริการ")} onClick={() => setOpen(!open)}>
         <Gauge size={14} />
         <span>Usage</span>
       </button>
       {open && (
-        <section className="usage-popover" role="dialog" aria-label="โควตาการใช้งาน">
+        <section className="usage-popover" role="dialog" aria-label={tr("โควตาการใช้งาน")}>
           <header>
             <div>
-              <h2>โควตาที่เหลือ</h2>
-              <p>อ่านจาก CLI ในเครื่องด้วยบัญชีของคุณ</p>
+              <h2>{tr("โควตาที่เหลือ")}</h2>
+              <p>{tr("อ่านจาก CLI ในเครื่องด้วยบัญชีของคุณ")}</p>
             </div>
-            <button className="icon-button" title="ตรวจใหม่ทั้งหมด" disabled={anyLoading} onClick={() => loadAll(true)}>
+            <button className="icon-button" title={tr("ตรวจใหม่ทั้งหมด")} disabled={anyLoading} onClick={() => loadAll(true)}>
               <RefreshCw size={14} className={anyLoading ? "spin" : ""} />
             </button>
-            <button className="icon-button" title="ปิด" onClick={() => setOpen(false)}><X size={14} /></button>
+            <button className="icon-button" title={tr("ปิด")} onClick={() => setOpen(false)}><X size={14} /></button>
           </header>
           <div className="usage-list">
             {PROVIDERS.map(({ id, label, cloud }) => {
@@ -95,12 +96,12 @@ export function UsageButton({ open, onOpenChange: setOpen }: { open: boolean; on
                 <article key={id} className={`usage-card status-${p?.status || "loading"}`}>
                   <header>
                     <strong>{label}</strong>
-                    <small>{busy ? "กำลังตรวจ…" : p ? `ตรวจล่าสุด ${ago(p.updatedAt)}` : ""}</small>
-                    <button className="icon-button" title={`ตรวจ ${label} ใหม่`} disabled={busy} onClick={() => void load(id, true)}>
+                    <small>{busy ? tr("กำลังตรวจ…") : p ? tr`ตรวจล่าสุด ${ago(p.updatedAt)}` : ""}</small>
+                    <button className="icon-button" title={tr`ตรวจ ${label} ใหม่`} disabled={busy} onClick={() => void load(id, true)}>
                       {busy ? <LoaderCircle size={12} className="spin" /> : <RefreshCw size={12} />}
                     </button>
                   </header>
-                  <AccountPicker provider={id} value={selectedAccounts[id]} label={`บัญชีโควตา ${label}`} onChange={accountId => {
+                  <AccountPicker provider={id} value={selectedAccounts[id]} label={tr`บัญชีโควตา ${label}`} onChange={accountId => {
                     selections.current[id] = accountId;
                     setSelectedAccounts(v => ({ ...v, [id]: accountId }));
                     setData(v => { const next = { ...v }; delete next[id]; return next; });
@@ -115,11 +116,11 @@ export function UsageButton({ open, onOpenChange: setOpen }: { open: boolean; on
                           <div className="usage-row-head">
                             <span>{w.label}</span>
                             <b className={w.remainingPercent === null ? "" : level(w.remainingPercent)}>
-                              {w.remainingPercent === null ? w.note || "—" : `เหลือ ${w.remainingPercent}%`}
+                              {w.remainingPercent === null ? w.note || "—" : tr`เหลือ ${w.remainingPercent}%`}
                             </b>
                           </div>
                           {w.remainingPercent !== null && (
-                            <div className="usage-bar" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={w.remainingPercent} aria-label={`${label} ${w.label} เหลือ ${w.remainingPercent}%`}>
+                            <div className="usage-bar" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={w.remainingPercent} aria-label={tr`${label} ${w.label} เหลือ ${w.remainingPercent}%`}>
                               <span className={level(w.remainingPercent)} style={{ width: `${w.remainingPercent}%` }} />
                             </div>
                           )}

@@ -3,6 +3,7 @@ import type { Cli } from '../api';
 import { HEADLESS } from '../providers';
 import { ProviderBadge } from './ProviderBadge';
 import { useTranslation } from '../i18n';
+import { tr } from '../i18n';
 
 export function WorkspaceWelcome({ clis, openSession, onMode, provider, onProvider, disabled }: {
   clis: Cli[]; openSession: (type?: string) => void; onMode: (mode: 'agent' | 'chat') => void;
@@ -12,7 +13,7 @@ export function WorkspaceWelcome({ clis, openSession, onMode, provider, onProvid
   return <div className="workspace-welcome">
     <h2>{t('welcome.title', 'วันนี้อยากทำอะไร?')}</h2>
     <p>{t('welcome.subtitle', 'เลือกผู้ช่วย แล้วเริ่มพิมพ์ด้านล่างได้เลย')}</p>
-    <div className="welcome-providers" aria-label="เลือกผู้ช่วย AI">
+    <div className="welcome-providers" aria-label={tr("เลือกผู้ช่วย AI")}>
       {clis.filter(cli => cli.id !== 'terminal').map(cli => <button key={cli.id} disabled={disabled} aria-pressed={HEADLESS.includes(cli.id) && provider === cli.id} onClick={() => HEADLESS.includes(cli.id) && cli.available ? onProvider(cli.id) : openSession(cli.id)}>
         <ProviderBadge provider={cli.id} />{!cli.available ? <small>{t('welcome.install', 'ติดตั้ง')}</small> : !HEADLESS.includes(cli.id) && <small>Terminal</small>}
       </button>)}

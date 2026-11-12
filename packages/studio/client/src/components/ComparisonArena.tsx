@@ -25,17 +25,20 @@ import {
 import { Markdown } from "./Markdown";
 import { RunUsage } from './RunUsage';
 import "../comparison-arena.css";
+import { tr } from '../i18n';
 
 export { formatLatency, formatTtft, estimateTokenCount, formatTokens, formatArenaError };
 
-const STEP_LABELS: Record<StepStatus, string> = {
-  pending: "รอ",
-  running: "กำลังคิด",
-  completed: "ตอบแล้ว",
-  failed: "ไม่สำเร็จ",
-  cancelled: "ยกเลิก",
-  skipped: "ข้าม",
-};
+function stepLabel(status: StepStatus) {
+  switch (status) {
+    case "pending": return tr("รอ");
+    case "running": return tr("กำลังคิด");
+    case "completed": return tr("ตอบแล้ว");
+    case "failed": return tr("ไม่สำเร็จ");
+    case "cancelled": return tr("ยกเลิก");
+    case "skipped": return tr("ข้าม");
+  }
+}
 
 export function ComparisonArena({ run }: { run: Run }) {
   const panel = run.panel || [];
@@ -83,9 +86,9 @@ export function ComparisonArena({ run }: { run: Run }) {
   const handoffToCode = (answer: PanelAnswer, index: number) => {
     if (!answer.output) return;
     const promptIntro = run.prompt
-      ? `จากคำถามเดิม: "${run.prompt.slice(0, 200)}${run.prompt.length > 200 ? "…" : ""}"\n\n`
+      ? tr`จากคำถามเดิม: "${run.prompt.slice(0, 200)}${run.prompt.length > 200 ? "…" : ""}"\n\n`
       : "";
-    const handoffText = `${promptIntro}แนวทางและโค้ดที่เลือกจาก ${answer.seat.name} (${providerName(answer.seat.provider)}):\n\n${answer.output}\n\nกรุณานำแนวทางหรือโค้ดนี้ไปปรับปรุงและใช้งานจริงในโปรเจกต์`;
+    const handoffText = tr`${promptIntro}แนวทางและโค้ดที่เลือกจาก ${answer.seat.name} (${providerName(answer.seat.provider)}):\n\n${answer.output}\n\nกรุณานำแนวทางหรือโค้ดนี้ไปปรับปรุงและใช้งานจริงในโปรเจกต์`;
 
     // Dispatch event to switch to code mode and populate composer draft
     window.dispatchEvent(
@@ -107,15 +110,15 @@ export function ComparisonArena({ run }: { run: Run }) {
   const columnClass = `columns-${Math.min(panel.length, 5)}`;
 
   return (
-    <section className="comparison-arena" aria-label="สนามประลอง AI (Comparison Arena)">
+    <section className="comparison-arena" aria-label={tr("สนามประลอง AI (Comparison Arena)")}>
       <RunUsage steps={run.usageSteps} />
       <div className="arena-header">
         <div className="arena-title-wrap">
           <Sparkles size={16} />
-          <span>เปรียบเทียบคำตอบ AI ({panel.length} โมเดล)</span>
+          <span>{tr("เปรียบเทียบคำตอบ AI (")}{panel.length} {tr("โมเดล)")}</span>
         </div>
         <span className="arena-count-badge">
-          {panel.filter((a) => a.status === "completed").length}/{panel.length} ตอบแล้ว
+          {panel.filter((a) => a.status === "completed").length}/{panel.length} {tr("ตอบแล้ว")}
         </span>
       </div>
 
@@ -131,7 +134,7 @@ export function ComparisonArena({ run }: { run: Run }) {
             <article
               key={index}
               className={`arena-card answer-card state-${answer.status} ${isWinner ? "is-winner" : ""}`}
-              aria-label={`คำตอบจาก ${answer.seat.name}`}
+              aria-label={tr`คำตอบจาก ${answer.seat.name}`}
             >
               <header className="arena-card-header">
                 <div className="arena-card-title-row">
@@ -149,8 +152,8 @@ export function ComparisonArena({ run }: { run: Run }) {
 
                   <div className="arena-header-status-wrap">
                     {isWinner && (
-                      <span className="arena-winner-badge" title="คำตอบที่เลือก">
-                        <Trophy size={11} /> คำตอบที่เลือก
+                      <span className="arena-winner-badge" title={tr("คำตอบที่เลือก")}>
+                        <Trophy size={11} /> {tr("คำตอบที่เลือก")}
                       </span>
                     )}
                     <span className={`arena-status-indicator state-${answer.status}`}>
@@ -161,7 +164,7 @@ export function ComparisonArena({ run }: { run: Run }) {
                       {answer.status === "failed" && <AlertCircle size={11} />}
                       {answer.status === "cancelled" && <XCircle size={11} />}
                       {answer.status === "pending" && <Clock size={11} />}
-                      {STEP_LABELS[answer.status] || answer.status}
+                      {stepLabel(answer.status) || answer.status}
                     </span>
                   </div>
                 </div>
@@ -175,11 +178,11 @@ export function ComparisonArena({ run }: { run: Run }) {
                   className="arena-metrics-pill"
                   title={`Latency: ${latency} · TTFT: ${ttft}`}
                 >
-                  <span className="arena-metric-item" title="ระยะเวลาตอบ">
+                  <span className="arena-metric-item" title={tr("ระยะเวลาตอบ")}>
                     <Timer size={11} /> {latency}
                   </span>
                   <span className="arena-metric-divider">·</span>
-                  <span className="arena-metric-item" title="เวลาถึงโทเค็นแรก (TTFT)">
+                  <span className="arena-metric-item" title={tr("เวลาถึงโทเค็นแรก (TTFT)")}>
                     <Zap size={11} /> {ttft}
                   </span>
                 </div>
@@ -191,10 +194,10 @@ export function ComparisonArena({ run }: { run: Run }) {
                     className={`arena-action-btn ${isCopied ? "btn-copied" : ""}`}
                     disabled={!answer.output}
                     onClick={() => void copyAnswer(answer.output, index)}
-                    title={isCopied ? "คัดลอกแล้ว" : "คัดลอกคำตอบ"}
+                    title={isCopied ? tr("คัดลอกแล้ว") : tr("คัดลอกคำตอบ")}
                   >
                     {isCopied ? <Check size={12} /> : <Copy size={12} />}
-                    <span>{isCopied ? "คัดลอกแล้ว" : "คัดลอก"}</span>
+                    <span>{isCopied ? tr("คัดลอกแล้ว") : tr("คัดลอก")}</span>
                   </button>
 
                   <button
@@ -202,10 +205,10 @@ export function ComparisonArena({ run }: { run: Run }) {
                     className={`arena-action-btn btn-winner ${isWinner ? "active" : ""}`}
                     disabled={!answer.output}
                     onClick={() => setWinnerIndex(isWinner ? null : index)}
-                    title={isWinner ? "ยกเลิกการเลือกคำตอบนี้" : "เลือกคำตอบนี้เป็นคำตอบที่ดีที่สุด"}
+                    title={isWinner ? tr("ยกเลิกการเลือกคำตอบนี้") : tr("เลือกคำตอบนี้เป็นคำตอบที่ดีที่สุด")}
                   >
                     <Trophy size={12} />
-                    <span>{isWinner ? "เลือกแล้ว" : "เลือกคำตอบนี้"}</span>
+                    <span>{isWinner ? tr("เลือกแล้ว") : tr("เลือกคำตอบนี้")}</span>
                   </button>
 
                   <button
@@ -213,10 +216,10 @@ export function ComparisonArena({ run }: { run: Run }) {
                     className={`arena-action-btn btn-handoff ${isHandoff ? "btn-copied" : ""}`}
                     disabled={!answer.output}
                     onClick={() => handoffToCode(answer, index)}
-                    title="ส่งคำตอบนี้ไปยังช่องคำสั่งโหมด Code เพื่อนำไปพัฒนาต่อ"
+                    title={tr("ส่งคำตอบนี้ไปยังช่องคำสั่งโหมด Code เพื่อนำไปพัฒนาต่อ")}
                   >
                     {isHandoff ? <Check size={12} /> : <Code2 size={12} />}
-                    <span>{isHandoff ? "ส่งไป Code แล้ว" : "ส่งต่อไปโหมด Code"}</span>
+                    <span>{isHandoff ? tr("ส่งไป Code แล้ว") : tr("ส่งต่อไปโหมด Code")}</span>
                   </button>
                 </div>
               </header>
@@ -227,7 +230,7 @@ export function ComparisonArena({ run }: { run: Run }) {
                 ) : answer.status === "running" ? (
                   <div className="arena-card-status-msg running">
                     <LoaderCircle size={13} className="spin" />
-                    <span>กำลังคิดคำตอบ…</span>
+                    <span>{tr("กำลังคิดคำตอบ…")}</span>
                   </div>
                 ) : answer.error ? (
                   <div className="arena-card-status-msg failed">
@@ -244,15 +247,15 @@ export function ComparisonArena({ run }: { run: Run }) {
       {run.summarizer && (
         <article
           className={`arena-summarizer-card summary-card state-${run.summaryStatus || "pending"}`}
-          aria-label="สรุปผลรวมคำตอบ"
+          aria-label={tr("สรุปผลรวมคำตอบ")}
         >
           <header className="arena-summarizer-header">
             <div className="arena-summarizer-title">
               <Sparkles size={16} />
-              <strong>สรุปผลโดย {run.summarizer.name}</strong>
+              <strong>{tr("สรุปผลโดย")} {run.summarizer.name}</strong>
               <span className="arena-summarizer-meta">
                 {providerName(run.summarizer.provider)} ·{" "}
-                {run.summaryStyle === "best" ? "คัดเฉพาะส่วนที่ดีที่สุด" : "รวมทุกความเห็น"}
+                {run.summaryStyle === "best" ? tr("คัดเฉพาะส่วนที่ดีที่สุด") : tr("รวมทุกความเห็น")}
               </span>
             </div>
 
@@ -262,8 +265,8 @@ export function ComparisonArena({ run }: { run: Run }) {
                 {run.summaryStatus === "completed" && <CheckCircle2 size={11} />}
                 {run.summaryStatus === "failed" && <AlertCircle size={11} />}
                 {run.summaryStatus === "pending"
-                  ? "รอคำตอบครบ"
-                  : STEP_LABELS[run.summaryStatus || "pending"]}
+                  ? tr("รอคำตอบครบ")
+                  : stepLabel(run.summaryStatus || "pending")}
               </span>
 
               {run.output && (
@@ -271,10 +274,10 @@ export function ComparisonArena({ run }: { run: Run }) {
                   type="button"
                   className={`arena-action-btn ${copiedSummary ? "btn-copied" : ""}`}
                   onClick={() => void copySummaryText(run.output)}
-                  title="คัดลอกบทสรุป"
+                  title={tr("คัดลอกบทสรุป")}
                 >
                   {copiedSummary ? <Check size={12} /> : <Copy size={12} />}
-                  <span>{copiedSummary ? "คัดลอกแล้ว" : "คัดลอกสรุป"}</span>
+                  <span>{copiedSummary ? tr("คัดลอกแล้ว") : tr("คัดลอกสรุป")}</span>
                 </button>
               )}
             </div>
@@ -286,7 +289,7 @@ export function ComparisonArena({ run }: { run: Run }) {
             ) : run.summaryStatus === "running" ? (
               <div className="arena-card-status-msg running">
                 <LoaderCircle size={13} className="spin" />
-                <span>กำลังวิเคราะห์และสรุปคำตอบ…</span>
+                <span>{tr("กำลังวิเคราะห์และสรุปคำตอบ…")}</span>
               </div>
             ) : null}
           </div>

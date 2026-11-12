@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FileText, ImagePlus, Paperclip, Plus, X } from 'lucide-react';
-import { ACCEPT_ATTACHMENTS, isPdf, isSupportedAttachment, pdfPageCount, UNSUPPORTED_ATTACHMENT } from '../attachments';
+import { ACCEPT_ATTACHMENTS, isPdf, isSupportedAttachment, pdfPageCount, unsupportedAttachmentMessage } from '../attachments';
+import { tr } from '../i18n';
 
 export interface ComposerAttachment {
   id: string;
@@ -23,9 +24,9 @@ export function useComposerAttachments(onError: (message: string) => void, scope
   const add = useCallback(
     (files: File[]) => {
       const supported = files.filter(isSupportedAttachment);
-      if (supported.length < files.length) onError(UNSUPPORTED_ATTACHMENT);
+      if (supported.length < files.length) onError(unsupportedAttachmentMessage());
       const room = 20 - (scopesRef.current[scopeKey]?.length || 0);
-      if (supported.length > room) onError('แนบได้ครั้งละไม่เกิน 20 ไฟล์ ส่งชุดนี้ก่อนแล้วค่อยแนบเพิ่ม');
+      if (supported.length > room) onError(tr("แนบได้ครั้งละไม่เกิน 20 ไฟล์ ส่งชุดนี้ก่อนแล้วค่อยแนบเพิ่ม"));
       const added = supported.slice(0, Math.max(0, room)).map((file) => ({
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         file,
@@ -59,7 +60,7 @@ export function useComposerAttachments(onError: (message: string) => void, scope
 
 export const AttachmentCards: React.FC<{ items: ComposerAttachment[]; onRemove: (id: string) => void; disabled?: boolean }> = ({ items, onRemove, disabled }) =>
   items.length ? (
-    <ul className="attachment-cards" aria-label="ไฟล์แนบ">
+    <ul className="attachment-cards" aria-label={tr("ไฟล์แนบ")}>
       {items.map((item) => (
         <li key={item.id} className={`attachment-card ${item.kind}`} title={item.file.name}>
           {item.thumb ? (
@@ -68,10 +69,10 @@ export const AttachmentCards: React.FC<{ items: ComposerAttachment[]; onRemove: 
             <div className="attachment-pdf">
               <FileText size={26} />
               <span className="attachment-name">{item.file.name}</span>
-              <span className="attachment-meta">PDF{item.pages ? ` · ${item.pages} หน้า` : ''}</span>
+              <span className="attachment-meta">PDF{item.pages ? tr` · ${item.pages} หน้า` : ''}</span>
             </div>
           )}
-          <button className="attachment-remove" onClick={() => onRemove(item.id)} disabled={disabled} aria-label={`เอา ${item.file.name} ออก`} title="เอาออก">
+          <button className="attachment-remove" onClick={() => onRemove(item.id)} disabled={disabled} aria-label={tr`เอา ${item.file.name} ออก`} title={tr("เอาออก")}>
             <X size={12} />
           </button>
         </li>
@@ -114,8 +115,8 @@ export const AttachMenu: React.FC<{ onFiles: (files: File[]) => void; disabled?:
     <div className="attach-menu" ref={root}>
       <button
         className={`icon-button ${open ? 'selected' : ''}`}
-        title="แนบไฟล์หรือรูปภาพ (Ctrl+U)"
-        aria-label="แนบไฟล์"
+        title={tr("แนบไฟล์หรือรูปภาพ (Ctrl+U)")}
+        aria-label={tr("แนบไฟล์")}
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
@@ -127,7 +128,7 @@ export const AttachMenu: React.FC<{ onFiles: (files: File[]) => void; disabled?:
         <div className="dictation-menu attach-popover" role="menu">
           <button role="menuitem" onClick={pick}>
             <Paperclip size={13} />
-            <span>เพิ่มไฟล์หรือรูปภาพ</span>
+            <span>{tr("เพิ่มไฟล์หรือรูปภาพ")}</span>
             <kbd>Ctrl+U</kbd>
           </button>
           {actions.map(action => <button key={action.label} type="button" role="menuitem" aria-pressed={action.selected} onClick={() => { setOpen(false); action.onSelect(); }}><FileText size={13} /><span>{action.label}</span></button>)}
@@ -139,7 +140,7 @@ export const AttachMenu: React.FC<{ onFiles: (files: File[]) => void; disabled?:
         multiple
         hidden
         accept={ACCEPT_ATTACHMENTS}
-        aria-label="เลือกไฟล์แนบ"
+        aria-label={tr("เลือกไฟล์แนบ")}
         onChange={(event) => {
           const files = Array.from(event.target.files || []);
           event.target.value = '';
@@ -213,7 +214,7 @@ export const ComposerDropOverlay: React.FC<{ active: boolean }> = ({ active }) =
   active ? (
     <div className="composer-drop-overlay" aria-hidden="true">
       <ImagePlus size={28} />
-      <strong>วางเพื่อแนบในช่องคำสั่ง</strong>
-      <span>รูปหรือ PDF จะแสดงเหนือช่องพิมพ์ ส่งพร้อมข้อความเมื่อกดส่ง</span>
+      <strong>{tr("วางเพื่อแนบในช่องคำสั่ง")}</strong>
+      <span>{tr("รูปหรือ PDF จะแสดงเหนือช่องพิมพ์ ส่งพร้อมข้อความเมื่อกดส่ง")}</span>
     </div>
   ) : null;

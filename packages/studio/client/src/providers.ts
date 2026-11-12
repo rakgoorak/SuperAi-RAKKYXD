@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Cli, type ModelList, type Seat } from "./api";
+import { tr } from './i18n';
 
 /** CLIs that can answer without a terminal; Freebuff only works in Code mode. */
 export const HEADLESS = ["claude-code", "codex", "antigravity", "opencode"];
@@ -14,15 +15,18 @@ export const PROVIDER_LABEL: Record<string, string> = {
   groq: "Groq",
   openrouter: "OpenRouter",
 };
-export const EFFORT_LABEL: Record<string, string> = {
-  minimal: "น้อยที่สุด",
-  low: "ต่ำ",
-  medium: "กลาง",
-  high: "สูง",
-  xhigh: "สูงมาก",
-  max: "สูงสุด",
-  ultra: "อัลตรา",
-};
+export function effortLabel(level: string): string {
+  switch (level) {
+    case "minimal": return tr("น้อยที่สุด");
+    case "low": return tr("ต่ำ");
+    case "medium": return tr("กลาง");
+    case "high": return tr("สูง");
+    case "xhigh": return tr("สูงมาก");
+    case "max": return tr("สูงสุด");
+    case "ultra": return tr("อัลตรา");
+    default: return level;
+  }
+}
 
 /** Effort levels each CLI accepts; shown while the live model list is still loading. */
 export const EFFORTS: Record<string, string[]> = {
@@ -63,7 +67,7 @@ export function providerName(provider: string) {
   return `Ollama · ${provider}`;
 }
 export function seatSummary(seat: Seat) {
-  return [providerName(seat.provider), seat.model || (seat.provider.startsWith("cli:") ? "รุ่นเริ่มต้น" : ""), seat.effort && `effort ${EFFORT_LABEL[seat.effort] || seat.effort}`]
+  return [providerName(seat.provider), seat.model || (seat.provider.startsWith("cli:") ? tr("รุ่นเริ่มต้น") : ""), seat.effort && `effort ${effortLabel(seat.effort)}`]
     .filter(Boolean)
     .join(" · ");
 }

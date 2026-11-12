@@ -5,6 +5,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { managedNodeDir, managedNodeBin, installNode22 } from "./NodeInstaller.js";
 import { managedGitCmd, bashForGit } from "./GitInstaller.js";
+import { tr } from './i18n.js';
 
 export { managedNodeDir, managedNodeBin, installNode22 };
 
@@ -149,7 +150,7 @@ export function getNodeStatus(
 
 export function getCliDefinition(id: string) {
   const definition = CLI_DEFINITIONS.find((c) => c.id === id);
-  if (!definition) throw new Error(`ไม่รู้จัก CLI: ${id}`);
+  if (!definition) throw new Error(tr`ไม่รู้จัก CLI: ${id}`);
   return definition;
 }
 
@@ -240,7 +241,7 @@ export function cliLaunch(
   const executable = findExecutable(cli.command);
   if (!executable)
     throw new Error(
-      `ยังไม่ได้ติดตั้ง ${cli.name} หรือไม่พบคำสั่งใน PATH กรุณาติดตั้งแล้วตรวจสอบอีกครั้ง`,
+      tr`ยังไม่ได้ติดตั้ง ${cli.name} หรือไม่พบคำสั่งใน PATH กรุณาติดตั้งแล้วตรวจสอบอีกครั้ง`,
     );
   if (process.platform === "win32" && /\.(cmd|bat)$/i.test(executable)) {
     const packages: Record<string, string> = {

@@ -3,6 +3,7 @@ import path from "node:path";
 import { CliProvider } from "./CliProvider.js";
 import { LocalProvider, extractJson } from "./AgentRunManager.js";
 import { Seat, validateSeat } from "./Providers.js";
+import { tr } from './i18n.js';
 
 /**
  * Agent Skills (folders with a SKILL.md) from fixed official sources and skills.sh.
@@ -75,8 +76,8 @@ export class SkillManager {
 
   private async json(url: string) {
     const res = await this.http(url, { headers: { Accept: "application/vnd.github+json", "User-Agent": "SuperAi-RAKKYXD" }, signal: AbortSignal.timeout(20000) });
-    if (res.status === 403 || res.status === 429) throw new Error("GitHub จำกัดจำนวนครั้งที่ขอข้อมูล กรุณารอสักครู่แล้วลองใหม่");
-    if (!res.ok) throw new Error(`โหลดรายการ skill ไม่สำเร็จ (${res.status})`);
+    if (res.status === 403 || res.status === 429) throw new Error(tr("GitHub จำกัดจำนวนครั้งที่ขอข้อมูล กรุณารอสักครู่แล้วลองใหม่"));
+    if (!res.ok) throw new Error(tr`โหลดรายการ skill ไม่สำเร็จ (${res.status})`);
     return res.json();
   }
 
@@ -122,7 +123,7 @@ export class SkillManager {
         errors.push(`${source.label}: ${err.message}`);
       }
     }
-    if (!skills.length) throw new Error(errors.join(" · ") || "ไม่พบ skill จากแหล่งทางการ ตรวจอินเทอร์เน็ตแล้วลองใหม่");
+    if (!skills.length) throw new Error(errors.join(" · ") || tr("ไม่พบ skill จากแหล่งทางการ ตรวจอินเทอร์เน็ตแล้วลองใหม่"));
     this.cache = { at: Date.now(), skills };
     return skills;
   }
@@ -183,7 +184,7 @@ export class SkillManager {
       );
       return results;
     } catch {
-      throw new Error("ค้นหาบน skills.sh ไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วลองอีกครั้ง");
+      throw new Error(tr("ค้นหาบน skills.sh ไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วลองอีกครั้ง"));
     }
   }
 
@@ -213,8 +214,8 @@ export class SkillManager {
   }
 
   async install(root: string, sourceId: string, name: string, options?: SkillInstallOptions) {
-    if (!NAME.test(name)) throw new Error("ชื่อ skill ไม่ถูกต้อง");
-    if (this.installed(root).some((s) => s.name === name)) throw new Error(`มี skill ชื่อ ${name} ในโปรเจกต์แล้ว`);
+    if (!NAME.test(name)) throw new Error(tr("ชื่อ skill ไม่ถูกต้อง"));
+    if (this.installed(root).some((s) => s.name === name)) throw new Error(tr`มี skill ชื่อ ${name} ในโปรเจกต์แล้ว`);
 
     const source = SKILL_SOURCES.find((s) => s.id === sourceId);
     let repo = "", branch = "main", prefix = `skills/${name}/`;
@@ -222,7 +223,7 @@ export class SkillManager {
 
     if (source) {
       const skill = (await this.catalog()).find((s) => s.source === sourceId && s.name === name);
-      if (!skill) throw new Error("ไม่พบ skill นี้ในแหล่งทางการ");
+      if (!skill) throw new Error(tr("ไม่พบ skill นี้ในแหล่งทางการ"));
       repo = source.repo;
       branch = source.branch;
       prefix = `${source.prefix}${name}/`;
@@ -230,7 +231,7 @@ export class SkillManager {
     } else if (options?.repo) {
       repo = options.repo;
       branch = options.branch || "main";
-      if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error("repository ไม่ถูกต้อง");
+      if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error(tr("repository ไม่ถูกต้อง"));
       try {
         let treeData: any;
         try {
@@ -239,7 +240,7 @@ export class SkillManager {
           if (branch === "main") {
             branch = "master";
             treeData = await this.json(`https://api.github.com/repos/${repo}/git/trees/${branch}?recursive=1`);
-          } else throw new Error("ไม่พบ branch ใน repository");
+          } else throw new Error(tr("ไม่พบ branch ใน repository"));
         }
         const blobs: string[] = (treeData.tree || []).filter((n: any) => n.type === "blob").map((n: any) => n.path);
         let dir = options.prefix || "";
@@ -257,22 +258,22 @@ export class SkillManager {
         fileList = options.files && options.files.length ? options.files : ["SKILL.md"];
       }
     } else {
-      throw new Error("ไม่พบ skill นี้ในแหล่งที่รองรับ");
+      throw new Error(tr("ไม่พบ skill นี้ในแหล่งที่รองรับ"));
     }
 
     if (!fileList.length) fileList = ["SKILL.md"];
-    if (fileList.length > MAX_FILES) throw new Error("skill นี้มีไฟล์มากเกินไป ติดตั้งเองจากหน้า GitHub แทน");
+    if (fileList.length > MAX_FILES) throw new Error(tr("skill นี้มีไฟล์มากเกินไป ติดตั้งเองจากหน้า GitHub แทน"));
 
     const contents: { file: string; data: Buffer }[] = [];
     let total = 0;
     for (const file of fileList) {
       const parts = file.split("/");
-      if (parts.some((p) => !p || p === "." || p === ".." || /[\0:\\]/.test(p))) throw new Error("พบชื่อไฟล์ที่ไม่ปลอดภัยใน skill");
+      if (parts.some((p) => !p || p === "." || p === ".." || /[\0:\\]/.test(p))) throw new Error(tr("พบชื่อไฟล์ที่ไม่ปลอดภัยใน skill"));
       const res = await this.http(this.raw(repo, branch, `${prefix}${file}`), { signal: AbortSignal.timeout(30000) });
-      if (!res.ok) throw new Error(`ดาวน์โหลด ${file} ไม่สำเร็จ (${res.status})`);
+      if (!res.ok) throw new Error(tr`ดาวน์โหลด ${file} ไม่สำเร็จ (${res.status})`);
       const data = Buffer.from(await res.arrayBuffer());
       total += data.length;
-      if (total > MAX_BYTES) throw new Error("skill นี้มีขนาดใหญ่เกินไป");
+      if (total > MAX_BYTES) throw new Error(tr("skill นี้มีขนาดใหญ่เกินไป"));
       contents.push({ file, data });
     }
 
@@ -294,7 +295,7 @@ export class SkillManager {
 
   /** Remove only skills SuperAi installed (they carry a marker file); never touch the user's own. */
   uninstall(root: string, name: string) {
-    if (!NAME.test(name)) throw new Error("ชื่อ skill ไม่ถูกต้อง");
+    if (!NAME.test(name)) throw new Error(tr("ชื่อ skill ไม่ถูกต้อง"));
     let removed = 0;
     for (const target of SKILL_TARGETS) {
       const dir = path.join(root, target, name);
@@ -302,7 +303,7 @@ export class SkillManager {
       fs.rmSync(dir, { recursive: true, force: true });
       removed++;
     }
-    if (!removed) throw new Error("ลบได้เฉพาะ skill ที่ติดตั้งผ่าน SuperAi");
+    if (!removed) throw new Error(tr("ลบได้เฉพาะ skill ที่ติดตั้งผ่าน SuperAi"));
     return { removed };
   }
 
@@ -326,7 +327,7 @@ export class SkillManager {
 
   /** Ask the chosen AI which official skills fit this project. Nothing is installed here. */
   async recommend(root: string, seatInput: unknown, goal: string, signal: AbortSignal) {
-    const seat: Seat = validateSeat(seatInput, "ผู้แนะนำ skill");
+    const seat: Seat = validateSeat(seatInput, tr("ผู้แนะนำ skill"));
     const catalog = await this.catalog();
     const installed = this.installed(root).map((s) => s.name);
     const options = catalog.filter((s) => !installed.includes(s.name));
@@ -347,7 +348,7 @@ ${options.map((s) => `${s.source}/${s.name}: ${s.description}`).join("\n")}
     try {
       picks = extractJson(reply.text);
     } catch {
-      throw new Error("AI ตอบรายการ skill ในรูปแบบที่อ่านไม่ได้ ลองใหม่อีกครั้ง");
+      throw new Error(tr("AI ตอบรายการ skill ในรูปแบบที่อ่านไม่ได้ ลองใหม่อีกครั้ง"));
     }
     return (Array.isArray(picks) ? picks : [])
       .map((p: any) => {

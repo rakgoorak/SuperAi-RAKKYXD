@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { api, loginProvider } from '../api';
 import { useAccounts } from '../accounts';
-import { useModels, EFFORT_LABEL } from '../providers';
+import { useModels, effortLabel } from '../providers';
 import { isCloud } from '../providers';
 import { ModelCombo } from './ModelCombo';
 import { useProviderAccess } from './ProviderAccess';
@@ -11,6 +11,7 @@ import { ProviderBadge } from './ProviderBadge';
 import { ComposerOptions } from './ComposerOptions';
 import { ResponseStyleSelect } from './ResponseStyleSelect';
 import type { ResponseStyle } from '../responseStyle';
+import { tr } from '../i18n';
 
 /**
  * Account, Model and Effort of the chat session the bottom composer sends to.
@@ -86,34 +87,34 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
   }), [sessionId, agent]);
 
   return (
-    <div className="session-chat-controls" aria-label={`การตั้งค่าแชท ${name}`}>
+    <div className="session-chat-controls" aria-label={tr`การตั้งค่าแชท ${name}`}>
       {/* What the AI may do on the left; which AI, model and effort on the right. */}
-      <select className="chat-permission-select" aria-label={`สิทธิ์ของ ${name} ในข้อความถัดไป`} value={permission} disabled={disabled}
-        title={choices.find(choice => choice.value === permission)?.hint || 'สิ่งที่ AI ทำได้เองในข้อความถัดไป'}
+      <select className="chat-permission-select" aria-label={tr`สิทธิ์ของ ${name} ในข้อความถัดไป`} value={permission} disabled={disabled}
+        title={choices.find(choice => choice.value === permission)?.hint || tr("สิ่งที่ AI ทำได้เองในข้อความถัดไป")}
         onChange={(e) => { const value = e.target.value as ChatPermission; setPermission(value); setChatPrefs(sessionId, { permission: value }); }}>
         {choices.map(choice => <option key={choice.value} value={choice.value} title={choice.hint}>{choice.label}</option>)}
       </select>
-      {problem && <div className="chat-composer-problem" role="alert">{problem}<button type="button" onClick={() => setProblem('')} aria-label="ปิดข้อความ"><X size={12} /></button></div>}
+      {problem && <div className="chat-composer-problem" role="alert">{problem}<button type="button" onClick={() => setProblem('')} aria-label={tr("ปิดข้อความ")}><X size={12} /></button></div>}
       {agent && <ProviderBadge provider={agent} />}
-      {ready && profiles > 1 && <span className="session-account-name" title="บัญชีที่ห้องนี้ใช้">{profileName}</span>}
+      {ready && profiles > 1 && <span className="session-account-name" title={tr("บัญชีที่ห้องนี้ใช้")}>{profileName}</span>}
       <div className="chat-model-controls">
-        <label>Model<ModelCombo label={`Model ในแชท ${name}`} value={model} options={list?.models || []} onOpen={refreshModels} placeholder="ค่าเริ่มต้นของ CLI" disabled={disabled || !ready}
+        <label>Model<ModelCombo label={tr`Model ในแชท ${name}`} value={model} options={list?.models || []} onOpen={refreshModels} placeholder={tr("ค่าเริ่มต้นของ CLI")} disabled={disabled || !ready}
           onChange={(value) => { setModel(value); setEffort(''); }} /></label>
-        {efforts.length > 0 && <select className="chat-effort-select" aria-label={`Effort ในแชท ${name}`} title="ระดับการคิด" value={effort} disabled={disabled} onChange={(e) => setEffort(e.target.value)}>
-          <option value="">Effort เริ่มต้น</option>{efforts.map((e) => <option key={e} value={e}>{EFFORT_LABEL[e] || e}</option>)}
+        {efforts.length > 0 && <select className="chat-effort-select" aria-label={tr`Effort ในแชท ${name}`} title={tr("ระดับการคิด")} value={effort} disabled={disabled} onChange={(e) => setEffort(e.target.value)}>
+          <option value="">{tr("Effort เริ่มต้น")}</option>{efforts.map((e) => <option key={e} value={e}>{effortLabel(e)}</option>)}
         </select>}
       </div>
-      <ComposerOptions label="ตัวเลือก AI" attention={!!authError || auth?.status === 'login-required' || auth?.status === 'not-installed'}>
+      <ComposerOptions label={tr("ตัวเลือก AI")} attention={!!authError || auth?.status === 'login-required' || auth?.status === 'not-installed'}>
         <ResponseStyleSelect value={style} disabled={disabled || !ready} onChange={value => { setStyle(value); setChatPrefs(sessionId, { responseStyle: value }); }} />
-        <label title="ปิดเพื่อลดข้อความที่ SuperAi แนบไปกับข้อความถัดไป"><input type="checkbox" checked={includeProjectContext} disabled={disabled} onChange={e => { setIncludeProjectContext(e.target.checked); setChatPrefs(sessionId, { includeProjectContext: e.target.checked }); }} /> แนบบริบทโปรเจกต์{rules?.files?.length ? ` และกฎ (${rules.files.join(', ')})` : ''}</label>
-        <section className={`composer-option-account ${auth?.status || ''}`} aria-label="บัญชีของ session">
-          <strong>{isCloud(agent) ? 'API Key' : profileName || 'บัญชี AI'}</strong>
-          <p>{authError || auth?.note || (agent ? 'กำลังตรวจบัญชี…' : 'กำลังโหลดการตั้งค่า…')}</p>
-          <button type="button" className="text-button" disabled={checking || busy || !agent} onClick={() => void check(true)}>ตรวจบัญชีอีกครั้ง</button>
-          {!isCloud(agent) && auth?.status !== 'authenticated' && auth?.status !== 'not-installed' && <button type="button" className="text-button" disabled={!agent || busy || disabled} onClick={() => void login()}>เข้าสู่ระบบใน Terminal</button>}
+        <label title={tr("ปิดเพื่อลดข้อความที่ SuperAi แนบไปกับข้อความถัดไป")}><input type="checkbox" checked={includeProjectContext} disabled={disabled} onChange={e => { setIncludeProjectContext(e.target.checked); setChatPrefs(sessionId, { includeProjectContext: e.target.checked }); }} /> {tr("แนบบริบทโปรเจกต์")}{rules?.files?.length ? tr` และกฎ (${rules.files.join(', ')})` : ''}</label>
+        <section className={`composer-option-account ${auth?.status || ''}`} aria-label={tr("บัญชีของ session")}>
+          <strong>{isCloud(agent) ? 'API Key' : profileName || tr("บัญชี AI")}</strong>
+          <p>{authError || auth?.note || (agent ? tr("กำลังตรวจบัญชี…") : tr("กำลังโหลดการตั้งค่า…"))}</p>
+          <button type="button" className="text-button" disabled={checking || busy || !agent} onClick={() => void check(true)}>{tr("ตรวจบัญชีอีกครั้ง")}</button>
+          {!isCloud(agent) && auth?.status !== 'authenticated' && auth?.status !== 'not-installed' && <button type="button" className="text-button" disabled={!agent || busy || disabled} onClick={() => void login()}>{tr("เข้าสู่ระบบใน Terminal")}</button>}
         </section>
       </ComposerOptions>
-      {modelError && <small className="muted">{modelError} · พิมพ์ชื่อ Model เองได้</small>}
+      {modelError && <small className="muted">{modelError} {tr("· พิมพ์ชื่อ Model เองได้")}</small>}
     </div>
   );
 }

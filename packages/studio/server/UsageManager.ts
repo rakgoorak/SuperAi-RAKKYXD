@@ -6,6 +6,7 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { cliLaunch, cliEnv, findExecutable, getCliDefinition } from "./CliCatalog.js";
 import { CLOUD_PROVIDERS, cloudKeys, isCloud } from "./CloudKeys.js";
+import { tr } from './i18n.js';
 
 /** One quota window, normalised to "percent remaining" so every provider reads the same way. */
 export interface UsageWindow {
@@ -35,7 +36,7 @@ export function parseClaudeUsage(text: string): UsageWindow[] {
   const windows: UsageWindow[] = [];
   for (const m of text.matchAll(/^\s*(Current [^:\n]+):\s*(\d+(?:\.\d+)?)%\s*used(?:\s*[·•-]\s*resets\s+(.+?))?\s*$/gim)) {
     const raw = m[1].trim();
-    const label = /session/i.test(raw) ? "5 ชั่วโมง" : /week/i.test(raw) ? `รายสัปดาห์${/\(([^)]+)\)/.exec(raw)?.[1] ? ` (${/\(([^)]+)\)/.exec(raw)![1].replace(/all models/i, "ทุกรุ่น")})` : ""}` : raw;
+    const label = /session/i.test(raw) ? tr("5 ชั่วโมง") : /week/i.test(raw) ? tr`รายสัปดาห์${/\(([^)]+)\)/.exec(raw)?.[1] ? ` (${/\(([^)]+)\)/.exec(raw)![1].replace(/all models/i, "ทุกรุ่น")})` : ""}` : raw;
     windows.push({ label, remainingPercent: clamp(100 - Number(m[2])), resetsText: m[3]?.trim() });
   }
   return windows;
@@ -81,10 +82,10 @@ export function parseCodexRateLimits(lines: string[]): { windows: UsageWindow[];
     }
     const windows: UsageWindow[] = [
       {
-        label: '5 ชั่วโมง',
+        label: tr("5 ชั่วโมง"),
         remainingPercent: 0,
         resetsAt,
-        note: 'โควตาเต็ม รอรอบรีเซ็ต',
+        note: tr("โควตาเต็ม รอรอบรีเซ็ต"),
       },
     ];
     const limits = rateLimitEvent?.payload?.rate_limits ?? rateLimitEvent?.payload?.info?.rate_limits ?? rateLimitEvent?.rate_limits;
@@ -93,10 +94,10 @@ export function parseCodexRateLimits(lines: string[]): { windows: UsageWindow[];
       const secResetsAt = typeof w.resets_at === 'number' ? new Date(w.resets_at * 1000).toISOString() : undefined;
       const reset = secResetsAt && Date.parse(secResetsAt) <= Date.now();
       windows.push({
-        label: 'รายสัปดาห์',
+        label: tr("รายสัปดาห์"),
         remainingPercent: reset ? 100 : clamp(100 - w.used_percent),
         resetsAt: reset ? undefined : secResetsAt,
-        note: reset ? 'รีเซ็ตแล้ว' : undefined,
+        note: reset ? tr("รีเซ็ตแล้ว") : undefined,
       });
     }
     return { windows, at: Number.isFinite(errorTime) ? errorTime : undefined };
@@ -110,11 +111,11 @@ export function parseCodexRateLimits(lines: string[]): { windows: UsageWindow[];
         const w = limits[key];
         if (!w || typeof w.used_percent !== 'number') continue;
         const minutes = Number(w.window_minutes) || 0;
-        const label = minutes === 300 ? '5 ชั่วโมง' : minutes === 10080 ? 'รายสัปดาห์' : minutes >= 1440 ? `${Math.round(minutes / 1440)} วัน` : `${Math.round(minutes / 60)} ชั่วโมง`;
+        const label = minutes === 300 ? tr("5 ชั่วโมง") : minutes === 10080 ? tr("รายสัปดาห์") : minutes >= 1440 ? tr`${Math.round(minutes / 1440)} วัน` : tr`${Math.round(minutes / 60)} ชั่วโมง`;
         const resetsAt = typeof w.resets_at === 'number' ? new Date(w.resets_at * 1000).toISOString() : undefined;
         // A window that has already reset is back to full, whatever the old log says.
         const reset = resetsAt && Date.parse(resetsAt) <= Date.now();
-        windows.push({ label, remainingPercent: reset ? 100 : clamp(100 - w.used_percent), resetsAt: reset ? undefined : resetsAt, note: reset ? 'รีเซ็ตแล้ว' : undefined });
+        windows.push({ label, remainingPercent: reset ? 100 : clamp(100 - w.used_percent), resetsAt: reset ? undefined : resetsAt, note: reset ? tr("รีเซ็ตแล้ว") : undefined });
       }
       const at = Date.parse(rateLimitEvent.timestamp || '');
       return windows.length ? { windows, at: Number.isFinite(at) ? at : undefined } : null;
@@ -132,7 +133,7 @@ export function parseCodexLiveLimits(result: any): UsageWindow[] {
     const w = limits?.[key];
     if (!w || typeof w.usedPercent !== "number") continue;
     const minutes = Number(w.windowDurationMins) || 0;
-    const label = minutes === 300 ? "5 ชั่วโมง" : minutes === 10080 ? "รายสัปดาห์" : minutes >= 1440 ? `${Math.round(minutes / 1440)} วัน` : `${Math.round(minutes / 60)} ชั่วโมง`;
+    const label = minutes === 300 ? tr("5 ชั่วโมง") : minutes === 10080 ? tr("รายสัปดาห์") : minutes >= 1440 ? tr`${Math.round(minutes / 1440)} วัน` : tr`${Math.round(minutes / 60)} ชั่วโมง`;
     windows.push({ label, remainingPercent: clamp(100 - w.usedPercent), resetsAt: typeof w.resetsAt === "number" ? new Date(w.resetsAt * 1000).toISOString() : undefined });
   }
   return windows;
@@ -185,14 +186,14 @@ export function parseAntigravityUsage(text: string): UsageWindow[] {
     const cells = line.split("\t").map((c) => c.trim());
     if (cells.length < 3 || !/limit/i.test(cells[1])) continue;
     const [group, rawLabel, value, reset] = cells;
-    const label = /five hour/i.test(rawLabel) ? "5 ชั่วโมง" : /week/i.test(rawLabel) ? "รายสัปดาห์" : rawLabel;
+    const label = /five hour/i.test(rawLabel) ? tr("5 ชั่วโมง") : /week/i.test(rawLabel) ? tr("รายสัปดาห์") : rawLabel;
     const pct = /^(\d+(?:\.\d+)?)%$/.exec(value);
     windows.push({
       group,
       label,
       remainingPercent: pct ? clamp(Number(pct[1])) : null,
       resetsAt: reset && !Number.isNaN(Date.parse(reset)) ? new Date(reset).toISOString() : undefined,
-      note: pct ? undefined : value === "disabled" ? "ไม่ได้เปิดใช้" : value,
+      note: pct ? undefined : value === "disabled" ? tr("ไม่ได้เปิดใช้") : value,
     });
   }
   return windows;
@@ -200,7 +201,7 @@ export function parseAntigravityUsage(text: string): UsageWindow[] {
 
 /** `opencode stats --days 7`: box-drawn table rows like "│Total Cost   $0.00 │". */
 export function parseOpenCodeStats(text: string): { label: string; value: string }[] {
-  const wanted: Record<string, string> = { "Total Cost": "ค่าใช้จ่าย 7 วัน", Sessions: "Session 7 วัน", Input: "Token ขาเข้า", Output: "Token ขาออก" };
+  const wanted: Record<string, string> = { "Total Cost": tr("ค่าใช้จ่าย 7 วัน"), Sessions: tr("Session 7 วัน"), Input: tr("Token ขาเข้า"), Output: tr("Token ขาออก") };
   const out: { label: string; value: string }[] = [];
   for (const line of text.split(/\r?\n/)) {
     const m = /│\s*([A-Za-z][A-Za-z /]+?)\s{2,}(\S.*?)\s*│/.exec(line);
@@ -265,7 +266,7 @@ type Probe = (env?: NodeJS.ProcessEnv) => Promise<Omit<ProviderUsage, "id" | "na
 const PROBES: Record<string, Probe> = {
   "claude-code": async env => {
     const windows = parseClaudeUsage(await runCli("claude-code", ["-p", "/usage"], 60000, env));
-    if (!windows.length) return { status: "error", windows, source: "claude /usage", note: "อ่านผล /usage ไม่ได้ ตรวจว่าเข้าสู่ระบบด้วยบัญชี Claude (Pro/Max) แล้ว" };
+    if (!windows.length) return { status: "error", windows, source: "claude /usage", note: tr("อ่านผล /usage ไม่ได้ ตรวจว่าเข้าสู่ระบบด้วยบัญชี Claude (Pro/Max) แล้ว") };
     return { status: "ok", windows, source: "claude /usage" };
   },
   codex: async env => {
@@ -274,19 +275,19 @@ const PROBES: Record<string, Probe> = {
     if (live) return { status: "ok", windows: live, source: "codex app-server" };
     const log = await newestCodexLog(env);
     const parsed = log && parseCodexRateLimits(log.split(/\r?\n/));
-    if (!parsed) return { status: "error", windows: [], source: "Codex session log", note: "ยังไม่มีข้อมูล ใช้ Codex สักครั้ง (ในโหมด Code หรือ Agent/Chat) แล้วกดรีเฟรช" };
-    return { status: "ok", windows: parsed.windows, source: "Codex session log", dataTime: parsed.at, note: "ตัวเลขจากการใช้ Codex ครั้งล่าสุด" };
+    if (!parsed) return { status: "error", windows: [], source: "Codex session log", note: tr("ยังไม่มีข้อมูล ใช้ Codex สักครั้ง (ในโหมด Code หรือ Agent/Chat) แล้วกดรีเฟรช") };
+    return { status: "ok", windows: parsed.windows, source: "Codex session log", dataTime: parsed.at, note: tr("ตัวเลขจากการใช้ Codex ครั้งล่าสุด") };
   },
   antigravity: async env => {
     const windows = parseAntigravityUsage(await runCli("antigravity", ["--print=/usage"], 60000, env));
-    if (!windows.length) return { status: "error", windows, source: "agy /usage", note: "อ่านผล /usage ไม่ได้ ตรวจว่าเข้าสู่ระบบ Antigravity แล้ว" };
+    if (!windows.length) return { status: "error", windows, source: "agy /usage", note: tr("อ่านผล /usage ไม่ได้ ตรวจว่าเข้าสู่ระบบ Antigravity แล้ว") };
     return { status: "ok", windows, source: "agy /usage" };
   },
   opencode: async env => {
     const details = parseOpenCodeStats(await runCli("opencode", ["stats", "--days", "7"], 60000, env));
-    return { status: "unsupported", windows: [], details, source: "opencode stats", note: "OpenCode ไม่มีโควตารวม ขีดจำกัดขึ้นกับผู้ให้บริการรุ่นที่เลือก แสดงการใช้งาน 7 วันแทน" };
+    return { status: "unsupported", windows: [], details, source: "opencode stats", note: tr("OpenCode ไม่มีโควตารวม ขีดจำกัดขึ้นกับผู้ให้บริการรุ่นที่เลือก แสดงการใช้งาน 7 วันแทน") };
   },
-  freebuff: async () => ({ status: "unsupported", windows: [], source: "-", note: "Freebuff ยังไม่มีคำสั่งให้ดูโควตา" }),
+  freebuff: async () => ({ status: "unsupported", windows: [], source: "-", note: tr("Freebuff ยังไม่มีคำสั่งให้ดูโควตา") }),
   openrouter: () => cloudBalance("openrouter"),
   deepseek: () => cloudBalance("deepseek"),
 };
@@ -294,7 +295,7 @@ const PROBES: Record<string, Probe> = {
 /** API providers bill per use: there is no quota window, so the card shows the credit that is left. */
 async function cloudBalance(id: string): ReturnType<Probe> {
   const details = (await cloudKeys.balance(id)) || [];
-  return { status: "unsupported", windows: [], details, source: `${cloudKeys.status(id).name} API`, note: details.length ? "คิดเงินตามการใช้จริงจากเครดิตที่เติมไว้" : "ผู้ให้บริการไม่ได้ส่งยอดเครดิตกลับมา" };
+  return { status: "unsupported", windows: [], details, source: `${cloudKeys.status(id).name} API`, note: details.length ? tr("คิดเงินตามการใช้จริงจากเครดิตที่เติมไว้") : tr("ผู้ให้บริการไม่ได้ส่งยอดเครดิตกลับมา") };
 }
 
 export const USAGE_PROVIDERS = ["claude-code", "codex", "antigravity", "opencode", "freebuff", "openrouter", "deepseek"];
@@ -314,13 +315,13 @@ export class UsageManager {
     const task = (async () => {
       const name = isCloud(id) ? cloudKeys.status(id).name : getCliDefinition(id).name;
       let result: ProviderUsage;
-      if (!this.installed(id)) result = { id, name, status: "not-installed", windows: [], source: "-", note: isCloud(id) ? "ยังไม่ได้ใส่ API Key" : "ยังไม่ได้ติดตั้ง", updatedAt: Date.now() };
+      if (!this.installed(id)) result = { id, name, status: "not-installed", windows: [], source: "-", note: isCloud(id) ? tr("ยังไม่ได้ใส่ API Key") : tr("ยังไม่ได้ติดตั้ง"), updatedAt: Date.now() };
       else
         try {
           result = { id, name, ...(await this.probes[id](env)), updatedAt: Date.now() };
         } catch (err: any) {
           const message = String(err?.message || err).split("\n").slice(-3).join(" ").slice(0, 300);
-          result = { id, name, status: "error", windows: [], source: "-", note: /timed? ?out|ETIMEDOUT|killed/i.test(message) ? "CLI ตอบช้าเกินไป ลองรีเฟรชอีกครั้ง" : `ตรวจไม่สำเร็จ: ${message}`, updatedAt: Date.now() };
+          result = { id, name, status: "error", windows: [], source: "-", note: /timed? ?out|ETIMEDOUT|killed/i.test(message) ? tr("CLI ตอบช้าเกินไป ลองรีเฟรชอีกครั้ง") : tr`ตรวจไม่สำเร็จ: ${message}`, updatedAt: Date.now() };
         }
       this.cache.set(key, result);
       return result;

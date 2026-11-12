@@ -40,6 +40,9 @@ import { responseStyle } from './ResponseStyle.js';
 import { cleanPrediction, nextPromptRequest, predictionSeat } from './NextPrompt.js';
 import { CliProvider } from './CliProvider.js';
 import { listMcpServers, saveMcpServer, removeMcpServer, toggleMcpServer } from './McpManager.js';
+import { serverLocale, setServerLocale, tr } from './i18n.js';
+import { browserHandler, browserToken, registerBrowserHandler, setBrowserBase, type BrowserHandler } from './BrowserTools.js';
+import { timingSafeEqual } from 'node:crypto';
 
 export function isValidLocalHost(hostHeader: string | undefined): boolean {
   if (!hostHeader) return true;
@@ -83,7 +86,8 @@ export class StudioServer {
   /** Open tabs saved right before an in-app update, reopened on the next start. */
   private restoreFile: string;
 
-  constructor(options?: { port?: number; customWorkspacePath?: string }) {
+  constructor(options?: { port?: number; customWorkspacePath?: string; browser?: BrowserHandler }) {
+    if (options?.browser) registerBrowserHandler(options.browser);
     this.agentRuns = new AgentRunManager(
       options?.customWorkspacePath
         ? path.join(
@@ -108,23 +112,23 @@ export class StudioServer {
 
     this.app = express();
     this.app.use((req, res, next) => {
-      if (this.branchChanging && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return res.status(409).json({ error: 'กำลังสลับ branch กรุณารอให้เสร็จก่อน' });
+      if (this.branchChanging && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return res.status(409).json({ error: tr("กำลังสลับ branch กรุณารอให้เสร็จก่อน") });
       if (!isValidLocalHost(req.headers.host))
         return res
           .status(403)
-          .json({ error: "อนุญาตเฉพาะการเชื่อมต่อในเครื่อง" });
+          .json({ error: tr("อนุญาตเฉพาะการเชื่อมต่อในเครื่อง") });
       const secFetchSite = req.headers['sec-fetch-site'];
       if (secFetchSite === 'cross-site')
-        return res.status(403).json({ error: "ไม่อนุญาตการเรียกแบบ cross-site" });
+        return res.status(403).json({ error: tr("ไม่อนุญาตการเรียกแบบ cross-site") });
       const origin = req.headers.origin;
       if (origin && !this.allowedOrigin(origin))
-        return res.status(403).json({ error: "ไม่อนุญาตต้นทางนี้" });
+        return res.status(403).json({ error: tr("ไม่อนุญาตต้นทางนี้") });
       const referer = req.headers.referer;
       if (referer) {
         try {
           const refOrigin = new URL(referer).origin;
           if (!this.allowedOrigin(refOrigin))
-            return res.status(403).json({ error: "ไม่อนุญาตการเรียกจากแหล่งที่มานี้" });
+            return res.status(403).json({ error: tr("ไม่อนุญาตการเรียกจากแหล่งที่มานี้") });
         } catch {}
       }
       res.setHeader("X-Content-Type-Options", "nosniff");
@@ -140,7 +144,7 @@ export class StudioServer {
           req.body.openCodeModel.length > 160 ||
           !/^[-\w./:]*$/.test(req.body.openCodeModel))
       )
-        return res.status(400).json({ error: "ชื่อรุ่น OpenCode ไม่ถูกต้อง" });
+        return res.status(400).json({ error: tr("ชื่อรุ่น OpenCode ไม่ถูกต้อง") });
       next();
     });
 
@@ -203,9 +207,9 @@ export class StudioServer {
     const id = typeof agentType === "string" ? agentType : "";
     const m = typeof model === "string" ? model.trim() : "";
     const e = typeof effort === "string" ? effort.trim() : "";
-    if (m && (m.length > 200 || !/^[\w.:/@+-]+$/.test(m) || m.startsWith("-"))) throw new Error("ชื่อรุ่นไม่ถูกต้อง");
-    if (isCloud(id)) { if (e) throw new Error('API นี้ไม่รองรับ effort'); return { model: m, effort: '' }; }
-    if (e && !PROVIDER_PROFILES[id]?.efforts.includes(e)) throw new Error("ระดับ effort ไม่ถูกต้องสำหรับ CLI นี้");
+    if (m && (m.length > 200 || !/^[\w.:/@+-]+$/.test(m) || m.startsWith("-"))) throw new Error(tr("ชื่อรุ่นไม่ถูกต้อง"));
+    if (isCloud(id)) { if (e) throw new Error(tr("API นี้ไม่รองรับ effort")); return { model: m, effort: '' }; }
+    if (e && !PROVIDER_PROFILES[id]?.efforts.includes(e)) throw new Error(tr("ระดับ effort ไม่ถูกต้องสำหรับ CLI นี้"));
     if ((m || e) && !modelEffortArgs(id, m, e, true).length) return {};
     return { model: m, effort: e };
   }
@@ -226,7 +230,7 @@ export class StudioServer {
     this.app.get("/api/clis", (_req, res) => res.json(listClis()));
     this.app.get("/api/clis/:id/auth", async (req, res) => {
       if (isCloud(String(req.params.id))) {
-        try { const status = cloudKeys.status(String(req.params.id)); return res.json({ id: status.id, status: status.hasKey ? 'authenticated' : 'login-required', note: status.hasKey ? 'ใช้ API Key ที่บันทึกไว้ในแอป' : 'เชื่อมต่อที่ การตั้งค่า > API Key' }); }
+        try { const status = cloudKeys.status(String(req.params.id)); return res.json({ id: status.id, status: status.hasKey ? 'authenticated' : 'login-required', note: status.hasKey ? tr("ใช้ API Key ที่บันทึกไว้ในแอป") : tr("เชื่อมต่อที่ การตั้งค่า > API Key") }); }
         catch (error) { return res.status(400).json({ error: (error as Error).message }); }
       }
       try { res.json(await cliAuth.get(String(req.params.id), req.query.refresh === "1", accounts.resolve(String(req.params.id), req.query.accountId))); }
@@ -265,17 +269,17 @@ export class StudioServer {
     this.app.post("/api/clis/:id/login", (req, res) => {
       try {
         const id = String(req.params.id);
-        if (!(id in LOGIN_ARGS)) throw new Error("ไม่รู้จักผู้ให้บริการนี้");
+        if (!(id in LOGIN_ARGS)) throw new Error(tr("ไม่รู้จักผู้ให้บริการนี้"));
         const context = req.body?.sessionId ? this.terminalManager.getSession(String(req.body.sessionId)) : undefined;
-        if (req.body?.sessionId && (!context || context.agentType !== id)) throw new Error("ไม่พบ session ของผู้ให้บริการนี้");
+        if (req.body?.sessionId && (!context || context.agentType !== id)) throw new Error(tr("ไม่พบ session ของผู้ให้บริการนี้"));
         const accountId = accounts.resolve(id, context ? context.accountId || "system" : req.body?.accountId);
         const workspace = this.workspaceRegistry.getWorkspace(String(context?.wsId || req.body?.wsId || ""));
-        if (!context && !workspace) throw new Error("กรุณาเลือกโปรเจกต์ก่อนเข้าสู่ระบบ");
+        if (!context && !workspace) throw new Error(tr("กรุณาเลือกโปรเจกต์ก่อนเข้าสู่ระบบ"));
         const existing = this.terminalManager.listSessions().find((s) => s.agentType === id && s.accountId === accountId && s.status === "running" && (this.terminalManager.getSession(s.id)?.restart?.authOnly || id === "freebuff"));
         if (existing) return res.json({ id: existing.id });
         const launch = cliLaunch(id, LOGIN_ARGS[id]);
         const session = this.terminalManager.spawnSession({ agentType: id, accountId, ...launch, authOnly: true,
-          name: `${getCliDefinition(id).name} · ${accounts.list(id).find(p => p.id === accountId)?.name || accountId} · เข้าสู่ระบบ`, cwd: context?.cwd || workspace!.rootPath, wsId: context?.wsId || workspace?.id });
+          name: tr`${getCliDefinition(id).name} · ${accounts.list(id).find(p => p.id === accountId)?.name || accountId} · เข้าสู่ระบบ`, cwd: context?.cwd || workspace!.rootPath, wsId: context?.wsId || workspace?.id });
         this.views.set(session.id, "terminal");
         res.json({ id: session.id });
       } catch (error: any) { res.status(400).json({ error: error.message }); }
@@ -292,8 +296,8 @@ export class StudioServer {
     this.app.get('/api/git/status', (_req, res) => res.json(getGitStatus(findExecutable)));
     this.app.post('/api/git/install', (_req, res) => {
       try {
-        if (process.platform !== 'win32') return res.status(400).json({ error: 'บน macOS ให้ติดตั้ง Git ด้วย xcode-select --install' });
-        if (getGitStatus(findExecutable).installed) return res.status(409).json({ error: 'มี Git พร้อมใช้งานแล้ว' });
+        if (process.platform !== 'win32') return res.status(400).json({ error: tr("บน macOS ให้ติดตั้ง Git ด้วย xcode-select --install") });
+        if (getGitStatus(findExecutable).installed) return res.status(409).json({ error: tr("มี Git พร้อมใช้งานแล้ว") });
         res.json(this.cliInstalls.start('git'));
       } catch (error: any) {
         res.status(400).json({ error: error.message });
@@ -302,7 +306,7 @@ export class StudioServer {
     this.app.post('/api/clis/:id/install', (req,res)=> {
       try {
         const id=String(req.params.id);
-        if(id !== 'node' && (this.terminalManager.listSessions().some(s=>s.agentType===id && ['running','stopping'].includes(s.status)) || this.agentRuns.usesCli(id))) return res.status(409).json({error:'CLI นี้กำลังใช้งานอยู่ กรุณาปิด session/หยุดทีมก่อนติดตั้ง'});
+        if(id !== 'node' && (this.terminalManager.listSessions().some(s=>s.agentType===id && ['running','stopping'].includes(s.status)) || this.agentRuns.usesCli(id))) return res.status(409).json({error:tr("CLI นี้กำลังใช้งานอยู่ กรุณาปิด session/หยุดทีมก่อนติดตั้ง")});
         res.json(this.cliInstalls.start(id));
       } catch(error:any) {res.status(400).json({error:error.message});}
     });
@@ -315,7 +319,7 @@ export class StudioServer {
           .status(503)
           .json({
             error:
-              "ตรวจรุ่น OpenCode ไม่สำเร็จ ตรวจการติดตั้งหรืออินเทอร์เน็ต แล้วลองใหม่",
+              tr("ตรวจรุ่น OpenCode ไม่สำเร็จ ตรวจการติดตั้งหรืออินเทอร์เน็ต แล้วลองใหม่"),
           });
       }
     });
@@ -332,27 +336,27 @@ export class StudioServer {
           .status(503)
           .json({
             error:
-              "ยังเชื่อมต่อ Ollama ไม่ได้ กรุณาเปิด Ollama และดาวน์โหลด model ด้วย ollama pull qwen2.5-coder:7b",
+              tr("ยังเชื่อมต่อ Ollama ไม่ได้ กรุณาเปิด Ollama และดาวน์โหลด model ด้วย ollama pull qwen2.5-coder:7b"),
           });
       }
     });
     this.app.get('/api/workspaces/:wsId/changes', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       try { res.json(await projectChanges(ws.rootPath)); }
-      catch { res.status(400).json({ error: 'อ่าน Git ไม่สำเร็จ ตรวจว่าติดตั้ง Git และโปรเจกต์เป็น Git repository' }); }
+      catch { res.status(400).json({ error: tr("อ่าน Git ไม่สำเร็จ ตรวจว่าติดตั้ง Git และโปรเจกต์เป็น Git repository") }); }
     });
     this.app.get('/api/workspaces/:wsId/changed-file', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       try { res.json(await projectFile(ws.rootPath, String(req.query.path || ''))); }
       catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
     this.app.post('/api/workspaces/:wsId/files/stage', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       const filePath = typeof req.body?.filePath === 'string' ? req.body.filePath.trim() : (typeof req.body?.path === 'string' ? req.body.path.trim() : '');
-      if (!filePath) return res.status(400).json({ error: 'กรุณาระบุพาธไฟล์' });
+      if (!filePath) return res.status(400).json({ error: tr("กรุณาระบุพาธไฟล์") });
       try {
         const success = await stageFile(ws.rootPath, filePath);
         res.json({ success });
@@ -362,9 +366,9 @@ export class StudioServer {
     });
     this.app.post('/api/workspaces/:wsId/files/unstage', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       const filePath = typeof req.body?.filePath === 'string' ? req.body.filePath.trim() : (typeof req.body?.path === 'string' ? req.body.path.trim() : '');
-      if (!filePath) return res.status(400).json({ error: 'กรุณาระบุพาธไฟล์' });
+      if (!filePath) return res.status(400).json({ error: tr("กรุณาระบุพาธไฟล์") });
       try {
         const success = await unstageFile(ws.rootPath, filePath);
         res.json({ success });
@@ -374,9 +378,9 @@ export class StudioServer {
     });
     this.app.post('/api/workspaces/:wsId/files/discard', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       const filePath = typeof req.body?.filePath === 'string' ? req.body.filePath.trim() : (typeof req.body?.path === 'string' ? req.body.path.trim() : '');
-      if (!filePath) return res.status(400).json({ error: 'กรุณาระบุพาธไฟล์' });
+      if (!filePath) return res.status(400).json({ error: tr("กรุณาระบุพาธไฟล์") });
       try {
         const success = await discardFile(ws.rootPath, filePath);
         res.json({ success });
@@ -386,10 +390,10 @@ export class StudioServer {
     });
     this.app.post('/api/workspaces/:wsId/files/save', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       const filePath = typeof req.body?.filePath === 'string' ? req.body.filePath.trim() : (typeof req.body?.path === 'string' ? req.body.path.trim() : '');
-      if (!filePath) return res.status(400).json({ error: 'กรุณาระบุพาธไฟล์' });
-      if (typeof req.body?.content !== 'string') return res.status(400).json({ error: 'กรุณาระบุเนื้อหาไฟล์' });
+      if (!filePath) return res.status(400).json({ error: tr("กรุณาระบุพาธไฟล์") });
+      if (typeof req.body?.content !== 'string') return res.status(400).json({ error: tr("กรุณาระบุเนื้อหาไฟล์") });
       try {
         const success = await saveProjectFile(ws.rootPath, filePath, req.body.content);
         res.json({ success });
@@ -399,7 +403,7 @@ export class StudioServer {
     });
     this.app.get('/api/workspaces/:wsId/worktrees', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       try {
         const worktrees = await listWorktrees(ws.rootPath);
         const current = worktrees.find(w => w.isCurrent) || null;
@@ -414,9 +418,9 @@ export class StudioServer {
     });
     this.app.post('/api/workspaces/:wsId/worktrees', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       const branch = typeof req.body?.branch === 'string' ? req.body.branch.trim() : '';
-      if (!branch) return res.status(400).json({ error: 'กรุณาระบุชื่อ Branch' });
+      if (!branch) return res.status(400).json({ error: tr("กรุณาระบุชื่อ Branch") });
       try {
         const worktree = await createWorktree(ws.rootPath, branch);
         res.json({ success: true, worktree });
@@ -426,9 +430,9 @@ export class StudioServer {
     });
     this.app.post('/api/workspaces/:wsId/worktrees/merge', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       const sourceBranch = typeof req.body?.sourceBranch === 'string' ? req.body.sourceBranch.trim() : '';
-      if (!sourceBranch) return res.status(400).json({ error: 'กรุณาระบุ Source Branch ที่ต้องการรวมโค้ด' });
+      if (!sourceBranch) return res.status(400).json({ error: tr("กรุณาระบุ Source Branch ที่ต้องการรวมโค้ด") });
       const targetBranch = typeof req.body?.targetBranch === 'string' && req.body.targetBranch.trim() ? req.body.targetBranch.trim() : 'main';
       const deleteAfter = Boolean(req.body?.deleteAfter);
       try {
@@ -440,9 +444,9 @@ export class StudioServer {
     });
     this.app.delete('/api/workspaces/:wsId/worktrees', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       const targetPath = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
-      if (!targetPath) return res.status(400).json({ error: 'กรุณาระบุพาธของ Worktree ที่ต้องการลบ' });
+      if (!targetPath) return res.status(400).json({ error: tr("กรุณาระบุพาธของ Worktree ที่ต้องการลบ") });
       const deleteBranch = Boolean(req.body?.deleteBranch);
       try {
         const success = await removeWorktree(ws.rootPath, targetPath, deleteBranch);
@@ -455,7 +459,7 @@ export class StudioServer {
     // Self-Healing: Verify tests / build
     this.app.post('/api/workspaces/:wsId/verify', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       try {
         const command = typeof req.body?.command === 'string' ? req.body.command : undefined;
         const result = await this.selfHealing.runVerification(ws.rootPath, command);
@@ -468,7 +472,7 @@ export class StudioServer {
     // Self-Healing: Run healing loop with agent session
     this.app.post('/api/workspaces/:wsId/self-heal', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       const sessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId : undefined;
       const command = typeof req.body?.command === 'string' ? req.body.command : undefined;
       const maxAttempts = Number(req.body?.maxAttempts) || 3;
@@ -476,7 +480,7 @@ export class StudioServer {
       const agentSend = async (prompt: string) => {
         if (sessionId) {
           const session = this.terminalManager.getSession(sessionId);
-          if (!session) throw new Error(`ไม่พบเซสชัน ${sessionId}`);
+          if (!session) throw new Error(tr`ไม่พบเซสชัน ${sessionId}`);
           this.chats.send(sessionId, {
             agent: session.agentType || 'claude-code',
             cwd: session.cwd || ws.rootPath,
@@ -487,7 +491,7 @@ export class StudioServer {
             await new Promise(r => setTimeout(r, 800));
           }
         } else {
-          throw new Error('กรุณาระบุ sessionId ของ Agent สำหรับการแก้ไขโค้ด');
+          throw new Error(tr("กรุณาระบุ sessionId ของ Agent สำหรับการแก้ไขโค้ด"));
         }
       };
 
@@ -507,7 +511,7 @@ export class StudioServer {
     // AI Cross-Examination: Run independent adversarial code review
     this.app.post('/api/workspaces/:wsId/cross-review', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       const authorProvider = String(req.body?.authorProvider || 'claude-code');
       const reviewer = req.body?.reviewer;
       const targetFile = typeof req.body?.targetFile === 'string' ? req.body.targetFile : undefined;
@@ -530,13 +534,13 @@ export class StudioServer {
     // AI Cross-Examination: Apply review fixes to a session
     this.app.post('/api/workspaces/:wsId/cross-review/apply', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       const sessionId = String(req.body?.sessionId || '');
       const review = req.body?.review;
-      if (!sessionId || !review) return res.status(400).json({ error: 'กรุณาระบุ sessionId และข้อมูลผลการตรวจทาน' });
+      if (!sessionId || !review) return res.status(400).json({ error: tr("กรุณาระบุ sessionId และข้อมูลผลการตรวจทาน") });
 
       const session = this.terminalManager.getSession(sessionId);
-      if (!session) return res.status(404).json({ error: 'ไม่พบเซสชัน' });
+      if (!session) return res.status(404).json({ error: tr("ไม่พบเซสชัน") });
 
       try {
         const prompt = this.crossReview.formatApplyPrompt(review);
@@ -552,7 +556,7 @@ export class StudioServer {
     });
     const previewFile = (folder: (req: Request) => string | undefined) => async (req: Request, res: Response) => {
       const root = folder(req);
-      if (!root) return res.status(404).json({ error: 'ไม่พบโปรเจกต์หรือ session สำหรับเปิดไฟล์นี้' });
+      if (!root) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์หรือ session สำหรับเปิดไฟล์นี้") });
       try {
         const file = await readPreviewFile(root, String(req.query.path || ''));
         res.setHeader('Content-Type', file.contentType);
@@ -561,7 +565,7 @@ export class StudioServer {
         res.send(file.content);
       } catch (error) {
         const missing = (error as NodeJS.ErrnoException).code === 'ENOENT';
-        res.status(missing ? 404 : 400).json({ error: missing ? 'ไม่พบไฟล์นี้แล้ว ตรวจที่อยู่ไฟล์หรือให้ AI สร้างไฟล์ใหม่' : (error as Error).message });
+        res.status(missing ? 404 : 400).json({ error: missing ? tr("ไม่พบไฟล์นี้แล้ว ตรวจที่อยู่ไฟล์หรือให้ AI สร้างไฟล์ใหม่") : (error as Error).message });
       }
     };
     this.app.get('/api/workspaces/:wsId/preview-file', previewFile(req => this.workspaceRegistry.getWorkspace(String(req.params.wsId))?.rootPath));
@@ -569,7 +573,7 @@ export class StudioServer {
     
     this.app.get('/api/workspaces/:wsId/pinned-content', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       const pinned = Array.isArray(ws.pinnedFiles) ? ws.pinnedFiles.filter(file => typeof file === 'string').slice(0, 100) : [];
       const files: Array<{ path: string; name: string; content: string; size: number }> = [];
       for (const rel of pinned) {
@@ -581,9 +585,9 @@ export class StudioServer {
 
     this.app.post('/api/workspaces/:wsId/pinned-files/toggle', (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       const target = typeof req.body.filePath === 'string' ? req.body.filePath.trim() : '';
-      if (!target) return res.status(400).json({ error: 'กรุณาระบุพาธไฟล์' });
+      if (!target) return res.status(400).json({ error: tr("กรุณาระบุพาธไฟล์") });
       const pinned = new Set(Array.isArray(ws.pinnedFiles) ? ws.pinnedFiles : []);
       if (pinned.has(target)) {
         pinned.delete(target);
@@ -597,7 +601,7 @@ export class StudioServer {
     });
     this.app.get('/api/workspaces/:wsId/files', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!ws) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       try {
         const query = typeof req.query.query === 'string' ? req.query.query : '';
         res.json(await listProjectFiles(ws.rootPath, query));
@@ -611,7 +615,7 @@ export class StudioServer {
     this.app.post("/api/conversations/:wsId", (req, res) => {
       try {
         const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-        if (!workspace) return res.status(404).json({ error: "ไม่พบโปรเจกต์" });
+        if (!workspace) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
         const attachments = resolveAttachments(workspace.rootPath, req.body.attachments);
         const body = { ...req.body, prompt: String(req.body.prompt || ""), attachments,
           projectContext: buildProjectContext(workspace, workspace.rootPath), responseStyle: responseStyle(req.body.responseStyle) };
@@ -633,7 +637,7 @@ export class StudioServer {
     });
     this.app.get("/api/workspaces/:wsId/chat-skills/:provider", (req, res) => {
       const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!workspace) return res.status(404).json({ error: "ไม่พบโปรเจกต์" });
+      if (!workspace) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       try {
         const provider = String(req.params.provider);
         const accountId = accounts.resolve(provider, req.query.accountId);
@@ -642,12 +646,12 @@ export class StudioServer {
     });
     this.app.get("/api/workspaces/:wsId/rules", (req, res) => {
       const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!workspace) return res.status(404).json({ error: "ไม่พบโปรเจกต์" });
+      if (!workspace) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       res.json(getProjectRules(workspace.rootPath));
     });
     this.app.get("/api/terminals/:id/rules", (req, res) => {
       const session = this.terminalManager.getSession(String(req.params.id));
-      if (!session) return res.status(404).json({ error: "ไม่พบ session" });
+      if (!session) return res.status(404).json({ error: tr("ไม่พบ session") });
       res.json(getProjectRules(session.cwd));
     });
     this.app.get("/api/mcp/servers", (req, res) => {
@@ -693,7 +697,7 @@ export class StudioServer {
     this.app.get("/api/cli-updates", (_req, res) => res.json(this.versions.list()));
     this.app.post("/api/cli-versions/:id/update", (req, res) => {
       const id = String(req.params.id);
-      if (!VERSIONED_CLIS.includes(id)) return res.status(404).json({ error: "ไม่รู้จัก CLI นี้" });
+      if (!VERSIONED_CLIS.includes(id)) return res.status(404).json({ error: tr("ไม่รู้จัก CLI นี้") });
       try {
         const inUse = (cli: string) =>
           this.terminalManager.listSessions().some((s) => s.agentType === cli && ["running", "stopping"].includes(s.status)) || this.agentRuns.usesCli(cli);
@@ -707,7 +711,7 @@ export class StudioServer {
     });
     this.app.get("/api/usage/:id", async (req, res) => {
       const id = String(req.params.id);
-      if (!USAGE_PROVIDERS.includes(id)) return res.status(404).json({ error: "ไม่รู้จักผู้ให้บริการนี้" });
+      if (!USAGE_PROVIDERS.includes(id)) return res.status(404).json({ error: tr("ไม่รู้จักผู้ให้บริการนี้") });
       try { res.json(await this.usage.get(id, req.query.refresh === "1", accounts.resolve(id, req.query.accountId))); }
       catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
@@ -728,7 +732,7 @@ export class StudioServer {
     });
     const skillWorkspace = (req: Request, res: Response) => {
       const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!workspace) res.status(404).json({ error: "ไม่พบโปรเจกต์" });
+      if (!workspace) res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       return workspace;
     };
     this.app.get("/api/workspaces/:wsId/skills", (req, res) => {
@@ -793,7 +797,7 @@ export class StudioServer {
           String(req.params.wsId),
           { name: req.body.name, rootPath: req.body.rootPath, instructions: req.body.instructions, pinnedFiles: req.body.pinnedFiles, favorite: req.body.favorite },
         );
-        if (!result) return res.status(404).json({ error: "ไม่พบโปรเจกต์" });
+        if (!result) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
         res.json(result);
       } catch (err: any) {
         res.status(400).json({ error: err.message });
@@ -808,6 +812,25 @@ export class StudioServer {
       res.json({ success: this.workspaceRegistry.deleteWorkspace(id) });
     });
     // Health / info
+    // The AI's browser tools (BrowserMcp.js, started by a chat CLI) act on the desktop browser panel.
+    this.app.post("/api/browser-tool", async (req: Request, res: Response) => {
+      const given = Buffer.from(String(req.headers["x-superai-browser-token"] || ""));
+      const expected = Buffer.from(browserToken());
+      if (given.length !== expected.length || !timingSafeEqual(given, expected)) return res.status(403).json({ error: "forbidden" });
+      const handler = browserHandler();
+      if (!handler) return res.status(503).json({ error: tr("Browser ในแอปใช้ได้เฉพาะแอป Desktop") });
+      const tool = String(req.body?.tool || "");
+      const args = req.body?.args && typeof req.body.args === "object" ? req.body.args : {};
+      try { res.json(await handler(tool, args)); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); }
+    });
+
+    // The window reports its language so errors and notices from here come back in it.
+    this.app.post("/api/locale", (req: Request, res: Response) => {
+      if (!setServerLocale(req.body?.locale)) return res.status(400).json({ error: "unknown locale" });
+      res.json({ locale: serverLocale() });
+    });
+
     this.app.get("/api/health", (_req: Request, res: Response) => {
       res.json({
         product: "SuperAi & RAKKYXD",
@@ -828,22 +851,22 @@ export class StudioServer {
         const rootPath = path.join(path.dirname(this.sessionsFile), "general-chat");
         fs.mkdirSync(rootPath, { recursive: true });
         const existing = this.workspaceRegistry.getWorkspaces().find(ws => ws.rootPath === rootPath);
-        res.json(existing || this.workspaceRegistry.createWorkspace("แชตทั่วไป", rootPath));
+        res.json(existing || this.workspaceRegistry.createWorkspace(tr("แชตทั่วไป"), rootPath));
       } catch {
-        res.status(500).json({ error: "เตรียมพื้นที่แชตไม่ได้ กรุณาตรวจสิทธิ์เขียนและพื้นที่ว่าง แล้วลองส่งอีกครั้ง" });
+        res.status(500).json({ error: tr("เตรียมพื้นที่แชตไม่ได้ กรุณาตรวจสิทธิ์เขียนและพื้นที่ว่าง แล้วลองส่งอีกครั้ง") });
       }
     });
 
     this.app.post("/api/workspaces", (req: Request, res: Response) => {
       const { name, rootPath } = req.body;
       if (typeof name !== "string" || !name.trim())
-        return res.status(400).json({ error: "กรุณาระบุชื่อโปรเจกต์" });
+        return res.status(400).json({ error: tr("กรุณาระบุชื่อโปรเจกต์") });
       if (
         typeof rootPath !== "string" ||
         !fs.existsSync(rootPath) ||
         !fs.statSync(rootPath).isDirectory()
       )
-        return res.status(400).json({ error: "ไม่พบโฟลเดอร์โปรเจกต์" });
+        return res.status(400).json({ error: tr("ไม่พบโฟลเดอร์โปรเจกต์") });
       const ws = this.workspaceRegistry.createWorkspace(
         name,
         rootPath || process.cwd(),
@@ -936,7 +959,7 @@ export class StudioServer {
           ? this.workspaceRegistry.getWorkspace(String(wsId))
           : undefined;
         if (wsId && !workspace)
-          return res.status(404).json({ error: "ไม่พบโปรเจกต์" });
+          return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
         const workingDir =
           cwd ||
           (workspace?.rootPath && fs.existsSync(workspace.rootPath)
@@ -947,7 +970,7 @@ export class StudioServer {
           workingDir &&
           (!fs.existsSync(workingDir) || !fs.statSync(workingDir).isDirectory())
         )
-          return res.status(400).json({ error: "ไม่พบโฟลเดอร์ทำงาน" });
+          return res.status(400).json({ error: tr("ไม่พบโฟลเดอร์ทำงาน") });
         const accountId = accounts.resolve(typeof agentType === "string" ? agentType : "terminal", req.body.accountId);
         const accountEnv = accounts.environment(agentType || "terminal", accountId);
         // Skip the CLI's "trust this folder?" prompt for the user's own project folder.
@@ -970,8 +993,8 @@ export class StudioServer {
         };
         // CLIs with a chat view open as a chat: no terminal process until the user switches to it.
         if (isCloud(agentType || '')) {
-          if (command || req.body.view === 'terminal') throw new Error('API Provider ใช้ผ่านหน้าคุยเท่านั้น');
-          if (!cloudKeys.key(agentType)) throw new Error('เชื่อมต่อ API Key ที่ การตั้งค่า > API Key ก่อน');
+          if (command || req.body.view === 'terminal') throw new Error(tr("API Provider ใช้ผ่านหน้าคุยเท่านั้น"));
+          if (!cloudKeys.key(agentType)) throw new Error(tr("เชื่อมต่อ API Key ที่ การตั้งค่า > API Key ก่อน"));
         }
         const chat = !command && (CHAT_CLIS.includes(agentType) || isCloud(agentType || '')) && req.body.view !== "terminal";
         const session = chat
@@ -1022,18 +1045,18 @@ export class StudioServer {
     this.app.post("/api/terminals/:id/view", async (req: Request, res: Response) => {
       const id = String(req.params.id);
       const session = this.terminalManager.getSession(id);
-      if (!session) return res.status(404).json({ error: "ไม่พบ session นี้แล้ว" });
+      if (!session) return res.status(404).json({ error: tr("ไม่พบ session นี้แล้ว") });
       const view = req.body?.view === "terminal" ? "terminal" : "chat";
       if (isCloud(session.agentType || '')) {
-        if (view === 'terminal') return res.status(400).json({ error: 'API Provider ใช้หน้าคุย ไม่มีโปรเซส CLI' });
+        if (view === 'terminal') return res.status(400).json({ error: tr("API Provider ใช้หน้าคุย ไม่มีโปรเซส CLI") });
         this.views.set(id, 'chat'); return res.json({ success: true, view: 'chat' });
       }
-      if (view === "chat" && session.restart?.authOnly) return res.status(400).json({ error: "แท็บนี้ใช้เข้าสู่ระบบ กรุณากลับไปแท็บแชตเดิมแล้วกดตรวจบัญชีอีกครั้ง" });
-      if (view === "chat" && !CHAT_CLIS.includes(session.agentType || "")) return res.status(400).json({ error: "CLI นี้ยังไม่รองรับมุมมองแชต" });
-      if ((session.sleeping || session.status === "stopping") && !(view === "chat" && session.sleeping && session.exitObserved && session.terminationConfirmed)) return res.status(409).json({ error: "Terminal กำลังปิด กรุณารอให้ปิดเสร็จก่อน" });
+      if (view === "chat" && session.restart?.authOnly) return res.status(400).json({ error: tr("แท็บนี้ใช้เข้าสู่ระบบ กรุณากลับไปแท็บแชตเดิมแล้วกดตรวจบัญชีอีกครั้ง") });
+      if (view === "chat" && !CHAT_CLIS.includes(session.agentType || "")) return res.status(400).json({ error: tr("CLI นี้ยังไม่รองรับมุมมองแชต") });
+      if ((session.sleeping || session.status === "stopping") && !(view === "chat" && session.sleeping && session.exitObserved && session.terminationConfirmed)) return res.status(409).json({ error: tr("Terminal กำลังปิด กรุณารอให้ปิดเสร็จก่อน") });
       try {
         if (view === "terminal") {
-          if (this.chats.isRunning(id)) return res.status(409).json({ error: "รอให้แชตตอบเสร็จหรือกดหยุดก่อน แล้วค่อยสลับไป Terminal" });
+          if (this.chats.isRunning(id)) return res.status(409).json({ error: tr("รอให้แชตตอบเสร็จหรือกดหยุดก่อน แล้วค่อยสลับไป Terminal") });
           if (session.status !== "running" && session.status !== "stopping") this.terminalManager.restartSession(id, this.chats.conversationId(id));
         } else if (session.status === "running") {
           // Carry on in the chat from where the terminal got to, then stop the TUI so only one writes.
@@ -1043,7 +1066,7 @@ export class StudioServer {
         } else {
           await this.terminalManager.sleepSession(id);
         }
-        if (this.terminalManager.getSession(id) !== session) return res.status(409).json({ error: "session เปลี่ยนไปแล้ว กรุณาลองใหม่" });
+        if (this.terminalManager.getSession(id) !== session) return res.status(409).json({ error: tr("session เปลี่ยนไปแล้ว กรุณาลองใหม่") });
         this.views.set(id, view);
         this.saveSessions();
         res.json({ success: true, view });
@@ -1055,16 +1078,16 @@ export class StudioServer {
     const registerBranches = (route: string, directory: (req: Request) => string | undefined) => {
       this.app.get(route, async (req, res) => {
         const cwd = directory(req);
-        if (!cwd) return res.status(404).json({ error: 'ไม่พบโฟลเดอร์ที่เลือก' });
+        if (!cwd) return res.status(404).json({ error: tr("ไม่พบโฟลเดอร์ที่เลือก") });
         try { res.json(await branchChoices(cwd)); }
         catch (error) { res.status(400).json({ error: (error as Error).message }); }
       });
       this.app.post(route, async (req, res) => {
         const cwd = directory(req);
-        if (!cwd) return res.status(404).json({ error: 'ไม่พบโฟลเดอร์ที่เลือก' });
-        if (typeof req.body?.branch !== 'string' || !req.body.branch || req.body.branch.length > 512) return res.status(400).json({ error: 'กรุณาเลือก branch จากรายการ' });
-        if (typeof req.body?.cwd !== 'string' || path.resolve(req.body.cwd) !== path.resolve(cwd)) return res.status(409).json({ error: 'โฟลเดอร์เปลี่ยนไปแล้ว กรุณาเปิดเมนู branch ใหม่' });
-        if (this.branchChanging || this.busy().length) return res.status(409).json({ error: 'รอให้งาน AI เสร็จและปิด Terminal ที่กำลังทำงาน ก่อนสลับ branch' });
+        if (!cwd) return res.status(404).json({ error: tr("ไม่พบโฟลเดอร์ที่เลือก") });
+        if (typeof req.body?.branch !== 'string' || !req.body.branch || req.body.branch.length > 512) return res.status(400).json({ error: tr("กรุณาเลือก branch จากรายการ") });
+        if (typeof req.body?.cwd !== 'string' || path.resolve(req.body.cwd) !== path.resolve(cwd)) return res.status(409).json({ error: tr("โฟลเดอร์เปลี่ยนไปแล้ว กรุณาเปิดเมนู branch ใหม่") });
+        if (this.branchChanging || this.busy().length) return res.status(409).json({ error: tr("รอให้งาน AI เสร็จและปิด Terminal ที่กำลังทำงาน ก่อนสลับ branch") });
         this.branchChanging = true;
         try { res.json(await selectBranch(cwd, req.body.branch)); }
         catch (error) { res.status(400).json({ error: (error as Error).message }); }
@@ -1075,19 +1098,19 @@ export class StudioServer {
     registerBranches('/api/terminals/:id/branches', req => this.terminalManager.getSession(String(req.params.id))?.cwd);
     this.app.get('/api/workspaces/:wsId/context', async (req, res) => {
       const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!workspace) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!workspace) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       res.json(await workingContext(workspace.rootPath));
     });
     this.app.get('/api/terminals/:id/context', async (req, res) => {
       const session = this.terminalManager.getSession(String(req.params.id));
-      if (!session) return res.status(404).json({ error: 'ไม่พบ session' });
+      if (!session) return res.status(404).json({ error: tr("ไม่พบ session") });
       res.json(await workingContext(session.cwd));
     });
     // Chat view of a Code session: the same CLI, model and folder, driven through its JSON stream.
     this.app.get("/api/terminals/:id/chat/settings", (req, res) => {
       const session = this.terminalManager.getSession(String(req.params.id));
-      if (!session) return res.status(404).json({ error: "ไม่พบ session นี้แล้ว" });
-      res.json({ agent: session.agentType, accountId: session.accountId || "system", accountName: accounts.list(session.agentType || "").find(p => p.id === (session.accountId || "system"))?.name || "บัญชีไม่พร้อม", model: session.restart?.model || session.restart?.openCodeModel || "", effort: session.restart?.effort || "",
+      if (!session) return res.status(404).json({ error: tr("ไม่พบ session นี้แล้ว") });
+      res.json({ agent: session.agentType, accountId: session.accountId || "system", accountName: accounts.list(session.agentType || "").find(p => p.id === (session.accountId || "system"))?.name || tr("บัญชีไม่พร้อม"), model: session.restart?.model || session.restart?.openCodeModel || "", effort: session.restart?.effort || "",
         skills: isCloud(session.agentType || '') ? [] : chatSkills(session.cwd, session.agentType || "", undefined, accounts.environment(session.agentType || "", session.accountId)) });
     });
     this.app.get("/api/terminals/:id/chat", (req: Request, res: Response) => {
@@ -1095,31 +1118,31 @@ export class StudioServer {
     });
     this.app.get('/api/workspaces/:wsId/project-context', (req, res) => {
       const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
-      if (!workspace) return res.status(404).json({ error: 'ไม่พบโปรเจกต์' });
+      if (!workspace) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       try { res.json(buildProjectContext(workspace, workspace.rootPath)); }
       catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
     this.app.get('/api/terminals/:id/project-context', (req, res) => {
       const session = this.terminalManager.getSession(String(req.params.id));
-      if (!session) return res.status(404).json({ error: 'ไม่พบห้องคุย' });
+      if (!session) return res.status(404).json({ error: tr("ไม่พบห้องคุย") });
       try { res.json(buildProjectContext(session.wsId ? this.workspaceRegistry.getWorkspace(session.wsId) : undefined, session.cwd, { native: nativeRuleFiles(session.agentType || "") })); }
       catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
     this.app.post('/api/terminals/:id/name', (req, res) => {
       const session = this.terminalManager.getSession(String(req.params.id));
-      if (!session) return res.status(404).json({ error: 'ไม่พบห้องคุย' });
+      if (!session) return res.status(404).json({ error: tr("ไม่พบห้องคุย") });
       const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
-      if (!name || name.length > 60) return res.status(400).json({ error: 'ชื่อห้องต้องมี 1–60 ตัวอักษร' });
+      if (!name || name.length > 60) return res.status(400).json({ error: tr("ชื่อห้องต้องมี 1–60 ตัวอักษร") });
       session.name = name; session.restart = { ...session.restart, name }; this.saveSessions();
       res.json({ ...this.terminalManager.listSessions().find(item => item.id === session.id), view: this.viewOf(session.id) });
     });
     this.app.post('/api/terminals/:id/chat/fork', (req: Request, res: Response) => {
       const source = this.terminalManager.getSession(String(req.params.id));
-      if (!source) return res.status(404).json({ error: 'ไม่พบห้องต้นทาง' });
-      if ((!CHAT_CLIS.includes(source.agentType || '') && !isCloud(source.agentType || '')) || this.viewOf(source.id) !== 'chat') return res.status(400).json({ error: 'แยกบทสนทนาได้จากห้องแชต AI เท่านั้น' });
+      if (!source) return res.status(404).json({ error: tr("ไม่พบห้องต้นทาง") });
+      if ((!CHAT_CLIS.includes(source.agentType || '') && !isCloud(source.agentType || '')) || this.viewOf(source.id) !== 'chat') return res.status(400).json({ error: tr("แยกบทสนทนาได้จากห้องแชต AI เท่านั้น") });
       try {
-        if (typeof req.body?.messageId !== 'string') throw new Error('กรุณาระบุข้อความต้นทาง');
-        if (req.body.selection !== undefined && (typeof req.body.selection !== 'string' || !req.body.selection.trim())) throw new Error('กรุณาเลือกข้อความสำหรับ Side chat');
+        if (typeof req.body?.messageId !== 'string') throw new Error(tr("กรุณาระบุข้อความต้นทาง"));
+        if (req.body.selection !== undefined && (typeof req.body.selection !== 'string' || !req.body.selection.trim())) throw new Error(tr("กรุณาเลือกข้อความสำหรับ Side chat"));
         const fork = this.chats.forkData(source.id, req.body.messageId, req.body.selection);
         const session = this.terminalManager.addDormant({ id: randomUUID(), options: {
           agentType: source.agentType, accountId: source.accountId || "system", cwd: source.cwd, wsId: source.wsId,
@@ -1134,28 +1157,28 @@ export class StudioServer {
     this.app.post("/api/terminals/:id/chat", async (req: Request, res: Response) => {
       const id = String(req.params.id);
       const session = this.terminalManager.getSession(id);
-      if (!session) return res.status(404).json({ error: "ไม่พบ session นี้แล้ว กรุณาเปิด session ใหม่" });
+      if (!session) return res.status(404).json({ error: tr("ไม่พบ session นี้แล้ว กรุณาเปิด session ใหม่") });
       const agent = session.agentType || "";
-      if (!CHAT_CLIS.includes(agent) && !isCloud(agent)) return res.status(400).json({ error: "ผู้ให้บริการนี้ยังไม่รองรับมุมมองแชต" });
+      if (!CHAT_CLIS.includes(agent) && !isCloud(agent)) return res.status(400).json({ error: tr("ผู้ให้บริการนี้ยังไม่รองรับมุมมองแชต") });
       // One writer per conversation: while its terminal is open, the chat waits.
-      if (this.viewOf(id) !== "chat") return res.status(409).json({ error: "session นี้เปิดอยู่ในโหมด Terminal กรุณาสลับเป็นแชตก่อน" });
-      if (session.sleeping || ["running", "stopping"].includes(session.status)) return res.status(409).json({ error: "Terminal ยังปิดไม่เสร็จ กรุณารอก่อนส่งข้อความ" });
+      if (this.viewOf(id) !== "chat") return res.status(409).json({ error: tr("session นี้เปิดอยู่ในโหมด Terminal กรุณาสลับเป็นแชตก่อน") });
+      if (session.sleeping || ["running", "stopping"].includes(session.status)) return res.status(409).json({ error: tr("Terminal ยังปิดไม่เสร็จ กรุณารอก่อนส่งข้อความ") });
       const files: unknown[] = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
       const attachments = files.filter((f): f is string => typeof f === "string" && path.isAbsolute(f) && fs.existsSync(f));
       try {
-        if (typeof req.body?.text !== "string" || !req.body.text.trim()) throw new Error("กรุณาพิมพ์ข้อความ");
+        if (typeof req.body?.text !== "string" || !req.body.text.trim()) throw new Error(tr("กรุณาพิมพ์ข้อความ"));
         const chosen = this.sessionModel(agent,
           req.body.model === undefined ? session.restart?.model || (agent === "opencode" ? session.restart?.openCodeModel : "") : req.body.model,
           req.body.effort === undefined ? session.restart?.effort : req.body.effort);
-        if (req.body.skillId !== undefined && (typeof req.body.skillId !== "string" || !/^[a-f0-9]{20}$/.test(req.body.skillId))) throw new Error("skill ไม่ถูกต้อง");
-        if (req.body.permission !== undefined && !CHAT_PERMISSIONS.includes(req.body.permission)) throw new Error("สิทธิ์ของแชตไม่ถูกต้อง");
-        if (req.body.permission !== undefined && !supportsChatPermission(agent, req.body.permission)) throw new Error('สิทธิ์นี้ไม่รองรับสำหรับ provider นี้');
-        if (req.body.includeProjectContext !== undefined && typeof req.body.includeProjectContext !== 'boolean') throw new Error('การตั้งค่าบริบทโปรเจกต์ไม่ถูกต้อง');
+        if (req.body.skillId !== undefined && (typeof req.body.skillId !== "string" || !/^[a-f0-9]{20}$/.test(req.body.skillId))) throw new Error(tr("skill ไม่ถูกต้อง"));
+        if (req.body.permission !== undefined && !CHAT_PERMISSIONS.includes(req.body.permission)) throw new Error(tr("สิทธิ์ของแชตไม่ถูกต้อง"));
+        if (req.body.permission !== undefined && !supportsChatPermission(agent, req.body.permission)) throw new Error(tr("สิทธิ์นี้ไม่รองรับสำหรับ provider นี้"));
+        if (req.body.includeProjectContext !== undefined && typeof req.body.includeProjectContext !== 'boolean') throw new Error(tr("การตั้งค่าบริบทโปรเจกต์ไม่ถูกต้อง"));
         const style = responseStyle(req.body.responseStyle);
         if (!isCloud(agent)) await cliAuth.requireReady(agent, session.accountId || "system");
-        if (this.terminalManager.getSession(id) !== session || this.viewOf(id) !== "chat") return res.status(409).json({ error: "session เปลี่ยนไปแล้ว กรุณาลองใหม่" });
-        if (session.sleeping || ["running", "stopping"].includes(session.status)) return res.status(409).json({ error: "Terminal ยังปิดไม่เสร็จ กรุณารอก่อนส่งข้อความ" });
-        if (this.branchChanging) return res.status(409).json({ error: 'กำลังสลับ branch กรุณารอก่อนส่งข้อความ' });
+        if (this.terminalManager.getSession(id) !== session || this.viewOf(id) !== "chat") return res.status(409).json({ error: tr("session เปลี่ยนไปแล้ว กรุณาลองใหม่") });
+        if (session.sleeping || ["running", "stopping"].includes(session.status)) return res.status(409).json({ error: tr("Terminal ยังปิดไม่เสร็จ กรุณารอก่อนส่งข้อความ") });
+        if (this.branchChanging) return res.status(409).json({ error: tr("กำลังสลับ branch กรุณารอก่อนส่งข้อความ") });
         const outcome = this.chats.send(id, {
           agent,
           accountId: session.accountId || "system",
@@ -1179,15 +1202,15 @@ export class StudioServer {
     // The user's choices on a question card the AI asked.
     this.app.post("/api/terminals/:id/chat/question", (req: Request, res: Response) => {
       try {
-        if (typeof req.body?.itemId !== "string") throw new Error("ไม่พบคำถาม");
+        if (typeof req.body?.itemId !== "string") throw new Error(tr("ไม่พบคำถาม"));
         res.json(this.chats.answerQuestion(String(req.params.id), req.body.itemId, { answers: req.body.answers, skip: req.body.skip }));
       } catch (error: any) { res.status(400).json({ error: error.message }); }
     });
     // The user's answer to a permission card (Claude asked to use a tool its mode does not cover).
     this.app.post("/api/terminals/:id/chat/permission", async (req: Request, res: Response) => {
       const decision = req.body?.decision;
-      if (typeof req.body?.requestId !== "string" || !["allow", "always", "deny"].includes(decision)) return res.status(400).json({ error: "คำตอบไม่ถูกต้อง" });
-      if (!await this.chats.answerPermissionAsync(String(req.params.id), req.body.requestId, decision)) return res.status(409).json({ error: "คำขอหมดอายุหรือส่งคำตอบไม่สำเร็จ" });
+      if (typeof req.body?.requestId !== "string" || !["allow", "always", "deny"].includes(decision)) return res.status(400).json({ error: tr("คำตอบไม่ถูกต้อง") });
+      if (!await this.chats.answerPermissionAsync(String(req.params.id), req.body.requestId, decision)) return res.status(409).json({ error: tr("คำขอหมดอายุหรือส่งคำตอบไม่สำเร็จ") });
       res.json({ success: true });
     });
     // Guess the user's next message after a finished turn (grey text in the composer, Tab accepts).
@@ -1196,7 +1219,7 @@ export class StudioServer {
       const session = this.terminalManager.getSession(id);
       const agent = session?.agentType || "";
       if (isCloud(agent)) return res.json({ text: '' });
-      if (!session || !CHAT_CLIS.includes(agent)) return res.status(404).json({ error: "ไม่พบห้องแชต" });
+      if (!session || !CHAT_CLIS.includes(agent)) return res.status(404).json({ error: tr("ไม่พบห้องแชต") });
       const chat = this.chats.snapshot(id);
       // Nothing to guess while answering or when a message is already waiting to go (interrupt, queue).
       if (chat.running || chat.queued.length) return res.json({ text: "" });
@@ -1232,7 +1255,7 @@ export class StudioServer {
     this.app.post("/api/terminals/:id/restart", (req: Request, res: Response) => {
       try {
         const id = String(req.params.id);
-        if (this.chats.isRunning(id)) return res.status(409).json({ error: "แชตยังตอบข้อความก่อนหน้าอยู่ กรุณารอให้เสร็จก่อนเปิด Terminal" });
+        if (this.chats.isRunning(id)) return res.status(409).json({ error: tr("แชตยังตอบข้อความก่อนหน้าอยู่ กรุณารอให้เสร็จก่อนเปิด Terminal") });
         const session = this.terminalManager.restartSession(id, this.viewOf(id) === "chat" ? this.chats.conversationId(id) : undefined);
         this.saveSessions();
         res.json({ id: session.id, status: session.status, name: session.name, agentType: session.agentType });
@@ -1266,7 +1289,7 @@ export class StudioServer {
       "/api/terminals/:id/attachments",
       ...attachmentUpload(
         (req) => this.terminalManager.getSession(String(req.params.id))?.cwd,
-        "ไม่พบ session นี้แล้ว กรุณาเปิด session ใหม่แล้วแนบไฟล์อีกครั้ง",
+        tr("ไม่พบ session นี้แล้ว กรุณาเปิด session ใหม่แล้วแนบไฟล์อีกครั้ง"),
       ),
     );
     this.app.post(
@@ -1274,16 +1297,16 @@ export class StudioServer {
       ...attachmentUpload((req) => {
         const root = this.workspaceRegistry.getWorkspace(String(req.params.wsId))?.rootPath;
         return root && fs.existsSync(root) ? root : undefined;
-      }, "ไม่พบโฟลเดอร์โปรเจกต์ กรุณาตรวจโฟลเดอร์ในการตั้งค่าโปรเจกต์"),
+      }, tr("ไม่พบโฟลเดอร์โปรเจกต์ กรุณาตรวจโฟลเดอร์ในการตั้งค่าโปรเจกต์")),
     );
 
     const errors:ErrorRequestHandler=(error,_req,res,next)=>{
       if(res.headersSent)return next(error);
-      res.status(error.status||500).json({error:error.status===413?(_req.path.endsWith('/attachments')?'ไฟล์ใหญ่เกิน 20 MB กรุณาย่อรูปหรือแยกไฟล์ PDF ให้เล็กลงแล้วลองใหม่':'คำขอยาวเกินไป กรุณาลดข้อความแล้วลองใหม่'):error.message||'ระบบทำรายการไม่สำเร็จ กรุณาลองใหม่'});
+      res.status(error.status||500).json({error:error.status===413?(_req.path.endsWith('/attachments')?tr("ไฟล์ใหญ่เกิน 20 MB กรุณาย่อรูปหรือแยกไฟล์ PDF ให้เล็กลงแล้วลองใหม่"):tr("คำขอยาวเกินไป กรุณาลดข้อความแล้วลองใหม่")):error.message||tr("ระบบทำรายการไม่สำเร็จ กรุณาลองใหม่")});
     };
     this.app.use(errors);
     this.app.use("/api", (_req, res) =>
-      res.status(404).json({ error: "ไม่พบ API นี้" }),
+      res.status(404).json({ error: tr("ไม่พบ API นี้") }),
     );
 
     // Serve the built UI (packages/studio/client/dist), resolved relative to this
@@ -1395,6 +1418,7 @@ export class StudioServer {
         this.server.off("error", onError);
         const address = this.server.address();
         if (address && typeof address === "object") this.port = address.port;
+        setBrowserBase(`http://127.0.0.1:${this.port}`);
         this.loadSessions();
         this.restoreSessions();
         // A terminal's conversation id is only known once its CLI has written it: save now and then.
@@ -1410,8 +1434,8 @@ export class StudioServer {
 
   /** What an update would interrupt right now: running Agent/Chat work and CLIs still answering. */
   public busy(): string[] {
-    const chats = this.chats.running().map((id) => `แชตของ ${this.terminalManager.getSession(id)?.name || "session"}`);
-    return [...(this.agentRuns.running() ? ["งานใน Agent/Chat"] : []), ...this.terminalManager.activeSessions(), ...chats];
+    const chats = this.chats.running().map((id) => tr`แชตของ ${this.terminalManager.getSession(id)?.name || "session"}`);
+    return [...(this.agentRuns.running() ? [tr("งานใน Agent/Chat")] : []), ...this.terminalManager.activeSessions(), ...chats];
   }
 
   /** Save the open tabs so the next start reopens them on the same conversations. */

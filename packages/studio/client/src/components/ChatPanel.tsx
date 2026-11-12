@@ -6,6 +6,7 @@ import { ConfigShell } from "./ConfigShell";
 import { useTeamDraft } from "./useTeamDraft";
 import { ProviderAccess } from "./ProviderAccess";
 import { ComparisonArena } from "./ComparisonArena";
+import { tr } from '../i18n';
 
 export { ComparisonArena };
 
@@ -35,12 +36,12 @@ export function ChatConfigEditor({ workspaceId, clis, ollamaModels, disabled, on
   const { config, saved, edit: setConfig } = team;
   const edit = (index: number, seat: Seat) => setConfig((c) => ({ ...c, panel: c.panel.map((s, i) => (i === index ? seat : s)) }));
   return (
-    <ConfigShell label="ตั้งค่าทีม Chat" title={<><MessagesSquare size={19} /> ทีม Chat</>}
-      description="เลือก AI ที่ร่วมตอบคำถามเดียวกัน และกำหนดว่าจะให้ใครสรุปผล"
-      summary={`${saved.panel.length} AI · ${saved.summarizer ? "มีผู้สรุป" : "แยกคำตอบ"}`}
+    <ConfigShell label={tr("ตั้งค่าทีม Chat")} title={<><MessagesSquare size={19} /> {tr("ทีม Chat")}</>}
+      description={tr("เลือก AI ที่ร่วมตอบคำถามเดียวกัน และกำหนดว่าจะให้ใครสรุปผล")}
+      summary={`${saved.panel.length} AI · ${saved.summarizer ? tr("มีผู้สรุป") : tr("แยกคำตอบ")}`}
       disabled={disabled} onOpen={team.begin} onSave={team.save} onCancel={team.cancel}>
-      <section aria-label="AI ที่ร่วมตอบ"><h3>AI ที่ร่วมตอบ</h3>
-      <p className="team-section-description">แต่ละตัวได้รับคำถามแยกกัน และใช้โควตาของตัวเอง</p>
+      <section aria-label={tr("AI ที่ร่วมตอบ")}><h3>{tr("AI ที่ร่วมตอบ")}</h3>
+      <p className="team-section-description">{tr("แต่ละตัวได้รับคำถามแยกกัน และใช้โควตาของตัวเอง")}</p>
       {config.panel.map((seat, index) => (
         <div className="seat-row" key={index}>
           <span className="seat-badge">Main {index + 1}</span>
@@ -51,37 +52,37 @@ export function ChatConfigEditor({ workspaceId, clis, ollamaModels, disabled, on
       ))}
       <button className="text-button add-seat" disabled={disabled || config.panel.length >= MAX_PANEL}
         onClick={() => setConfig((c) => ({ ...c, panel: [...c.panel, seatFor(firstReady(clis, c.panel.map((s) => s.provider.slice(4))) || HEADLESS[0], `Main ${c.panel.length + 1}`)] }))}>
-        <Plus size={13} /> เพิ่ม Main ({config.panel.length}/{MAX_PANEL})
+        <Plus size={13} /> {tr("เพิ่ม Main (")}{config.panel.length}/{MAX_PANEL})
       </button>
       </section>
-      <section aria-label="สรุปคำตอบ"><h3>สรุปคำตอบ</h3>
-      <p className="team-section-description">เรียก AI เพิ่มอีกครั้งเพื่ออ่านคำตอบทั้งหมดและสรุปผล</p>
+      <section aria-label={tr("สรุปคำตอบ")}><h3>{tr("สรุปคำตอบ")}</h3>
+      <p className="team-section-description">{tr("เรียก AI เพิ่มอีกครั้งเพื่ออ่านคำตอบทั้งหมดและสรุปผล")}</p>
       <div className="summarizer-row">
         <label className="tool-permission">
           <input type="checkbox" checked={!!config.summarizer} disabled={disabled}
-            onChange={(e) => setConfig((c) => ({ ...c, summarizer: e.target.checked ? seatFor(c.panel[0]?.provider.slice(4) || HEADLESS[0], "ผู้สรุป") : null }))} />
-          ให้ AI สรุปผลรวม
+            onChange={(e) => setConfig((c) => ({ ...c, summarizer: e.target.checked ? seatFor(c.panel[0]?.provider.slice(4) || HEADLESS[0], tr("ผู้สรุป")) : null }))} />
+          {tr("ให้ AI สรุปผลรวม")}
         </label>
         {config.summarizer && (
-          <select aria-label="วิธีสรุป" value={config.style} disabled={disabled} onChange={(e) => setConfig((c) => ({ ...c, style: e.target.value as ChatConfig["style"] }))}>
-            <option value="merge">รวมทุกความเห็น</option>
-            <option value="best">คัดส่วนที่ดี ตัดส่วนที่อ่อนออก</option>
+          <select aria-label={tr("วิธีสรุป")} value={config.style} disabled={disabled} onChange={(e) => setConfig((c) => ({ ...c, style: e.target.value as ChatConfig["style"] }))}>
+            <option value="merge">{tr("รวมทุกความเห็น")}</option>
+            <option value="best">{tr("คัดส่วนที่ดี ตัดส่วนที่อ่อนออก")}</option>
           </select>
         )}
       </div>
       {config.summarizer && (
         <div className="seat-row">
-          <span className="seat-badge"><Sparkles size={13} /> ผู้สรุป</span>
-          <SeatPicker seat={config.summarizer} label="ผู้สรุป" clis={clis} ollamaModels={ollamaModels} disabled={disabled}
+          <span className="seat-badge"><Sparkles size={13} /> {tr("ผู้สรุป")}</span>
+          <SeatPicker seat={config.summarizer} label={tr("ผู้สรุป")} clis={clis} ollamaModels={ollamaModels} disabled={disabled}
             onChange={(summarizer) => setConfig((c) => ({ ...c, summarizer }))} />
         </div>
       )}
       </section>
-      <div className="team-access" aria-label="ความพร้อมของทีม">{Array.from(new Set([...config.panel, ...(config.summarizer ? [config.summarizer] : [])].filter(s => s.provider.startsWith("cli:")).map(s => `${s.provider.slice(4)}:${s.accountId || ""}`))).map(provider => <ProviderAccess key={provider} provider={provider.split(":")[0]} accountId={provider.split(":")[1] || undefined} wsId={workspaceId} compact />)}</div>
+      <div className="team-access" aria-label={tr("ความพร้อมของทีม")}>{Array.from(new Set([...config.panel, ...(config.summarizer ? [config.summarizer] : [])].filter(s => s.provider.startsWith("cli:")).map(s => `${s.provider.slice(4)}:${s.accountId || ""}`))).map(provider => <ProviderAccess key={provider} provider={provider.split(":")[0]} accountId={provider.split(":")[1] || undefined} wsId={workspaceId} compact />)}</div>
       <div className="summarizer-row">
         <label className="tool-permission">
           <input type="checkbox" checked={config.clarify === true} disabled={disabled} onChange={(e) => setConfig((c) => ({ ...c, clarify: e.target.checked }))} />
-          ถามกลับแบบมีตัวเลือกก่อนตอบเมื่อคำถามกำกวม (เหมือน Claude)
+          {tr("ถามกลับแบบมีตัวเลือกก่อนตอบเมื่อคำถามกำกวม (เหมือน Claude)")}
         </label>
       </div>
     </ConfigShell>

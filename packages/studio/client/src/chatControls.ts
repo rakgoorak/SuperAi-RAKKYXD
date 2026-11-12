@@ -3,6 +3,7 @@
  * session's account state, so the composer's send can use them for whichever session it targets.
  */
 import type { ResponseStyle } from './responseStyle';
+import { tr } from './i18n';
 export interface ChatPrefs {
   responseStyle: ResponseStyle;
   includeProjectContext: boolean;
@@ -18,7 +19,7 @@ export interface ChatPrefs {
 }
 
 export type ChatPermission = 'read' | 'edit' | 'auto' | 'review' | 'full' | 'ask' | 'approve_all';
-export const PERMISSION_LABEL: Record<ChatPermission, string> = { read: 'อ่านอย่างเดียว', edit: 'แก้ไฟล์ได้', auto: 'ทำเองอัตโนมัติ', review: 'Approve for me', full: 'เต็มสิทธิ์', ask: 'ถามก่อนทำ', approve_all: 'เต็มสิทธิ์' };
+const PERMISSION_VALUES = new Set<ChatPermission>(['read', 'edit', 'auto', 'review', 'full', 'ask', 'approve_all']);
 
 /**
  * The choices the composer offers: the same three or four for every AI, most careful first. The
@@ -29,13 +30,13 @@ export function permissionChoices(agent: string): { value: ChatPermission; label
   const asks = ['claude-code', 'codex', 'opencode'].includes(agent);
   const full: ChatPermission | null = agent === 'claude-code' || agent === 'codex' ? 'full' : agent === 'opencode' || agent === 'antigravity' ? 'approve_all' : null;
   return [
-    { value: 'read', label: 'อ่านอย่างเดียว', hint: 'อ่านและวางแผนได้ ไม่แก้ไฟล์และไม่รันคำสั่ง' },
-    ...(asks ? [{ value: 'ask' as const, label: 'ถามก่อนทำ', hint: 'ขออนุญาตในแชตก่อนแก้ไฟล์หรือรันคำสั่งทุกครั้ง' }] : []),
-    { value: 'auto', label: 'ทำเองอัตโนมัติ', hint: 'แก้ไฟล์และรันคำสั่งในโฟลเดอร์โปรเจกต์ได้เอง (แนะนำ)' },
-    ...(full ? [{ value: full, label: 'เต็มสิทธิ์', hint: 'ไม่ถามและไม่จำกัดเฉพาะโฟลเดอร์โปรเจกต์ ใช้เมื่อไว้ใจงานนี้เท่านั้น' }] : []),
+    { value: 'read', label: tr("อ่านอย่างเดียว"), hint: tr("อ่านและวางแผนได้ ไม่แก้ไฟล์และไม่รันคำสั่ง") },
+    ...(asks ? [{ value: 'ask' as const, label: tr("ถามก่อนทำ"), hint: tr("ขออนุญาตในแชตก่อนแก้ไฟล์หรือรันคำสั่งทุกครั้ง") }] : []),
+    { value: 'auto', label: tr("ทำเองอัตโนมัติ"), hint: tr("แก้ไฟล์และรันคำสั่งในโฟลเดอร์โปรเจกต์ได้เอง (แนะนำ)") },
+    ...(full ? [{ value: full, label: tr("เต็มสิทธิ์"), hint: tr("ไม่ถามและไม่จำกัดเฉพาะโฟลเดอร์โปรเจกต์ ใช้เมื่อไว้ใจงานนี้เท่านั้น") }] : []),
   ];
 }
-const isPermission = (value: unknown): value is ChatPermission => typeof value === 'string' && Object.prototype.hasOwnProperty.call(PERMISSION_LABEL, value);
+const isPermission = (value: unknown): value is ChatPermission => typeof value === 'string' && PERMISSION_VALUES.has(value as ChatPermission);
 
 const prefs = new Map<string, ChatPrefs>();
 const choices = new Set<string>();

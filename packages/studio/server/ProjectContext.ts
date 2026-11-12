@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { RULE_FILES, nativeRuleFiles } from './ProjectRules.js';
 import { styleGuidance, type ResponseStyle } from './ResponseStyle.js';
+import { tr } from './i18n.js';
 
 export interface ContextFile { path: string; source: 'rule' | 'pinned'; status: 'included' | 'native' | 'missing' | 'outside-root' | 'too-large' | 'unsupported' | 'budget' | 'duplicate' | 'unreadable'; }
 export interface ProjectContextChunk { source: 'instructions' | 'rule' | 'pinned'; file?: string; text: string; }
@@ -48,7 +49,7 @@ export function buildProjectContext(workspace: WorkspaceContext | undefined, cwd
   };
   const instructions = workspace?.instructions?.trim();
   if (instructions) {
-    if (!add({ source: 'instructions', text: `[คำสั่งประจำโปรเจกต์]\n${instructions}` })) throw new Error('คำสั่งประจำโปรเจกต์ยาวเกินไป กรุณาย่อก่อนส่ง');
+    if (!add({ source: 'instructions', text: `[คำสั่งประจำโปรเจกต์]\n${instructions}` })) throw new Error(tr("คำสั่งประจำโปรเจกต์ยาวเกินไป กรุณาย่อก่อนส่ง"));
     result.instructions = true;
   }
   const read = (rootPath: string, rel: string, source: ContextFile['source']) => {

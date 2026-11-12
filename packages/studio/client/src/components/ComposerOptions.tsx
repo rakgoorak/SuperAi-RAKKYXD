@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
+import { tr } from '../i18n';
 
 /** Native disclosure: keyboard reachable, dismissed outside or with Escape. */
 export function ComposerOptions({ label, children, attention = false }: { label: string; children: ReactNode; attention?: boolean }) {
@@ -38,7 +39,7 @@ export function ComposerOptions({ label, children, attention = false }: { label:
     return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', dismiss); };
   }, []);
   return <details ref={root} className={`composer-options ${attention ? 'needs-attention' : ''}`} onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary aria-label={label} title={attention ? `${label} · ตรวจบัญชี AI` : label} aria-expanded={open} aria-controls={id}><SlidersHorizontal size={15} />{attention && <span>ตรวจบัญชี</span>}</summary>
+    <summary aria-label={label} title={attention ? tr`${label} · ตรวจบัญชี AI` : label} aria-expanded={open} aria-controls={id}><SlidersHorizontal size={15} />{attention && <span>{tr("ตรวจบัญชี")}</span>}</summary>
     <div ref={popup} className="composer-options-popover" id={id} role="group" aria-label={label}>{children}</div>
   </details>;
 }

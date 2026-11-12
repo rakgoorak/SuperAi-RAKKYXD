@@ -6,6 +6,7 @@ import { AccountPicker } from './AccountPicker';
 import { ComposerOptions } from './ComposerOptions';
 import { ResponseStyleSelect } from './ResponseStyleSelect';
 import type { ResponseStyle } from '../responseStyle';
+import { tr } from '../i18n';
 
 export function QuickChatControls({ clis, provider, onProvider, accountId, onAccount, disabled, onSetup, style = 'normal', onStyle }: {
   clis: Cli[]; provider: string; onProvider: (id: string) => void; disabled: boolean; onSetup: () => void; style?: ResponseStyle; onStyle?: (value: ResponseStyle) => void;
@@ -15,18 +16,18 @@ export function QuickChatControls({ clis, provider, onProvider, accountId, onAcc
   const defaults = loadDefaults()[provider];
   return <div className="quick-chat-controls">
     {provider && <ProviderBadge provider={provider} />}
-    <label>ผู้ช่วย AI<select aria-label="AI สำหรับบทสนทนาใหม่" value={provider} onChange={event => onProvider(event.target.value)} disabled={disabled || !ready.length}>
-      {!ready.length && <option value="">ยังไม่มี AI พร้อมใช้</option>}
+    <label>{tr("ผู้ช่วย AI")}<select aria-label={tr("AI สำหรับบทสนทนาใหม่")} value={provider} onChange={event => onProvider(event.target.value)} disabled={disabled || !ready.length}>
+      {!ready.length && <option value="">{tr("ยังไม่มี AI พร้อมใช้")}</option>}
       {ready.map(cli => <option key={cli.id} value={cli.id}>{providerIdentity(cli.id).label}</option>)}
     </select></label>
-    {onAccount && <AccountPicker provider={provider} value={accountId} onChange={onAccount} disabled={disabled} label="บัญชีสำหรับบทสนทนาใหม่" />}
-    <span className="quick-chat-model" title="ใช้รุ่นและระดับการคิดจากการตั้งค่าของคุณ">{defaults?.model || 'ใช้รุ่นที่ตั้งไว้'}</span>
-    <ComposerOptions label="ตัวเลือกบทสนทนาใหม่">
+    {onAccount && <AccountPicker provider={provider} value={accountId} onChange={onAccount} disabled={disabled} label={tr("บัญชีสำหรับบทสนทนาใหม่")} />}
+    <span className="quick-chat-model" title={tr("ใช้รุ่นและระดับการคิดจากการตั้งค่าของคุณ")}>{defaults?.model || tr("ใช้รุ่นที่ตั้งไว้")}</span>
+    <ComposerOptions label={tr("ตัวเลือกบทสนทนาใหม่")}>
       {onStyle && <ResponseStyleSelect value={style} onChange={onStyle} disabled={disabled} />}
       {provider && <><strong>{providerIdentity(provider).label}</strong><p>{providerIdentity(provider).connection}</p><p>{providerIdentity(provider).attachments}</p></>}
-      <p>เริ่มด้วยสิทธิ์อ่านและวางแผน ปรับสิทธิ์แก้ไฟล์และรันคำสั่งได้ในห้องคุย</p>
-      <small>มุมมองนี้ใช้ CLI ความสามารถจึงอาจต่างจากแอป Desktop ของผู้ให้บริการ</small>
+      <p>{tr("เริ่มด้วยสิทธิ์อ่านและวางแผน ปรับสิทธิ์แก้ไฟล์และรันคำสั่งได้ในห้องคุย")}</p>
+      <small>{tr("มุมมองนี้ใช้ CLI ความสามารถจึงอาจต่างจากแอป Desktop ของผู้ให้บริการ")}</small>
     </ComposerOptions>
-    {!ready.length && <button type="button" className="text-button" disabled={disabled} onClick={onSetup}>เชื่อมต่อ AI</button>}
+    {!ready.length && <button type="button" className="text-button" disabled={disabled} onClick={onSetup}>{tr("เชื่อมต่อ AI")}</button>}
   </div>;
 }

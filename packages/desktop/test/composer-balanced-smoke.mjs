@@ -18,7 +18,7 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true });
 let checks = 0;
 const check = (value, label) => { assert.ok(value, label); checks++; console.log(`PASS ${label}`); };
 try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+  const page = await browser.newPage({ locale: 'th-TH',  viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
   page.setDefaultTimeout(12000);
   const errors = [], sent = [], cancelled = [], sockets = new Map();
   let modelReads = 0;
