@@ -31,3 +31,15 @@ packages/studio/client/public/ort/
 # AI planning notes written by skills during work sessions; not part of the public repo.
 docs/superpowers/
 .superpowers/
+
+# Working notes, audits and plans stay on the maintainer's machine. docs/ is the public website,
+# so only the Markdown files the site, the README or the release workflow use are kept.
+docs/*.md
+!docs/RELEASE.md
+!docs/DOWNLOADS.md
+!docs/DOWNLOADS_EN.md
+!docs/MULTI_ACCOUNT.md
+# Design and product context written for AI tools.
+/DESIGN.md
+/PRODUCT.md
+.freebuff/
