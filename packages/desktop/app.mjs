@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog, clipboard, nativeImage, nativeTheme, Notification } from "electron";
+import { app, BrowserWindow, ipcMain, shell, dialog, clipboard, nativeImage, nativeTheme, Notification, Tray, Menu } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -8,6 +8,7 @@ import { normalizeBrowserUrl } from "./browser-url.mjs";
 import { prepareDesktopPath } from "./platform-env.mjs";
 import { Updater } from "./updater.mjs";
 import { UsagePing } from "./usage.mjs";
+import { createTrayController } from './tray.mjs';
 prepareDesktopPath();
 // Started from inside a Claude Code session: do not pass its session markers on to the CLIs
 // opened here (with CLAUDE_CODE_CHILD_SESSION, Claude Code stops saving conversations).
@@ -27,7 +28,7 @@ if (process.env.SUPERAI_TEST_MODE === "1" || process.argv.includes("--disable-gp
 app.commandLine.appendSwitch("disable-gpu-process-crash-limit");
 // Same id as the installer's shortcuts: Windows groups the taskbar button with them and shows our toasts.
 if (process.platform === "win32") app.setAppUserModelId("com.rakgoorak.superai");
-let window, server, browser;
+let window, server, browser, trayController;
 const updater = new Updater({
   currentVersion: app.getVersion(),
   // SUPERAI_UPDATE_TEST lets a dev build exercise the real download/install path.
@@ -291,6 +292,16 @@ else {
         },
       });
       browser = new BrowserController(window);
+      try {
+        // Windows picks the right size out of the .ico; elsewhere the 1024px PNG must be shrunk
+        // to menu-bar size or it would cover the whole bar.
+        trayController = createTrayController({ app, window, Tray, Menu,
+          icon: process.platform === 'win32' ? path.join(directory, 'assets', 'icon.ico')
+            : nativeImage.createFromPath(path.join(directory, 'assets', 'icon.png')).resize({ width: 18, height: 18 }) });
+      } catch (error) {
+        // If the OS cannot create a tray icon, closing still exits instead of hiding an unreachable app.
+        await log(`System tray unavailable: ${error.message}`);
+      }
       window.once("ready-to-show", () => window.show());
       window.webContents.setWindowOpenHandler(({ url }) => {
         try {
@@ -315,7 +326,7 @@ else {
       window.on("focus", () => window.flashFrame(false));
       window.on("closed", () => {
         window = null;
-        app.quit();
+        if (!app.isQuitting) app.quit();
       });
       await window.loadURL(appUrl).catch((error) => {
         // A reload (Ctrl+R, the error screen's reload button) before the first load finished

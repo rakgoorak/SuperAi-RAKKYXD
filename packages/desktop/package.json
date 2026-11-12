@@ -7,8 +7,8 @@
   "main": "main.mjs",
   "scripts": {
     "start": "electron .",
-    "build": "node --check main.mjs && node --check app.mjs && node --check browser.mjs && node --check updater.mjs && node --check usage.mjs && node --check installer/installer-main.mjs && node --check installer/installer.js",
-    "test": "node --test browser.test.mjs updater.test.mjs usage.test.mjs smoke-harness.test.mjs"
+    "build": "node --check main.mjs && node --check app.mjs && node --check tray.mjs && node --check browser.mjs && node --check updater.mjs && node --check usage.mjs && node --check installer/installer-main.mjs && node --check installer/installer.js",
+    "test": "node --test browser.test.mjs updater.test.mjs usage.test.mjs smoke-harness.test.mjs tray.test.mjs"
   },
   "devDependencies": {
     "electron": "^33.4.11"
