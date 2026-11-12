@@ -6,6 +6,13 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.0.44] - 2026-11-12
+
+### Changed
+- Closing the window now hides the app in the system tray instead of quitting, so
+  background work keeps running. Click the tray icon to reopen it; choose Exit in
+  the tray menu to quit.
+
 ## [1.0.43] - 2026-11-12
 
 ### Fixed
