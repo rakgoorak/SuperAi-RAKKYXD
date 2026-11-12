@@ -26,6 +26,10 @@ try {
   const initial = await desktop.evaluate(({ BrowserWindow }) => ({ windowId: BrowserWindow.getAllWindows()[0].id,
     trayLive: !globalThis.superaiTrayFixture.tray.isDestroyed(), menu: globalThis.superaiTrayFixture.menu.items.map(item => ({ id: item.id, label: item.label })) }));
   assert.equal(initial.trayLive, true);
+  // The menu-bar icon must be menu-bar sized: a full-size app icon would cover the whole bar on macOS.
+  const bounds = await desktop.evaluate(() => globalThis.superaiTrayFixture.tray.getBounds());
+  steps.log(`tray bounds ${JSON.stringify(bounds)}`);
+  if (process.platform === 'darwin') assert.ok(bounds.width > 0 && bounds.width <= 44 && bounds.height <= 44, `tray icon fits the menu bar: ${JSON.stringify(bounds)}`);
   assert.ok(initial.menu.some(item => item.id === 'quit-app' && item.label.includes('Exit')));
   const base = new URL(page.url()).origin;
   const response = await fetch(base + '/api/terminals/spawn', { method: 'POST', headers: { 'Content-Type': 'application/json' },

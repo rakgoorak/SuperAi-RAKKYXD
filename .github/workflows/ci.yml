@@ -40,6 +40,11 @@ jobs:
         run: npm test
         timeout-minutes: 8
 
+      - name: Run Tray Smoke (macOS menu-bar icon)
+        if: runner.os == 'macOS'
+        run: npm run test:tray
+        timeout-minutes: 5
+
       - name: Run Desktop Smoke Harness (Windows)
         if: runner.os == 'Windows'
         run: npm run test:desktop
