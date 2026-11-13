@@ -53,12 +53,12 @@
     "test:provider-conversation": "node packages/desktop/test/provider-conversation-smoke.mjs"
   },
   "devDependencies": {
-    "@electron/packager": "^18.3.6",
-    "@types/node": "^22.10.2",
-    "@vitejs/plugin-react": "^4.7.0",
-    "rcedit": "^4.0.1",
+    "@electron/packager": "^20.3.0",
+    "@types/node": "^26.6.6",
+    "@vitejs/plugin-react": "^6.3.0",
+    "rcedit": "^5.0.2",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
-    "vite": "^6.4.4"
+    "typescript": "^7.0.2",
+    "vite": "^8.3.7"
   }
 }
