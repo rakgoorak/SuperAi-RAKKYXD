@@ -37,8 +37,9 @@ try {
   await codex.getByRole('button', { name: 'เพิ่มบัญชี', exact: true }).click();
   await codex.getByText('บัญชีงาน', { exact: true }).waitFor();
   const card = codex.locator('.account-card').filter({ has: page.getByText('บัญชีงาน', { exact: true }) });
-  await card.getByRole('button', { name: 'ใช้เป็นบัญชีเริ่มต้น', exact: true }).click();
+  // The first account added is the default straight away, and the computer's login is no longer listed.
   await card.getByText('เริ่มต้นสำหรับงานใหม่', { exact: true }).waitFor();
+  assert.equal(await codex.getByText('บัญชีหลักของเครื่อง', { exact: true }).count(), 0);
   const group = (await request('/api/accounts')).find(p => p.provider === 'codex');
   const a = group.profiles.find(p => p.name === 'บัญชีงาน');
   assert.ok(a.isDefault);
@@ -61,7 +62,7 @@ try {
   await personal.getByRole('button', { name: 'นำออก', exact: true }).click();
   await personal.getByRole('button', { name: 'ยืนยันนำออก', exact: true }).click();
   await personal.waitFor({ state: 'detached' });
-  assert.equal((await request('/api/accounts')).find(p => p.provider === 'codex').profiles.find(p => p.isDefault).id, 'system');
+  assert.equal((await request('/api/accounts')).find(p => p.provider === 'codex').profiles.find(p => p.isDefault).id, a.id, 'removing the default falls back to the first account, not the computer login');
   const agy = page.locator('.account-provider').filter({ has: page.getByRole('heading', { name: 'Antigravity', exact: true }) });
   assert.equal(await agy.getByRole('button', { name: 'เพิ่มบัญชี', exact: true }).count(), 0);
   await page.screenshot({ path: path.join(output, 'accounts-desktop.png') });
@@ -75,9 +76,8 @@ try {
   await page.getByRole('button', { name: 'เสร็จแล้ว', exact: true }).click();
   await page.getByRole('button', { name: 'สร้าง session', exact: true }).click();
   await page.locator('.cli-option').filter({ hasText: 'Codex' }).click();
-  const picker = page.locator('.session-model .account-picker select');
-  await picker.selectOption(a.id);
-  assert.equal(await picker.inputValue(), a.id);
+  // One account: nothing to choose, so no picker.
+  assert.equal(await page.locator('.session-model .account-picker').count(), 0);
   await page.screenshot({ path: path.join(output, 'accounts-session-picker.png') });
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ passed: true, checks: ['create', 'default', 'rename', 'remove', 'tab binding', 'account settings', 'agy restriction', 'desktop and compact layout', 'session picker', 'model defaults'], data }));

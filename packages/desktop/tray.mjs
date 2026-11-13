@@ -1,3 +1,4 @@
+import { tr } from './i18n.mjs';
 /** Keep the desktop workspace alive when its window is closed; quit only on an explicit exit. */
 export function createTrayController({ app, window, Tray, Menu, icon }) {
   // Create the icon before intercepting close: failure must never leave an unreachable window.
@@ -30,9 +31,9 @@ export function createTrayController({ app, window, Tray, Menu, icon }) {
   try {
     tray.setToolTip('SuperAi & RAKKYXD');
     tray.setContextMenu(Menu.buildFromTemplate([
-      { id: 'show-window', label: 'เปิด SuperAi', click: show },
+      { id: 'show-window', label: tr("เปิด SuperAi"), click: show },
       { type: 'separator' },
-      { id: 'quit-app', label: 'ออกจากโปรแกรม (Exit)', click: quit },
+      { id: 'quit-app', label: tr("ออกจากโปรแกรม (Exit)"), click: quit },
     ]));
     tray.on('click', show);
     tray.on('double-click', show);

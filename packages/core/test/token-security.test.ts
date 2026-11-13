@@ -405,7 +405,8 @@ test('preview forgetting closes tabs and clears shared cookies/storage/cache; bl
     const source = fs.readFileSync(new URL('../../desktop/browser.mjs', import.meta.url), 'utf8')
       .replace('import { WebContentsView, session } from "electron";',
         'const WebContentsView = null; const session = globalThis.__previewSessionTest;')
-      .replace('"./browser-url.mjs"', JSON.stringify(new URL('../../desktop/browser-url.mjs', import.meta.url).href));
+      .replace('"./browser-url.mjs"', JSON.stringify(new URL('../../desktop/browser-url.mjs', import.meta.url).href))
+      .replace("'./i18n.mjs'", JSON.stringify(new URL('../../desktop/i18n.mjs', import.meta.url).href));
     const { BrowserController } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
     const controller = new BrowserController({ on() {}, isDestroyed: () => false,
       webContents: { send: () => events.push('emit') } });

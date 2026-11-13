@@ -42,6 +42,7 @@ import { CliProvider } from './CliProvider.js';
 import { listMcpServers, saveMcpServer, removeMcpServer, toggleMcpServer } from './McpManager.js';
 import { serverLocale, setServerLocale, tr } from './i18n.js';
 import { browserHandler, browserToken, registerBrowserHandler, setBrowserBase, type BrowserHandler } from './BrowserTools.js';
+import { closeExternal, runExternal, type ExternalKind } from './ExternalBrowser.js';
 import { timingSafeEqual } from 'node:crypto';
 
 export function isValidLocalHost(hostHeader: string | undefined): boolean {
@@ -83,6 +84,8 @@ export class StudioServer {
   private workspaceRegistry: WorkspaceRegistry;
   private port: number = 3888;
   private branchChanging = false;
+  /** The browser the AI's tools act on after the last browser_open: the app panel, Chrome or Edge. */
+  private browserTarget = "app";
   /** Open tabs saved right before an in-app update, reopened on the next start. */
   private restoreFile: string;
 
@@ -817,12 +820,19 @@ export class StudioServer {
       const given = Buffer.from(String(req.headers["x-superai-browser-token"] || ""));
       const expected = Buffer.from(browserToken());
       if (given.length !== expected.length || !timingSafeEqual(given, expected)) return res.status(403).json({ error: "forbidden" });
-      const handler = browserHandler();
-      if (!handler) return res.status(503).json({ error: tr("Browser ในแอปใช้ได้เฉพาะแอป Desktop") });
       const tool = String(req.body?.tool || "");
       const args = req.body?.args && typeof req.body.args === "object" ? req.body.args : {};
-      try { res.json(await handler(tool, args)); }
-      catch (error) { res.status(400).json({ error: (error as Error).message }); }
+      // The browser named in the call, else the one the last browser_open used.
+      const asked = ["app", "chrome", "edge"].includes(args.browser) ? args.browser : undefined;
+      // computer_ tools always go to the desktop app.
+      const target = tool.startsWith("computer_") ? "app" : asked || (tool === "browser_open" ? "app" : this.browserTarget);
+      if (tool === "browser_open") this.browserTarget = target;
+      try {
+        if (target !== "app") return res.json(await runExternal(target as ExternalKind, tool, args));
+        const handler = browserHandler();
+        if (!handler) return res.status(503).json({ error: tr("Browser ในแอปใช้ได้เฉพาะแอป Desktop") + " (browser: chrome / edge)" });
+        res.json(await handler(tool, args));
+      } catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
 
     // The window reports its language so errors and notices from here come back in it.
@@ -1468,6 +1478,7 @@ export class StudioServer {
       clearInterval(this.saveTimer);
       this.saveSessions();
       this.agentRuns.stop();
+      void closeExternal();
       this.chats.stopAll();
       this.cliInstalls.stop();
       this.terminalManager.killAll();

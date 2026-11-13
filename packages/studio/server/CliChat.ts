@@ -586,7 +586,7 @@ export class CliChatManager {
   send(id: string, request: ChatRequest, options: { queue?: boolean; interrupt?: boolean } = {}): "sent" | "queued" | "interrupted" {
     if (isCloud(request.agent)) return this.sendApi(id, request, options);
     const { agent } = request;
-    const accountId = accounts.resolve(agent, request.accountId || "system");
+    const accountId = accounts.resolve(agent, request.accountId || undefined);
     const accountEnv = accounts.environment(agent, accountId);
     if (!CHAT_CLIS.includes(agent)) throw new Error(tr("CLI นี้ยังไม่รองรับมุมมองแชต กรุณาใช้ terminal"));
     if (request.permission && (!CHAT_PERMISSIONS.includes(request.permission) || !supportsChatPermission(agent, request.permission))) throw new Error(tr("สิทธิ์นี้ไม่รองรับสำหรับ provider นี้"));

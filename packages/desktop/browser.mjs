@@ -1,6 +1,7 @@
 import { WebContentsView, session } from "electron";
 import { randomUUID } from "node:crypto";
 import { normalizeBrowserUrl } from "./browser-url.mjs";
+import { tr } from './i18n.mjs';
 
 export class BrowserController {
   tabs = new Map();
@@ -19,7 +20,7 @@ export class BrowserController {
       tabs: [...this.tabs].map(([id, t]) => ({
         id,
         url: t.view.webContents.getURL() || t.url,
-        title: t.view.webContents.getTitle() || "แท็บใหม่",
+        title: t.view.webContents.getTitle() || tr("แท็บใหม่"),
         loading: t.view.webContents.isLoading(),
         error: t.error,
         canBack: t.view.webContents.canGoBack(),
@@ -55,7 +56,7 @@ export class BrowserController {
     } catch {}
   }
   async action(action, payload = {}) {
-    if (this.forgetting) throw new Error("กำลังล้างข้อมูล browser กรุณารอให้เสร็จ");
+    if (this.forgetting) throw new Error(tr("กำลังล้างข้อมูล browser กรุณารอให้เสร็จ"));
     if (action === "bounds") {
       this.bounds = {
         x: Number(payload.x) || 0,
@@ -68,7 +69,7 @@ export class BrowserController {
       return this.state();
     }
     if (action === "create") {
-      if (this.tabs.size >= 8) throw new Error("เปิด browser ได้สูงสุด 8 แท็บ");
+      if (this.tabs.size >= 8) throw new Error(tr("เปิด browser ได้สูงสุด 8 แท็บ"));
       const url = normalizeBrowserUrl(payload.url || "https://www.google.com");
       const id = randomUUID();
       const view = new WebContentsView({
@@ -127,14 +128,14 @@ export class BrowserController {
         "did-fail-load",
         (_e, code, description, _url, isMainFrame) => {
           if (isMainFrame && code !== -3) {
-            tab.error = `เปิดหน้าเว็บไม่ได้ (${code}): ${description}`;
+            tab.error = tr`เปิดหน้าเว็บไม่ได้ (${code}): ${description}`;
             this.layout();
             this.emit();
           }
         },
       );
       view.webContents.on("render-process-gone", () => {
-        tab.error = "หน้าเว็บหยุดทำงาน กรุณารีโหลด";
+        tab.error = tr("หน้าเว็บหยุดทำงาน กรุณารีโหลด");
         this.layout();
         this.emit();
       });
@@ -157,7 +158,7 @@ export class BrowserController {
       if (this.tabs.has(payload.id)) this.activeId = payload.id;
     } else if (action !== "state") {
       const tab = this.tabs.get(this.activeId);
-      if (!tab) throw new Error("กรุณาเปิดแท็บก่อน");
+      if (!tab) throw new Error(tr("กรุณาเปิดแท็บก่อน"));
       const wc = tab.view.webContents;
       if (action === "navigate") {
         const url = normalizeBrowserUrl(payload.url);
@@ -184,7 +185,7 @@ export class BrowserController {
     return this.state();
   }
   async forgetSession() {
-    if (this.forgetting) throw new Error("กำลังล้างข้อมูล browser");
+    if (this.forgetting) throw new Error(tr("กำลังล้างข้อมูล browser"));
     this.forgetting = true;
     try {
       this.destroy();

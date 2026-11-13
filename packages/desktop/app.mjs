@@ -1,15 +1,18 @@
 import { app, BrowserWindow, ipcMain, shell, dialog, clipboard, nativeImage, nativeTheme, Notification, Tray, Menu } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import os from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserController } from "./browser.mjs";
 import { createBrowserAutomation } from "./browser-automation.mjs";
+import { createComputerControl } from "./computer-control.mjs";
 import { normalizeBrowserUrl } from "./browser-url.mjs";
 import { prepareDesktopPath } from "./platform-env.mjs";
 import { Updater } from "./updater.mjs";
 import { UsagePing } from "./usage.mjs";
 import { createTrayController } from './tray.mjs';
+import { tr } from './i18n.mjs';
 prepareDesktopPath();
 // Started from inside a Claude Code session: do not pass its session markers on to the CLIs
 // opened here (with CLAUDE_CODE_CHILD_SESSION, Claude Code stops saving conversations).
@@ -28,10 +31,15 @@ if (process.env.SUPERAI_TEST_MODE === "1" || process.argv.includes("--disable-gp
 }
 app.commandLine.appendSwitch("disable-gpu-process-crash-limit");
 // Start in a given interface language (tests, or anyone who wants it); otherwise the computer's.
-if (/^[a-z]{2}(-[A-Za-z]{2})?$/.test(process.env.SUPERAI_LANG || "")) app.commandLine.appendSwitch("lang", process.env.SUPERAI_LANG);
+// The language picked in the installer (or later in the app) is the window's starting language.
+const chosenLanguage = (() => {
+  try { return readFileSync(path.join(process.env.SUPERAI_DATA_DIR || path.join(os.homedir(), ".opencode-multi"), "locale.txt"), "utf8").trim(); } catch { return ""; }
+})();
+const startLanguage = process.env.SUPERAI_LANG || chosenLanguage;
+if (/^[a-z]{2}(-[A-Za-z]{2})?$/.test(startLanguage)) app.commandLine.appendSwitch("lang", startLanguage);
 // Same id as the installer's shortcuts: Windows groups the taskbar button with them and shows our toasts.
 if (process.platform === "win32") app.setAppUserModelId("com.rakgoorak.superai");
-let window, server, browser, trayController, browserAutomation;
+let window, server, browser, trayController, browserAutomation, computer;
 const updater = new Updater({
   currentVersion: app.getVersion(),
   // SUPERAI_UPDATE_TEST lets a dev build exercise the real download/install path.
@@ -62,12 +70,12 @@ function trusted(event) {
     event.sender.id !== window.webContents.id ||
     event.senderFrame !== window.webContents.mainFrame
   )
-    throw new Error("ไม่อนุญาตการเรียกจากหน้าเว็บภายนอก");
+    throw new Error(tr("ไม่อนุญาตการเรียกจากหน้าเว็บภายนอก"));
 }
 ipcMain.handle("app:folder", async (e) => {
   trusted(e);
   const r = await dialog.showOpenDialog(window, {
-    title: "เลือกโฟลเดอร์โปรเจกต์",
+    title: tr("เลือกโฟลเดอร์โปรเจกต์"),
     properties: ["openDirectory", "createDirectory"],
   });
   return r.canceled ? null : r.filePaths[0];
@@ -79,21 +87,21 @@ ipcMain.handle("app:external", async (e, url) => {
 ipcMain.handle("clipboard:stage-image", async (e, filePath) => {
   trusted(e);
   if (typeof filePath !== "string" || !filePath.trim()) {
-    throw new Error("ตำแหน่งไฟล์ไม่ถูกต้อง");
+    throw new Error(tr("ตำแหน่งไฟล์ไม่ถูกต้อง"));
   }
   const cleanPath = path.resolve(filePath.trim());
   const ext = path.extname(cleanPath).toLowerCase();
   const ALLOWED_EXTS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"];
   if (!ALLOWED_EXTS.includes(ext)) {
-    throw new Error("รองรับเฉพาะไฟล์รูปภาพ");
+    throw new Error(tr("รองรับเฉพาะไฟล์รูปภาพ"));
   }
   const stat = await fs.stat(cleanPath);
   if (!stat.isFile() || stat.size > 20 * 1024 * 1024) {
-    throw new Error("ไฟล์รูปภาพต้องมีขนาดไม่เกิน 20 MB");
+    throw new Error(tr("ไฟล์รูปภาพต้องมีขนาดไม่เกิน 20 MB"));
   }
   const img = nativeImage.createFromPath(cleanPath);
   if (img.isEmpty()) {
-    throw new Error("ไม่สามารถอ่านข้อมูลรูปภาพได้");
+    throw new Error(tr("ไม่สามารถอ่านข้อมูลรูปภาพได้"));
   }
   clipboard.writeImage(img);
   return { success: true };
@@ -156,7 +164,7 @@ ipcMain.handle("update:action", async (e, action) => {
     return updater.cancel(), updater.state;
   }
   if (action === "install") return applyUpdate();
-  throw new Error("คำสั่งอัปเดตไม่ถูกต้อง");
+  throw new Error(tr("คำสั่งอัปเดตไม่ถูกต้อง"));
 });
 // Anonymous usage count (see usage.mjs). Only installed builds count, never dev or test runs.
 let usage;
@@ -165,11 +173,19 @@ const usagePing = () => usage ||= new UsagePing({
   version: app.getVersion(),
   active: app.isPackaged && !process.env.SUPERAI_TEST_MODE,
 });
+// "Let the AI control this computer" (Settings > AI control): read and switched by the window only.
+ipcMain.handle("computer:action", async (e, action, value) => {
+  trusted(e);
+  if (!computer) throw new Error(tr("คำสั่งไม่ถูกต้อง"));
+  if (action === "state") return computer.state();
+  if (action === "set") return computer.setEnabled(value === true);
+  throw new Error(tr("คำสั่งไม่ถูกต้อง"));
+});
 ipcMain.handle("usage:action", async (e, action, value) => {
   trusted(e);
   if (action === "state") return usagePing().state();
   if (action === "set") return usagePing().setEnabled(value === true);
-  throw new Error("คำสั่งไม่ถูกต้อง");
+  throw new Error(tr("คำสั่งไม่ถูกต้อง"));
 });
 ipcMain.handle("browser:action", async (e, action, payload) => {
   trusted(e);
@@ -187,7 +203,7 @@ ipcMain.handle("browser:action", async (e, action, payload) => {
       "bounds",
     ].includes(action)
   )
-    throw new Error("คำสั่ง browser ไม่ถูกต้อง");
+    throw new Error(tr("คำสั่ง browser ไม่ถูกต้อง"));
   return browser.action(action, payload);
 });
 // Kept referenced until closed: a garbage-collected Notification loses its click handler.
@@ -224,7 +240,7 @@ ipcMain.handle("credentials:forget", async (e, service) => {
     await browser.forgetSession();
     return { success: true, previewCleared: true };
   } catch {
-    return { success: false, error: "ลืมข้อมูลไม่สำเร็จ กรุณาตรวจคลัง credential ของระบบ" };
+    return { success: false, error: tr("ลืมข้อมูลไม่สำเร็จ กรุณาตรวจคลัง credential ของระบบ") };
   }
 });
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -255,6 +271,7 @@ else {
           port,
           // The AI's browser tools act on the side browser panel of this window.
           browser: (tool, args) => {
+            if (tool.startsWith("computer_")) return computer ? computer.run(tool, args) : Promise.reject(new Error("The SuperAi window is not open yet"));
             if (!browserAutomation) return Promise.reject(new Error("The SuperAi window is not open yet"));
             return browserAutomation(tool, args);
           },
@@ -270,7 +287,7 @@ else {
           await candidate.stop().catch(() => {});
         }
       }
-      if (!server) throw new Error("พอร์ต 3888–3899 ถูกใช้งานทั้งหมด");
+      if (!server) throw new Error(tr("พอร์ต 3888–3899 ถูกใช้งานทั้งหมด"));
       await fs.mkdir(path.dirname(portFile), { recursive: true }).catch(() => {});
       await fs.writeFile(portFile, JSON.stringify({ port: server.getPort() })).catch(() => {});
       window = new BrowserWindow({
@@ -300,6 +317,11 @@ else {
         },
       });
       browser = new BrowserController(window);
+      computer = createComputerControl({
+        settingsFile: path.join(app.getPath("userData"), "computer-use.json"),
+        // The Stop button on the bar turns it off; the settings screen shows the new state.
+        onStop: () => { if (!window.isDestroyed()) window.webContents.send("computer:state", computer.state()); },
+      });
       browserAutomation = createBrowserAutomation(browser, {
         reveal: () => { if (!window.isDestroyed()) window.webContents.send("browser:reveal", {}); },
       });
@@ -354,8 +376,8 @@ else {
     } catch (error) {
       await log(error.stack || error.message);
       dialog.showErrorBox(
-        "เปิด SuperAi & RAKKYXD ไม่สำเร็จ",
-        `${error.message}\nลอง npm run build แล้วเปิดใหม่`,
+        tr("เปิด SuperAi & RAKKYXD ไม่สำเร็จ"),
+        tr`${error.message}\nลอง npm run build แล้วเปิดใหม่`,
       );
       app.quit();
     }
@@ -363,6 +385,7 @@ else {
   app.on("before-quit", () => {
     app.isQuitting = true;
     browser?.destroy();
+    computer?.dispose();
     server?.stop().catch(() => {});
   });
   app.on("window-all-closed", () => app.quit());

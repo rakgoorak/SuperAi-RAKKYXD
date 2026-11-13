@@ -87,6 +87,7 @@ import { CliInstaller } from "./components/CliInstaller";
 import { LaunchPresets, type LaunchSeat } from "./components/LaunchPresets";
 import { VoiceSettingsPanel } from "./components/VoiceSettingsPanel";
 import { NotifySettingsPanel } from "./components/NotifySettingsPanel";
+import { ComputerUsePanel } from "./components/ComputerUsePanel";
 import { ApiKeysPanel } from "./components/ApiKeysPanel";
 import { McpManagerPanel } from "./components/McpManagerPanel";
 import { finishedRuns, notifyDone, onNoticeOpen, runNotice } from "./completionNotify";
@@ -2191,7 +2192,7 @@ export function App() {
             {dialog === "settings" && (
               <>
                 <div className="mission-settings">
-<nav className="settings-nav" aria-label={tr("หมวดการตั้งค่า")}>{[["language", t("settings.tab_language", "ภาษา / Language")], ["tools", t("settings.tab_tools", "เครื่องมือ AI")], ["accounts", tr("บัญชี AI")], ["apikeys", t("settings.tab_apikeys", "API Key")], ["mcp", t("settings.tab_mcp", "MCP Servers")], ["models", t("settings.tab_models", "Model และ Effort")], ["folders", t("settings.tab_folders", "โฟลเดอร์")], ["voice", t("settings.tab_voice", "เสียง")], ["notify", t("settings.tab_notify", "แจ้งเตือนและคำแนะนำ")]].map(([id, label]) => <button key={id} aria-current={settingsTab === id ? "page" : undefined} onClick={() => setSettingsTab(id)}>{label}</button>)}</nav>
+<nav className="settings-nav" aria-label={tr("หมวดการตั้งค่า")}>{[["language", t("settings.tab_language", "ภาษา / Language")], ["tools", t("settings.tab_tools", "เครื่องมือ AI")], ["accounts", tr("บัญชี AI")], ["apikeys", t("settings.tab_apikeys", "API Key")], ["mcp", t("settings.tab_mcp", "MCP Servers")], ["models", t("settings.tab_models", "Model และ Effort")], ["folders", t("settings.tab_folders", "โฟลเดอร์")], ["voice", t("settings.tab_voice", "เสียง")], ["notify", t("settings.tab_notify", "แจ้งเตือนและคำแนะนำ")], ["computer", tr("ควบคุมคอมพิวเตอร์")]].map(([id, label]) => <button key={id} aria-current={settingsTab === id ? "page" : undefined} onClick={() => setSettingsTab(id)}>{label}</button>)}</nav>
 <div className="settings-content">
 {settingsTab === "accounts" && <section><AccountsPanel wsId={activeWs || undefined} /></section>}
 <section hidden={settingsTab !== "language"}>
@@ -2301,7 +2302,7 @@ export function App() {
                       {tr("ใส่ในช่องคำสั่ง")}
                     </button>
                   </div>
-                  </section><section hidden={settingsTab !== "mcp"}><McpManagerPanel cwd={workspace?.rootPath} onError={showError} onNotice={setNotice} /></section><section hidden={settingsTab !== "voice"}><VoiceSettingsPanel settings={voiceSettings} onChange={setVoiceSettings} /></section><section hidden={settingsTab !== "notify"}><NotifySettingsPanel /></section><section hidden={settingsTab !== "apikeys"}><ApiKeysPanel onNotice={setNotice} /></section></div>
+                  </section><section hidden={settingsTab !== "computer"}><ComputerUsePanel onError={showError} /></section><section hidden={settingsTab !== "mcp"}><McpManagerPanel cwd={workspace?.rootPath} onError={showError} onNotice={setNotice} /></section><section hidden={settingsTab !== "voice"}><VoiceSettingsPanel settings={voiceSettings} onChange={setVoiceSettings} /></section><section hidden={settingsTab !== "notify"}><NotifySettingsPanel /></section><section hidden={settingsTab !== "apikeys"}><ApiKeysPanel onNotice={setNotice} /></section></div>
                 </div>
                 <div className="dialog-footer">
                   <span className="muted">{tr("บันทึกการตั้งค่าอัตโนมัติ")}</span>

@@ -9,6 +9,23 @@ let info = null;
 let target = "";
 let installedExe = "";
 
+// The installer's own language: the one chosen earlier in the app, else the computer's, else English.
+const TEXT = window.INSTALLER_TEXT;
+let lang = (() => {
+  for (const code of navigator.languages || [navigator.language]) { const short = String(code || "").slice(0, 2).toLowerCase(); if (TEXT[short]) return short; }
+  return "en";
+})();
+const T = (key, values = {}) => (TEXT[lang][key] ?? TEXT.en[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => values[name] ?? "");
+function applyLanguage() {
+  document.documentElement.lang = lang;
+  $("language").value = lang;
+  document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T(el.dataset.t)));
+  document.querySelectorAll("[data-t-html]").forEach((el) => (el.innerHTML = T(el.dataset.tHtml)));
+  document.querySelectorAll("[data-t-label]").forEach((el) => el.setAttribute("aria-label", T(el.dataset.tLabel)));
+  if (info) describe();
+  void api.locale?.(lang);
+}
+
 const mb = (bytes) => (bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.round(bytes / 1024 ** 2)} MB`);
 const setState = (state) => (body.dataset.state = state);
 
@@ -35,14 +52,20 @@ async function load() {
     showLocation(info.dir);
     // An earlier choice to stop the usage count is kept when updating.
     if (info.usage === false) $("usage").checked = false;
-    $("meta").textContent = `เวอร์ชัน ${info.version} · ใช้พื้นที่ ${mb(info.required)}${info.free ? ` · ว่าง ${mb(info.free)}` : ""}`;
-    if (info.existing) {
-      $("install-label").textContent = "อัปเดตเป็นเวอร์ชันนี้";
-      $("welcome-title").innerHTML = "ติดตั้งทับ<br />เวอร์ชันเดิม";
-    }
-    if (info.free && info.free < info.required * 1.1) $("meta").textContent += " · พื้นที่ไม่พอ";
+    if (info.locale && TEXT[info.locale]) lang = info.locale;
+    applyLanguage();
   } catch (error) {
     fail(error);
+  }
+}
+
+/** Version, size and the wording that depends on an existing install. */
+function describe() {
+  $("meta").textContent = T("meta", { version: info.version, size: mb(info.required) }) + (info.free ? T("free", { size: mb(info.free) }) : "")
+    + (info.free && info.free < info.required * 1.1 ? T("noSpace") : "");
+  if (info.existing) {
+    $("install-label").textContent = T("update");
+    $("welcome-title").innerHTML = T("welcomeUpdate");
   }
 }
 
@@ -87,9 +110,9 @@ $("install").addEventListener("click", async () => {
   $("percent").textContent = "0";
   setState("installing");
   try {
-    const result = await api.install({ dir: target, desktop: $("desktop").checked, usage: $("usage").checked });
+    const result = await api.install({ dir: target, desktop: $("desktop").checked, usage: $("usage").checked, locale: lang });
     installedExe = result.exe;
-    $("done-version").textContent = info ? `v${info.version}` : "";
+    $("done-lead").textContent = T("doneLead", { version: info ? `v${info.version}` : "" });
     $("done-desktop").hidden = !$("desktop").checked;
     setTimeout(() => {
       setState("done");
@@ -109,6 +132,8 @@ document.querySelectorAll("[data-window]").forEach((button) =>
   button.addEventListener("click", () => void api.window(button.dataset.window)),
 );
 
+$("language").addEventListener("change", (event) => { lang = event.target.value; applyLanguage(); });
+applyLanguage();
 setOrbit(0);
 void load();
 

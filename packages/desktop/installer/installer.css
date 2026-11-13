@@ -108,3 +108,7 @@ h1 { font-size: 30px; line-height: 1.32; font-weight: 700; letter-spacing: -0.01
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition-duration: 0.01ms !important; }
 }
+
+/* Language choice, at the right of the title bar next to the window buttons. */
+.titlebar .language { margin-left: auto; margin-right: 6px; height: 26px; padding: 0 8px; border: 1px solid #ffffff1f; border-radius: 6px; background: #0b121a; color: var(--dim); font: inherit; font-size: 12px; -webkit-app-region: no-drag; cursor: pointer; }
+.titlebar .language:hover, .titlebar .language:focus-visible { color: #fff; border-color: #ffffff40; outline: none; }

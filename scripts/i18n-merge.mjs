@@ -37,7 +37,8 @@ function readTranslations(file) {
 
 let incomplete = false;
 for (const [area, dir] of Object.entries(AREAS)) for (const locale of locales) {
-  const sourceKeys = [...sources(area).keys()];
+  // The server's dictionaries also cover the desktop app's main process.
+  const sourceKeys = [...new Set([...sources(area).keys(), ...(area === 'server' ? sources('desktop').keys() : [])])];
   const file = path.join(root, dir, `${locale}.ts`);
   const current = readTranslations(file);
   const merged = Object.fromEntries(sourceKeys.map((key) => [key, current[key] || '']));

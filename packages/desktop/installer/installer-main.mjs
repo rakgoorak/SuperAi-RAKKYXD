@@ -24,6 +24,33 @@ const SHORTCUT_DIR = process.env.SUPERAI_INSTALL_SHORTCUT_DIR || "";
 const USAGE_FILE = process.env.SUPERAI_INSTALL_USAGE_FILE || path.join(app.getPath("appData"), APPNAME, "usage.json");
 const PRIVACY_URL = "https://github.com/rakgoorak/SuperAi-RAKKYXD/blob/main/PRIVACY.md";
 const readUsage = () => { try { return JSON.parse(fs.readFileSync(USAGE_FILE, "utf8")); } catch { return {}; } };
+// The language chosen here is the app's first language (the app reads the same file; see
+// packages/studio/server/i18n.ts). An earlier choice made in the app is shown first.
+const LOCALE_FILE = process.env.SUPERAI_INSTALL_LOCALE_FILE || path.join(os.homedir(), ".opencode-multi", "locale.txt");
+const LOCALES = ["th", "en", "ja", "zh"];
+const readLocale = () => { try { const v = fs.readFileSync(LOCALE_FILE, "utf8").trim(); return LOCALES.includes(v) ? v : ""; } catch { return ""; } };
+// Empty until chosen: messages then follow the computer's language (known once the app is ready).
+let locale = readLocale();
+const current = () => locale || (LOCALES.includes(app.getLocale().slice(0, 2)) ? app.getLocale().slice(0, 2) : "en");
+const MESSAGES = {
+  en: { denied: "Not allowed", pick: "Choose where to install", shortcut: "Could not create the shortcut: {0}", busy: "Already installing",
+    noDir: "Please choose an install folder", otherDir: "Choose another folder", running: "{0} is open. Please close it, then press install again",
+    noWrite: "No permission to write this folder. Please choose another one, e.g. inside your user folder", noUninstaller: "The uninstaller is missing from the setup files",
+    noApp: "The app was not found", title: "Install {0}" },
+  th: { denied: "ไม่อนุญาต", pick: "เลือกโฟลเดอร์ที่จะติดตั้ง", shortcut: "สร้างทางลัดไม่สำเร็จ: {0}", busy: "กำลังติดตั้งอยู่",
+    noDir: "กรุณาเลือกโฟลเดอร์ติดตั้ง", otherDir: "เลือกโฟลเดอร์อื่น", running: "{0} กำลังเปิดอยู่ กรุณาปิดโปรแกรมก่อน แล้วกดติดตั้งอีกครั้ง",
+    noWrite: "ไม่มีสิทธิ์เขียนโฟลเดอร์นี้ กรุณาเลือกโฟลเดอร์อื่น เช่นในโฟลเดอร์ผู้ใช้ของคุณ", noUninstaller: "ไม่พบตัวถอนการติดตั้งในไฟล์ติดตั้ง",
+    noApp: "ไม่พบโปรแกรม", title: "ติดตั้ง {0}" },
+  ja: { denied: "許可されていません", pick: "インストール先を選択", shortcut: "ショートカットを作成できませんでした: {0}", busy: "インストール中です",
+    noDir: "インストール先のフォルダーを選択してください", otherDir: "別のフォルダーを選択してください", running: "{0} が起動しています。終了してからもう一度インストールを押してください",
+    noWrite: "このフォルダーへの書き込み権限がありません。ユーザーフォルダー内など、別のフォルダーを選択してください", noUninstaller: "セットアップファイルにアンインストーラーがありません",
+    noApp: "アプリが見つかりません", title: "{0} のインストール" },
+  zh: { denied: "不允许", pick: "选择安装位置", shortcut: "无法创建快捷方式: {0}", busy: "正在安装",
+    noDir: "请选择安装文件夹", otherDir: "请选择其他文件夹", running: "{0} 正在运行，请先关闭程序再点击安装",
+    noWrite: "没有写入此文件夹的权限，请选择其他文件夹，例如你的用户文件夹中", noUninstaller: "安装文件中缺少卸载程序",
+    noApp: "未找到程序", title: "安装 {0}" },
+};
+const M = (key, value = "") => (MESSAGES[current()] || MESSAGES.en)[key].replace("{0}", value);
 
 // Keep installer state out of the real app's profile and single-instance lock.
 app.setPath("userData", path.join(os.tmpdir(), `superai-installer-${process.pid}`));
@@ -81,7 +108,7 @@ let manifest; // files of the payload, listed once
 const send = (channel, data) => window?.webContents.send(channel, data);
 
 function trusted(event) {
-  if (!window || event.sender.id !== window.webContents.id) throw new Error("ไม่อนุญาต");
+  if (!window || event.sender.id !== window.webContents.id) throw new Error(M("denied"));
 }
 
 async function defaultDir() {
@@ -98,13 +125,13 @@ ipcMain.handle("installer:info", async (e) => {
     const s = await fsp.statfs(path.parse(dir).root);
     free = s.bavail * s.bsize;
   } catch {}
-  return { version, dir, existing: !!existing, required: manifest.bytes, free, usage: readUsage().enabled !== false };
+  return { version, dir, existing: !!existing, required: manifest.bytes, free, usage: readUsage().enabled !== false, locale };
 });
 
 ipcMain.handle("installer:pick", async (e, current) => {
   trusted(e);
   const r = await dialog.showOpenDialog(window, {
-    title: "เลือกโฟลเดอร์ที่จะติดตั้ง",
+    title: M("pick"),
     defaultPath: current,
     properties: ["openDirectory", "createDirectory"],
   });
@@ -121,7 +148,7 @@ async function shortcut(file, target) {
     description: APPNAME,
     appUserModelId: "com.rakgoorak.superai",
   });
-  if (!ok) throw new Error(`สร้างทางลัดไม่สำเร็จ: ${file}`);
+  if (!ok) throw new Error(M("shortcut", file));
 }
 
 async function register(dir, sizeKB) {
@@ -149,12 +176,12 @@ ipcMain.handle("installer:install", async (e, opts) => {
 
 /** Copy the app, create shortcuts and register it. Used by the UI and by `Setup.exe /S`. */
 async function install(opts) {
-  if (busy) throw new Error("กำลังติดตั้งอยู่");
+  if (busy) throw new Error(M("busy"));
   busy = true;
   try {
     const dir = resolveTarget(String(opts?.dir || ""));
-    if (!path.isAbsolute(dir)) throw new Error("กรุณาเลือกโฟลเดอร์ติดตั้ง");
-    if (path.resolve(dir) === payload) throw new Error("เลือกโฟลเดอร์อื่น");
+    if (!path.isAbsolute(dir)) throw new Error(M("noDir"));
+    if (path.resolve(dir) === payload) throw new Error(M("otherDir"));
     manifest ||= await listFiles(payload);
     await fsp.mkdir(dir, { recursive: true });
     send("installer:progress", { step: "prepare", dir });
@@ -165,14 +192,14 @@ async function install(opts) {
         await fsp.rename(exe, exe + ".check");
         await fsp.rename(exe + ".check", exe);
       } catch {
-        throw new Error(`${APPNAME} กำลังเปิดอยู่ กรุณาปิดโปรแกรมก่อน แล้วกดติดตั้งอีกครั้ง`);
+        throw new Error(M("running", APPNAME));
       }
     }
     try {
       await fsp.writeFile(path.join(dir, `.write-test-${process.pid}`), "");
       await fsp.rm(path.join(dir, `.write-test-${process.pid}`), { force: true });
     } catch {
-      throw new Error("ไม่มีสิทธิ์เขียนโฟลเดอร์นี้ กรุณาเลือกโฟลเดอร์อื่น เช่นในโฟลเดอร์ผู้ใช้ของคุณ");
+      throw new Error(M("noWrite"));
     }
     // resources\app belongs to SuperAi: replace it whole so files from older versions go away.
     await fsp.rm(path.join(dir, "resources", "app"), { recursive: true, force: true });
@@ -202,8 +229,12 @@ async function install(opts) {
       await fsp.mkdir(path.dirname(USAGE_FILE), { recursive: true });
       await fsp.writeFile(USAGE_FILE, JSON.stringify({ ...readUsage(), enabled: opts.usage }), { mode: 0o600 });
     }
+    if (LOCALES.includes(opts?.locale)) {
+      await fsp.mkdir(path.dirname(LOCALE_FILE), { recursive: true });
+      await fsp.writeFile(LOCALE_FILE, opts.locale);
+    }
     send("installer:progress", { step: "register" });
-    if (!fs.existsSync(path.join(dir, UNINSTALLER))) throw new Error("ไม่พบตัวถอนการติดตั้งในไฟล์ติดตั้ง");
+    if (!fs.existsSync(path.join(dir, UNINSTALLER))) throw new Error(M("noUninstaller"));
     await register(dir, Math.round(manifest.bytes / 1024));
     send("installer:progress", { step: "done", dir });
     return { dir, exe };
@@ -212,6 +243,11 @@ async function install(opts) {
   }
 }
 
+ipcMain.handle("installer:locale", (e, value) => {
+  trusted(e);
+  if (LOCALES.includes(value)) locale = value;
+});
+
 ipcMain.handle("installer:privacy", (e) => {
   trusted(e);
   return shell.openExternal(PRIVACY_URL);
@@ -219,7 +255,7 @@ ipcMain.handle("installer:privacy", (e) => {
 
 ipcMain.handle("installer:launch", async (e, exe) => {
   trusted(e);
-  if (typeof exe !== "string" || path.basename(exe) !== EXE || !fs.existsSync(exe)) throw new Error("ไม่พบโปรแกรม");
+  if (typeof exe !== "string" || path.basename(exe) !== EXE || !fs.existsSync(exe)) throw new Error(M("noApp"));
   spawn(exe, [], { detached: true, stdio: "ignore", cwd: path.dirname(exe) }).unref();
   setTimeout(() => app.quit(), 400);
 });
@@ -258,7 +294,7 @@ else
       maximizable: false,
       frame: false,
       show: false,
-      title: `ติดตั้ง ${APPNAME}`,
+      title: M("title", APPNAME),
       backgroundColor: "#05090e",
       icon: path.join(here, "..", "assets", "icon.ico"),
       webPreferences: { preload: path.join(here, "installer-preload.cjs"), contextIsolation: true, sandbox: true, nodeIntegration: false },

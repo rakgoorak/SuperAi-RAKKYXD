@@ -8,6 +8,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { spawn, execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { tr } from './i18n.mjs';
 
 export const RELEASES_REPO = process.env.SUPERAI_UPDATE_REPO || "rakgoorak/SuperAi-RAKKYXD-releases";
 const DOWNLOAD_HOSTS = /^(github\.com|objects\.githubusercontent\.com|release-assets\.githubusercontent\.com|[\w-]+\.githubusercontent\.com)$/;
@@ -65,7 +66,7 @@ export const windowsTar = () => path.join(process.env.SystemRoot || "C:\\Windows
 
 function checkUrl(url) {
   const u = new URL(url);
-  if (u.protocol !== "https:" || !DOWNLOAD_HOSTS.test(u.hostname)) throw new Error("ลิงก์ดาวน์โหลดไม่ได้มาจาก GitHub");
+  if (u.protocol !== "https:" || !DOWNLOAD_HOSTS.test(u.hostname)) throw new Error(tr("ลิงก์ดาวน์โหลดไม่ได้มาจาก GitHub"));
   return u.href;
 }
 
@@ -115,14 +116,14 @@ export class Updater {
         headers: { Accept: "application/vnd.github+json", "User-Agent": "SuperAi-RAKKYXD-updater" },
         signal: AbortSignal.timeout(20000),
       });
-      if (res.status === 404) return this.set({ status: "none", error: "ยังไม่มี release ให้ดาวน์โหลด", checkedAt: Date.now() });
-      if (res.status === 403 || res.status === 429) throw new Error("GitHub จำกัดจำนวนครั้งที่ตรวจ กรุณาลองใหม่ภายหลัง");
-      if (!res.ok) throw new Error(`ตรวจอัปเดตไม่สำเร็จ (${res.status})`);
+      if (res.status === 404) return this.set({ status: "none", error: tr("ยังไม่มี release ให้ดาวน์โหลด"), checkedAt: Date.now() });
+      if (res.status === 403 || res.status === 429) throw new Error(tr("GitHub จำกัดจำนวนครั้งที่ตรวจ กรุณาลองใหม่ภายหลัง"));
+      if (!res.ok) throw new Error(tr`ตรวจอัปเดตไม่สำเร็จ (${res.status})`);
       const data = await res.json();
       const releases = (Array.isArray(data) ? data : [data])
         .filter((r) => r && r.tag_name && !r.draft && !r.prerelease)
         .sort((a, b) => compareVersions(b.tag_name, a.tag_name));
-      if (!releases.length) return this.set({ status: "none", error: "ยังไม่มี release ให้ดาวน์โหลด", checkedAt: Date.now() });
+      if (!releases.length) return this.set({ status: "none", error: tr("ยังไม่มี release ให้ดาวน์โหลด"), checkedAt: Date.now() });
       const release = releases[0];
       const latest = String(release.tag_name).replace(/^v/i, "");
       const asset = pickAsset(release.assets);
@@ -137,7 +138,7 @@ export class Updater {
         releaseUrl: release.html_url,
         asset: asset ? { name: asset.zip.name, size: asset.zip.size, url: asset.zip.browser_download_url, sha: asset.sha?.browser_download_url || "" } : null,
         checkedAt: Date.now(),
-        error: newer && !asset ? "release นี้ยังไม่มีไฟล์สำหรับเครื่องนี้" : "",
+        error: newer && !asset ? tr("release นี้ยังไม่มีไฟล์สำหรับเครื่องนี้") : "",
       });
     } catch (err) {
       // A dropped connection must not hide an update an earlier check already found.
@@ -149,9 +150,9 @@ export class Updater {
   async download() {
     const asset = this.state.asset;
     if (this.state.status !== "available" && this.state.status !== "error") return this.state;
-    if (!asset) throw new Error("ตรวจอัปเดตก่อน");
-    if (!this.packaged) throw new Error("โหมดพัฒนา (รันจาก source) อัปเดตด้วย git pull และ npm run build แทน");
-    if (!asset.sha) throw new Error("release นี้ไม่มีไฟล์ SHA-256 จึงไม่ติดตั้งให้เพื่อความปลอดภัย");
+    if (!asset) throw new Error(tr("ตรวจอัปเดตก่อน"));
+    if (!this.packaged) throw new Error(tr("โหมดพัฒนา (รันจาก source) อัปเดตด้วย git pull และ npm run build แทน"));
+    if (!asset.sha) throw new Error(tr("release นี้ไม่มีไฟล์ SHA-256 จึงไม่ติดตั้งให้เพื่อความปลอดภัย"));
     this.controller = new AbortController();
     const work = path.join(this.tempDir, `superai-update-${this.state.latestVersion}-${Date.now()}`);
     await fsp.mkdir(work, { recursive: true });
@@ -159,11 +160,11 @@ export class Updater {
     try {
       this.set({ status: "downloading", progress: 0, error: "" });
       const shaRes = await this.http(checkUrl(asset.sha), { signal: this.controller.signal });
-      if (!shaRes.ok) throw new Error(`โหลดไฟล์ตรวจสอบไม่สำเร็จ (${shaRes.status})`);
+      if (!shaRes.ok) throw new Error(tr`โหลดไฟล์ตรวจสอบไม่สำเร็จ (${shaRes.status})`);
       const expected = parseChecksum(await shaRes.text(), asset.name);
-      if (!expected) throw new Error("ไฟล์ SHA-256 ไม่ถูกต้อง");
+      if (!expected) throw new Error(tr("ไฟล์ SHA-256 ไม่ถูกต้อง"));
       const res = await this.http(checkUrl(asset.url), { signal: this.controller.signal });
-      if (!res.ok || !res.body) throw new Error(`ดาวน์โหลดไม่สำเร็จ (${res.status})`);
+      if (!res.ok || !res.body) throw new Error(tr`ดาวน์โหลดไม่สำเร็จ (${res.status})`);
       const total = Number(res.headers.get("content-length")) || asset.size || 0;
       const hash = createHash("sha256");
       const out = fs.createWriteStream(zipPath);
@@ -178,7 +179,7 @@ export class Updater {
         }
       }
       await new Promise((resolve, reject) => out.end((e) => (e ? reject(e) : resolve())));
-      if (hash.digest("hex") !== expected) throw new Error("ไฟล์ที่ดาวน์โหลดไม่ตรงกับ SHA-256 จึงยกเลิกการติดตั้ง");
+      if (hash.digest("hex") !== expected) throw new Error(tr("ไฟล์ที่ดาวน์โหลดไม่ตรงกับ SHA-256 จึงยกเลิกการติดตั้ง"));
       this.set({ status: "extracting", progress: 100 });
       const extracted = path.join(work, "extracted");
       await fsp.mkdir(extracted);
@@ -189,7 +190,7 @@ export class Updater {
       // show the old version, then offer the same update again forever. Refuse it up front.
       const inside = await payloadVersion(source);
       if (inside && compareVersions(inside, this.state.latestVersion) !== 0) {
-        throw new Error(`ไฟล์อัปเดตของ v${this.state.latestVersion} ข้างในเป็น v${inside} (release ยังอัปโหลดไม่ครบ) กรุณาลองใหม่ภายหลัง`);
+        throw new Error(tr`ไฟล์อัปเดตของ v${this.state.latestVersion} ข้างในเป็น v${inside} (release ยังอัปโหลดไม่ครบ) กรุณาลองใหม่ภายหลัง`);
       }
       await fsp.rm(zipPath, { force: true });
       return this.set({ status: "ready", source, work });
@@ -216,21 +217,21 @@ export class Updater {
         if (app) return path.join(base, app);
       } else if (fs.existsSync(path.join(base, "SuperAi-RAKKYXD.exe"))) return base;
     }
-    throw new Error("ไม่พบโปรแกรมในไฟล์อัปเดต");
+    throw new Error(tr("ไม่พบโปรแกรมในไฟล์อัปเดต"));
   }
 
   /** Start the detached copier; the caller must quit the app right after this returns. */
   async install({ execPath = process.execPath, pid = process.pid } = {}) {
-    if (!["ready", "waiting"].includes(this.state.status)) throw new Error("ดาวน์โหลดอัปเดตให้เสร็จก่อน");
+    if (!["ready", "waiting"].includes(this.state.status)) throw new Error(tr("ดาวน์โหลดอัปเดตให้เสร็จก่อน"));
     const target = installTarget(execPath);
-    if (!target) throw new Error("ไม่พบตำแหน่งที่ติดตั้งโปรแกรม");
+    if (!target) throw new Error(tr("ไม่พบตำแหน่งที่ติดตั้งโปรแกรม"));
     // Fail early (before quitting) when the install folder is read-only, e.g. Program Files.
     const probe = path.join(process.platform === "darwin" ? path.dirname(target) : target, `.superai-write-test-${pid}`);
     try {
       await fsp.writeFile(probe, "");
       await fsp.rm(probe, { force: true });
     } catch {
-      throw new Error(`ไม่มีสิทธิ์เขียนโฟลเดอร์ ${path.dirname(target)} ย้ายโปรแกรมไปไว้ในโฟลเดอร์ของคุณ (เช่น Documents) แล้วลองใหม่`);
+      throw new Error(tr`ไม่มีสิทธิ์เขียนโฟลเดอร์ ${path.dirname(target)} ย้ายโปรแกรมไปไว้ในโฟลเดอร์ของคุณ (เช่น Documents) แล้วลองใหม่`);
     }
     const { source, work } = this.state;
     const log = path.join(work, "install.log");
@@ -264,11 +265,11 @@ export class Updater {
       // Not "detached": a console-less (DETACHED_PROCESS) launcher cannot start the installer.
       const launcher = spawn("powershell.exe", ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", inner], { stdio: "ignore", windowsHide: true });
       const code = await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("เริ่มตัวติดตั้งไม่สำเร็จ (หมดเวลา) กรุณาลองใหม่")), 20000);
+        const timer = setTimeout(() => reject(new Error(tr("เริ่มตัวติดตั้งไม่สำเร็จ (หมดเวลา) กรุณาลองใหม่"))), 20000);
         launcher.once("error", (e) => { clearTimeout(timer); reject(e); });
         launcher.once("exit", (c) => { clearTimeout(timer); resolve(c); });
       });
-      if (code !== 0) throw new Error(`เริ่มตัวติดตั้งไม่สำเร็จ (รหัส ${code})`);
+      if (code !== 0) throw new Error(tr`เริ่มตัวติดตั้งไม่สำเร็จ (รหัส ${code})`);
     } else {
       const script = path.join(work, "install.sh");
       const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;

@@ -275,7 +275,7 @@ export class AgentRunManager {
     if (this.list(wsId).some((r) => r.status === "running"))
       throw new Error(tr("โปรเจกต์นี้มีงานกำลังทำอยู่ กรุณารอหรือหยุดงานก่อน"));
     for (const seat of seats) {
-      if (seat.provider.startsWith("cli:")) { accounts.resolve(seat.provider.slice(4), seat.accountId || "system"); cliLaunch(seat.provider.slice(4)); }
+      if (seat.provider.startsWith("cli:")) { accounts.resolve(seat.provider.slice(4), seat.accountId || undefined); cliLaunch(seat.provider.slice(4)); }
       // Without a key the provider would answer with its own "apiKey not set" text instead of failing.
       if (isCloud(seat.provider) && !cloudKeys.key(seat.provider))
         throw new Error(tr`${seat.name}: ยังไม่ได้ใส่ API Key ของ ${cloudKeys.status(seat.provider).name} เปิด การตั้งค่า > API Key เพื่อเชื่อมต่อ`);
@@ -343,7 +343,7 @@ export class AgentRunManager {
   private provider(seat: Seat, cwd: string, signal: AbortSignal, tools: boolean, readTools: boolean, attachments: string[], onUsage?: (usage: TokenUsage) => void): LLMProvider {
     if (isCloud(seat.provider)) return cloudKeys.create(seat.provider, seat.model || undefined, signal);
     if (seat.provider.startsWith("cli:")) {
-      return new CliProvider(seat.provider, cwd, signal, tools, seat.model, readTools, attachments, seat.effort, onUsage, undefined, seat.accountId || "system");
+      return new CliProvider(seat.provider, cwd, signal, tools, seat.model, readTools, attachments, seat.effort, onUsage, undefined, seat.accountId || accounts.resolve(seat.provider.slice(4)));
     }
     const cloud = ["deepseek", "groq", "openrouter", "openai", "anthropic", "gemini", "openai_compatible"];
     if (cloud.includes(seat.provider)) {

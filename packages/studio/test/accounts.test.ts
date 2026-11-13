@@ -20,7 +20,18 @@ test('profiles persist with defaults without replacing the system login', t => {
   assert.equal(accounts.resolve('claude-code', 'system'), 'system');
   accounts.setDefault('claude-code', b.id);
   assert.equal(accounts.resolve('claude-code', a.id), a.id);
-  assert.equal(accounts.list('claude-code').length, 3);
+  // Once the user has accounts of their own, the computer's login is no longer offered.
+  assert.deepEqual(accounts.list('claude-code').map((p) => p.name), ['งาน', 'ส่วนตัว']);
+});
+
+test('without a chosen default the first account added is used; with none, the computer login', t => {
+  const { accounts } = setup(t);
+  assert.deepEqual(accounts.list('codex').map((p) => [p.id, p.isDefault]), [['system', true]]);
+  assert.equal(accounts.resolve('codex'), 'system');
+  const first = accounts.create('codex', 'ส่วนตัว');
+  accounts.create('codex', 'งาน');
+  assert.equal(accounts.resolve('codex'), first.id);
+  assert.deepEqual(accounts.list('codex').map((p) => [p.name, p.isDefault]), [['ส่วนตัว', true], ['งาน', false]]);
 });
 
 test('profiles refuse wrong providers, unknown ids and unsupported isolation', t => {

@@ -35,6 +35,7 @@
     "test:terminal-render": "node packages/desktop/test/terminal-render-smoke.mjs",
     "test:tray": "node packages/desktop/test/tray-smoke.mjs",
     "test:browser-tools": "node packages/desktop/test/browser-tools-smoke.mjs",
+    "test:computer-use": "node packages/desktop/test/computer-use-smoke.mjs",
     "i18n:check": "node scripts/i18n-merge.mjs --check",
     "i18n:merge": "node scripts/i18n-merge.mjs",
     "package:portable": "node scripts/package-portable.mjs",

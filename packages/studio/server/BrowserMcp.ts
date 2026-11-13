@@ -4,7 +4,7 @@
  * JSON-RPC, so no MCP library is bundled.
  */
 import { createInterface } from "node:readline";
-import { BROWSER_MCP, BROWSER_TOOLS } from "./BrowserTools.js";
+import { BROWSER_MCP, BROWSER_TOOLS, COMPUTER_TOOLS } from "./BrowserTools.js";
 
 const base = process.env.SUPERAI_BROWSER_URL || "";
 const token = process.env.SUPERAI_BROWSER_TOKEN || "";
@@ -34,9 +34,9 @@ createInterface({ input: process.stdin }).on("line", async (line) => {
   if (id === undefined || id === null) return; // notifications need no reply
   if (method === "initialize")
     return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion || "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: BROWSER_MCP, version: "1.0.0" },
-      instructions: "Controls the browser panel inside the SuperAi app, which the user watches live. Use browser_snapshot to read a page and get element refs before clicking or typing." } });
+      instructions: "browser_ tools control a web browser the user watches live (the SuperAi panel, or Chrome / Edge). Use browser_snapshot to read a page and get element refs before clicking or typing. computer_ tools see and control the whole computer; they work only when the user has turned them on in SuperAi, and each action returns a fresh screenshot." } });
   if (method === "ping") return send({ jsonrpc: "2.0", id, result: {} });
-  if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: BROWSER_TOOLS } });
+  if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: [...BROWSER_TOOLS, ...COMPUTER_TOOLS] } });
   if (method === "tools/call") return send({ jsonrpc: "2.0", id, result: await call(String(params?.name || ""), params?.arguments) });
   send({ jsonrpc: "2.0", id, error: { code: -32601, message: `Method not found: ${method}` } });
 });

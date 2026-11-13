@@ -32,14 +32,27 @@ export class AccountRegistry {
     finally { fs.rmSync(temp, { force: true }); }
   }
   supported(provider: string) { return ACCOUNT_CAPABILITIES.some(c => c.provider === provider && c.supported); }
+  /**
+   * The account used when none is chosen. Once the user has added accounts, the computer's own CLI
+   * login is no longer offered: the chosen default, else the first account added.
+   */
+  private defaultId(provider: string, data = this.read()): string {
+    const own = data.profiles.filter(p => p.provider === provider).sort((a, b) => a.createdAt - b.createdAt);
+    const chosen = data.defaults[provider];
+    if (chosen && own.some(p => p.id === chosen)) return chosen;
+    return own[0]?.id || 'system';
+  }
   list(provider: string): AccountProfile[] {
     const data = this.read();
-    return [{ id: 'system', provider, name: tr("บัญชีเดิมของเครื่อง"), createdAt: 0, system: true }, ...data.profiles.filter(p => p.provider === provider)]
-      .map(p => ({ ...p, isDefault: p.id === (data.defaults[provider] || 'system') }));
+    const own = data.profiles.filter(p => p.provider === provider).sort((a, b) => a.createdAt - b.createdAt);
+    const fallback = this.defaultId(provider, data);
+    // The computer's own login is listed only while there is no account of the user's own.
+    return (own.length ? own : [{ id: 'system', provider, name: tr("บัญชีหลักของเครื่อง"), createdAt: 0, system: true }])
+      .map(p => ({ ...p, isDefault: p.id === fallback }));
   }
   resolve(provider: string, id?: unknown): string {
     if (id !== undefined && (typeof id !== 'string' || !id)) throw new Error(tr("บัญชีไม่ถูกต้อง"));
-    const selected = id === undefined ? this.read().defaults[provider] || 'system' : id;
+    const selected = id === undefined ? this.defaultId(provider) : id;
     if (selected === 'system') return selected;
     if (!this.supported(provider) || !this.read().profiles.some(p => p.provider === provider && p.id === selected))
       throw new Error(tr("ไม่พบบัญชีของผู้ให้บริการนี้ กรุณาเลือกบัญชีใหม่"));

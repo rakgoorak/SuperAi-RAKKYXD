@@ -112,7 +112,22 @@ try {
   const refused = await fetch(launch.env.SUPERAI_BROWSER_URL + '/api/browser-tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"tool":"browser_snapshot"}' });
   assert.equal(refused.status, 403, 'calls without the token are refused');
 
-  console.log(JSON.stringify({ passed: true, tools: tools.length, screenshots: output }));
+  steps.step('Chrome or Edge on the computer, in its own window');
+  const external = process.platform === 'win32' ? 'edge' : 'chrome';
+  snap = (await call('browser_open', { url: pageUrl, browser: external })).content[0].text;
+  assert.match(snap, /Order form/);
+  snap = (await call('browser_type', { ref: refOf(snap, 'Your name'), text: 'Lin' })).content[0].text;
+  snap = (await call('browser_select', { ref: refOf(snap, 'Size'), value: 'Large' })).content[0].text;
+  snap = (await call('browser_click', { ref: refOf(snap, 'Send order') })).content[0].text;
+  assert.match(snap, /Thanks Lin/, 'later calls stay on the browser of the last browser_open');
+  assert.match(snap, /size=l/);
+  const outside = await call('browser_screenshot');
+  assert.equal(outside.content[1].type, 'image');
+  await fs.writeFile(path.join(output, `${external}-screenshot.png`), Buffer.from(outside.content[1].data, 'base64'));
+  snap = (await call('browser_snapshot', { browser: 'app' })).content[0].text;
+  assert.match(snap, /Order form|Bottom of page/, 'the app panel is still reachable by name');
+
+  console.log(JSON.stringify({ passed: true, tools: tools.length, external, screenshots: output }));
 } finally {
   clearTimeout(guard);
   mcp?.kill();

@@ -16,6 +16,8 @@ const THAI = /[฀-๿]/;
 export const AREAS = {
   client: { dir: 'packages/studio/client/src', helper: 'packages/studio/client/src/i18n.ts', skip: /[\\/](i18n\.ts|locales[\\/].*)$/ },
   server: { dir: 'packages/studio/server', helper: 'packages/studio/server/i18n.ts', skip: /[\\/](i18n\.ts|locales[\\/].*)$/ },
+  // The desktop app's main process shares the server's dictionaries (desktop/i18n.mjs re-exports its tr).
+  desktop: { dir: 'packages/desktop', helper: 'packages/desktop/i18n.mjs', ext: /\.mjs$/, skip: /[\\/](i18n\.mjs|[^\\/]*\.test\.mjs|test[\\/].*|installer[\\/].*)$/ },
 };
 
 export function files(area) {
@@ -24,14 +26,14 @@ export function files(area) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) { if (!['node_modules', 'dist', 'public'].includes(entry.name)) walk(file); }
-      else if (/\.tsx?$/.test(entry.name) && !/\.d\.ts$/.test(entry.name) && !area.skip.test(file)) out.push(file);
+      else if ((area.ext || /\.tsx?$/).test(entry.name) && !/\.d\.ts$/.test(entry.name) && !area.skip.test(file)) out.push(file);
     }
   };
   walk(path.join(root, area.dir));
   return out.sort();
 }
 
-const parse = (file) => ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+const parse = (file) => ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : file.endsWith('.mjs') ? ts.ScriptKind.JS : ts.ScriptKind.TS);
 /** The key of a template: its text with {n} where each value goes. */
 const templateKey = (node) => node.head.text + node.templateSpans.map((span, index) => `{${index}}` + span.literal.text).join('');
 const isTr = (expression) => ts.isIdentifier(expression) && expression.text === 'tr';
@@ -131,7 +133,7 @@ export function wrap(areaName, only) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const area = process.argv.includes('--server') ? 'server' : 'client';
+  const area = ['server', 'desktop'].find((name) => process.argv.includes(`--${name}`)) || 'client';
   if (process.argv.includes('--wrap')) {
     const result = wrap(area);
     console.error(`wrapped ${result.total}; left alone ${result.skipped.length}`);
