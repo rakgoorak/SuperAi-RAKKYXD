@@ -6,6 +6,24 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.0.48] - 2026-11-13
+
+### Added
+- Computer use (opt-in): with "Let the AI control this computer" turned on in
+  Settings > AI control, the AI can see the screen, click, type in any language,
+  press key combinations and scroll to work in other apps. A bar with a Stop
+  button shows while it acts.
+- The AI can also use Google Chrome or Microsoft Edge on the computer, in its
+  own window with a SuperAi profile that keeps sign-ins.
+- The installer, Setup and the uninstaller come in English, Japanese, Chinese
+  and Thai; the language chosen there is the app's starting language. The tray
+  menu and update messages are translated too.
+
+### Changed
+- Account choice: once you have accounts of your own, the computer's original
+  login is no longer offered and the first account you added is the default.
+  The picker shows your accounts as buttons.
+
 ## [1.0.47] - 2026-11-13
 
 ### Added

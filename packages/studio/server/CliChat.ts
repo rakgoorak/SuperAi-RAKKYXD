@@ -948,7 +948,7 @@ export class CliChatManager {
       proc.stdin?.on('error', () => fail(tr("ช่องส่งข้อมูลไปยัง Codex ปิดแล้ว")));
       proc.on('error', error => fail(tr`เปิด Codex ไม่สำเร็จ: ${error.message}`));
       proc.on('close', code => { lv.closed = true; if (pending.trim()) onLine(pending); if (lv.writeProblem) finish(lv.writeProblem); else if (!completed && !chat.cancelled && code === 0) finish(tr("Codex ปิดก่อนส่งผลการทำงาน")); else closed(code, errors); });
-      write({ id: 1, method: 'initialize', params: { clientInfo: { name: 'superai_rakkyxd', title: 'SuperAi & RAKKYXD', version: '1.0.47' } } });
+      write({ id: 1, method: 'initialize', params: { clientInfo: { name: 'superai_rakkyxd', title: 'SuperAi & RAKKYXD', version: '1.0.48' } } });
       return 'sent';
     }
     if (current) {
