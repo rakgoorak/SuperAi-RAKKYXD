@@ -11,6 +11,6 @@
     "test": "node --env-file=test/test.env --test browser.test.mjs updater.test.mjs usage.test.mjs smoke-harness.test.mjs tray.test.mjs"
   },
   "devDependencies": {
-    "electron": "^33.4.11"
+    "electron": "^45.2.3"
   }
 }
