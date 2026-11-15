@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { Updater, compareVersions, pickAsset, parseChecksum, installTarget, windowsTar, updateKind } from "./updater.mjs";
+import { Updater, compareVersions, pickAsset, parseChecksum, installTarget, windowsTar, updateKind, STORE_URL } from "./updater.mjs";
 
 test("versions compare numerically and pre-releases sort before releases", () => {
   assert.equal(compareVersions("1.10.0", "1.9.9"), 1);
@@ -36,20 +36,6 @@ test("checksum lines and install targets are parsed safely", () => {
 
 const release = (version, assets) => new Response(JSON.stringify({ tag_name: `v${version}`, body: "notes", html_url: "https://github.com/x/y/releases/tag/v" + version, assets }));
 
-test("Store builds never request GitHub updates or write an update payload", async () => {
-  let requests = 0;
-  const u = new Updater({ currentVersion: "1.0.33", packaged: true, storeManaged: true,
-    http: async () => { requests++; throw new Error("Store must not fetch GitHub"); } });
-  assert.equal((await u.check()).storeManaged, true);
-  assert.equal(requests, 0);
-  // Even stale or forged ready state must not reach download/install filesystem operations.
-  u.set({ status: "available", asset: { url: "https://github.com/fake.zip" } });
-  await assert.rejects(u.download(), /Microsoft Store/);
-  u.set({ status: "ready", source: "unused", work: "unused" });
-  await assert.rejects(u.install(), /Microsoft Store/);
-  assert.equal(requests, 0);
-});
-
 test("check reports available, latest and missing releases without downloading", async () => {
   const assets = [{ name: `SuperAi-RAKKYXD-v2.0.0-${process.platform === "win32" ? "windows" : "macos"}-${process.arch}.zip`, size: 10, browser_download_url: "https://github.com/a.zip" }];
   let u = new Updater({ currentVersion: "1.0.0", packaged: true, http: async () => release("2.0.0", assets) });
@@ -60,6 +46,65 @@ test("check reports available, latest and missing releases without downloading",
   assert.equal((await u.check()).status, "none");
   u = new Updater({ currentVersion: "1.0.0", packaged: true, http: async () => { throw new Error("offline"); } });
   assert.match((await u.check()).error, /offline/);
+});
+
+test("Store builds check GitHub and report a newer version without offering a download", async () => {
+  const assets = [
+    { name: `SuperAi-RAKKYXD-v1.0.48-${process.platform === "win32" ? "windows" : "macos"}-${process.arch}.zip`, size: 10, browser_download_url: "https://github.com/a.zip" },
+    { name: `SuperAi-RAKKYXD-v1.0.48-${process.platform === "win32" ? "windows" : "macos"}-${process.arch}.zip.sha256`, browser_download_url: "https://github.com/a.zip.sha256" },
+  ];
+  const urls = [];
+  const http = async (url) => { urls.push(String(url)); return release("1.0.48", assets); };
+  const u = new Updater({ currentVersion: "1.0.33", packaged: true, storeManaged: true, http });
+  assert.equal(u.state.storeManaged, true);
+  assert.equal(u.state.storeUrl, STORE_URL);
+  assert.match(STORE_URL, /^ms-windows-store:\/\/pdp\/\?ProductId=9NZH79QL515K$/);
+  const s = await u.check();
+  assert.equal(urls.length, 1);
+  assert.match(urls[0], /^https:\/\/api\.github\.com\/repos\//);
+  assert.equal(s.status, "available");
+  assert.equal(s.latestVersion, "1.0.48");
+  assert.equal(s.storeManaged, true);
+  assert.equal(s.asset, null, "no installer is handed to a Store build");
+  assert.equal(s.error, "");
+  // Even with the GitHub asset missing a Store build still reports the update.
+  const bare = new Updater({ currentVersion: "1.0.33", packaged: true, storeManaged: true, http: async () => release("1.0.48", []) });
+  assert.equal((await bare.check()).status, "available");
+  // Up to date.
+  const same = new Updater({ currentVersion: "1.0.48", packaged: true, storeManaged: true, http });
+  assert.equal((await same.check()).status, "latest");
+});
+
+test("Store builds never get a hard-update gate and keep a found update when offline", async () => {
+  const hard = new Response(JSON.stringify([{ tag_name: "v1.0.48", body: "<!-- superai-update: hard -->\nfix", assets: [] }]));
+  let online = true;
+  const u = new Updater({ currentVersion: "1.0.33", packaged: true, storeManaged: true,
+    http: async () => { if (!online) throw new Error("offline"); return hard; } });
+  const s = await u.check();
+  assert.equal(s.status, "available");
+  assert.equal(s.mandatory, false);
+  online = false;
+  const again = await u.check();
+  assert.equal(again.status, "available");
+  assert.equal(again.latestVersion, "1.0.48");
+});
+
+test("Store builds refuse to download or install the GitHub payload", async () => {
+  let requests = 0;
+  const u = new Updater({ currentVersion: "1.0.33", packaged: true, storeManaged: true,
+    http: async () => { requests++; throw new Error("must not fetch"); } });
+  // Even stale or forged ready state must not reach download/install filesystem operations.
+  u.set({ status: "available", latestVersion: "1.0.48", asset: { name: "x.zip", url: "https://github.com/fake.zip", sha: "https://github.com/fake.zip.sha256" } });
+  await assert.rejects(u.download(), /Microsoft Store/);
+  u.set({ status: "ready", source: "unused", work: "unused" });
+  await assert.rejects(u.install(), /Microsoft Store/);
+  assert.equal(requests, 0);
+});
+
+test("non-Store builds default to storeManaged=false", () => {
+  const u = new Updater({ currentVersion: "1.0.0", packaged: true, storeManaged: false });
+  assert.equal(u.state.storeManaged, false);
+  assert.equal(u.state.storeUrl, undefined);
 });
 
 async function fixtureZip(dir, version = "2.0.0") {

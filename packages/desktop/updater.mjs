@@ -11,6 +11,9 @@ import { promisify } from "node:util";
 import { tr } from './i18n.mjs';
 
 export const RELEASES_REPO = process.env.SUPERAI_UPDATE_REPO || "rakgoorak/SuperAi-RAKKYXD-releases";
+// Microsoft Store listing (installer/windows/store-identity.json on the Store packaging branch).
+export const STORE_PRODUCT_ID = "9NZH79QL515K";
+export const STORE_URL = `ms-windows-store://pdp/?ProductId=${STORE_PRODUCT_ID}`;
 const DOWNLOAD_HOSTS = /^(github\.com|objects\.githubusercontent\.com|release-assets\.githubusercontent\.com|[\w-]+\.githubusercontent\.com)$/;
 
 /** -1, 0 or 1 for dotted numeric versions ("v1.2.0" == "1.2"). Pre-release suffixes sort first. */
@@ -92,14 +95,16 @@ export async function payloadVersion(source, platform = process.platform) {
 }
 
 export class Updater {
+  /** storeManaged: installed from the Microsoft Store. GitHub is still checked so the user learns a
+   *  newer version exists, but the Store installs it: nothing is downloaded or installed here. */
   constructor({ currentVersion, packaged, storeManaged = process.windowsStore === true, onState, http = (...a) => fetch(...a), tempDir = os.tmpdir() }) {
     this.currentVersion = currentVersion;
     this.packaged = packaged;
-    this.storeManaged = storeManaged;
+    this.storeManaged = !!storeManaged;
     this.onState = onState || (() => {});
     this.http = http;
     this.tempDir = tempDir;
-    this.state = { status: "idle", currentVersion, packaged, storeManaged };
+    this.state = { status: "idle", currentVersion, packaged, storeManaged: this.storeManaged, ...(this.storeManaged ? { storeUrl: STORE_URL } : {}) };
     this.controller = null;
   }
   set(patch) {
@@ -109,7 +114,6 @@ export class Updater {
   }
 
   async check() {
-    if (this.storeManaged) return this.state;
     if (["downloading", "extracting", "ready", "waiting", "installing"].includes(this.state.status)) return this.state;
     this.set({ status: "checking", error: "" });
     try {
@@ -131,20 +135,21 @@ export class Updater {
       const asset = pickAsset(release.assets);
       const newer = compareVersions(latest, this.currentVersion) > 0;
       // Hard update: some release newer than this one says so in its notes.
-      const mandatory = newer && releases.some((r) => compareVersions(r.tag_name, this.currentVersion) > 0 && updateKind(r.body) === "hard");
+      // Store builds never get a hard-update gate: the Store may not have published the version yet.
+      const mandatory = newer && !this.storeManaged && releases.some((r) => compareVersions(r.tag_name, this.currentVersion) > 0 && updateKind(r.body) === "hard");
       return this.set({
-        status: newer ? (asset ? "available" : "unsupported") : "latest",
+        status: newer ? (asset || this.storeManaged ? "available" : "unsupported") : "latest",
         latestVersion: latest,
         mandatory,
         notes: stripMarkers(release.body).slice(0, 4000),
         releaseUrl: release.html_url,
-        asset: asset ? { name: asset.zip.name, size: asset.zip.size, url: asset.zip.browser_download_url, sha: asset.sha?.browser_download_url || "" } : null,
+        asset: asset && !this.storeManaged ? { name: asset.zip.name, size: asset.zip.size, url: asset.zip.browser_download_url, sha: asset.sha?.browser_download_url || "" } : null,
         checkedAt: Date.now(),
-        error: newer && !asset ? tr("release นี้ยังไม่มีไฟล์สำหรับเครื่องนี้") : "",
+        error: newer && !asset && !this.storeManaged ? tr("release นี้ยังไม่มีไฟล์สำหรับเครื่องนี้") : "",
       });
     } catch (err) {
       // A dropped connection must not hide an update an earlier check already found.
-      const known = this.state.asset && compareVersions(this.state.latestVersion || "0", this.currentVersion) > 0;
+      const known = (this.state.asset || this.storeManaged) && compareVersions(this.state.latestVersion || "0", this.currentVersion) > 0;
       return this.set({ status: known ? "available" : "error", error: known ? "" : err.message || String(err) });
     }
   }

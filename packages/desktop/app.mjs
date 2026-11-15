@@ -9,7 +9,7 @@ import { createBrowserAutomation } from "./browser-automation.mjs";
 import { createComputerControl } from "./computer-control.mjs";
 import { normalizeBrowserUrl } from "./browser-url.mjs";
 import { prepareDesktopPath } from "./platform-env.mjs";
-import { Updater } from "./updater.mjs";
+import { Updater, STORE_URL } from "./updater.mjs";
 import { UsagePing } from "./usage.mjs";
 import { createTrayController } from './tray.mjs';
 import { tr } from './i18n.mjs';
@@ -37,10 +37,13 @@ const chosenLanguage = (() => {
 })();
 const startLanguage = process.env.SUPERAI_LANG || chosenLanguage;
 if (/^[a-z]{2}(-[A-Za-z]{2})?$/.test(startLanguage)) app.commandLine.appendSwitch("lang", startLanguage);
+// Microsoft Store install: Electron sets process.windowsStore; scripts/package-msix.mjs also marks the
+// staged package.json, so the Store build is recognised even where that flag is missing.
+const storeManaged = process.windowsStore === true || (() => {
+  try { return JSON.parse(readFileSync(path.join(app.getAppPath(), "package.json"), "utf8")).distribution === "microsoft-store"; } catch { return false; }
+})();
 // Same id as the installer's shortcuts: Windows groups the taskbar button with them and shows our toasts.
-// Microsoft Store (MSIX) builds: identity comes from the package, updates come from the Store.
-const appMetadata = JSON.parse(readFileSync(path.join(app.getAppPath(), "package.json"), "utf8"));
-const storeManaged = process.windowsStore === true || appMetadata.distribution === "microsoft-store";
+// A Store (MSIX) app gets its id from the package, so it must not set one of its own.
 if (process.platform === "win32" && !storeManaged) app.setAppUserModelId("com.rakgoorak.superai");
 let window, server, browser, trayController, browserAutomation, computer;
 const updater = new Updater({
@@ -151,17 +154,17 @@ function applyUpdate() {
 // Check shortly after launch and every 30 minutes; a newer release downloads in the background.
 async function checkForUpdate() {
   const state = await updater.check();
-  if (state.status === "available" && updater.packaged) void updater.download();
+  if (state.status === "available" && updater.packaged && !updater.storeManaged) void updater.download();
 }
 ipcMain.handle("update:action", async (e, action) => {
   trusted(e);
   if (action === "state") return updater.state;
-  if (storeManaged) {
-    if (["check", "download", "apply", "force"].includes(action))
-      await shell.openExternal("https://apps.microsoft.com/detail/9NZH79QL515K");
+  if (action === "check") return updater.check();
+  // Microsoft Store install: the Store installs updates, so every install action opens its page.
+  if (updater.storeManaged) {
+    if (["download", "apply", "force", "install"].includes(action)) await shell.openExternal(STORE_URL);
     return updater.state;
   }
-  if (action === "check") return updater.check();
   if (action === "download") return updater.download();
   if (action === "apply") return applyUpdate();
   if (action === "force") {
@@ -378,7 +381,7 @@ else {
       });
       await log(`SuperAi & RAKKYXD ${app.getVersion()} started at ${appUrl}`);
       usagePing().start();
-      if (updater.packaged && !storeManaged && !process.env.SUPERAI_TEST_MODE) {
+      if (updater.packaged && !process.env.SUPERAI_TEST_MODE) {
         setTimeout(() => void checkForUpdate(), 4000);
         setInterval(() => void checkForUpdate(), 30 * 60_000);
       }

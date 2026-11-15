@@ -69,18 +69,45 @@ export function UpdatePanel({ state, onError }: { state: UpdateState | null; onE
   }, []);
 
   if (!state) return <p className="muted">{tr("ปุ่มอัปเดตใช้ได้ในแอป Desktop เท่านั้น")}</p>;
+  const s = state.status;
+  // Microsoft Store install: GitHub tells us a newer version exists; the Store installs it.
   if (state.storeManaged) return (
     <div className="update-panel">
       <div className="update-versions">
         <div><small>{t("updates.current_version", "เวอร์ชันที่ใช้อยู่")}</small><strong>v{state.currentVersion}</strong></div>
+        {state.latestVersion && <div><small>{t("updates.latest_version", "เวอร์ชันล่าสุด")}</small><strong>v{state.latestVersion}</strong></div>}
+        {s === "available" && <span className="update-kind">{tr("มีอัปเดต")}</span>}
       </div>
-      <p className="update-status" role="status">{tr("แอปนี้รับการอัปเดตผ่าน Microsoft Store")}</p>
-      <button className="secondary" disabled={busy} onClick={() => void run("check")}>
-        <ExternalLink size={14} /> {tr("เปิด Microsoft Store")}
-      </button>
+      <p className={`update-status ${s === "error" ? "danger-text" : s === "available" ? "success-text" : ""}`} role="status">
+        {s === "idle" && tr("ยังไม่ได้ตรวจ")}
+        {s === "checking" && <><LoaderCircle size={14} className="spin" /> {tr("กำลังตรวจ…")}</>}
+        {s === "latest" && <><Check size={14} /> {tr("ใช้เวอร์ชันล่าสุดอยู่แล้ว")}</>}
+        {s === "none" && tr("ยังไม่มี release ให้ดาวน์โหลด")}
+        {s === "error" && state.error}
+        {s === "available" && tr`มีเวอร์ชันใหม่ v${state.latestVersion || ""} อัปเดตได้ใน Microsoft Store`}
+      </p>
+      {state.notes && s === "available" && (
+        <details className="update-notes" open>
+          <summary>{tr("มีอะไรใหม่ใน v")}{state.latestVersion}</summary>
+          <Markdown text={state.notes} />
+        </details>
+      )}
+      <div className="update-actions">
+        {s === "available" ? (
+          <button className="primary" disabled={busy} onClick={() => void run("apply")}><ExternalLink size={14} /> {tr("อัปเดตใน Microsoft Store")}</button>
+        ) : (
+          <button className="secondary" disabled={busy || s === "checking"} onClick={() => void run("check")}><RefreshCw size={14} /> {tr("ตรวจอัปเดต")}</button>
+        )}
+        {s !== "available" && (
+          <button className="text-button" disabled={busy} onClick={() => void run("apply")}><ExternalLink size={13} /> {tr("เปิด Microsoft Store")}</button>
+        )}
+        {state.releaseUrl && (
+          <button className="text-button" onClick={() => void window.superai?.openExternal(state.releaseUrl!)}><ExternalLink size={13} /> {tr("ดูหน้า release")}</button>
+        )}
+      </div>
+      <p className="muted">{tr("ระบบตรวจเวอร์ชันใหม่จาก GitHub ทุกครั้งที่เปิดโปรแกรมและทุก 30 นาที · แอปนี้ติดตั้งจาก Microsoft Store จึงอัปเดตผ่าน Store เท่านั้น ถ้า Store ยังไม่แสดงเวอร์ชันใหม่ อาจกำลังรอการอนุมัติ ลองใหม่ภายหลัง")}</p>
     </div>
   );
-  const s = state.status;
   return (
     <div className="update-panel">
       <div className="update-versions">
@@ -136,7 +163,7 @@ export function UpdatePanel({ state, onError }: { state: UpdateState | null; onE
 export function UpdatePrompt({ state, onError, onDetails }: { state: UpdateState | null; onError: (m: string) => void; onDetails: () => void }) {
   const { busy, run } = useUpdateAction(onError);
   const [later, setLater] = useState("");
-  const hard = !!state?.mandatory && !!state.packaged;
+  const hard = !!state?.mandatory && !!state.packaged && !state.storeManaged;
   const show = !!state && pending(state.status) && state.packaged;
 
   // A hard update starts by itself: download, wait for running work, install, reopen.
@@ -157,7 +184,9 @@ export function UpdatePrompt({ state, onError, onDetails }: { state: UpdateState
       ) : s === "installing" ? null : (
         <>
           <button className="primary" disabled={busy || (hard && s !== "error")} onClick={() => void run("apply")}>
-            {s === "error" ? <><RefreshCw size={14} /> {tr("ลองอีกครั้ง")}</> : <><Download size={14} /> {tr("อัปเดตตอนนี้")}</>}
+            {s === "error" ? <><RefreshCw size={14} /> {tr("ลองอีกครั้ง")}</>
+              : state!.storeManaged ? <><ExternalLink size={14} /> {tr("อัปเดตใน Microsoft Store")}</>
+              : <><Download size={14} /> {tr("อัปเดตตอนนี้")}</>}
           </button>
           {!hard && <button className="secondary" onClick={() => setLater(state!.latestVersion || "")}>{tr("ไว้ทีหลัง")}</button>}
         </>
@@ -185,7 +214,7 @@ export function UpdatePrompt({ state, onError, onDetails }: { state: UpdateState
   return (
     <aside className="update-toast" role="status" aria-live="polite">
       <strong>{tr("มีเวอร์ชันใหม่ v")}{state!.latestVersion}</strong>
-      <small>{s === "available" || s === "ready" ? tr("อัปเดตแล้วโปรแกรมจะเปิดกลับมาที่เดิม งานไม่หาย") : statusLine(state!)}</small>
+      <small>{state!.storeManaged ? tr("อัปเดตได้ใน Microsoft Store") : s === "available" || s === "ready" ? tr("อัปเดตแล้วโปรแกรมจะเปิดกลับมาที่เดิม งานไม่หาย") : statusLine(state!)}</small>
       {actions}
     </aside>
   );

@@ -22,7 +22,8 @@ The script discovers MakeAppx in Windows Kits; `MAKEAPPX_PATH` can override it.
 It validates the executable's architecture and package version before staging,
 then runs MakeAppx with validation enabled. It packages a separate copy of the
 Windows release, marked `distribution: microsoft-store`. Store builds never
-download or install GitHub ZIP updates; their update button opens the Store page.
+download or install GitHub ZIP updates; they show when a newer version exists and
+the update button opens the Store page.
 
 The root `package.json` version (for example `1.0.49`) becomes `1.0.49.0`. Each
 Store submission needs a higher version than the last one. Only stable versions are accepted here.

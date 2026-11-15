@@ -496,6 +496,6 @@ const text: Record<string, string> = {
   "ไม่มีสิทธิ์เขียนโฟลเดอร์ {0} ย้ายโปรแกรมไปไว้ในโฟลเดอร์ของคุณ (เช่น Documents) แล้วลองใหม่": "No permission to write the folder {0}. Move the app into one of your own folders (e.g. Documents) and try again",
   "เริ่มตัวติดตั้งไม่สำเร็จ (หมดเวลา) กรุณาลองใหม่": "Could not start the installer (timed out). Please try again",
   "เริ่มตัวติดตั้งไม่สำเร็จ (รหัส {0})": "Could not start the installer (code {0})",
-  "อัปเดตแอปนี้ผ่าน Microsoft Store เท่านั้น": "Update this app through the Microsoft Store"
+  "อัปเดตแอปนี้ผ่าน Microsoft Store เท่านั้น": "This app updates only through the Microsoft Store"
 };
 export default text;
