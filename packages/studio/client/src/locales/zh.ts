@@ -1512,14 +1512,6 @@ const text: Record<string, string> = {
   "เปิดไมโครโฟนไม่ได้: {0}": "无法打开麦克风: {0}",
   "ยังไม่ได้เปิดไมโครโฟน": "麦克风尚未打开",
   "ระบบแปลงเสียงหยุดทำงาน": "语音转换系统已停止工作",
-  "ปิดโหมดเสียงแล้ว": "语音模式已关闭",
-  "ตรวจเวอร์ชันใหม่ แล้วอัปเดตผ่าน Microsoft Store": "检查新版本并通过 Microsoft Store 更新",
-  "ตรวจเวอร์ชันใหม่จาก GitHub Releases แล้วอัปเดตผ่าน Microsoft Store": "从 GitHub Releases 检查新版本，然后通过 Microsoft Store 更新",
-  "มีอัปเดต": "有可用更新",
-  "มีเวอร์ชันใหม่ v{0} อัปเดตได้ใน Microsoft Store": "有新版本 v{0}，请在 Microsoft Store 中更新",
-  "อัปเดตใน Microsoft Store": "在 Microsoft Store 中更新",
-  "เปิด Microsoft Store": "打开 Microsoft Store",
-  "ระบบตรวจเวอร์ชันใหม่จาก GitHub ทุกครั้งที่เปิดโปรแกรมและทุก 30 นาที · แอปนี้ติดตั้งจาก Microsoft Store จึงอัปเดตผ่าน Store เท่านั้น ถ้า Store ยังไม่แสดงเวอร์ชันใหม่ อาจกำลังรอการอนุมัติ ลองใหม่ภายหลัง": "每次打开应用以及每 30 分钟会在 GitHub 上检查新版本 · 此应用通过 Microsoft Store 安装，因此只能通过 Store 更新。如果 Store 尚未显示新版本，可能仍在等待审核，请稍后再试",
-  "อัปเดตได้ใน Microsoft Store": "可在 Microsoft Store 中更新"
+  "ปิดโหมดเสียงแล้ว": "语音模式已关闭"
 };
 export default text;
