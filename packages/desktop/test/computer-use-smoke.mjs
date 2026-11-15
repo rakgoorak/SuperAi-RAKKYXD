@@ -82,13 +82,39 @@ try {
   const state = await page.evaluate(() => window.superai.computer('state'));
   assert.equal(state.allowed.length, 1, 'Settings lists the allowed chat');
   assert.equal(state.allowed[0].scope, 'chat');
+  steps.step('screens: a wrong number is refused; every screen can be seen');
+  const screens = await desktop.evaluate(({ screen }) => screen.getAllDisplays().length);
+  const wrong = await call('computer_screenshot', { display: screens + 1 });
+  assert.equal(wrong.isError, true);
+  assert.match(wrong.content[0].text, /display must be/);
+  for (let n = screens; n >= 1; n--) {
+    const each = await call('computer_screenshot', { display: n });
+    assert.ok(!each.isError, each.content?.[0]?.text);
+    assert.equal(each.content[1].type, 'image');
+    if (screens > 1) assert.match(each.content[0].text, new RegExp(`screen ${n} of ${screens}`));
+    if (screens > 1) assert.match(await desktop.evaluate(async ({ BrowserWindow }) => {
+      const texts = await Promise.all(BrowserWindow.getAllWindows().map((w) => w.webContents.executeJavaScript("document.getElementById('sub')?.textContent || ''").catch(() => '')));
+      return texts.filter(Boolean).join(' | ');
+    }), new RegExp(`จอ ${n}`), 'the bar says which screen the AI works on');
+    await fs.writeFile(path.join(output, `screen-${n}.png`), Buffer.from(each.content[1].data, 'base64'));
+  }
+  steps.log(`${screens} screen(s)`);
+  // Coordinates map to the right screen: move on each one, then read the position back.
+  for (let n = screens; n >= 1; n--) {
+    await call('computer_screenshot', { display: n });
+    await call('computer_move', { x: 120, y: 90 });
+    const where = (await call('computer_cursor')).content[0].text;
+    const [, cx, cy] = /x=(-?\d+) y=(-?\d+)/.exec(where) || [];
+    assert.ok(Math.abs(cx - 120) <= 2 && Math.abs(cy - 90) <= 2, `screen ${n}: moved to 120,90 but the mouse is reported at: ${where}`);
+  }
   steps.step('no second window once allowed; zoom and cursor work');
   const zoomed = await call('computer_zoom', { x: 0, y: 0, width: 200, height: 120 });
   assert.ok(!zoomed.isError, zoomed.content?.[0]?.text);
   assert.equal(zoomed.content[1].type, 'image');
   const cursor = await call('computer_cursor');
   assert.ok(!cursor.isError, cursor.content?.[0]?.text);
-  assert.match(cursor.content[0].text, /x=-?\d+ y=-?\d+/);
+  // The mouse may be on another screen (the user's), which the tool says instead of giving coordinates.
+  assert.match(cursor.content[0].text, /x=-?\d+ y=-?\d+|on screen \d+/);
 
   steps.step('click the message box and type with real input');
   const composer = page.getByLabel('คำสั่ง', { exact: true });

@@ -488,6 +488,7 @@ const text: Record<string, string> = {
   "AI กำลังควบคุมคอมพิวเตอร์": "The AI is controlling the computer",
   "หยุด": "Stop",
   "แชต \"{0}\"": "Chat \"{0}\"",
+  "จอ {0}": "Screen {0}",
   "AI ในแชต": "The AI in a chat",
   "macOS ยังไม่อนุญาต Accessibility (ใช้เมาส์และคีย์บอร์ด)": "macOS has not allowed Accessibility yet (mouse and keyboard)",
   "macOS ยังไม่อนุญาต Screen Recording (ดูหน้าจอ)": "macOS has not allowed Screen Recording yet (seeing the screen)",

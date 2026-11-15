@@ -46,7 +46,8 @@ export const BROWSER_TOOLS = [
 const computerTool = (name: string, description: string, properties: Record<string, unknown> = {}, required: string[] = []) =>
   ({ name, description, inputSchema: { type: "object", properties, required, additionalProperties: false } });
 export const COMPUTER_TOOLS = [
-  computerTool("computer_screenshot", "See the user's whole screen (main display). Use its pixel coordinates in the other computer_ tools. Prefer the browser_ tools for web pages. The first computer_ call in a chat waits while the user answers an Allow / Deny window."),
+  computerTool("computer_screenshot", "See one of the user's screens (the main one unless display is given; the reply lists every screen when there are several). The other computer_ tools act on the screen of the latest screenshot, in its pixel coordinates. Prefer the browser_ tools for web pages. The first computer_ call in a chat waits while the user answers an Allow / Deny window.",
+    { display: num("screen number: 1 = main, 2, 3 … as listed in an earlier screenshot") }),
   computerTool("computer_click", "Click at a point of the latest computer_screenshot. Returns a new screenshot.",
     { x: num("x in the screenshot"), y: num("y in the screenshot"), button: { type: "string", enum: ["left", "right", "middle"] }, double: { type: "boolean" }, clicks: num("1-3, e.g. 3 selects a line") }, ["x", "y"]),
   computerTool("computer_drag", "Press the left button at one point, move to another and release (drag and drop, select text, move a slider). Returns a new screenshot.",

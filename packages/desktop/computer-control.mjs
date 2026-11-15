@@ -34,6 +34,7 @@ Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Runtime.InteropServices;
 public static class SuperAiInput {
   [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr value);
   [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT p);
   [DllImport("user32.dll")] static extern short VkKeyScanW(char c);
@@ -50,7 +51,9 @@ public static class SuperAiInput {
     if (sent != i.Length) throw new Exception("Windows accepted " + sent + " of " + i.Length + " input events (error " + Marshal.GetLastWin32Error() + ")");
   }
   static INPUT KeyInput(ushort vk, ushort scan, uint flags) { INPUT i = new INPUT(); i.type = 1; i.u.ki.wVk = vk; i.u.ki.wScan = scan; i.u.ki.dwFlags = flags; return i; }
-  public static void Init() { SetProcessDPIAware(); }
+  // Per-monitor aware (v2, Windows 10 1703+), so coordinates are real pixels on every screen even
+  // when they use different scaling; older Windows: system aware.
+  public static void Init() { try { if (SetProcessDpiAwarenessContext(new IntPtr(-4))) return; } catch (EntryPointNotFoundException) {} SetProcessDPIAware(); }
   public static void Move(int x, int y) { SetCursorPos(x, y); INPUT i = new INPUT(); i.type = 0; i.u.mi.dwFlags = 0x0001; Send(new INPUT[] { i }); }
   public static string Pos() { POINT p; GetCursorPos(out p); return p.X + " " + p.Y; }
   public static void Mouse(uint flags) { INPUT i = new INPUT(); i.type = 0; i.u.mi.dwFlags = flags; Send(new INPUT[] { i }); }
@@ -240,7 +243,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   const read = () => { try { return JSON.parse(fs.readFileSync(settingsFile, "utf8")).enabled === true; } catch { return false; } };
   let enabled = read();
   let scale = 1; // screen pixels per screenshot pixel, from the last screenshot
-  let bar, hideTimer, prompt;
+  let hideTimer, prompt;
   /** chatId → { chat: true } (whole chat) or { until } ("this task", extended on every call). */
   const grants = new Map();
   /** chatId → time until which a Deny still stands. */
@@ -265,39 +268,40 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     return state();
   };
 
-  // While the AI acts: a status bar at the top (what it does, for which chat, and Stop) and a glow
-  // along the edges of the screen. The glow is four thin strips rather than one window over the
-  // whole screen, so nothing but the edges is ever covered. Content protection asks the OS to keep
-  // them out of screenshots (Windows ignores it for transparent windows), and any of them under a
-  // point the AI clicks steps aside meanwhile.
-  let glows = [];
+  // While the AI acts, on every screen: a status bar at the top (what it does, for which chat,
+  // on which screen, and Stop) and a glow along the edges. The glow is four thin strips rather than
+  // one window over the whole screen, so nothing but the edges is ever covered. Content protection
+  // asks the OS to keep them out of screenshots (Windows ignores it for transparent windows), and
+  // any of them under a point the AI clicks steps aside meanwhile.
+  /** display id → { bar, glows } */
+  const ui = new Map();
   const GLOW = 14;
-  const barSize = { width: 440, height: 64 };
-  const overlays = () => [bar, ...glows].filter((w) => w && !w.isDestroyed());
+  const barSize = { width: 460, height: 64 };
+  const overlays = () => [...ui.values()].flatMap(({ bar, glows }) => [bar, ...glows]).filter((w) => w && !w.isDestroyed());
   const hideBar = () => { for (const w of overlays()) w.hide(); };
-  const makeBar = () => {
-    const { workArea } = screen.getPrimaryDisplay();
-    bar = new BrowserWindow({ ...barSize, x: Math.round(workArea.x + (workArea.width - barSize.width) / 2), y: workArea.y + 6, frame: false, resizable: false,
-      movable: true, alwaysOnTop: true, skipTaskbar: true, focusable: false, show: false, transparent: true, hasShadow: false,
-      webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } });
-    bar.setAlwaysOnTop(true, "screen-saver");
-    bar.setVisibleOnAllWorkspaces?.(true);
-    bar.setContentProtection(true);
-    const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+  const dropOverlays = () => { for (const w of overlays()) w.destroy(); ui.clear(); };
+  // Screens plugged in, removed or rearranged: build the overlays again on the next action.
+  for (const event of ["display-added", "display-removed", "display-metrics-changed"]) screen.on(event, () => {
+    dropOverlays();
+    if (target !== undefined && !screen.getAllDisplays().some((d) => d.id === target)) target = undefined;
+  });
+  const barHtml = () => `<!doctype html><html><head><meta charset="utf-8"><style>
       @property --a { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
       * { box-sizing: border-box; }
       body { margin: 0; overflow: hidden; background: transparent; font: 13px "Segoe UI", system-ui, -apple-system, sans-serif; -webkit-app-region: drag; user-select: none; }
       .pill { position: relative; margin: 8px; height: 48px; border-radius: 24px; padding: 0 6px 0 16px; display: flex; align-items: center; gap: 12px;
         color: #eafff3; background: linear-gradient(135deg, rgba(14,22,19,.94), rgba(10,16,22,.94)); box-shadow: 0 10px 30px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06);
-        animation: rise .35s cubic-bezier(.2,.9,.3,1.2); }
+        animation: rise .35s cubic-bezier(.2,.9,.3,1.2); transition: opacity .25s; }
       .pill::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px;
         background: conic-gradient(from var(--a), #3ddc84, #38bdf8, #a78bfa, #3ddc84);
         -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
         animation: spin 3s linear infinite; pointer-events: none; }
+      body.idle .pill { opacity: .78; } body.idle .pill::before { animation-duration: 9s; }
       @keyframes spin { to { --a: 360deg; } }
       @keyframes rise { from { transform: translateY(-14px) scale(.96); opacity: 0; } }
       .orb { position: relative; flex: none; width: 10px; height: 10px; border-radius: 50%; background: #3ddc84; box-shadow: 0 0 12px #3ddc84; }
       .orb::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 2px solid #3ddc84; animation: ping 1.6s ease-out infinite; }
+      body.idle .orb::after { animation: none; opacity: 0; }
       @keyframes ping { from { transform: scale(.35); opacity: .9; } to { transform: scale(1.35); opacity: 0; } }
       .text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
       .title { font-weight: 600; letter-spacing: .2px; background: linear-gradient(90deg, #eafff3, #9be7ff); -webkit-background-clip: text; color: transparent; }
@@ -310,16 +314,31 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     </style></head><body><div class="pill"><span class="orb"></span>
       <div class="text"><span class="title">${escapeHtml(tr("AI กำลังควบคุมคอมพิวเตอร์"))}</span><span class="sub" id="sub"></span></div>
       <a class="stop" href="superai-stop:"><i></i>${escapeHtml(tr("หยุด"))}</a></div>
-      <script>window.setStatus = (action, who) => { const s = document.getElementById('sub'); s.textContent = ''; const b = document.createElement('b'); b.textContent = action; s.append(b); if (who) s.append(' · ' + who); };</script>
+      <script>window.setStatus = (action, who, here) => { const s = document.getElementById('sub'); s.textContent = ''; const b = document.createElement('b'); b.textContent = action; s.append(b); if (who) s.append(' · ' + who); document.body.classList.toggle('idle', !here); };</script>
     </body></html>`;
+  const glowHtml = (to) => `<!doctype html><meta charset="utf-8"><style>
+      html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+      .edge { position: fixed; inset: 0; background: linear-gradient(to ${to}, rgba(61,220,132,.95) 0 3px, rgba(56,189,248,.45) 3px, rgba(167,139,250,0));
+        animation: breathe 2.6s ease-in-out infinite, in .4s ease-out; }
+      @keyframes breathe { 50% { opacity: .55; filter: hue-rotate(40deg); } }
+      @keyframes in { from { opacity: 0; } }
+    </style><div class="edge"></div>`;
+  const overlayWindow = (rect, extra = {}) => {
+    const w = new BrowserWindow({ ...rect, frame: false, resizable: false, alwaysOnTop: true, skipTaskbar: true, focusable: false, show: false,
+      transparent: true, hasShadow: false, webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false }, ...extra });
+    w.setAlwaysOnTop(true, "screen-saver");
+    w.setVisibleOnAllWorkspaces?.(true);
+    w.setContentProtection(true);
+    return w;
+  };
+  const makeOverlays = (d) => {
+    const { workArea: a, bounds: b } = d;
+    const bar = overlayWindow({ ...barSize, x: Math.round(a.x + (a.width - barSize.width) / 2), y: a.y + 6 }, { movable: true });
     bar.webContents.on("will-navigate", (event, url) => {
       event.preventDefault();
       if (url.startsWith("superai-stop:")) { setEnabled(false); onStop?.(); }
     });
-    bar.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
-  };
-  const makeGlow = () => {
-    const { bounds: b } = screen.getPrimaryDisplay();
+    bar.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(barHtml()));
     // Each strip fades from the screen edge inwards; "to" is the direction of the fade.
     const strips = [
       { x: b.x, y: b.y, width: b.width, height: GLOW, to: "bottom" },
@@ -327,42 +346,37 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       { x: b.x, y: b.y + GLOW, width: GLOW, height: b.height - 2 * GLOW, to: "right" },
       { x: b.x + b.width - GLOW, y: b.y + GLOW, width: GLOW, height: b.height - 2 * GLOW, to: "left" },
     ];
-    glows = strips.map(({ to, ...rect }) => {
-      const w = new BrowserWindow({ ...rect, frame: false, resizable: false, movable: false, alwaysOnTop: true, skipTaskbar: true, focusable: false, show: false,
-        transparent: true, hasShadow: false, webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } });
-      w.setAlwaysOnTop(true, "screen-saver");
-      w.setVisibleOnAllWorkspaces?.(true);
+    const glows = strips.map(({ to, ...rect }) => {
+      const w = overlayWindow(rect, { movable: false });
       w.setIgnoreMouseEvents(true);
-      w.setContentProtection(true);
-      const html = `<!doctype html><meta charset="utf-8"><style>
-        html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
-        .edge { position: fixed; inset: 0; background: linear-gradient(to ${to}, rgba(61,220,132,.95) 0 3px, rgba(56,189,248,.45) 3px, rgba(167,139,250,0));
-          animation: breathe 2.6s ease-in-out infinite, in .4s ease-out; }
-        @keyframes breathe { 50% { opacity: .55; filter: hue-rotate(40deg); } }
-        @keyframes in { from { opacity: 0; } }
-      </style><div class="edge"></div>`;
-      w.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
+      w.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(glowHtml(to)));
       return w;
     });
+    return { bar, glows };
   };
-  /** Shows (or refreshes) the bar and the glow; they go away after a while without computer_ calls. */
+  /** Shows (or refreshes) the bar and the glow on every screen; they go away after a while without computer_ calls. */
   const showBar = (tool, caller) => {
-    if (!bar || bar.isDestroyed()) makeBar();
-    if (!glows.length || glows.some((w) => w.isDestroyed())) { for (const w of glows) if (!w.isDestroyed()) w.destroy(); makeGlow(); }
-    const who = caller?.chatName ? tr`แชต "${caller.chatName}"` : "";
-    const status = `window.setStatus && window.setStatus(${JSON.stringify(toolLabel(tool))}, ${JSON.stringify(who)})`;
-    const apply = () => bar.webContents.executeJavaScript(status).catch(() => {});
-    if (bar.webContents.isLoading()) bar.webContents.once("did-finish-load", apply); else apply();
-    for (const w of glows) w.showInactive();
-    bar.showInactive();
+    const list = displays(), active = display();
+    for (const d of list) {
+      let set = ui.get(d.id);
+      if (!set || [set.bar, ...set.glows].some((w) => w.isDestroyed())) { if (set) for (const w of [set.bar, ...set.glows]) if (!w.isDestroyed()) w.destroy(); set = makeOverlays(d); ui.set(d.id, set); }
+      const who = [caller?.chatName ? tr`แชต "${caller.chatName}"` : "", list.length > 1 ? tr`จอ ${list.findIndex((x) => x.id === active.id) + 1}` : ""].filter(Boolean).join(" · ");
+      // The screen the AI works on shows the bar fully lit; the others show it calmer.
+      const status = `window.setStatus && window.setStatus(${JSON.stringify(toolLabel(tool))}, ${JSON.stringify(who)}, ${d.id === active.id})`;
+      const { bar } = set;
+      const apply = () => bar.webContents.executeJavaScript(status).catch(() => {});
+      if (bar.webContents.isLoading()) bar.webContents.once("did-finish-load", apply); else apply();
+      for (const w of set.glows) w.showInactive();
+      bar.showInactive();
+    }
     clearTimeout(hideTimer);
     hideTimer = setTimeout(hideBar, BAR_IDLE);
   };
   /** Is this screen point (pixels on Windows, points on macOS) on the window? */
   const covers = (w, sx, sy) => {
     if (!w.isVisible()) return false;
-    const b = w.getBounds(), f = process.platform === "darwin" ? 1 : display().scaleFactor;
-    const x = sx / f, y = sy / f;
+    const { x, y } = process.platform === "win32" && screen.screenToDipPoint ? screen.screenToDipPoint({ x: sx, y: sy }) : { x: sx, y: sy };
+    const b = w.getBounds();
     return x >= b.x - 4 && x <= b.x + b.width + 4 && y >= b.y - 4 && y <= b.y + b.height + 4;
   };
   /** The bar takes clicks (for Stop) and the glow sits on the edges: step aside while the AI clicks there. */
@@ -413,7 +427,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
         </div></div>
         <script>addEventListener('keydown', (e) => { if (e.key === 'Escape') location.href = 'superai-perm:deny'; });</script>
       </body></html>`;
-      const { workArea } = screen.getPrimaryDisplay();
+      const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
       const width = 480, height = 296 + missing.length * 52;
       const win = new BrowserWindow({ width, height, x: Math.round(workArea.x + (workArea.width - width) / 2), y: Math.round(workArea.y + (workArea.height - height) / 3),
         frame: false, resizable: false, minimizable: false, maximizable: false, fullscreenable: false, alwaysOnTop: true, skipTaskbar: false, show: false,
@@ -477,45 +491,74 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   }
 
   // ------------------------------------------------------------------------------------------
-  const display = () => screen.getPrimaryDisplay();
+  // Screens: 1 is the main one, then the others from left to right. Every computer_ tool works on
+  // the screen of the latest computer_screenshot (main until one is chosen).
+  let target; // display id
+  const displays = () => {
+    const primary = screen.getPrimaryDisplay();
+    return [primary, ...screen.getAllDisplays().filter((d) => d.id !== primary.id).sort((a, b) => a.bounds.x - b.bounds.x || a.bounds.y - b.bounds.y)];
+  };
+  const display = () => displays().find((d) => d.id === target) || screen.getPrimaryDisplay();
+  /** Where the screen is in input coordinates: physical pixels on Windows, points on macOS. */
+  const inputRect = (d) => process.platform === "win32" && screen.dipToScreenRect ? screen.dipToScreenRect(null, d.bounds) : d.bounds;
+  /** The screen's width in captured pixels. */
+  const pixelWidth = (d) => process.platform === "win32" && screen.dipToScreenRect ? inputRect(d).width : Math.round(d.size.width * d.scaleFactor);
   const num = (v, name) => { const n = Number(v); if (v === undefined || v === null || v === "" || !Number.isFinite(n)) throw new Error(`${name} must be a number from the latest screenshot`); return n; };
-  // Screenshot coordinates → screen pixels (Windows, DPI aware) or points (macOS).
+  // Screenshot coordinates → input coordinates on the current screen, and back.
   const toScreen = (x, y) => {
-    const px = Math.round(num(x, "x") * scale), py = Math.round(num(y, "y") * scale);
-    if (process.platform === "darwin") { const { bounds, scaleFactor } = display(); return [bounds.x + px / scaleFactor, bounds.y + py / scaleFactor]; }
-    return [px, py];
+    const d = display(), r = inputRect(d);
+    const px = num(x, "x") * scale, py = num(y, "y") * scale;
+    if (process.platform === "darwin") return [r.x + px / d.scaleFactor, r.y + py / d.scaleFactor];
+    return [Math.round(r.x + px), Math.round(r.y + py)];
   };
   const fromScreen = (sx, sy) => {
-    if (process.platform === "darwin") { const { bounds, scaleFactor } = display(); return [Math.round((sx - bounds.x) * scaleFactor / scale), Math.round((sy - bounds.y) * scaleFactor / scale)]; }
-    return [Math.round(sx / scale), Math.round(sy / scale)];
+    const d = display(), r = inputRect(d);
+    if (process.platform === "darwin") return [Math.round((sx - r.x) * d.scaleFactor / scale), Math.round((sy - r.y) * d.scaleFactor / scale)];
+    return [Math.round((sx - r.x) / scale), Math.round((sy - r.y) / scale)];
+  };
+  const describeScreens = () => {
+    const list = displays(), active = display();
+    if (list.length < 2) return "";
+    return `\nScreens (choose with computer_screenshot display=N): ${list.map((d, i) => `${i + 1}${i === 0 ? " main" : ""} ${d.size.width}x${d.size.height}${d.id === active.id ? " ← this one" : ""}`).join(", ")}.`;
   };
 
-  async function capture() {
+  async function capture(d = display()) {
     requireOs("screen");
-    const { size, scaleFactor, id } = display();
-    const width = Math.round(size.width * scaleFactor), height = Math.round(size.height * scaleFactor);
+    const width = Math.round(d.size.width * d.scaleFactor), height = Math.round(d.size.height * d.scaleFactor);
     const sources = await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width, height } });
-    const source = sources.find((s) => String(s.display_id) === String(id)) || sources[0];
+    // display_id is empty on some systems with one screen: fall back to the only source then.
+    const source = sources.find((s) => String(s.display_id) === String(d.id)) || (sources.length === 1 ? sources[0] : undefined);
     if (!source || source.thumbnail.isEmpty()) throw new Error(process.platform === "darwin"
-      ? "Could not capture the screen. Ask the user to allow SuperAi in System Settings > Privacy & Security > Screen Recording, then restart SuperAi." : "Could not capture the screen.");
+      ? "Could not capture the screen. Ask the user to allow SuperAi in System Settings > Privacy & Security > Screen Recording, then restart SuperAi." : "Could not capture that screen.");
     return source.thumbnail;
   }
+  /** computer_screenshot display=N: switch screens (before the bar is updated, so it names the new one). */
+  function choose(args = {}) {
+    if (args.display === undefined || args.display === null || args.display === "") return;
+    const list = displays(), n = Number(args.display);
+    if (!Number.isInteger(n) || n < 1 || n > list.length) throw new Error(`display must be 1${list.length > 1 ? `-${list.length}` : ""} (this computer has ${list.length} screen${list.length > 1 ? "s" : ""})`);
+    target = list[n - 1].id;
+  }
   async function screenshot() {
-    let image = await capture();
-    const full = image.getSize();
-    if (full.width > MAX_WIDTH) image = image.resize({ width: MAX_WIDTH, quality: "good" });
-    scale = full.width / image.getSize().width;
+    const d = display();
+    let image = await capture(d);
+    if (image.getSize().width > MAX_WIDTH) image = image.resize({ width: MAX_WIDTH, quality: "good" });
     const shown = image.getSize();
-    return { text: `Screen ${shown.width}x${shown.height} (coordinates for computer_click etc. are in this image).`, image: { data: image.toPNG().toString("base64"), mimeType: "image/png" } };
+    scale = pixelWidth(d) / shown.width;
+    const list = displays(), n = list.findIndex((x) => x.id === d.id) + 1;
+    return { text: `Screen ${shown.width}x${shown.height}${list.length > 1 ? ` (screen ${n} of ${list.length})` : ""} (coordinates for computer_click etc. are in this image).${describeScreens()}`,
+      image: { data: image.toPNG().toString("base64"), mimeType: "image/png" } };
   }
   async function zoom(args) {
     const x = num(args.x, "x"), y = num(args.y, "y"), w = num(args.width, "width"), h = num(args.height, "height");
     if (w <= 0 || h <= 0) throw new Error("width and height must be positive");
-    const full = await capture();
+    const d = display();
+    const full = await capture(d);
     const size = full.getSize();
-    const rect = { x: Math.max(0, Math.round(x * scale)), y: Math.max(0, Math.round(y * scale)) };
-    rect.width = Math.max(1, Math.min(size.width - rect.x, Math.round(w * scale)));
-    rect.height = Math.max(1, Math.min(size.height - rect.y, Math.round(h * scale)));
+    const k = scale * size.width / pixelWidth(d); // screenshot pixels → captured pixels
+    const rect = { x: Math.max(0, Math.round(x * k)), y: Math.max(0, Math.round(y * k)) };
+    rect.width = Math.max(1, Math.min(size.width - rect.x, Math.round(w * k)));
+    rect.height = Math.max(1, Math.min(size.height - rect.y, Math.round(h * k)));
     let image = full.crop(rect);
     if (image.getSize().width > MAX_WIDTH) image = image.resize({ width: MAX_WIDTH, quality: "good" });
     return { text: `Zoomed view of the region x=${x} y=${y} ${w}x${h} at full resolution. Keep using the coordinates of the latest computer_screenshot (not of this image) in other tools.`,
@@ -561,6 +604,10 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   }
   async function cursor() {
     const [sx, sy] = (await send("pos")).split(" ").map(Number);
+    // Which screen is it on? (inputRect is in the same coordinates as the helper's answer.)
+    const list = displays();
+    const on = list.findIndex((d) => { const r = inputRect(d); return sx >= r.x && sx < r.x + r.width && sy >= r.y && sy < r.y + r.height; });
+    if (on >= 0 && list[on].id !== display().id) return { text: `The mouse is on screen ${on + 1}, not on the screen of the latest screenshot. Use computer_screenshot display=${on + 1} to see it.` };
     const [x, y] = fromScreen(sx, sy);
     return { text: `The mouse is at x=${x} y=${y} of the latest screenshot.` };
   }
@@ -660,8 +707,10 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       if (!TOOLS.includes(tool)) throw new Error(`Unknown computer tool: ${tool}`);
       await authorize(caller, tool);
       if (!enabled) throw new Error("Computer control was turned off.");
+      const given = args && typeof args === "object" ? args : {};
+      if (tool === "computer_screenshot") choose(given);
       showBar(tool, caller);
-      return act(tool, args && typeof args === "object" ? args : {});
+      return act(tool, given);
     });
     queue = next.catch(() => {});
     return next;
