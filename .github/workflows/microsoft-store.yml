@@ -118,7 +118,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run test:msix
-      - run: node --test packages/desktop/updater.test.mjs
+      - run: node --env-file=packages/desktop/test/test.env --test packages/desktop/updater.test.mjs
       - run: npm run package:release
       - run: npm run test:release
         timeout-minutes: 5
