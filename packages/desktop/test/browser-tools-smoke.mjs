@@ -1,6 +1,7 @@
 // The AI's browser tools, end to end: the real app, the MCP server a chat CLI would start, and a
 // small local page with a form. Checks open, snapshot, type, click, select, press, scroll,
-// screenshot and that the side browser panel is shown while the AI works.
+// screenshot and that the side browser panel is shown while the AI works; then a page with a
+// same-origin iframe, a web component (shadow DOM) and confirm(), in the panel and in Chrome / Edge.
 import { _electron as electron } from 'playwright-core';
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
@@ -17,6 +18,12 @@ const data = await fs.mkdtemp(path.join(output, 'profile-'));
 
 const site = createServer((req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  if (req.url.startsWith('/extras')) return res.end(`<title>Extras</title><h1>Extras</h1><p id="out">nothing yet</p>
+    <button onclick="document.getElementById('out').textContent = confirm('Delete everything?') ? 'deleted' : 'kept'">Delete all</button>
+    <iframe srcdoc="<button onclick=&quot;parent.document.getElementById('out').textContent='frame clicked'&quot;>Frame button</button><input placeholder='Frame field'>" style="width:300px;height:80px"></iframe>
+    <shadow-box></shadow-box>
+    <script>customElements.define('shadow-box', class extends HTMLElement { connectedCallback() { const root = this.attachShadow({ mode: 'open' });
+      root.innerHTML = '<button>Shadow button</button>'; root.querySelector('button').onclick = () => { document.getElementById('out').textContent = 'shadow clicked'; }; } });</script>`);
   if (req.url.startsWith('/done')) return res.end(`<title>Done</title><h1>Thanks ${new URL(req.url, 'http://x').searchParams.get('name')}</h1><p>size=${new URL(req.url, 'http://x').searchParams.get('size')}</p>`);
   res.end(`<title>Order form</title><h1>Order</h1>
     <form action="/done"><label>Name <input name="name" placeholder="Your name"></label>
@@ -105,6 +112,35 @@ try {
   await fs.writeFile(path.join(output, 'ai-screenshot.png'), Buffer.from(shot.content[1].data, 'base64'));
   await page.screenshot({ path: path.join(output, 'app.png') });
 
+  steps.step('iframe, shadow DOM and confirm() in the panel');
+  const extras = async (browser) => {
+    const on = browser ? { browser } : {};
+    let s = (await call('browser_open', { url: pageUrl + 'extras', ...on })).content[0].text;
+    assert.match(s, /Frame button[^\n]*\(in frame\)/, 'elements inside a same-origin iframe get refs');
+    assert.match(s, /Shadow button/, 'elements inside shadow DOM get refs');
+    s = (await call('browser_click', { ref: refOf(s, 'Frame button') })).content[0].text;
+    assert.match(s, /frame clicked/);
+    s = (await call('browser_type', { ref: refOf(s, 'Frame field'), text: 'in a frame' })).content[0].text;
+    assert.match(s, /value="in a frame"/, 'typing reaches an input inside the iframe');
+    s = (await call('browser_click', { ref: refOf(s, 'Shadow button') })).content[0].text;
+    assert.match(s, /shadow clicked/);
+    s = (await call('browser_click', { ref: refOf(s, 'Delete all') })).content[0].text;
+    assert.match(s, /kept/, 'confirm() is cancelled by default instead of freezing the page');
+    assert.match(s, /confirm "Delete everything\?" -> Cancel/, 'the snapshot reports the dialog');
+    await call('browser_dialog', { accept: true, ...on });
+    s = (await call('browser_click', { ref: refOf(s, 'Delete all') })).content[0].text;
+    assert.match(s, /deleted/, 'browser_dialog answers the next confirm()');
+    const tabs = (await call('browser_tabs', on)).content[0].text;
+    assert.match(tabs, /^\* 0 /m, 'tabs are listed with their number');
+    assert.match((await call('browser_tabs', { select: '0', ...on })).content[0].text, /^\* 0 /m, 'a tab can be chosen by number');
+  };
+  await extras();
+  steps.step('the user gets real dialogs again after the AI is done');
+  assert.equal(await desktop.evaluate(async ({ webContents }) => {
+    const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('/extras'));
+    return wc.executeJavaScript('String(window.confirm).includes("native code")');
+  }), true);
+
   steps.step('bad input is reported, not crashed');
   const bad = (await rpc('tools/call', { name: 'browser_click', arguments: { ref: 'e999' } })).result;
   assert.equal(bad.isError, true);
@@ -124,8 +160,10 @@ try {
   const outside = await call('browser_screenshot');
   assert.equal(outside.content[1].type, 'image');
   await fs.writeFile(path.join(output, `${external}-screenshot.png`), Buffer.from(outside.content[1].data, 'base64'));
+  steps.step('iframe, shadow DOM and confirm() in ' + external);
+  await extras(external);
   snap = (await call('browser_snapshot', { browser: 'app' })).content[0].text;
-  assert.match(snap, /Order form|Bottom of page/, 'the app panel is still reachable by name');
+  assert.match(snap, /Extras/, 'the app panel is still reachable by name');
 
   console.log(JSON.stringify({ passed: true, tools: tools.length, external, screenshots: output }));
 } finally {
