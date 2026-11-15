@@ -24,8 +24,8 @@ then runs MakeAppx with validation enabled. It packages a separate copy of the
 Windows release, marked `distribution: microsoft-store`. Store builds never
 download or install GitHub ZIP updates; their update button opens the Store page.
 
-The root `package.json` version `1.0.33` becomes `1.0.33.0`. Increase the version
-for each subsequent Store submission. Only stable versions are accepted here.
+The root `package.json` version (for example `1.0.49`) becomes `1.0.49.0`. Each
+Store submission needs a higher version than the last one. Only stable versions are accepted here.
 The fourth component stays zero for Microsoft Store submission.
 
 Alternatively, run GitHub Actions → **Build Microsoft Store MSIX** →
@@ -51,14 +51,15 @@ every stable GitHub release, so Store users get the same updates as GitHub users
   Listing text, screenshots, pricing and age ratings carry over unchanged.
 - **Manual run:** **Run workflow** with **tag** set to an existing `vX.Y.Z` tag
   and **submit** ticked. Use this to submit a release that was missed, for
-  example the current GitHub version right after finishing the setup below.
+  example one released before the secrets were added.
 - **Without credentials** the MSIX is still built and uploaded as an artifact.
   The submit job logs a warning naming the missing secrets and skips submission.
 
 The workflow must be on the default branch (`main`) for the release triggers
-to fire, and the tagged release must contain the Store support from this branch
-(`distribution: microsoft-store`, `store-identity.json`, `package-msix.mjs`).
-Merge this branch into `main` before the first automated release.
+to fire, and the tagged commit must contain the Store packaging
+(`store-identity.json`, `package-msix.mjs`, the `test:msix` script). Tags made
+before that landed on `main` (v1.0.48 and older) cannot be built for the Store,
+so the first automatic Store update is the first release tagged afterwards.
 
 Certification usually takes from a few hours to three business days. The CLI
 deletes any pending submission before creating its own, so a release submitted
@@ -104,9 +105,11 @@ Center account must be linked to a Microsoft Entra ID (Azure AD) tenant.
    | `PARTNER_CENTER_CLIENT_SECRET` | Client secret (key) from step 4 |
    | `PARTNER_CENTER_SELLER_ID` | Seller ID |
 
-7. **Catch up the Store.** Run **Build Microsoft Store MSIX** manually with the
-   latest stable tag and **submit** ticked. Check that the new submission shows
-   up under the product's **Submissions** in Partner Center.
+7. **Check the first submission.** After the next stable release (the first one
+   tagged with this workflow on `main`), open the workflow run and confirm the
+   **submit** job passed, then check that the new submission shows up under the
+   product's **Submissions** in Partner Center. If a release was missed, run
+   **Build Microsoft Store MSIX** manually with that tag and **submit** ticked.
 
 Never commit these values to the repository. The workflow reads them only from
 GitHub secrets, and GitHub masks them in logs.
