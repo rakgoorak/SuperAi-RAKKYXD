@@ -1492,6 +1492,14 @@ const text: Record<string, string> = {
   "เปิดไมโครโฟนไม่ได้: {0}": "Cannot open the microphone: {0}",
   "ยังไม่ได้เปิดไมโครโฟน": "The microphone is not on yet",
   "ระบบแปลงเสียงหยุดทำงาน": "The speech system stopped working",
-  "ปิดโหมดเสียงแล้ว": "Voice mode turned off"
+  "ปิดโหมดเสียงแล้ว": "Voice mode turned off",
+  "ตรวจเวอร์ชันใหม่ แล้วอัปเดตผ่าน Microsoft Store": "Check for a new version and update through the Microsoft Store",
+  "ตรวจเวอร์ชันใหม่จาก GitHub Releases แล้วอัปเดตผ่าน Microsoft Store": "Check GitHub Releases for a new version, then update through the Microsoft Store",
+  "มีอัปเดต": "Update available",
+  "มีเวอร์ชันใหม่ v{0} อัปเดตได้ใน Microsoft Store": "New version v{0} is available. Update it in the Microsoft Store",
+  "อัปเดตใน Microsoft Store": "Update in Microsoft Store",
+  "เปิด Microsoft Store": "Open Microsoft Store",
+  "ระบบตรวจเวอร์ชันใหม่จาก GitHub ทุกครั้งที่เปิดโปรแกรมและทุก 30 นาที · แอปนี้ติดตั้งจาก Microsoft Store จึงอัปเดตผ่าน Store เท่านั้น ถ้า Store ยังไม่แสดงเวอร์ชันใหม่ อาจกำลังรอการอนุมัติ ลองใหม่ภายหลัง": "New versions are checked on GitHub every time the app opens and every 30 minutes · This app was installed from the Microsoft Store, so it updates only through the Store. If the Store does not show the new version yet, it may still be awaiting approval. Try again later",
+  "อัปเดตได้ใน Microsoft Store": "Update it in the Microsoft Store"
 };
 export default text;

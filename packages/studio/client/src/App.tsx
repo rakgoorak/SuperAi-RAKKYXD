@@ -1300,7 +1300,7 @@ export function App() {
               </button>
               {update && (
                 <button onClick={() => setDialog("update")} className={update.status === "available" || update.status === "ready" ? "update-ready" : ""}
-                  title={tr("ตรวจและติดตั้งเวอร์ชันใหม่จาก GitHub Releases")}>
+                  title={update.storeManaged ? tr("ตรวจเวอร์ชันใหม่ แล้วอัปเดตผ่าน Microsoft Store") : tr("ตรวจและติดตั้งเวอร์ชันใหม่จาก GitHub Releases")}>
                   {update.status === "checking" ? (
                     <LoaderCircle size={17} className="spin" />
                   ) : update.status === "latest" ? (
@@ -1953,7 +1953,9 @@ export function App() {
                           : dialog === "skills"
                             ? tr`${workspace?.name || ""} · AI เสนอ คุณเป็นคนกดติดตั้ง`
                             : dialog === "update"
-                              ? tr("ดาวน์โหลดเวอร์ชันใหม่จาก GitHub Releases แล้วติดตั้งทับให้เอง")
+                              ? update?.storeManaged
+                                ? tr("ตรวจเวอร์ชันใหม่จาก GitHub Releases แล้วอัปเดตผ่าน Microsoft Store")
+                                : tr("ดาวน์โหลดเวอร์ชันใหม่จาก GitHub Releases แล้วติดตั้งทับให้เอง")
                             : dialog === "history" ? tr("ค้นหาข้อความและคำตอบที่บันทึกไว้ แล้วเปิดกลับไปทำงานต่อ") : dialog === "changes" ? tr("ตรวจไฟล์และ diff ของโปรเจกต์ หรือเปิดตัวอย่างผลงาน") : tr("กรุณาตรวจสอบก่อนดำเนินการ")}
                 </p>
               </div>
