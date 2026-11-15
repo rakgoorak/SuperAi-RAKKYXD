@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import { tr } from '../i18n';
 
 interface Props {
   value: string;
@@ -78,7 +79,7 @@ export function ModelCombo({ value, options, onChange, label, placeholder, maxLe
         }}
         onBlur={(e) => !root.current?.contains(e.relatedTarget as Node) && setOpen(false)}
       />
-      <button type="button" className="model-combo-toggle" tabIndex={-1} aria-label={`ดูรายชื่อ ${label} ทั้งหมด`} disabled={disabled || (!options.length && !onOpen)}
+      <button type="button" className="model-combo-toggle" tabIndex={-1} aria-label={tr`ดูรายชื่อ ${label} ทั้งหมด`} disabled={disabled || (!options.length && !onOpen)}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => {
           root.current?.querySelector('input')?.focus({ preventScroll: true });

@@ -1,6 +1,6 @@
 import type { Session } from './api';
 
-export interface PendingQuickConversation { session: Session; wsId: string }
+export interface PendingQuickConversation { session: Session; wsId: string; accountSelection?: string }
 interface QuickConversationState { aliases: Record<string, string>; pending?: PendingQuickConversation }
 const KEY = 'superai-pending-conversation-v1';
 

@@ -22,7 +22,7 @@ let checks = 0;
 const errors = [];
 const check = (value, message) => { assert.ok(value, message); checks++; console.log('PASS ' + message); };
 try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+  const page = await browser.newPage({ locale: 'th-TH',  viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => { localStorage.setItem('superai-setup-dismissed', '1'); localStorage.setItem('superai-mode', 'code'); localStorage.setItem('superai-preview', 'false'); });
   const workspaces = [{ id: 'first', name: 'งานของฉัน', rootPath: output, threads: [] }, { id: 'second', name: 'งานอื่น', rootPath: output, threads: [] }];

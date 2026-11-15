@@ -1,3 +1,4 @@
+import { tr } from './i18n';
 /**
  * How each CLI in a terminal pane receives an attached file. Checked against the
  * installed CLIs on Windows:
@@ -16,7 +17,9 @@ export function attachMode(agentType: string): AttachMode {
 
 export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 export const ACCEPT_ATTACHMENTS = [...IMAGE_TYPES, 'application/pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.pdf'].join(',');
-export const UNSUPPORTED_ATTACHMENT = 'รองรับเฉพาะรูป PNG, JPG, GIF, WEBP และไฟล์ PDF กรุณาแปลงไฟล์แล้วลองใหม่';
+export function unsupportedAttachmentMessage(): string {
+  return tr("รองรับเฉพาะรูป PNG, JPG, GIF, WEBP และไฟล์ PDF กรุณาแปลงไฟล์แล้วลองใหม่");
+}
 
 export function isSupportedImage(file: { type: string; name: string }): boolean {
   return IMAGE_TYPES.includes(file.type) || /\.(png|jpe?g|gif|webp)$/i.test(file.name);
@@ -73,10 +76,10 @@ export async function uploadAttachment(url: string, file: File): Promise<SavedAt
       body: file,
     });
   } catch {
-    throw new Error('เชื่อมต่อแอปไม่ได้ขณะบันทึกไฟล์แนบ กรุณาลองอีกครั้ง');
+    throw new Error(tr("เชื่อมต่อแอปไม่ได้ขณะบันทึกไฟล์แนบ กรุณาลองอีกครั้ง"));
   }
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || `บันทึกไฟล์แนบไม่สำเร็จ (${response.status}) กรุณาลองใหม่`);
+  if (!response.ok) throw new Error(body.error || tr`บันทึกไฟล์แนบไม่สำเร็จ (${response.status}) กรุณาลองใหม่`);
   return body;
 }
 

@@ -20,6 +20,7 @@ import {
   type CrossReviewResult,
   type Session,
 } from '../api';
+import { tr } from '../i18n';
 
 export function CrossReviewModal({
   workspaceId,
@@ -116,7 +117,7 @@ export function CrossReviewModal({
                 </span>
               </h3>
               <p className="text-xs text-slate-400">
-                ส่งโค้ดที่ AI ตัวหนึ่งเขียน ให้ AI อีกค่ายเป็นผู้ตรวจทาน (Code Review) เพื่อค้นหาข้อบกพร่อง ช่องโหว่ และ Logic Bug
+                {tr("ส่งโค้ดที่ AI ตัวหนึ่งเขียน ให้ AI อีกค่ายเป็นผู้ตรวจทาน (Code Review) เพื่อค้นหาข้อบกพร่อง ช่องโหว่ และ Logic Bug")}
               </p>
             </div>
           </div>
@@ -134,7 +135,7 @@ export function CrossReviewModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-lg bg-white/[0.02] border border-white/5">
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                เซสชันที่เป็นผู้เขียนโค้ด (Author):
+                {tr("เซสชันที่เป็นผู้เขียนโค้ด (Author):")}
               </label>
               <select
                 value={selectedSessionId}
@@ -152,7 +153,7 @@ export function CrossReviewModal({
 
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                AI ผู้ตรวจทานอิสระ (Reviewer):
+                {tr("AI ผู้ตรวจทานอิสระ (Reviewer):")}
               </label>
               <select
                 value={reviewerChoice}
@@ -160,7 +161,7 @@ export function CrossReviewModal({
                 disabled={isLoading || isApplying}
                 className="w-full px-2.5 py-1.5 bg-[#0e1216] border border-white/10 rounded-md text-xs text-slate-200 focus:outline-none focus:border-indigo-500/50"
               >
-                <option value="auto">⚡ คัดเลือกค่ายตรงข้ามให้อัตโนมัติ (แนะนำ)</option>
+                <option value="auto">{tr("⚡ คัดเลือกค่ายตรงข้ามให้อัตโนมัติ (แนะนำ)")}</option>
                 <option value="cli:codex">OpenAI Codex (Senior Auditor)</option>
                 <option value="cli:claude-code">Claude Code (Principal Architect)</option>
                 <option value="cli:antigravity">Antigravity CLI (Google Gemini)</option>
@@ -180,7 +181,7 @@ export function CrossReviewModal({
           {applySuccess && (
             <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-xs font-medium">
               <CheckCircle2 size={15} className="flex-shrink-0 text-emerald-400" />
-              <span>ส่งคำแนะนำให้ AI ผู้เขียนโค้ดทำการแก้ไขเรียบร้อยแล้ว! กำลังปิดหน้าต่าง...</span>
+              <span>{tr("ส่งคำแนะนำให้ AI ผู้เขียนโค้ดทำการแก้ไขเรียบร้อยแล้ว! กำลังปิดหน้าต่าง...")}</span>
             </div>
           )}
 
@@ -190,16 +191,16 @@ export function CrossReviewModal({
               <div className="w-12 h-12 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 mb-3">
                 <UserCheck size={24} />
               </div>
-              <h4 className="font-semibold text-slate-200 mb-1">ยังไม่มีผลการตรวจทาน</h4>
+              <h4 className="font-semibold text-slate-200 mb-1">{tr("ยังไม่มีผลการตรวจทาน")}</h4>
               <p className="text-xs text-slate-400 max-w-sm mb-4">
-                กดปุ่มด้านล่างเพื่อให้ AI อีกค่ายตรวจสอบ Git Diff ล่าสุดในโปรเจกต์ของคุณ
+                {tr("กดปุ่มด้านล่างเพื่อให้ AI อีกค่ายตรวจสอบ Git Diff ล่าสุดในโปรเจกต์ของคุณ")}
               </p>
               <button
                 onClick={handleStartReview}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs transition-colors shadow-lg shadow-indigo-600/20"
               >
                 <Scale size={15} />
-                <span>เริ่มการตรวจทานโค้ด (Start Cross-Review)</span>
+                <span>{tr("เริ่มการตรวจทานโค้ด (Start Cross-Review)")}</span>
               </button>
             </div>
           )}
@@ -208,9 +209,9 @@ export function CrossReviewModal({
           {isLoading && (
             <div className="flex flex-col items-center justify-center p-12 text-center rounded-xl bg-white/[0.01] border border-white/10">
               <LoaderCircle size={32} className="animate-spin text-indigo-400 mb-3" />
-              <h4 className="font-semibold text-slate-200 mb-1">AI Reviewer กำลังวิเคราะห์โค้ด...</h4>
+              <h4 className="font-semibold text-slate-200 mb-1">{tr("AI Reviewer กำลังวิเคราะห์โค้ด...")}</h4>
               <p className="text-xs text-slate-400">
-                กำลังอ่าน Git Diff ตรวจสอบช่องโหว่ด้านความปลอดภัย ข้อผิดพลาดทางตรรกะ และมาตรฐานโค้ด
+                {tr("กำลังอ่าน Git Diff ตรวจสอบช่องโหว่ด้านความปลอดภัย ข้อผิดพลาดทางตรรกะ และมาตรฐานโค้ด")}
               </p>
             </div>
           )}
@@ -250,7 +251,7 @@ export function CrossReviewModal({
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      ตรวจทานโค้ดของ <b className="text-slate-300">{reviewResult.authorProvider}</b> ({reviewResult.diffStats.filesChanged} ไฟล์ที่มีการเปลี่ยนแปลง)
+                      {tr("ตรวจทานโค้ดของ")} <b className="text-slate-300">{reviewResult.authorProvider}</b> ({reviewResult.diffStats.filesChanged} {tr("ไฟล์ที่มีการเปลี่ยนแปลง)")}
                     </p>
                   </div>
                 </div>
@@ -271,7 +272,7 @@ export function CrossReviewModal({
               {/* Summary Box */}
               <div className="p-3.5 rounded-lg bg-white/[0.02] border border-white/5">
                 <span className="text-xs font-semibold text-slate-400 block mb-1">
-                  บทสรุปความเห็นของ Reviewer:
+                  {tr("บทสรุปความเห็นของ Reviewer:")}
                 </span>
                 <p className="text-xs text-slate-200 leading-relaxed">
                   {reviewResult.summary}
@@ -288,7 +289,7 @@ export function CrossReviewModal({
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  ทั้งหมด ({reviewResult.issues.length})
+                  {tr("ทั้งหมด (")}{reviewResult.issues.length})
                 </button>
                 {criticalCount > 0 && (
                   <button
@@ -378,7 +379,7 @@ export function CrossReviewModal({
                     {issue.suggestedFix && (
                       <div className="mt-2 rounded bg-black/50 border border-white/5 overflow-hidden">
                         <div className="flex items-center justify-between px-2.5 py-1.5 bg-white/[0.02] border-b border-white/5 text-[10px] font-medium text-slate-400">
-                          <span>แนวทางแก้ไขที่แนะนำ:</span>
+                          <span>{tr("แนวทางแก้ไขที่แนะนำ:")}</span>
                           <button
                             onClick={() => {
                               navigator.clipboard.writeText(issue.suggestedFix!);
@@ -388,7 +389,7 @@ export function CrossReviewModal({
                             className="flex items-center gap-1 text-slate-400 hover:text-slate-200 transition-colors"
                           >
                             {copiedIdx === idx ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                            {copiedIdx === idx ? 'คัดลอกแล้ว' : 'คัดลอกโค้ด'}
+                            {copiedIdx === idx ? tr("คัดลอกแล้ว") : tr("คัดลอกโค้ด")}
                           </button>
                         </div>
                         <pre className="p-2.5 text-[11px] font-mono text-emerald-300 overflow-x-auto whitespace-pre-wrap leading-relaxed">
@@ -401,7 +402,7 @@ export function CrossReviewModal({
 
                 {!filteredIssues.length && (
                   <div className="p-6 text-center text-xs text-slate-500">
-                    ไม่พบรายการในหมวดหมู่นี้
+                    {tr("ไม่พบรายการในหมวดหมู่นี้")}
                   </div>
                 )}
               </div>
@@ -417,7 +418,7 @@ export function CrossReviewModal({
               disabled={isLoading || isApplying}
               className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
             >
-              ตรวจทานซ้ำ (Re-run)
+              {tr("ตรวจทานซ้ำ (Re-run)")}
             </button>
           )}
           {!reviewResult && <div />}
@@ -427,7 +428,7 @@ export function CrossReviewModal({
               onClick={onClose}
               className="px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 transition-colors text-xs font-medium"
             >
-              ปิด
+              {tr("ปิด")}
             </button>
             {reviewResult && reviewResult.issues.length > 0 && (
               <button
@@ -438,12 +439,12 @@ export function CrossReviewModal({
                 {isApplying ? (
                   <>
                     <LoaderCircle size={14} className="animate-spin" />
-                    <span>กำลังส่งให้ AI แก้ไข...</span>
+                    <span>{tr("กำลังส่งให้ AI แก้ไข...")}</span>
                   </>
                 ) : (
                   <>
                     <Send size={14} />
-                    <span>⚡ นำคำแนะนำส่งให้ AI แก้โค้ดทันที</span>
+                    <span>{tr("⚡ นำคำแนะนำส่งให้ AI แก้โค้ดทันที")}</span>
                   </>
                 )}
               </button>

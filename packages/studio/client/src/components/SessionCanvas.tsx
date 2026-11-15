@@ -5,6 +5,7 @@ import { SessionEnded } from './SessionEnded';
 import type { Session } from '../api';
 import { paneView, type PaneView } from '../paneView';
 import { ProviderBadge } from './ProviderBadge';
+import { tr } from '../i18n';
 
 export type CanvasLayout = 'auto' | 'tabs' | 'stack' | 'split' | '3' | '4';
 export function canvasColumns(layout: CanvasLayout, count: number, width: number) {
@@ -95,7 +96,7 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
       localStorage.setItem('superai-pane-order', JSON.stringify(order));
       localStorage.setItem('superai-pane-names', JSON.stringify(names));
       localStorage.setItem('superai-pane-sizes', JSON.stringify(weights));
-    } catch { onError('บันทึกการจัดวางบนเครื่องไม่ได้ กรุณาตรวจพื้นที่จัดเก็บ'); }
+    } catch { onError(tr("บันทึกการจัดวางบนเครื่องไม่ได้ กรุณาตรวจพื้นที่จัดเก็บ")); }
   }, [order, names, weights, onError]);
   useEffect(() => {
     if (grid && active && !hiddenSet.has(selected)) document.getElementById(`session-${selected}`)?.scrollIntoView({ block: 'nearest' });
@@ -129,7 +130,7 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
   const separator = (axis: 'x' | 'y', sizes: number[]) => sizes.slice(0, -1).map((_, i) => {
     const percent = sizes.slice(0, i + 1).reduce((a, b) => a + b, 0) / sizes.reduce((a, b) => a + b, 0) * 100;
     return <div key={axis + i} className={`pane-splitter ${axis}`} role="separator" tabIndex={0}
-      aria-label={`ปรับ${axis === 'x' ? 'ความกว้างคอลัมน์' : 'ความสูงแถว'} ${i + 1}`}
+      aria-label={tr`ปรับ${axis === 'x' ? tr("ความกว้างคอลัมน์") : tr("ความสูงแถว")} ${i + 1}`}
       aria-orientation={axis === 'x' ? 'vertical' : 'horizontal'}
       aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}
       style={axis === 'x' ? { left: `${percent}%` } : { top: `${percent}%` }}
@@ -143,22 +144,22 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
     {!grid && (ordered.length > 1 || editing) && <div className="session-tabs">
       {ordered.map(s => <div key={s.id} className={`session-tab ${s.id === selected ? 'active' : ''}`}>
         <button onClick={() => select(s.id)}><ProviderBadge provider={s.agentType} compact />{names[s.id] || s.name}</button>
-        <button className="tab-rename" title={`เปลี่ยนชื่อ ${s.name}`} onClick={() => { setName(s.name); setEditing(s.id); }}><Pencil size={12} /></button>
-        {hide && <button title={`ซ่อน ${s.name} พับเก็บไว้ก่อน (ไม่ลบ)`} aria-label={`ซ่อน ${s.name}`} onClick={() => hide(s.id)}><EyeOff size={12} /></button>}
-        <button title={`ลบ ${s.name}`} disabled={busy} onClick={() => remove(s)}><X size={12} /></button>
+        <button className="tab-rename" title={tr`เปลี่ยนชื่อ ${s.name}`} onClick={() => { setName(s.name); setEditing(s.id); }}><Pencil size={12} /></button>
+        {hide && <button title={tr`ซ่อน ${s.name} พับเก็บไว้ก่อน (ไม่ลบ)`} aria-label={tr`ซ่อน ${s.name}`} onClick={() => hide(s.id)}><EyeOff size={12} /></button>}
+        <button title={tr`ลบ ${s.name}`} disabled={busy} onClick={() => remove(s)}><X size={12} /></button>
       </div>)}
-      <button className="icon-button" title="เพิ่ม session" onClick={() => add()}><Plus size={14} /></button>
+      <button className="icon-button" title={tr("เพิ่ม session")} onClick={() => add()}><Plus size={14} /></button>
     </div>}
     {!grid && editing && <form className="session-rename-inline" onSubmit={event => { event.preventDefault(); void saveName(editing); }}>
-      <input autoFocus aria-label="ชื่อห้องใหม่" maxLength={60} value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape' && !renaming) setEditing(''); }} />
-      <button disabled={renaming || !name.trim()} type="submit">บันทึกชื่อ</button><button type="button" disabled={renaming} onClick={() => setEditing('')}>ยกเลิก</button>
+      <input autoFocus aria-label={tr("ชื่อห้องใหม่")} maxLength={60} value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape' && !renaming) setEditing(''); }} />
+      <button disabled={renaming || !name.trim()} type="submit">{tr("บันทึกชื่อ")}</button><button type="button" disabled={renaming} onClick={() => setEditing('')}>{tr("ยกเลิก")}</button>
     </form>}
     <div className={`tile-surface ${fitted ? 'fitted' : ''}`}>
       {ordered.length === 0 && hiddenList.length > 0 && (
         <div className="hidden-sessions-empty">
           <div className="hidden-sessions-empty-icon"><EyeOff size={24} /></div>
-          <h3>ซ่อนไว้ทั้งหมด {hiddenList.length} session</h3>
-          <p>ทุก session ยังทำงานและเก็บประวัติแชตไว้ครบ คลิกเลือกเพื่อเปิดกลับมาแสดงบนหน้าจอได้ทันที</p>
+          <h3>{tr("ซ่อนไว้ทั้งหมด")} {hiddenList.length} session</h3>
+          <p>{tr("ทุก session ยังทำงานและเก็บประวัติแชตไว้ครบ คลิกเลือกเพื่อเปิดกลับมาแสดงบนหน้าจอได้ทันที")}</p>
           <div className="hidden-sessions-empty-list">
             {hiddenList.map(s => (
               <button key={s.id} type="button" className="secondary" onClick={() => unhide?.(s.id)}>
@@ -168,7 +169,7 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
             ))}
             {hiddenList.length > 1 && unhideAll && (
               <button type="button" className="primary" onClick={unhideAll}>
-                <Eye size={14} /> แสดงทั้งหมด ({hiddenList.length})
+                <Eye size={14} /> {tr("แสดงทั้งหมด (")}{hiddenList.length})
               </button>
             )}
           </div>
@@ -189,20 +190,20 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
               onDragStart={e => { dragging.current = s.id; e.dataTransfer.setData('text/plain', s.id); }}
               onDragEnd={() => { dragging.current = ''; }} onDoubleClick={() => zoom(s.id)}>
               {editing === s.id ? <form className="pane-rename" onSubmit={e => { e.preventDefault(); void saveName(s.id); }}>
-                <input autoFocus aria-label="ชื่อ session" value={name} maxLength={60} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setEditing(''); }} />
-                <button type="submit" disabled={renaming || !name.trim()}>บันทึก</button><button type="button" disabled={renaming} onClick={() => setEditing('')}>ยกเลิก</button>
+                <input autoFocus aria-label={tr("ชื่อ session")} value={name} maxLength={60} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setEditing(''); }} />
+                <button type="submit" disabled={renaming || !name.trim()}>{tr("บันทึก")}</button><button type="button" disabled={renaming} onClick={() => setEditing('')}>{tr("ยกเลิก")}</button>
               </form> : <button className="pane-title" onClick={() => select(s.id)} title={`${names[s.id] || s.name} · ${s.agentType} · ${s.cwd}`}>
                 <span className={`status-dot ${s.status === 'running' ? '' : s.status === 'error' ? 'bad' : 'offline'}`} />
                 <ProviderBadge provider={s.agentType} compact /><strong>{names[s.id] || s.name}</strong>
               </button>}
               <div className="pane-actions">
-                <button className="icon-button secondary-pane-action" title={`เปลี่ยนชื่อ ${s.name}`} onClick={() => { setName(names[s.id] || s.name); setEditing(s.id); }}><Pencil size={11} /></button>
-                <button className="icon-button secondary-pane-action" title={`ย้าย ${s.name} ก่อนหน้า`} disabled={visibleIndex <= 0} onClick={() => visibleIndex > 0 && reorder(s.id, ordered[visibleIndex - 1].id)}><ArrowLeft size={11} /></button>
-                <button className="icon-button secondary-pane-action" title={`ย้าย ${s.name} ถัดไป`} disabled={visibleIndex < 0 || visibleIndex === ordered.length - 1} onClick={() => visibleIndex >= 0 && visibleIndex < ordered.length - 1 && reorder(s.id, ordered[visibleIndex + 1].id)}><ArrowRight size={11} /></button>
-                <button className="icon-button" title={`เพิ่ม session แบบ ${s.name}`} onClick={() => add(s.agentType)}><Plus size={13} /></button>
-                {hide && <button className="icon-button" title={`ซ่อน ${s.name} พับเก็บไว้ก่อน (ไม่ลบ)`} aria-label={`ซ่อน ${s.name}`} onClick={() => hide(s.id)}><EyeOff size={12} /></button>}
-                <button className="icon-button" title={`ขยาย ${s.name}`} onClick={() => zoom(s.id)}><Maximize2 size={12} /></button>
-                <button className="icon-button" title={`ลบ ${s.name}`} disabled={busy} onClick={() => remove(s)}><X size={12} /></button>
+                <button className="icon-button secondary-pane-action" title={tr`เปลี่ยนชื่อ ${s.name}`} onClick={() => { setName(names[s.id] || s.name); setEditing(s.id); }}><Pencil size={11} /></button>
+                <button className="icon-button secondary-pane-action" title={tr`ย้าย ${s.name} ก่อนหน้า`} disabled={visibleIndex <= 0} onClick={() => visibleIndex > 0 && reorder(s.id, ordered[visibleIndex - 1].id)}><ArrowLeft size={11} /></button>
+                <button className="icon-button secondary-pane-action" title={tr`ย้าย ${s.name} ถัดไป`} disabled={visibleIndex < 0 || visibleIndex === ordered.length - 1} onClick={() => visibleIndex >= 0 && visibleIndex < ordered.length - 1 && reorder(s.id, ordered[visibleIndex + 1].id)}><ArrowRight size={11} /></button>
+                <button className="icon-button" title={tr`เพิ่ม session แบบ ${s.name}`} onClick={() => add(s.agentType)}><Plus size={13} /></button>
+                {hide && <button className="icon-button" title={tr`ซ่อน ${s.name} พับเก็บไว้ก่อน (ไม่ลบ)`} aria-label={tr`ซ่อน ${s.name}`} onClick={() => hide(s.id)}><EyeOff size={12} /></button>}
+                <button className="icon-button" title={tr`ขยาย ${s.name}`} onClick={() => zoom(s.id)}><Maximize2 size={12} /></button>
+                <button className="icon-button" title={tr`ลบ ${s.name}`} disabled={busy} onClick={() => remove(s)}><X size={12} /></button>
               </div>
             </div>}
             {(s.status === 'exited' || s.status === 'error') && paneView(s) !== 'chat' && <SessionEnded key={`${s.id}-${s.createdAt}`} session={{ ...s, name: names[s.id] || s.name }} onRestart={restart} onClose={close} />}

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Cli } from "../api";
 import { HEADLESS, PROVIDER_LABEL, confirmDefaults, loadDefaults, saveDefaults, type ProviderDefaults as Defaults } from "../providers";
 import { SeatPicker } from "./SeatPicker";
+import { tr } from '../i18n';
 
 /** Default model and effort per provider; every new Agent/Chat/Code seat starts from these. */
 export function ProviderDefaults({ clis, onSaved }: { clis: Cli[]; onSaved?: () => void }) {
@@ -14,7 +15,7 @@ export function ProviderDefaults({ clis, onSaved }: { clis: Cli[]; onSaved?: () 
     confirmDefaults();
     onSaved?.();
   };
-  if (!installed.length) return <p className="muted">ติดตั้ง CLI ของ AI อย่างน้อย 1 ตัวก่อน แล้วกลับมาเลือก model และ effort</p>;
+  if (!installed.length) return <p className="muted">{tr("ติดตั้ง CLI ของ AI อย่างน้อย 1 ตัวก่อน แล้วกลับมาเลือก model และ effort")}</p>;
   return (
     <div className="provider-defaults">
       {installed.map((id) => {
@@ -22,7 +23,7 @@ export function ProviderDefaults({ clis, onSaved }: { clis: Cli[]; onSaved?: () 
         return (
           <div className="seat-row" key={id}>
             <span className="seat-badge">{PROVIDER_LABEL[id]}</span>
-            <SeatPicker named={false} fixedProvider label={PROVIDER_LABEL[id]} clis={clis.filter((c) => c.id === id)} ollamaModels={[]}
+            <SeatPicker named={false} fixedProvider showAccount={false} label={PROVIDER_LABEL[id]} clis={clis.filter((c) => c.id === id)} ollamaModels={[]}
               seat={{ name: id, provider: `cli:${id}`, model: d.model, effort: d.effort }}
               onChange={(seat) => update(id, seat.model, seat.effort)} />
           </div>

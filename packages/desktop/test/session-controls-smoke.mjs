@@ -6,7 +6,7 @@ import path from 'node:path';
 import { closeApp, stepper } from './smoke-harness.mjs';
 const require = createRequire(import.meta.url), steps = stepper('session-controls');
 const data = await fs.mkdtemp(path.resolve('output/session-controls-'));
-const app = await electron.launch({executablePath:require('electron'),args:['packages/desktop'],env:{...process.env,SUPERAI_DATA_DIR:data},timeout:60000});
+const app = await electron.launch({executablePath:require('electron'),args:['packages/desktop'],env:{SUPERAI_LANG: 'th', ...process.env,SUPERAI_DATA_DIR:data},timeout:60000});
 try {
  const page = await app.firstWindow(); page.setDefaultTimeout(20000); page.on('console',m=>{if(m.type()==='error')steps.log(m.text());}); page.on('pageerror', error => steps.log(error.stack)); await page.waitForSelector('.app-shell'); await page.waitForFunction(()=>document.querySelector('.statusbar')?.textContent.includes('เชื่อมต่อแล้ว'));
  await page.evaluate(() => localStorage.setItem('superai-setup-dismissed','1'));
@@ -80,7 +80,7 @@ try {
  await page.waitForTimeout(150);
  assert.equal(await model.inputValue(),'');assert.equal(await page.getByLabel('Effort ในแชท One',{exact:true}).inputValue(),'');
  const firstChat=page.locator('[data-session-id="fixture-0"] .chat-view');
- await firstChat.getByRole('button',{name:'แก้ข้อความแล้วส่งใหม่',exact:true}).click();
+ await firstChat.getByRole('button',{name:'แก้ไขข้อความ',exact:true}).first().click();
  assert.equal(await page.getByLabel('คำสั่ง',{exact:true}).inputValue(),'previous fixture-0');
  const beforeRetry=sent.length;
  await firstChat.getByRole('button',{name:'สร้างคำตอบใหม่',exact:true}).click();

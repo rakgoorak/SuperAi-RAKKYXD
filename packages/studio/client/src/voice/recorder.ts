@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 // Microphone capture at 16 kHz with energy-based end-of-utterance detection.
 export interface UtteranceOptions {
   deviceId?: string;
@@ -17,7 +18,7 @@ export class Microphone {
 
   async open(deviceId?: string) {
     if (this.stream) return;
-    if (!navigator.mediaDevices?.getUserMedia) throw new Error("อุปกรณ์นี้ไม่รองรับไมโครโฟน");
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error(tr("อุปกรณ์นี้ไม่รองรับไมโครโฟน"));
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: { deviceId: deviceId ? { exact: deviceId } : undefined, channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -25,9 +26,9 @@ export class Microphone {
     } catch (error) {
       const name = (error as DOMException).name;
       throw new Error(
-        name === "NotAllowedError" ? "ไม่ได้รับสิทธิ์ใช้ไมโครโฟน กรุณาอนุญาตในการตั้งค่าความเป็นส่วนตัวของระบบ"
-          : name === "NotFoundError" || name === "OverconstrainedError" ? "ไม่พบไมโครโฟน กรุณาเสียบไมค์หรือเลือกอุปกรณ์ใหม่"
-          : `เปิดไมโครโฟนไม่ได้: ${(error as Error).message}`,
+        name === "NotAllowedError" ? tr("ไม่ได้รับสิทธิ์ใช้ไมโครโฟน กรุณาอนุญาตในการตั้งค่าความเป็นส่วนตัวของระบบ")
+          : name === "NotFoundError" || name === "OverconstrainedError" ? tr("ไม่พบไมโครโฟน กรุณาเสียบไมค์หรือเลือกอุปกรณ์ใหม่")
+          : tr`เปิดไมโครโฟนไม่ได้: ${(error as Error).message}`,
       );
     }
     this.context = new AudioContext({ sampleRate: 16000 });
@@ -36,7 +37,7 @@ export class Microphone {
 
   // Resolves with audio after the speaker pauses, or null if cancelled / nothing said.
   listen(options: UtteranceOptions = {}): Promise<Float32Array | null> {
-    if (!this.context || !this.source) return Promise.reject(new Error("ยังไม่ได้เปิดไมโครโฟน"));
+    if (!this.context || !this.source) return Promise.reject(new Error(tr("ยังไม่ได้เปิดไมโครโฟน")));
     this.stopListening();
     const { silenceMs = 1100, maxMs = 28000, onLevel, onSpeechStart } = options;
     const context = this.context;

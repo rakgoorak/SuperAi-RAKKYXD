@@ -41,7 +41,7 @@ async function ping(request, env) {
 async function stats(env) {
   const now = Date.now();
   const month = now - 30 * DAY_MS;
-  const [totals, byOs, byCountry] = await env.DB.batch([
+  const [totals, byOs, byCountry, onlineByCountry] = await env.DB.batch([
     env.DB.prepare(
       `SELECT COUNT(*) AS total,
               SUM(last_seen >= ?1) AS online, SUM(last_seen >= ?2) AS today,
@@ -53,13 +53,17 @@ async function stats(env) {
       `SELECT country, COUNT(*) AS users FROM devices WHERE last_seen >= ?1 AND country != ''
        GROUP BY country ORDER BY users DESC, country LIMIT 12`,
     ).bind(month),
+    env.DB.prepare(
+      `SELECT country, COUNT(*) AS users FROM devices WHERE last_seen >= ?1 AND country != ''
+       GROUP BY country ORDER BY users DESC, country`,
+    ).bind(now - ONLINE_MS),
   ]);
   const t = totals.results[0] || {};
   const os = { win32: 0, darwin: 0, linux: 0 };
   for (const row of byOs.results) os[row.os] = row.users;
   return json({
     online: t.online || 0, today: t.today || 0, week: t.week || 0, month: t.month || 0, total: t.total || 0,
-    os, countries: byCountry.results, updatedAt: now,
+    os, countries: byCountry.results, onlineCountries: onlineByCountry.results, updatedAt: now,
   }, 200, { "Cache-Control": "public, max-age=60" });
 }
 

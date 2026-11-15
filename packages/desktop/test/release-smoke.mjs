@@ -13,7 +13,7 @@ const steps = stepper('release');
 let page;
 watchdog(240000, steps, () => page && snapshot(page, path.join(data, 'watchdog.png'), steps));
 steps.step('launch packaged app');
-const app = await electron.launch({ executablePath: manifest.main, args: ['--disable-gpu'], env: { ...process.env, SUPERAI_DATA_DIR: data, SUPERAI_TEST_MODE: '1' }, timeout: 60000 });
+const app = await electron.launch({ executablePath: manifest.main, args: ['--disable-gpu'], env: { SUPERAI_LANG: 'th', ...process.env, SUPERAI_DATA_DIR: data, SUPERAI_TEST_MODE: '1' }, timeout: 60000 });
 const errors = [], passed = [];
 let failure = null;
 async function eventually(fn) { for (let i = 0; i < 150; i++) { if (await fn()) return; await new Promise(r => setTimeout(r, 100)); } throw new Error(`Condition timed out at step "${steps.current}"`); }

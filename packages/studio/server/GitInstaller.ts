@@ -6,6 +6,7 @@ import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { tr } from './i18n.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -57,7 +58,7 @@ export interface GitAsset { url: string; filename: string; sha256?: string; vers
 export function pickPortableGitAsset(release: any, arch = process.arch): GitAsset {
   const suffix = arch === 'arm64' ? 'arm64' : '64-bit';
   const asset = (release?.assets || []).find((a: any) => new RegExp(`^PortableGit-[\\d.]+-${suffix}\\.7z\\.exe$`).test(a.name));
-  if (!asset) throw new Error(`ไม่พบ PortableGit สำหรับ ${suffix} ใน release ล่าสุดของ Git for Windows`);
+  if (!asset) throw new Error(tr`ไม่พบ PortableGit สำหรับ ${suffix} ใน release ล่าสุดของ Git for Windows`);
   let digest = typeof asset.digest === 'string' && asset.digest.startsWith('sha256:') ? asset.digest.slice(7) : undefined;
   if (!digest && typeof release?.body === 'string') {
     const match = release.body.match(new RegExp(`([a-f0-9]{64})\\s+\\*?${asset.name}`, 'i'));
@@ -67,62 +68,62 @@ export function pickPortableGitAsset(release: any, arch = process.arch): GitAsse
 }
 
 export async function installPortableGit(options: { onLog?: (msg: string) => void; signal?: AbortSignal; targetDir?: string } = {}) {
-  if (process.platform !== 'win32') throw new Error('ติดตั้ง Git อัตโนมัติรองรับเฉพาะ Windows บน macOS ให้ใช้ xcode-select --install');
+  if (process.platform !== 'win32') throw new Error(tr("ติดตั้ง Git อัตโนมัติรองรับเฉพาะ Windows บน macOS ให้ใช้ xcode-select --install"));
   const { onLog = () => {}, signal, targetDir = managedGitDir() } = options;
-  onLog('กำลังตรวจรุ่นล่าสุดของ Git for Windows...');
+  onLog(tr("กำลังตรวจรุ่นล่าสุดของ Git for Windows..."));
   const response = await fetch('https://api.github.com/repos/git-for-windows/git/releases/latest', {
     signal: signal || AbortSignal.timeout(20000), headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'SuperAi-RAKKYXD' },
   });
-  if (!response.ok) throw new Error(`อ่านข้อมูล Git for Windows ไม่ได้ (HTTP ${response.status})`);
+  if (!response.ok) throw new Error(tr`อ่านข้อมูล Git for Windows ไม่ได้ (HTTP ${response.status})`);
   const asset = pickPortableGitAsset(await response.json());
   const parent = path.dirname(targetDir);
   const staging = path.join(parent, `.staging-git-${Date.now()}`);
   fs.mkdirSync(staging, { recursive: true });
   try {
     const archive = path.join(staging, asset.filename);
-    onLog(`กำลังดาวน์โหลด ${asset.filename}...`);
+    onLog(tr`กำลังดาวน์โหลด ${asset.filename}...`);
     const res = await fetch(asset.url, { signal });
-    if (!res.ok || !res.body) throw new Error(`ดาวน์โหลด Git ไม่สำเร็จ (HTTP ${res.status})`);
+    if (!res.ok || !res.body) throw new Error(tr`ดาวน์โหลด Git ไม่สำเร็จ (HTTP ${res.status})`);
     const total = Number(res.headers.get('content-length') || 0);
     const sha = crypto.createHash('sha256');
     let received = 0, last = 0;
     const body = Readable.fromWeb(res.body as any);
     body.on('data', (chunk: Buffer) => {
       received += chunk.length; sha.update(chunk);
-      if (Date.now() - last > 1000) { last = Date.now(); onLog(`ดาวน์โหลด Git: ${(received / 1048576).toFixed(1)}MB / ${total ? (total / 1048576).toFixed(1) : '?'}MB`); }
+      if (Date.now() - last > 1000) { last = Date.now(); onLog(tr`ดาวน์โหลด Git: ${(received / 1048576).toFixed(1)}MB / ${total ? (total / 1048576).toFixed(1) : '?'}MB`); }
     });
     await pipeline(body, fs.createWriteStream(archive));
     if (asset.sha256) {
       const actual = sha.digest('hex');
-      if (actual.toLowerCase() !== asset.sha256.toLowerCase()) throw new Error('ไฟล์ Git ไม่สมบูรณ์ (SHA256 ไม่ตรง) กรุณาลองใหม่');
-      onLog('ตรวจ SHA256 ถูกต้อง');
+      if (actual.toLowerCase() !== asset.sha256.toLowerCase()) throw new Error(tr("ไฟล์ Git ไม่สมบูรณ์ (SHA256 ไม่ตรง) กรุณาลองใหม่"));
+      onLog(tr("ตรวจ SHA256 ถูกต้อง"));
     } else {
-      onLog('ตรวจความสมบูรณ์ของไฟล์ดาวน์โหลด...');
+      onLog(tr("ตรวจความสมบูรณ์ของไฟล์ดาวน์โหลด..."));
       try {
         const checkRes = await fetch(`${asset.url}.sha256`, { signal: AbortSignal.timeout(5000) });
         if (checkRes.ok) {
           const expected = (await checkRes.text()).trim().split(/\s+/)[0]?.toLowerCase();
           if (expected && expected.length === 64) {
             const actual = sha.digest('hex').toLowerCase();
-            if (actual !== expected) throw new Error('ไฟล์ Git ไม่สมบูรณ์ (SHA256 ไม่ตรง) กรุณาลองใหม่');
-            onLog('ตรวจ SHA256 จาก checksum asset ถูกต้อง');
+            if (actual !== expected) throw new Error(tr("ไฟล์ Git ไม่สมบูรณ์ (SHA256 ไม่ตรง) กรุณาลองใหม่"));
+            onLog(tr("ตรวจ SHA256 จาก checksum asset ถูกต้อง"));
           }
         }
       } catch (err: any) {
         if (err.message?.includes('SHA256')) throw err;
       }
     }
-    onLog('กำลังแตกไฟล์ Git...');
+    onLog(tr("กำลังแตกไฟล์ Git..."));
     const extracted = path.join(staging, 'git');
     // 7-Zip self-extractor: -o target, -y no prompts.
     await execFileAsync(archive, [`-o${extracted}`, '-y'], { windowsHide: true, signal, timeout: 600000 });
     if (!fs.existsSync(path.join(extracted, 'cmd', 'git.exe')) || !bashForGit(path.join(extracted, 'cmd', 'git.exe')))
-      throw new Error('แตกไฟล์แล้วแต่ไม่พบ git.exe หรือ bash.exe');
+      throw new Error(tr("แตกไฟล์แล้วแต่ไม่พบ git.exe หรือ bash.exe"));
     if (fs.existsSync(targetDir)) fs.rmSync(targetDir, { recursive: true, force: true });
     try { fs.renameSync(extracted, targetDir); } catch { fs.cpSync(extracted, targetDir, { recursive: true }); }
     const git = path.join(targetDir, 'cmd', 'git.exe');
     const version = execFileSync(git, ['--version'], { encoding: 'utf8', windowsHide: true, timeout: 10000 }).trim();
-    onLog(`${version} พร้อมใช้งาน`);
+    onLog(tr`${version} พร้อมใช้งาน`);
     return { git, bash: bashForGit(git)!, version };
   } finally {
     try { fs.rmSync(staging, { recursive: true, force: true }); } catch {}

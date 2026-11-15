@@ -31,6 +31,7 @@ import {
   getFileCategory,
 } from '../fileTree';
 import '../file-explorer.css';
+import { tr } from '../i18n';
 
 export { type TreeNode, buildFileTree };
 
@@ -131,7 +132,7 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
       setCopiedPath(filePath);
       setTimeout(() => setCopiedPath(null), 1500);
     }).catch(() => {
-      onError?.('คัดลอกพาธไม่สำเร็จ');
+      onError?.(tr("คัดลอกพาธไม่สำเร็จ"));
     });
   };
 
@@ -153,7 +154,7 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
     if (!workspace?.id) return;
 
     if (editingFile && editorContent !== savedContent) {
-      const proceed = window.confirm('คุณยังไม่ได้บันทึกไฟล์ปัจจุบัน ต้องการเปิดไฟล์ใหม่หรือไม่?');
+      const proceed = window.confirm(tr("คุณยังไม่ได้บันทึกไฟล์ปัจจุบัน ต้องการเปิดไฟล์ใหม่หรือไม่?"));
       if (!proceed) return;
     }
 
@@ -168,7 +169,7 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
       const res = await fetch(url);
       if (!res.ok) {
         const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.error || `เปิดไฟล์ไม่สำเร็จ (${res.status})`);
+        throw new Error(errorData?.error || tr`เปิดไฟล์ไม่สำเร็จ (${res.status})`);
       }
 
       const contentType = res.headers.get('content-type') || '';
@@ -192,7 +193,7 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
 
   const handleCloseEditor = () => {
     if (editorContent !== savedContent) {
-      const proceed = window.confirm('คุณมีข้อมูลที่ยังไม่ได้บันทึก ต้องการปิดโปรแกรมแก้ไขหรือไม่?');
+      const proceed = window.confirm(tr("คุณมีข้อมูลที่ยังไม่ได้บันทึก ต้องการปิดโปรแกรมแก้ไขหรือไม่?"));
       if (!proceed) return;
     }
     setEditingFile(null);
@@ -219,7 +220,7 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
         setSaveStatus('success');
         setTimeout(() => setSaveStatus('idle'), 2500);
       } else {
-        throw new Error('บันทึกไฟล์ไม่สำเร็จ');
+        throw new Error(tr("บันทึกไฟล์ไม่สำเร็จ"));
       }
     } catch (err) {
       setSaveStatus('error');
@@ -277,7 +278,7 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
             onClick={() => toggleExpand(node.path)}
             title={node.path}
           >
-            <span className="node-toggle" aria-label={isExpanded ? 'ยุบโฟลเดอร์' : 'ขยายโฟลเดอร์'}>
+            <span className="node-toggle" aria-label={isExpanded ? tr("ยุบโฟลเดอร์") : tr("ขยายโฟลเดอร์")}>
               {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </span>
             <span className="node-icon is-folder">
@@ -287,7 +288,7 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
             <div className="tree-node-actions">
               <button
                 className="tree-action-btn"
-                title="คัดลอกพาธโฟลเดอร์"
+                title={tr("คัดลอกพาธโฟลเดอร์")}
                 onClick={e => handleCopyPath(node.path, e)}
               >
                 {copiedPath === node.path ? <Check size={13} color="var(--green)" /> : <Copy size={13} />}
@@ -322,21 +323,21 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
           </span>
           <span className="node-name">{node.name}</span>
           {isPinned && (
-            <span className="node-pin-badge" title="ปักหมุดใน Context แล้ว">
+            <span className="node-pin-badge" title={tr("ปักหมุดใน Context แล้ว")}>
               <Pin size={11} fill="currentColor" />
             </span>
           )}
           <div className="tree-node-actions">
             <button
               className={`tree-action-btn ${isPinned ? 'is-pinned' : ''}`}
-              title={isPinned ? 'ยกเลิกการปักหมุด' : 'ปักหมุดไฟล์เพื่อให้อยู่ใน Context'}
+              title={isPinned ? tr("ยกเลิกการปักหมุด") : tr("ปักหมุดไฟล์เพื่อให้อยู่ใน Context")}
               onClick={e => void handleTogglePin(node.path, e)}
             >
               <Pin size={13} fill={isPinned ? 'currentColor' : 'none'} />
             </button>
             <button
               className="tree-action-btn"
-              title="คัดลอกพาธไฟล์"
+              title={tr("คัดลอกพาธไฟล์")}
               onClick={e => handleCopyPath(node.path, e)}
             >
               {copiedPath === node.path ? <Check size={13} color="var(--green)" /> : <Copy size={13} />}
@@ -354,12 +355,12 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
     const isImg = mediaPreview !== null;
 
     return (
-      <section className="quick-editor" aria-label={`โปรแกรมแก้ไขไฟล์ด่วน ${fileName}`}>
+      <section className="quick-editor" aria-label={tr`โปรแกรมแก้ไขไฟล์ด่วน ${fileName}`}>
         <header className="quick-editor-header">
           <div className="quick-editor-info">
             <button
               className="tree-action-btn"
-              title="กลับไปที่รายการไฟล์"
+              title={tr("กลับไปที่รายการไฟล์")}
               onClick={handleCloseEditor}
             >
               <ArrowLeft size={15} />
@@ -370,7 +371,7 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
               </span>
               {isDirty && !isImg && (
                 <span className="quick-editor-dirty-indicator">
-                  • ยังไม่บันทึก
+                  {tr("• ยังไม่บันทึก")}
                 </span>
               )}
             </div>
@@ -381,26 +382,26 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
                 className="quick-editor-save-btn"
                 disabled={isSaving || !isDirty}
                 onClick={() => void handleSaveFile()}
-                title="บันทึกไฟล์ (Ctrl+S)"
+                title={tr("บันทึกไฟล์ (Ctrl+S)")}
               >
                 {isSaving ? (
                   <LoaderCircle size={13} className="spin" />
                 ) : (
                   <Save size={13} />
                 )}
-                <span>บันทึกไฟล์</span>
+                <span>{tr("บันทึกไฟล์")}</span>
               </button>
             )}
             <button
               className="tree-action-btn"
-              title={isModal ? 'ย่อกลับเข้า Dock' : 'ขยายเต็มหน้าจอ'}
+              title={isModal ? tr("ย่อกลับเข้า Dock") : tr("ขยายเต็มหน้าจอ")}
               onClick={() => setIsModal(!isModal)}
             >
               {isModal ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             </button>
             <button
               className="tree-action-btn"
-              title="ปิดโปรแกรมแก้ไข"
+              title={tr("ปิดโปรแกรมแก้ไข")}
               onClick={handleCloseEditor}
             >
               <X size={14} />
@@ -411,14 +412,14 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
         {isLoadingContent ? (
           <div className="file-explorer-empty" role="status">
             <LoaderCircle size={22} className="spin" />
-            <p>กำลังโหลดเนื้อหาไฟล์…</p>
+            <p>{tr("กำลังโหลดเนื้อหาไฟล์…")}</p>
           </div>
         ) : editorError ? (
           <div className="file-explorer-empty" role="alert">
             <AlertCircle size={24} color="#e06c75" />
             <p>{editorError}</p>
             <button className="secondary" onClick={() => void handleOpenFile(editingFile)}>
-              ลองใหม่
+              {tr("ลองใหม่")}
             </button>
           </div>
         ) : isImg ? (
@@ -452,21 +453,21 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
               <div className="quick-editor-status">
                 {saveStatus === 'success' && (
                   <span className="quick-editor-status is-success">
-                    <Check size={12} /> บันทึกสำเร็จ
+                    <Check size={12} /> {tr("บันทึกสำเร็จ")}
                   </span>
                 )}
                 {saveStatus === 'error' && (
                   <span className="quick-editor-status is-error">
-                    <AlertCircle size={12} /> บันทึกผิดพลาด
+                    <AlertCircle size={12} /> {tr("บันทึกผิดพลาด")}
                   </span>
                 )}
                 {saveStatus === 'idle' && (
-                  <span>{isDirty ? 'มีการเปลี่ยนแปลง' : 'ไฟล์ไม่ถูกแก้ไข'}</span>
+                  <span>{isDirty ? tr("มีการเปลี่ยนแปลง") : tr("ไฟล์ไม่ถูกแก้ไข")}</span>
                 )}
               </div>
               <div className="quick-editor-meta">
-                <span>{lineCount} บรรทัด</span>
-                <span>{editorContent.length} ตัวอักษร</span>
+                <span>{lineCount} {tr("บรรทัด")}</span>
+                <span>{editorContent.length} {tr("ตัวอักษร")}</span>
                 <span>UTF-8</span>
               </div>
             </footer>
@@ -486,14 +487,14 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
           <div className="file-explorer-header">
             <div className="file-explorer-title">
               <Folder size={15} color="var(--accent)" />
-              <h2>ไฟล์ในโปรเจกต์</h2>
-              <span className="file-explorer-count">{fileList.length} ไฟล์</span>
+              <h2>{tr("ไฟล์ในโปรเจกต์")}</h2>
+              <span className="file-explorer-count">{fileList.length} {tr("ไฟล์")}</span>
             </div>
             <div className="file-explorer-toolbar">
               <button
                 type="button"
                 className="btn-worktree-trigger"
-                title="จัดการ Git Worktrees (คู่ขนาน)"
+                title={tr("จัดการ Git Worktrees (คู่ขนาน)")}
                 onClick={() => setWorktreeModalOpen(true)}
               >
                 <FolderGit2 size={12} />
@@ -501,7 +502,7 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
               </button>
               <button
                 className="tree-action-btn"
-                title="รีเฟรชรายการไฟล์"
+                title={tr("รีเฟรชรายการไฟล์")}
                 disabled={loading}
                 onClick={() => void loadFiles()}
               >
@@ -514,14 +515,14 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
             <Search size={13} />
             <input
               type="text"
-              placeholder="ค้นหาไฟล์และโฟลเดอร์..."
+              placeholder={tr("ค้นหาไฟล์และโฟลเดอร์...")}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
             {search && (
               <button
                 className="file-explorer-search-clear"
-                title="ล้างคำค้นหา"
+                title={tr("ล้างคำค้นหา")}
                 onClick={() => setSearch('')}
               >
                 <X size={12} />
@@ -533,18 +534,18 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
             {loading && fileList.length === 0 ? (
               <div className="file-explorer-empty">
                 <LoaderCircle size={20} className="spin" />
-                <p>กำลังค้นหาไฟล์ในโปรเจกต์…</p>
+                <p>{tr("กำลังค้นหาไฟล์ในโปรเจกต์…")}</p>
               </div>
             ) : !workspace?.id ? (
               <div className="file-explorer-empty">
-                <p>กรุณาเลือกโปรเจกต์ก่อนดูไฟล์</p>
+                <p>{tr("กรุณาเลือกโปรเจกต์ก่อนดูไฟล์")}</p>
               </div>
             ) : visibleTree.length === 0 ? (
               <div className="file-explorer-empty">
                 <p>
                   {search
-                    ? `ไม่พบไฟล์ที่ตรงกับ "${search}"`
-                    : 'ไม่พบไฟล์ในโฟลเดอร์ของโปรเจกต์นี้'}
+                    ? tr`ไม่พบไฟล์ที่ตรงกับ "${search}"`
+                    : tr("ไม่พบไฟล์ในโฟลเดอร์ของโปรเจกต์นี้")}
                 </p>
               </div>
             ) : (
@@ -560,7 +561,7 @@ export function FileExplorerPanel({ workspace, onOpenFile, onError }: FileExplor
           className="quick-editor-modal-backdrop"
           role="dialog"
           aria-modal="true"
-          aria-label={`แก้ไขไฟล์ ${editingFile}`}
+          aria-label={tr`แก้ไขไฟล์ ${editingFile}`}
           onKeyDown={e => {
             if (e.key === 'Escape') {
               e.stopPropagation();

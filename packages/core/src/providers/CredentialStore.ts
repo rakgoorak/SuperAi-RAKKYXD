@@ -18,6 +18,12 @@ export function sessionService(value: string): SessionService {
   return value as SessionService;
 }
 
+export const API_SERVICES = ['openrouter', 'deepseek', 'groq'] as const;
+export function apiService(value: string): string {
+  if (!(API_SERVICES as readonly string[]).includes(value)) throw new Error('Unsupported API service');
+  return value;
+}
+
 function systemEncryption(): CredentialEncryption {
   try {
     const { safeStorage } = createRequire(import.meta.url)('electron');
@@ -30,7 +36,9 @@ function systemEncryption(): CredentialEncryption {
  * Non-Electron callers fail closed. Tests may inject an isolated encryption adapter. */
 export class CredentialStore {
   constructor(
-    private directory = path.join(os.homedir(), '.opencode-multi'),
+    // Follows the app's data folder: Windows encrypts with a key kept in that folder, so a test or
+    // second copy of the app with its own data folder must not write the user's file.
+    private directory = process.env.SUPERAI_DATA_DIR || path.join(os.homedir(), '.opencode-multi'),
     private encryption?: CredentialEncryption,
   ) {}
 
@@ -98,10 +106,42 @@ export class CredentialStore {
     } catch { throw new Error('Encrypted migration verified; legacy cleanup incomplete'); }
   }
 
+  /**
+   * Saving must not stay blocked by a file this app can never decrypt (written with another app
+   * data folder's key, or damaged). It is kept beside the store as `credentials.enc.unreadable-*`
+   * and a new store starts; nothing in it could be used anyway.
+   */
+  private readOrReset(): Record<string, string> {
+    try { return this.read(); }
+    catch (error) {
+      this.cipher(); // encryption itself unavailable: fail closed, keep the file
+      const file = path.join(this.directory, 'credentials.enc');
+      if (!fs.existsSync(file)) throw error;
+      fs.renameSync(file, `${file}.unreadable-${Date.now()}`);
+      return {};
+    }
+  }
+
   get(kind: 'api' | 'session', provider: string): string | undefined {
     if (kind === 'session') sessionService(provider);
     this.migrateLegacy();
     return this.read()[`${kind}:${provider}`];
+  }
+
+  /** API keys the user pasted in Settings (OpenRouter, DeepSeek, Groq). */
+  saveApi(provider: string, key: string): void {
+    apiService(provider);
+    if (!key || key.length > 500 || /\s/.test(key)) throw new Error('Invalid API key');
+    this.migrateLegacy();
+    this.write({ ...this.readOrReset(), [`api:${provider}`]: key });
+  }
+
+  forgetApi(provider: string): void {
+    apiService(provider);
+    this.migrateLegacy();
+    const data = this.read();
+    delete data[`api:${provider}`];
+    this.write(data);
   }
 
   saveSession(provider: string, token: string): void {

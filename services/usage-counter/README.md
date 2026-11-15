@@ -6,7 +6,8 @@ Anonymous usage counter behind the "people using SuperAi" numbers on the downloa
   `id` is a random UUID created on the device. No IP address or account is stored; the
   country is Cloudflare's two-letter code for the request.
 - `GET /stats` returns `online` (last 15 minutes), `today`, `week`, `month`, `total`,
-  per-OS and per-country counts. Cached for 60 seconds.
+  per-OS counts, `countries` (last 30 days), and `onlineCountries` (devices active in the
+  same 15-minute window as `online`). Cached for 60 seconds.
 
 ## Deploy (once)
 

@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { cliEnv, findExecutable } from './CliCatalog.js';
+import { tr } from './i18n.js';
 
 const exec = promisify(execFile);
 
@@ -98,7 +99,7 @@ export async function listWorktrees(root: string): Promise<WorktreeInfo[]> {
 export async function createWorktree(root: string, branch: string): Promise<WorktreeInfo> {
   const cleanBranch = branch.trim();
   if (!cleanBranch || !/^[a-zA-Z0-9_\-\.\/]+$/.test(cleanBranch) || cleanBranch.includes('..') || cleanBranch.startsWith('/')) {
-    throw new Error('ชื่อ Branch ไม่ถูกต้อง (ต้องเป็นตัวอักษร ตัวเลข หรือขีดกลาง)');
+    throw new Error(tr("ชื่อ Branch ไม่ถูกต้อง (ต้องเป็นตัวอักษร ตัวเลข หรือขีดกลาง)"));
   }
 
   const worktrees = await listWorktrees(root);
@@ -138,7 +139,7 @@ export async function createWorktree(root: string, branch: string): Promise<Work
   const updatedList = await listWorktrees(mainRoot);
   const created = updatedList.find(w => path.resolve(w.path) === path.resolve(targetDir));
   if (!created) {
-    throw new Error(`สร้าง Worktree สำเร็จที่ ${targetDir} แต่ไม่สามารถอ่านข้อมูลได้`);
+    throw new Error(tr`สร้าง Worktree สำเร็จที่ ${targetDir} แต่ไม่สามารถอ่านข้อมูลได้`);
   }
   return created;
 }
@@ -155,7 +156,7 @@ export async function mergeWorktree(
 ): Promise<MergeWorktreeResult> {
   const worktrees = await listWorktrees(root);
   const mainWt = worktrees.find(w => w.isMain) || worktrees[0];
-  if (!mainWt) throw new Error('ไม่พบโฟลเดอร์หลักของโปรเจกต์');
+  if (!mainWt) throw new Error(tr("ไม่พบโฟลเดอร์หลักของโปรเจกต์"));
   const mainRoot = mainWt.path;
 
   // Check that main working tree is clean (auto-commit .gitignore if needed)
@@ -167,7 +168,7 @@ export async function mergeWorktree(
   }
   const dirtyFiles = statusLines.filter(line => !line.endsWith('.gitignore'));
   if (dirtyFiles.length > 0) {
-    throw new Error('โฟลเดอร์หลัก (main) มีไฟล์ที่ยังไม่ได้บันทึกหรือ commit กรุณาจัดเก็บก่อนรวมโค้ด');
+    throw new Error(tr("โฟลเดอร์หลัก (main) มีไฟล์ที่ยังไม่ได้บันทึกหรือ commit กรุณาจัดเก็บก่อนรวมโค้ด"));
   }
 
   // Ensure mainRoot is on targetBranch
@@ -199,8 +200,8 @@ export async function mergeWorktree(
     return {
       success: false,
       conflict: true,
-      conflictingFiles: conflictingFiles.length ? conflictingFiles : ['(ตรวจพบข้อขัดแย้งในการรวมไฟล์)'],
-      error: `เกิดข้อขัดแย้งในการรวมโค้ด (Merge Conflict) ในไฟล์: ${conflictingFiles.join(', ')}`,
+      conflictingFiles: conflictingFiles.length ? conflictingFiles : [tr("(ตรวจพบข้อขัดแย้งในการรวมไฟล์)")],
+      error: tr`เกิดข้อขัดแย้งในการรวมโค้ด (Merge Conflict) ในไฟล์: ${conflictingFiles.join(', ')}`,
     };
   }
 

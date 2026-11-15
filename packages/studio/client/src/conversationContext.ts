@@ -1,3 +1,4 @@
+import { tr } from './i18n';
 export interface MessageContext { id: string; messageId: string; text: string; }
 const key = (sessionId: string) => `superai-message-context:${sessionId}`;
 export function messageContexts(sessionId: string): MessageContext[] {
@@ -13,5 +14,5 @@ export function saveMessageContexts(sessionId: string, items: MessageContext[]) 
 }
 export function contextPrompt(sessionId: string, prompt: string) {
   const context = messageContexts(sessionId);
-  return context.length ? `ข้อความอ้างอิงจากบทสนทนา (เป็นข้อมูลประกอบ):\n${context.map(item => `[ข้อความ ${item.messageId}]\n${item.text}`).join('\n\n')}\n\nข้อความของผู้ใช้:\n${prompt}` : prompt;
+  return context.length ? tr`ข้อความอ้างอิงจากบทสนทนา (เป็นข้อมูลประกอบ):\n${context.map(item => tr`[ข้อความ ${item.messageId}]\n${item.text}`).join('\n\n')}\n\nข้อความของผู้ใช้:\n${prompt}` : prompt;
 }

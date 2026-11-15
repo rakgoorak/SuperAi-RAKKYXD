@@ -3,6 +3,7 @@
  * session's account state, so the composer's send can use them for whichever session it targets.
  */
 import type { ResponseStyle } from './responseStyle';
+import { tr } from './i18n';
 export interface ChatPrefs {
   responseStyle: ResponseStyle;
   includeProjectContext: boolean;
@@ -18,8 +19,24 @@ export interface ChatPrefs {
 }
 
 export type ChatPermission = 'read' | 'edit' | 'auto' | 'review' | 'full' | 'ask' | 'approve_all';
-export const PERMISSION_LABEL: Record<ChatPermission, string> = { read: 'อ่านอย่างเดียว', edit: 'แก้ไฟล์ได้', auto: 'อัตโนมัติ', review: 'Approve for me', full: 'Full access', ask: 'Ask for approval', approve_all: 'อนุมัติเครื่องมืออัตโนมัติ' };
-const isPermission = (value: unknown): value is ChatPermission => typeof value === 'string' && Object.prototype.hasOwnProperty.call(PERMISSION_LABEL, value);
+const PERMISSION_VALUES = new Set<ChatPermission>(['read', 'edit', 'auto', 'review', 'full', 'ask', 'approve_all']);
+
+/**
+ * The choices the composer offers: the same three or four for every AI, most careful first. The
+ * provider-specific modes behind them (Codex "review", "edit" without commands) are no longer
+ * offered; a session that saved one falls back to "auto".
+ */
+export function permissionChoices(agent: string): { value: ChatPermission; label: string; hint: string }[] {
+  const asks = ['claude-code', 'codex', 'opencode'].includes(agent);
+  const full: ChatPermission | null = agent === 'claude-code' || agent === 'codex' ? 'full' : agent === 'opencode' || agent === 'antigravity' ? 'approve_all' : null;
+  return [
+    { value: 'read', label: tr("อ่านอย่างเดียว"), hint: tr("อ่านและวางแผนได้ ไม่แก้ไฟล์และไม่รันคำสั่ง") },
+    ...(asks ? [{ value: 'ask' as const, label: tr("ถามก่อนทำ"), hint: tr("ขออนุญาตในแชตก่อนแก้ไฟล์หรือรันคำสั่งทุกครั้ง") }] : []),
+    { value: 'auto', label: tr("ทำเองอัตโนมัติ"), hint: tr("แก้ไฟล์และรันคำสั่งในโฟลเดอร์โปรเจกต์ได้เอง (แนะนำ)") },
+    ...(full ? [{ value: full, label: tr("เต็มสิทธิ์"), hint: tr("ไม่ถามและไม่จำกัดเฉพาะโฟลเดอร์โปรเจกต์ ใช้เมื่อไว้ใจงานนี้เท่านั้น") }] : []),
+  ];
+}
+const isPermission = (value: unknown): value is ChatPermission => typeof value === 'string' && PERMISSION_VALUES.has(value as ChatPermission);
 
 const prefs = new Map<string, ChatPrefs>();
 const choices = new Set<string>();

@@ -9,6 +9,9 @@ export interface OpenAiCompatibleProviderOptions {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  approvedOrigins?: readonly string[];
+  signal?: AbortSignal;
+  throwErrors?: boolean;
 }
 
 export const APPROVED_OPENAI_COMPATIBLE_ORIGINS = [
@@ -148,6 +151,9 @@ export class OpenAiCompatibleProvider extends BaseProvider {
   public temperature?: number;
   public maxTokens?: number;
   protected allowUnauthenticated = false;
+  private approvedOrigins: readonly string[];
+  private signal?: AbortSignal;
+  private throwErrors: boolean;
 
   constructor(options: OpenAiCompatibleProviderOptions = {}) {
     super();
@@ -158,6 +164,9 @@ export class OpenAiCompatibleProvider extends BaseProvider {
     this.apiKey = resolveApiKey(options);
     this.temperature = options.temperature;
     this.maxTokens = options.maxTokens;
+    this.approvedOrigins = options.approvedOrigins ?? APPROVED_OPENAI_COMPATIBLE_ORIGINS;
+    this.signal = options.signal;
+    this.throwErrors = options.throwErrors === true;
   }
 
   private isLocal(): boolean {
@@ -206,10 +215,11 @@ export class OpenAiCompatibleProvider extends BaseProvider {
     try {
       const endpoint = `${this.baseURL.replace(/\/+$/, '')}/chat/completions`;
       if (this.apiKey && !this.isLocal()) {
-        credentialEndpoint(endpoint, APPROVED_OPENAI_COMPATIBLE_ORIGINS);
+        credentialEndpoint(endpoint, this.approvedOrigins);
       }
 
       const res = await fetch(endpoint, {
+        signal: this.signal,
         method: 'POST',
         redirect: 'error',
         headers: this.getRequestHeaders(),
@@ -253,6 +263,7 @@ export class OpenAiCompatibleProvider extends BaseProvider {
         } : undefined,
       };
     } catch (err: any) {
+      if (this.throwErrors) throw new Error(redactCredential(String(err?.message || 'API request failed'), this.apiKey));
       return {
         text: `Error calling ${this.name} API; check credentials and the approved endpoint.`,
       };
@@ -297,10 +308,11 @@ export class OpenAiCompatibleProvider extends BaseProvider {
     try {
       const endpoint = `${this.baseURL.replace(/\/+$/, '')}/chat/completions`;
       if (this.apiKey && !this.isLocal()) {
-        credentialEndpoint(endpoint, APPROVED_OPENAI_COMPATIBLE_ORIGINS);
+        credentialEndpoint(endpoint, this.approvedOrigins);
       }
 
       const res = await fetch(endpoint, {
+        signal: this.signal,
         method: 'POST',
         redirect: 'error',
         headers: this.getRequestHeaders(),
@@ -383,6 +395,7 @@ export class OpenAiCompatibleProvider extends BaseProvider {
         usage,
       };
     } catch (err: any) {
+      if (this.throwErrors) throw new Error(redactCredential(String(err?.message || 'API request failed'), this.apiKey));
       return {
         text: `Error calling ${this.name} API; check credentials and the approved endpoint.`,
       };

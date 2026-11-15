@@ -18,7 +18,7 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true });
 const errors = [], checks = [];
 const check = (value, message) => { assert.ok(value, message); checks.push(message); console.log('PASS '+message); };
 try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const page = await browser.newPage({ locale: 'th-TH',  viewport: { width: 1440, height: 900 } });
   page.on('pageerror', e => errors.push(e.message));
   await page.addInitScript(() => { localStorage.setItem('superai-setup-dismissed', '1'); localStorage.setItem('superai-mode', 'code'); localStorage.setItem('superai-preview', 'false'); });
   const sessions = ['one', 'two'].map((id, i) => ({ id, wsId: 'ws', name: `Codex ${i+1}`, agentType: 'codex', view: 'chat', status: 'running', cwd: i ? 'D:/Project/.worktrees/feature' : 'D:/Project', createdAt: i+1 }));

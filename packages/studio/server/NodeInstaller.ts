@@ -6,6 +6,7 @@ import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { tr } from './i18n.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -68,7 +69,7 @@ export async function resolveNodeArchiveInfo(options?: {
 
   let lastError: Error | null = null;
   for (const base of baseUrls) {
-    if (options?.signal?.aborted) throw new Error('ยกเลิกการค้นหาไฟล์ Node.js');
+    if (options?.signal?.aborted) throw new Error(tr("ยกเลิกการค้นหาไฟล์ Node.js"));
     try {
       const shasumsUrl = `${base.replace(/\/$/, '')}/SHASUMS256.txt`;
       const res = await fetch(shasumsUrl, {
@@ -96,7 +97,7 @@ export async function resolveNodeArchiveInfo(options?: {
     }
   }
 
-  throw new Error(`ไม่พบแพ็กเกจ Node.js 22 LTS ที่ตรงกับระบบ (${process.platform}-${process.arch}): ${lastError?.message || 'unknown'}`);
+  throw new Error(tr`ไม่พบแพ็กเกจ Node.js 22 LTS ที่ตรงกับระบบ (${process.platform}-${process.arch}): ${lastError?.message || 'unknown'}`);
 }
 
 async function extractArchive(
@@ -169,9 +170,9 @@ export async function installNode22(
 ): Promise<{ node: string; npm: string; version: string }> {
   const { onLog = () => {}, signal, targetDir = managedNodeDir() } = options;
 
-  onLog('กำลังตรวจสอบรุ่น Node.js 22 LTS ล่าสุด...');
+  onLog(tr("กำลังตรวจสอบรุ่น Node.js 22 LTS ล่าสุด..."));
   const archiveInfo = await resolveNodeArchiveInfo({ signal, distBaseUrl: options.distBaseUrl });
-  if (signal?.aborted) throw new Error('ยกเลิกการติดตั้ง Node.js');
+  if (signal?.aborted) throw new Error(tr("ยกเลิกการติดตั้ง Node.js"));
 
   const parentDir = path.dirname(targetDir);
   fs.mkdirSync(parentDir, { recursive: true });
@@ -183,16 +184,16 @@ export async function installNode22(
   const extractDir = path.join(stagingDir, 'extracted');
 
   try {
-    onLog(`กำลังดาวน์โหลด Node.js ${archiveInfo.version} (${archiveInfo.filename})...`);
+    onLog(tr`กำลังดาวน์โหลด Node.js ${archiveInfo.version} (${archiveInfo.filename})...`);
     const res = await fetch(archiveInfo.url, { signal });
-    if (!res.ok) throw new Error(`ดาวน์โหลดไม่สำเร็จ (HTTP ${res.status}) จาก ${archiveInfo.url}`);
+    if (!res.ok) throw new Error(tr`ดาวน์โหลดไม่สำเร็จ (HTTP ${res.status}) จาก ${archiveInfo.url}`);
 
     const totalBytes = Number(res.headers.get('content-length') || 0);
     let downloadedBytes = 0;
     const sha = crypto.createHash('sha256');
     const fileStream = fs.createWriteStream(archivePath);
 
-    if (!res.body) throw new Error('ไม่มีข้อมูลเนื้อหาจากเซิร์ฟเวอร์');
+    if (!res.body) throw new Error(tr("ไม่มีข้อมูลเนื้อหาจากเซิร์ฟเวอร์"));
     const bodyStream = Readable.fromWeb(res.body as any);
 
     let lastProgressLog = Date.now();
@@ -204,7 +205,7 @@ export async function installNode22(
         lastProgressLog = now;
         const mb = (downloadedBytes / (1024 * 1024)).toFixed(1);
         const totalMb = totalBytes > 0 ? (totalBytes / (1024 * 1024)).toFixed(1) : '?';
-        onLog(`ดาวน์โหลด Node.js: ${mb}MB / ${totalMb}MB`);
+        onLog(tr`ดาวน์โหลด Node.js: ${mb}MB / ${totalMb}MB`);
       }
     });
 
@@ -213,21 +214,21 @@ export async function installNode22(
     if (archiveInfo.sha256) {
       const actualSha = sha.digest('hex');
       if (actualSha.toLowerCase() !== archiveInfo.sha256.toLowerCase()) {
-        throw new Error(`ไฟล์ Node.js ไม่สมบูรณ์ (SHA256 checksum ไม่ตรง: คาดหวัง ${archiveInfo.sha256}, ได้รับ ${actualSha})`);
+        throw new Error(tr`ไฟล์ Node.js ไม่สมบูรณ์ (SHA256 checksum ไม่ตรง: คาดหวัง ${archiveInfo.sha256}, ได้รับ ${actualSha})`);
       }
-      onLog('ตรวจสอบความสมบูรณ์ไฟล์ (SHA256) ถูกต้อง');
+      onLog(tr("ตรวจสอบความสมบูรณ์ไฟล์ (SHA256) ถูกต้อง"));
     }
 
-    onLog('กำลังแตกไฟล์ Node.js 22 LTS...');
+    onLog(tr("กำลังแตกไฟล์ Node.js 22 LTS..."));
     await extractArchive(archivePath, extractDir, signal);
 
     const rootDir = findExtractedRoot(extractDir);
     const verified = findManagedNode(rootDir);
     if (!verified) {
-      throw new Error('ไม่พบ node executable ในไฟล์ที่แตกออกมา');
+      throw new Error(tr("ไม่พบ node executable ในไฟล์ที่แตกออกมา"));
     }
 
-    onLog('กำลังติดตั้งเข้าโฟลเดอร์ของ SuperAi...');
+    onLog(tr("กำลังติดตั้งเข้าโฟลเดอร์ของ SuperAi..."));
     // Replace targetDir with rootDir
     if (fs.existsSync(targetDir)) {
       const backupDir = path.join(parentDir, `.node-old-${Date.now()}`);
@@ -248,7 +249,7 @@ export async function installNode22(
 
     const finalInstalled = findManagedNode(targetDir);
     if (!finalInstalled) {
-      throw new Error('ติดตั้งเสร็จสิ้นแต่ไม่พบ Node.js ในโฟลเดอร์ปลายทาง');
+      throw new Error(tr("ติดตั้งเสร็จสิ้นแต่ไม่พบ Node.js ในโฟลเดอร์ปลายทาง"));
     }
 
     // Verify version by running it
@@ -258,7 +259,7 @@ export async function installNode22(
       timeout: 5000,
     }).trim();
 
-    onLog(`Node.js ${output} ติดตั้งสำเร็จและพร้อมใช้งานทันที!`);
+    onLog(tr`Node.js ${output} ติดตั้งสำเร็จและพร้อมใช้งานทันที!`);
     return {
       node: finalInstalled.node,
       npm: finalInstalled.npm,

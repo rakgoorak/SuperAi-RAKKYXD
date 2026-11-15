@@ -47,3 +47,7 @@
   #root .skills-search-bar { flex-wrap: wrap; }
   #root .skills-search-bar input { flex-basis: 100%; }
 }
+
+/* Language picker at the top of the first-run guide; it reads the same in every language. */
+.beginner-language { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 0 0 10px; font-size: 12px; color: var(--text-secondary); }
+.beginner-language select { min-height: 30px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--raised); color: var(--text); font-size: 13px; }

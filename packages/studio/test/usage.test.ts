@@ -84,3 +84,11 @@ test('usage results are cached, de-duplicated and report missing CLIs and failur
   assert.match((await manager.get('codex')).note!, /ช้าเกินไป/);
   assert.equal((await manager.get('antigravity')).status, 'not-installed');
 });
+
+test('Codex live limits from the app-server become the same windows as the log', async () => {
+  const { parseCodexLiveLimits } = await import('../server/UsageManager.js');
+  const w = parseCodexLiveLimits({ rateLimits: { primary: { usedPercent: 1, windowDurationMins: 300, resetsAt: 1794318527 }, secondary: { usedPercent: 28, windowDurationMins: 10080, resetsAt: 1794585942 } } });
+  assert.deepEqual(w.map(x => [x.label, x.remainingPercent]), [['5 ชั่วโมง', 99], ['รายสัปดาห์', 72]]);
+  assert.equal(w[0].resetsAt, new Date(1794318527000).toISOString());
+  assert.deepEqual(parseCodexLiveLimits({}), [], 'an answer without limits falls back to the session log');
+});

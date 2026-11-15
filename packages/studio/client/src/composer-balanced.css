@@ -90,7 +90,9 @@
   #root .work-canvas .composer-area.composer-balanced .session-chat-controls>.provider-badge>span { display:none; }
 }
 @container (max-width:580px) {
-  #root .work-canvas .composer-area.composer-balanced .composer-location { flex-basis:100%; max-width:100%; }
+  /* Two full rows: folder and branch with the options icon at the end, then the AI's settings. */
+  #root .work-canvas .composer-area.composer-balanced .composer-location { flex:1 1 calc(100% - 40px); max-width:calc(100% - 33px); }
+  #root .work-canvas .composer-area.composer-balanced .composer-meta .composer-options { order:0; margin-left:auto; }
   #root .work-canvas .composer-area.composer-balanced .chat-permission-select { margin-right:auto; }
   #root .work-canvas .composer-area.composer-balanced .session-chat-controls>.provider-badge { margin-left:0; }
   #root .work-canvas .composer-area.composer-balanced .chat-model-controls .model-combo { width:90px; }

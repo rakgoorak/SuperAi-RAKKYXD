@@ -12,7 +12,7 @@ const data = await fs.mkdtemp(path.join(path.resolve('output/playwright'), 'over
 const app = await electron.launch({
   executablePath: process.env.SUPERAI_PORTABLE_DIR ? path.join(process.env.SUPERAI_PORTABLE_DIR, 'SuperAi-RAKKYXD.exe') : require('electron'),
   args: process.env.SUPERAI_PORTABLE_DIR ? [] : ['packages/desktop'],
-  env: { ...process.env, SUPERAI_DATA_DIR: data }, timeout: 60000,
+  env: { SUPERAI_LANG: 'th', ...process.env, SUPERAI_DATA_DIR: data }, timeout: 60000,
 });
 const sizes = [[1040, 680], [1200, 760], [1366, 768], [1920, 1080]];
 const report = [];

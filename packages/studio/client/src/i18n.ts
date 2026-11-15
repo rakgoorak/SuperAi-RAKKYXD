@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react';
+import en from './locales/en';
+import ja from './locales/ja';
+import zh from './locales/zh';
 
 export type Locale = 'th' | 'en' | 'ja' | 'zh';
 
@@ -23,6 +26,7 @@ export const translations: Record<Locale, Record<string, string>> = {
   th: {
     // Titlebar & Navigation
     'brand.title': 'SuperAi & RAKKYXD',
+    'composer.shortcut_hint': 'Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่',
     'titlebar.sidebar_toggle': 'สลับแถบข้าง',
     'titlebar.sidebar_hide': 'ซ่อนแถบข้าง',
     'titlebar.sidebar_show': 'แสดงแถบข้าง',
@@ -158,6 +162,7 @@ export const translations: Record<Locale, Record<string, string>> = {
   en: {
     // Titlebar & Navigation
     'brand.title': 'SuperAi & RAKKYXD',
+    'composer.shortcut_hint': 'Enter to send · Shift+Enter for a new line',
     'titlebar.sidebar_toggle': 'Toggle sidebar',
     'titlebar.sidebar_hide': 'Hide sidebar',
     'titlebar.sidebar_show': 'Show sidebar',
@@ -293,6 +298,7 @@ export const translations: Record<Locale, Record<string, string>> = {
   ja: {
     // Titlebar & Navigation
     'brand.title': 'SuperAi & RAKKYXD',
+    'composer.shortcut_hint': 'Enter で送信 · Shift+Enter で改行',
     'titlebar.sidebar_toggle': 'サイドバー切替',
     'titlebar.sidebar_hide': 'サイドバーを隠す',
     'titlebar.sidebar_show': 'サイドバーを表示',
@@ -428,6 +434,7 @@ export const translations: Record<Locale, Record<string, string>> = {
   zh: {
     // Titlebar & Navigation
     'brand.title': 'SuperAi & RAKKYXD',
+    'composer.shortcut_hint': 'Enter 发送 · Shift+Enter 换行',
     'titlebar.sidebar_toggle': '切换侧边栏',
     'titlebar.sidebar_hide': '隐藏侧边栏',
     'titlebar.sidebar_show': '显示侧边栏',
@@ -567,17 +574,20 @@ export const translations: Record<Locale, Record<string, string>> = {
  * Thai OS -> 'th', Japanese OS -> 'ja', Chinese OS -> 'zh', all other global OS -> 'en'.
  */
 export function getInitialLocale(): Locale {
+  // Outside a browser (tests and scripts) the text stays as written, in Thai.
+  if (typeof window === 'undefined') return 'th';
   try {
     const saved = localStorage.getItem(STORAGE_KEY) as Locale | null;
     if (saved && (saved === 'th' || saved === 'en' || saved === 'ja' || saved === 'zh')) {
       return saved;
     }
-    const nav = navigator.language?.toLowerCase() || '';
-    if (nav.startsWith('th')) return 'th';
-    if (nav.startsWith('ja')) return 'ja';
-    if (nav.startsWith('zh')) return 'zh';
+    // First run: the computer's language when the app has it, otherwise English for everyone else.
+    for (const language of navigator.languages?.length ? navigator.languages : [navigator.language]) {
+      const code = String(language || '').toLowerCase().slice(0, 2);
+      if (code === 'th' || code === 'en' || code === 'ja' || code === 'zh') return code;
+    }
   } catch {}
-  return 'th'; // Default to Thai
+  return 'en';
 }
 
 let currentLocale: Locale = getInitialLocale();
@@ -590,7 +600,17 @@ export function setLocale(locale: Locale): void {
     localStorage.setItem(STORAGE_KEY, locale);
   } catch {}
   listeners.forEach((fn) => fn(locale));
+  // Text kept in module-level tables and memoized components was built in the old language, so
+  // the window reloads: every screen then comes up in the new one. Sessions keep running.
+  if (typeof window !== 'undefined' && typeof window.location?.reload === 'function') void tellServer().finally(() => window.location.reload());
 }
+
+/** The server words its errors and notices in the window's language. */
+function tellServer(): Promise<unknown> {
+  if (typeof window === 'undefined' || typeof fetch !== 'function') return Promise.resolve();
+  return fetch('/api/locale', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ locale: currentLocale }) }).catch(() => undefined);
+}
+void tellServer();
 
 export function getLocale(): Locale {
   return currentLocale;
@@ -616,6 +636,22 @@ export function t(key: string, fallback?: string): string {
   if (translations.en && translations.en[key]) return translations.en[key];
   if (translations.th && translations.th[key]) return translations.th[key];
   return fallback || key;
+}
+
+/** Translations keyed by the Thai text itself; Thai needs none. */
+const TEXT: Record<Locale, Record<string, string> | null> = { th: null, en, ja, zh };
+
+/**
+ * Interface text written in Thai where it is used: tr('ข้อความ') or tr`${name} ขออนุญาต`.
+ * A template's values are {0}, {1}, … in the translation, so a language can reorder them.
+ * Text with no translation yet falls back to English, then to the Thai original.
+ */
+export function tr(source: TemplateStringsArray | string, ...values: unknown[]): string {
+  const key = typeof source === 'string'
+    ? source
+    : source.reduce((out, part, index) => out + part + (index < source.length - 1 ? `{${index}}` : ''), '');
+  const text = TEXT[currentLocale]?.[key] || (currentLocale !== 'th' && en[key]) || key;
+  return typeof source === 'string' ? text : text.replace(/\{(\d+)\}/g, (_, index) => String(values[Number(index)] ?? ''));
 }
 
 /**

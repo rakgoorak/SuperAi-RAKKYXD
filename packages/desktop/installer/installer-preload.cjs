@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('installer', {
   install: (options) => ipcRenderer.invoke('installer:install', options),
   launch: (exe) => ipcRenderer.invoke('installer:launch', exe),
   window: (action) => ipcRenderer.invoke('installer:window', action),
+  privacy: () => ipcRenderer.invoke('installer:privacy'),
+  locale: (code) => ipcRenderer.invoke('installer:locale', code),
   onProgress: (callback) => {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on('installer:progress', handler);

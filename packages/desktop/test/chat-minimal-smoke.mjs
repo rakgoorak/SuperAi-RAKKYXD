@@ -12,7 +12,7 @@ const data = await fs.mkdtemp(path.join(path.resolve('output/playwright'), 'chat
 const launch = () => electron.launch({
   executablePath: process.env.SUPERAI_PORTABLE_DIR ? path.join(process.env.SUPERAI_PORTABLE_DIR, 'SuperAi-RAKKYXD.exe') : require('electron'),
   args: process.env.SUPERAI_PORTABLE_DIR ? [] : ['packages/desktop'],
-  env: { ...process.env, SUPERAI_DATA_DIR: data }, timeout: 60000,
+  env: { SUPERAI_LANG: 'th', ...process.env, SUPERAI_DATA_DIR: data }, timeout: 60000,
 });
 const ready = async app => {
   const page = await app.firstWindow();
@@ -62,9 +62,12 @@ try {
       permission: rect('.chat-minimal .chat-permission-select'), model: rect('.chat-minimal .chat-model-controls') };
   });
   await page.screenshot({ path: path.join(output, '01-chat.png') });
-  // Permission cards: an open question has its three answers; an answered one only says what was chosen.
-  const open = page.locator('.chat-permission.pending');
-  for (const label of ['อนุญาต', 'อนุญาตตลอดห้องนี้', 'ไม่อนุญาต']) assert.ok(await open.getByRole('button', { name: label, exact: true }).isVisible(), label);
+  // Permission cards: an answered one only says what was chosen. A request still open when the app
+  // closed can no longer be answered, so it comes back expired and without buttons (the live buttons
+  // are covered by permission-popup-smoke).
+  const open = page.locator('.chat-scroll .chat-permission.expired');
+  await open.waitFor();
+  assert.equal(await open.locator('button').count(), 0);
   assert.equal(await page.locator('.chat-permission.allowed button').count(), 0);
   assert.match(await page.locator('.chat-permission.allowed').innerText(), /อนุญาตแล้ว/);
   await open.screenshot({ path: path.join(output, '03-permission.png') });

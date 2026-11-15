@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { parseMcpJson } from "../mcpImport";
 import { Check, Loader2, Plus, Power, RefreshCw, Server, Trash2, X, Terminal, Globe, Sparkles } from "lucide-react";
 import { api, post } from "../api";
+import { tr } from '../i18n';
 
 export interface McpServerRecord {
   id: string;
@@ -22,11 +24,12 @@ interface Props {
   onNotice?: (msg: string) => void;
 }
 
-const PRESETS = [
+function getPresets() {
+  return [
   {
     name: "puppeteer",
     title: "Puppeteer (Browser)",
-    desc: "ควบคุมเบราว์เซอร์อัตโนมัติ ท่องเว็บ และจับภาพหน้าจอ",
+    desc: tr("ควบคุมเบราว์เซอร์อัตโนมัติ ท่องเว็บ และจับภาพหน้าจอ"),
     type: "stdio" as const,
     command: "npx",
     args: "-y @modelcontextprotocol/server-puppeteer",
@@ -34,7 +37,7 @@ const PRESETS = [
   {
     name: "desktop-commander",
     title: "Desktop Commander",
-    desc: "ควบคุมหน้าจอและเปิดแอปพลิเคชันบนเครื่อง",
+    desc: tr("ควบคุมหน้าจอและเปิดแอปพลิเคชันบนเครื่อง"),
     type: "stdio" as const,
     command: "npx",
     args: "-y @wonderwhy-er/desktop-commander@latest",
@@ -42,7 +45,7 @@ const PRESETS = [
   {
     name: "github",
     title: "GitHub MCP",
-    desc: "อ่าน/เขียน Issues, Pull Requests และ Repositories",
+    desc: tr("อ่าน/เขียน Issues, Pull Requests และ Repositories"),
     type: "stdio" as const,
     command: "npx",
     args: "-y @modelcontextprotocol/server-github",
@@ -50,7 +53,7 @@ const PRESETS = [
   {
     name: "sqlite",
     title: "SQLite Server",
-    desc: "คิวรีและอ่านฐานข้อมูล SQLite ในเครื่อง",
+    desc: tr("คิวรีและอ่านฐานข้อมูล SQLite ในเครื่อง"),
     type: "stdio" as const,
     command: "npx",
     args: "-y @modelcontextprotocol/server-sqlite --db-path ./database.sqlite",
@@ -58,7 +61,7 @@ const PRESETS = [
   {
     name: "postgres",
     title: "PostgreSQL",
-    desc: "เชื่อมต่อและคิวรีฐานข้อมูล PostgreSQL",
+    desc: tr("เชื่อมต่อและคิวรีฐานข้อมูล PostgreSQL"),
     type: "stdio" as const,
     command: "npx",
     args: "-y @modelcontextprotocol/server-postgres postgresql://localhost/mydb",
@@ -66,7 +69,7 @@ const PRESETS = [
   {
     name: "filesystem",
     title: "Filesystem",
-    desc: "เข้าถึงและจัดการไฟล์ในโฟลเดอร์ที่กำหนด",
+    desc: tr("เข้าถึงและจัดการไฟล์ในโฟลเดอร์ที่กำหนด"),
     type: "stdio" as const,
     command: "npx",
     args: "-y @modelcontextprotocol/server-filesystem D:\\",
@@ -74,7 +77,7 @@ const PRESETS = [
   {
     name: "brave-search",
     title: "Brave Search",
-    desc: "ค้นหาข้อมูลบนอินเทอร์เน็ตผ่าน Brave Search API",
+    desc: tr("ค้นหาข้อมูลบนอินเทอร์เน็ตผ่าน Brave Search API"),
     type: "stdio" as const,
     command: "npx",
     args: "-y @modelcontextprotocol/server-brave-search",
@@ -82,7 +85,7 @@ const PRESETS = [
   {
     name: "memory",
     title: "Memory Graph",
-    desc: "กราฟความจำระยะยาว เสริมความจำให้กับ AI",
+    desc: tr("กราฟความจำระยะยาว เสริมความจำให้กับ AI"),
     type: "stdio" as const,
     command: "npx",
     args: "-y @modelcontextprotocol/server-memory",
@@ -90,14 +93,16 @@ const PRESETS = [
   {
     name: "fetch",
     title: "Fetch Web Server",
-    desc: "ดาวน์โหลดและอ่านหน้าเว็บเพื่อแปลงเป็น Markdown",
+    desc: tr("ดาวน์โหลดและอ่านหน้าเว็บเพื่อแปลงเป็น Markdown"),
     type: "stdio" as const,
     command: "uvx",
     args: "mcp-server-fetch",
   },
-];
+  ];
+}
 
 export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
+  const presets = getPresets();
   const [servers, setServers] = useState<McpServerRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<"all" | "claude" | "codex" | "opencode">("all");
@@ -115,6 +120,36 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
   const [formUrl, setFormUrl] = useState("");
   const [formEnv, setFormEnv] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Paste a whole "mcpServers" JSON block, as shown in most MCP READMEs, instead of filling the form.
+  const [addMode, setAddMode] = useState<"json" | "form">("json");
+  const [jsonText, setJsonText] = useState("");
+  const [jsonProviders, setJsonProviders] = useState<("claude" | "codex" | "opencode")[]>(["claude", "codex", "opencode"]);
+  const PROVIDER_NAME = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode" } as const;
+
+  const handleImport = async () => {
+    let parsed;
+    try { parsed = parseMcpJson(jsonText); }
+    catch (err: any) {
+      onError(err.message === "EMPTY" ? tr("ไม่พบ MCP server ใน JSON นี้ ต้องมี command หรือ url อย่างน้อยหนึ่งตัว") : tr("JSON ไม่ถูกต้อง ตรวจวงเล็บและเครื่องหมายคำพูดแล้วลองใหม่"));
+      return;
+    }
+    if (!jsonProviders.length) { onError(tr("เลือก AI อย่างน้อยหนึ่งตัว")); return; }
+    setSubmitting(true);
+    const added: McpServerRecord[] = [], failed: string[] = [];
+    for (const server of parsed) for (const provider of jsonProviders) {
+      try {
+        const res = await post<{ success: boolean; server: McpServerRecord }>("/api/mcp/servers", { ...server, provider, scope: formScope, cwd });
+        if (res.server) added.push(res.server);
+      } catch (err: any) { failed.push(`${server.name} → ${PROVIDER_NAME[provider]}: ${err.message}`); }
+    }
+    setServers((prev) => [...prev.filter((s) => !added.some((a) => a.id === s.id)), ...added]);
+    setSubmitting(false);
+    if (failed.length) onError(failed.join("\n"));
+    if (added.length) {
+      onNotice?.(tr`เพิ่ม ${parsed.map((s) => s.name).join(", ")} ให้ ${jsonProviders.map((p) => PROVIDER_NAME[p]).join(", ")} แล้ว · เปิดห้องคุยใหม่เพื่อให้ AI โหลดเครื่องมือ`);
+      if (!failed.length) { setJsonText(""); setAdding(false); }
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -123,7 +158,7 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
       const res = await api<{ servers: McpServerRecord[] }>(url);
       setServers(res.servers || []);
     } catch (err: any) {
-      onError(err.message || "โหลดรายการ MCP servers ไม่สำเร็จ");
+      onError(err.message || tr("โหลดรายการ MCP servers ไม่สำเร็จ"));
     } finally {
       setLoading(false);
     }
@@ -151,9 +186,9 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
       if (res.server) {
         setServers((prev) => [...prev.filter((s) => s.id !== res.server.id), res.server]);
       }
-      onNotice?.(`คัดลอก ${server.name} ไปยัง ${targetProvider === "claude" ? "Claude Code" : targetProvider === "codex" ? "Codex" : "OpenCode"} สำเร็จแล้ว`);
+      onNotice?.(tr`คัดลอก ${server.name} ไปยัง ${targetProvider === "claude" ? "Claude Code" : targetProvider === "codex" ? "Codex" : "OpenCode"} สำเร็จแล้ว`);
     } catch (err: any) {
-      onError(err.message || "คัดลอกไม่สำเร็จ");
+      onError(err.message || tr("คัดลอกไม่สำเร็จ"));
     } finally {
       setBusyServer(null);
     }
@@ -167,16 +202,16 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
       setServers((prev) =>
         prev.map((s) => (s.id === server.id ? { ...s, enabled: !server.enabled } : s)),
       );
-      onNotice?.(`${server.enabled ? "ปิด" : "เปิด"}การใช้งาน ${server.name} แล้ว`);
+      onNotice?.(server.enabled ? tr`ปิดการใช้งาน ${server.name} แล้ว` : tr`เปิดการใช้งาน ${server.name} แล้ว`);
     } catch (err: any) {
-      onError(err.message || "เปลี่ยนสถานะไม่สำเร็จ");
+      onError(err.message || tr("เปลี่ยนสถานะไม่สำเร็จ"));
     } finally {
       setBusyServer(null);
     }
   };
 
   const handleDelete = async (server: McpServerRecord) => {
-    if (!confirm(`คุณต้องการลบ MCP server "${server.name}" ออกจาก ${server.provider === "claude" ? "Claude Code" : server.provider === "codex" ? "Codex" : "OpenCode"} ใช่หรือไม่?`)) {
+    if (!confirm(tr`คุณต้องการลบ MCP server "${server.name}" ออกจาก ${server.provider === "claude" ? "Claude Code" : server.provider === "codex" ? "Codex" : "OpenCode"} ใช่หรือไม่?`)) {
       return;
     }
     setBusyServer(server.id);
@@ -187,18 +222,18 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
       });
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || "ลบไม่สำเร็จ");
+        throw new Error(err.error || tr("ลบไม่สำเร็จ"));
       }
       setServers((prev) => prev.filter((s) => s.id !== server.id));
-      onNotice?.(`ลบ ${server.name} แล้ว`);
+      onNotice?.(tr`ลบ ${server.name} แล้ว`);
     } catch (err: any) {
-      onError(err.message || "ลบไม่สำเร็จ");
+      onError(err.message || tr("ลบไม่สำเร็จ"));
     } finally {
       setBusyServer(null);
     }
   };
 
-  const handlePresetSelect = (preset: typeof PRESETS[0]) => {
+  const handlePresetSelect = (preset: ReturnType<typeof getPresets>[number]) => {
     setFormName(preset.name);
     setFormType(preset.type);
     setFormCommand(preset.command);
@@ -209,15 +244,15 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) {
-      onError("กรุณาระบุชื่อ MCP server");
+      onError(tr("กรุณาระบุชื่อ MCP server"));
       return;
     }
     if (formType === "stdio" && !formCommand.trim()) {
-      onError("กรุณาระบุคำสั่ง Command");
+      onError(tr("กรุณาระบุคำสั่ง Command"));
       return;
     }
     if (formType === "http" && !formUrl.trim()) {
-      onError("กรุณาระบุ URL");
+      onError(tr("กรุณาระบุ URL"));
       return;
     }
 
@@ -249,7 +284,7 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
       if (res.server) {
         setServers((prev) => [...prev.filter((s) => s.id !== res.server.id), res.server]);
       }
-      onNotice?.(`เพิ่ม MCP Server "${formName}" ให้ ${formProvider === "claude" ? "Claude Code" : formProvider === "codex" ? "Codex" : "OpenCode"} เรียบร้อยแล้ว`);
+      onNotice?.(tr`เพิ่ม MCP Server "${formName}" ให้ ${formProvider === "claude" ? "Claude Code" : formProvider === "codex" ? "Codex" : "OpenCode"} เรียบร้อยแล้ว`);
       setAdding(false);
       // Reset form
       setFormName("");
@@ -258,7 +293,7 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
       setFormUrl("");
       setFormEnv("");
     } catch (err: any) {
-      onError(err.message || "เพิ่ม MCP Server ไม่สำเร็จ");
+      onError(err.message || tr("เพิ่ม MCP Server ไม่สำเร็จ"));
     } finally {
       setSubmitting(false);
     }
@@ -280,29 +315,29 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
   return (
     <div className="mcp-manager-panel">
       <div className="settings-section-title">
-        <h3>เครื่องมือ MCP (Model Context Protocol)</h3>
+        <h3>{tr("เครื่องมือ MCP (Model Context Protocol)")}</h3>
         <div style={{ display: "flex", gap: "6px" }}>
-          <button className="text-button" disabled={loading} onClick={load} title="รีเฟรช">
-            <RefreshCw className={loading ? "spin" : ""} size={13} /> รีเฟรช
+          <button className="text-button" disabled={loading} onClick={load} title={tr("รีเฟรช")}>
+            <RefreshCw className={loading ? "spin" : ""} size={13} /> {tr("รีเฟรช")}
           </button>
           <button className="text-button primary" onClick={() => setAdding(true)}>
-            <Plus size={13} /> เพิ่ม Server
+            <Plus size={13} /> {tr("เพิ่ม Server")}
           </button>
         </div>
       </div>
       <p className="muted">
-        Model Context Protocol ช่วยให้ Claude Code และ Codex เข้าถึงเครื่องมือพิเศษ เช่น ค้นหาฐานข้อมูล สั่งการระบบอัตโนมัติ หรือเชื่อมต่อกับบริการภายนอก
+        {tr("Model Context Protocol ช่วยให้ Claude Code และ Codex เข้าถึงเครื่องมือพิเศษ เช่น ค้นหาฐานข้อมูล สั่งการระบบอัตโนมัติ หรือเชื่อมต่อกับบริการภายนอก")}
       </p>
 
       {/* Filter and Search Bar */}
       <div style={{ display: "flex", gap: "8px", margin: "12px 0", alignItems: "center" }}>
-        <div className="segmented-control" role="group" aria-label="กรองผู้ให้บริการ">
+        <div className="segmented-control" role="group" aria-label={tr("กรองผู้ให้บริการ")}>
           <button
             type="button"
             className={filter === "all" ? "active" : ""}
             onClick={() => setFilter("all")}
           >
-            ทั้งหมด ({servers.length})
+            {tr("ทั้งหมด (")}{servers.length})
           </button>
           <button
             type="button"
@@ -328,7 +363,7 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
         </div>
         <input
           type="search"
-          placeholder="ค้นหาชื่อหรือคำสั่ง..."
+          placeholder={tr("ค้นหาชื่อหรือคำสั่ง...")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           style={{
@@ -356,20 +391,61 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
             <h4 style={{ margin: 0, display: "flex", alignItems: "center", gap: "6px" }}>
-              <Server size={16} /> เพิ่ม MCP Server ใหม่
+              <Server size={16} /> {tr("เพิ่ม MCP Server ใหม่")}
             </h4>
-            <button className="icon-button" onClick={() => setAdding(false)} title="ปิด">
+            <button className="icon-button" onClick={() => setAdding(false)} title={tr("ปิด")}>
               <X size={15} />
             </button>
           </div>
 
+          <div role="tablist" aria-label={tr("วิธีเพิ่ม MCP Server")} style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
+            {(["json", "form"] as const).map((mode) => (
+              <button key={mode} type="button" role="tab" aria-selected={addMode === mode} onClick={() => setAddMode(mode)}
+                className={addMode === mode ? "primary" : "secondary"} style={{ fontSize: "12px", padding: "4px 10px" }}>
+                {mode === "json" ? tr("วาง JSON") : tr("กรอกเอง")}
+              </button>
+            ))}
+          </div>
+
+          {addMode === "json" && (
+            <div style={{ display: "grid", gap: "10px" }}>
+              <label>
+                <span style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>{tr("วาง JSON จากคู่มือของ MCP server (รูปแบบ mcpServers แบบเดียวกับ Claude Desktop)")}</span>
+                <textarea value={jsonText} onChange={(e) => setJsonText(e.target.value)} rows={8} spellCheck={false} aria-label={tr("JSON ของ MCP server")}
+                  placeholder={'{\n  "mcpServers": {\n    "playwright": {\n      "command": "npx",\n      "args": ["@playwright/mcp@latest"]\n    }\n  }\n}'}
+                  style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "var(--input-bg, #1a1a1a)", color: "inherit", border: "1px solid var(--border, #444)", fontFamily: "ui-monospace, Consolas, monospace", fontSize: "12px" }} />
+              </label>
+              <fieldset style={{ border: 0, padding: 0, margin: 0, display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "center" }}>
+                <legend style={{ fontSize: "12px", marginBottom: "4px" }}>{tr("เพิ่มให้ AI")}</legend>
+                {(["claude", "codex", "opencode"] as const).map((provider) => (
+                  <label key={provider} style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "13px" }}>
+                    <input type="checkbox" checked={jsonProviders.includes(provider)}
+                      onChange={(e) => setJsonProviders((prev) => e.target.checked ? [...prev, provider] : prev.filter((p) => p !== provider))} />
+                    {PROVIDER_NAME[provider]}
+                  </label>
+                ))}
+                <select value={formScope} onChange={(e) => setFormScope(e.target.value as any)} aria-label={tr("ขอบเขตการใช้งาน")}
+                  style={{ padding: "4px", borderRadius: "4px", background: "var(--input-bg, #1a1a1a)", color: "inherit", border: "1px solid var(--border, #444)" }}>
+                  <option value="global">{tr("ทั้งเครื่อง (Global User)")}</option>
+                  <option value="project" disabled={!cwd}>{tr("เฉพาะโปรเจกต์นี้ (.mcp.json)")}</option>
+                </select>
+              </fieldset>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button type="button" className="primary" disabled={submitting || !jsonText.trim()} onClick={() => void handleImport()}>
+                  {submitting ? tr("กำลังเพิ่ม…") : tr("เพิ่มจาก JSON")}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {addMode === "form" && <>
           {/* Quick Presets */}
           <div style={{ marginBottom: "12px" }}>
             <span style={{ fontSize: "12px", color: "var(--muted, #888)", display: "flex", alignItems: "center", gap: "4px", marginBottom: "6px" }}>
-              <Sparkles size={13} /> แม่แบบยอดนิยม (คลิกเพื่อใส่ข้อมูลอัตโนมัติ):
+              <Sparkles size={13} /> {tr("แม่แบบยอดนิยม (คลิกเพื่อใส่ข้อมูลอัตโนมัติ):")}
             </span>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-              {PRESETS.map((p) => (
+              {presets.map((p) => (
                 <button
                   key={p.name}
                   type="button"
@@ -394,7 +470,7 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
           <form onSubmit={handleSubmit}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
               <label>
-                <span style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>ผู้ให้บริการ AI</span>
+                <span style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>{tr("ผู้ให้บริการ AI")}</span>
                 <select
                   value={formProvider}
                   onChange={(e) => setFormProvider(e.target.value as any)}
@@ -407,25 +483,25 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
               </label>
 
               <label>
-                <span style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>ขอบเขตการใช้งาน</span>
+                <span style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>{tr("ขอบเขตการใช้งาน")}</span>
                 <select
                   value={formScope}
                   onChange={(e) => setFormScope(e.target.value as any)}
                   style={{ width: "100%", padding: "6px", borderRadius: "4px", background: "var(--input-bg, #1a1a1a)", color: "inherit", border: "1px solid var(--border, #444)" }}
                 >
-                  <option value="global">ทั้งเครื่อง (Global User)</option>
-                  {cwd && <option value="project">เฉพาะโปรเจกต์นี้ (.mcp.json)</option>}
+                  <option value="global">{tr("ทั้งเครื่อง (Global User)")}</option>
+                  {cwd && <option value="project">{tr("เฉพาะโปรเจกต์นี้ (.mcp.json)")}</option>}
                 </select>
               </label>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "10px", marginBottom: "10px" }}>
               <label>
-                <span style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>ชื่อ Server (ID ภาษาอังกฤษ) *</span>
+                <span style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>{tr("ชื่อ Server (ID ภาษาอังกฤษ) *")}</span>
                 <input
                   type="text"
                   required
-                  placeholder="เช่น desktop-commander, github"
+                  placeholder={tr("เช่น desktop-commander, github")}
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   style={{ width: "100%", padding: "6px", borderRadius: "4px", background: "var(--input-bg, #1a1a1a)", color: "inherit", border: "1px solid var(--border, #444)" }}
@@ -433,13 +509,13 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
               </label>
 
               <label>
-                <span style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>ชนิดการเชื่อมต่อ (Type)</span>
+                <span style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>{tr("ชนิดการเชื่อมต่อ (Type)")}</span>
                 <select
                   value={formType}
                   onChange={(e) => setFormType(e.target.value as any)}
                   style={{ width: "100%", padding: "6px", borderRadius: "4px", background: "var(--input-bg, #1a1a1a)", color: "inherit", border: "1px solid var(--border, #444)" }}
                 >
-                  <option value="stdio">Stdio (คำสั่งโปรแกรม)</option>
+                  <option value="stdio">{tr("Stdio (คำสั่งโปรแกรม)")}</option>
                   <option value="http">HTTP / SSE (URL)</option>
                 </select>
               </label>
@@ -452,7 +528,7 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
                   <input
                     type="text"
                     required
-                    placeholder="เช่น npx, uvx, node, python"
+                    placeholder={tr("เช่น npx, uvx, node, python")}
                     value={formCommand}
                     onChange={(e) => setFormCommand(e.target.value)}
                     style={{ width: "100%", padding: "6px", borderRadius: "4px", background: "var(--input-bg, #1a1a1a)", color: "inherit", border: "1px solid var(--border, #444)" }}
@@ -462,7 +538,7 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
                   <span style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>Arguments</span>
                   <input
                     type="text"
-                    placeholder="เช่น -y @wonderwhy-er/desktop-commander@latest"
+                    placeholder={tr("เช่น -y @wonderwhy-er/desktop-commander@latest")}
                     value={formArgs}
                     onChange={(e) => setFormArgs(e.target.value)}
                     style={{ width: "100%", padding: "6px", borderRadius: "4px", background: "var(--input-bg, #1a1a1a)", color: "inherit", border: "1px solid var(--border, #444)" }}
@@ -484,7 +560,7 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
             )}
 
             <label style={{ display: "block", marginBottom: "12px" }}>
-              <span style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>Environment Variables (บรรทัดละ KEY=VALUE ไม่บังคับ)</span>
+              <span style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>{tr("Environment Variables (บรรทัดละ KEY=VALUE ไม่บังคับ)")}</span>
               <textarea
                 rows={2}
                 placeholder="GITHUB_PERSONAL_ACCESS_TOKEN=ghp_...&#10;PORT=8080"
@@ -496,13 +572,14 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
               <button type="button" onClick={() => setAdding(false)}>
-                ยกเลิก
+                {tr("ยกเลิก")}
               </button>
               <button type="submit" className="primary" disabled={submitting}>
-                {submitting ? <Loader2 size={14} className="spin" /> : <Check size={14} />} บันทึก MCP Server
+                {submitting ? <Loader2 size={14} className="spin" /> : <Check size={14} />} {tr("บันทึก MCP Server")}
               </button>
             </div>
           </form>
+          </>}
         </div>
       )}
 
@@ -520,14 +597,14 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
         >
           {loading ? (
             <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "8px" }}>
-              <Loader2 size={16} className="spin" /> กำลังโหลดรายการ MCP servers...
+              <Loader2 size={16} className="spin" /> {tr("กำลังโหลดรายการ MCP servers...")}
             </div>
           ) : (
             <div>
               <Server size={32} style={{ opacity: 0.4, marginBottom: "8px" }} />
-              <div>ยังไม่มี MCP Server {filter !== "all" ? `สำหรับ ${filter === "claude" ? "Claude Code" : filter === "codex" ? "Codex" : "OpenCode"}` : ""}</div>
+              <div>{tr("ยังไม่มี MCP Server")} {filter !== "all" ? tr`สำหรับ ${filter === "claude" ? "Claude Code" : filter === "codex" ? "Codex" : "OpenCode"}` : ""}</div>
               <p style={{ fontSize: "12px", marginTop: "4px" }}>
-                กดปุ่ม "เพิ่ม Server" ด้านบน เพื่อเชื่อมต่อเครื่องมือภายนอกเข้าสู่ระบบ AI
+                {tr("กดปุ่ม \"เพิ่ม Server\" ด้านบน เพื่อเชื่อมต่อเครื่องมือภายนอกเข้าสู่ระบบ AI")}
               </p>
             </div>
           )}
@@ -622,7 +699,7 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
                         className="text-button"
                         disabled={isBusy}
                         onClick={() => handleCopyToServer(s, targetP)}
-                        title={`คัดลอก ${s.name} ไปยัง ${targetP === "claude" ? "Claude Code" : targetP === "codex" ? "Codex" : "OpenCode"}`}
+                        title={tr`คัดลอก ${s.name} ไปยัง ${targetP === "claude" ? "Claude Code" : targetP === "codex" ? "Codex" : "OpenCode"}`}
                         style={{ fontSize: "11px", padding: "3px 6px", opacity: 0.85 }}
                       >
                         + {targetP === "claude" ? "Claude" : targetP === "codex" ? "Codex" : "OpenCode"}
@@ -633,18 +710,18 @@ export function McpManagerPanel({ cwd, onError, onNotice }: Props) {
                     className={`text-button ${s.enabled ? "primary" : ""}`}
                     disabled={isBusy}
                     onClick={() => handleToggle(s)}
-                    title={s.enabled ? "กดเพื่อปิดการใช้งาน" : "กดเพื่อเปิดการใช้งาน"}
+                    title={s.enabled ? tr("กดเพื่อปิดการใช้งาน") : tr("กดเพื่อเปิดการใช้งาน")}
                     style={{ fontSize: "12px", padding: "4px 8px" }}
                   >
                     {isBusy ? <Loader2 size={12} className="spin" /> : <Power size={12} />}
-                    {s.enabled ? "เปิดอยู่" : "ปิดอยู่"}
+                    {s.enabled ? tr("เปิดอยู่") : tr("ปิดอยู่")}
                   </button>
 
                   <button
                     className="icon-button danger"
                     disabled={isBusy}
                     onClick={() => handleDelete(s)}
-                    title="ลบ Server"
+                    title={tr("ลบ Server")}
                   >
                     <Trash2 size={14} />
                   </button>

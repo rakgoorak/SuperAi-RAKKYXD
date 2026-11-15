@@ -20,6 +20,7 @@ import {
   formatSessionLabel,
   getQuickAgentTargets,
 } from '../handoffUtils';
+import { tr } from '../i18n';
 
 export interface ResponseActionsProps {
   text?: string;
@@ -143,7 +144,7 @@ export function ResponseActions({
       copiedTimer.current = setTimeout(() => setCopied(false), 1500);
     } catch {
       setCopied(false);
-      setProblem('คัดลอกไม่ได้ ลองเลือกข้อความแล้วคัดลอกอีกครั้ง');
+      setProblem(tr("คัดลอกไม่ได้ ลองเลือกข้อความแล้วคัดลอกอีกครั้ง"));
     }
   };
 
@@ -173,9 +174,9 @@ export function ResponseActions({
       onHandoff(targetSessionId, prompt);
     }
 
-    const label = targetLabel || 'session อื่น';
+    const label = targetLabel || tr("session อื่น");
     setHandoffDone(true);
-    setHandoffStatus(`ส่งต่อไป ${label} แล้ว`);
+    setHandoffStatus(tr`ส่งต่อไป ${label} แล้ว`);
     setHandoffOpen(false);
     clearTimeout(handoffTimer.current);
     handoffTimer.current = setTimeout(() => {
@@ -192,12 +193,12 @@ export function ResponseActions({
 
   return (
     <div className="response-controls">
-      <div className="response-actions" role="group" aria-label="จัดการคำตอบ">
+      <div className="response-actions" role="group" aria-label={tr("จัดการคำตอบ")}>
         {text?.trim() && (
           <button
             type="button"
-            aria-label={copied ? 'คัดลอกแล้ว' : 'คัดลอกคำตอบ'}
-            title={copied ? 'คัดลอกแล้ว' : 'คัดลอกคำตอบ'}
+            aria-label={copied ? tr("คัดลอกแล้ว") : tr("คัดลอกคำตอบ")}
+            title={copied ? tr("คัดลอกแล้ว") : tr("คัดลอกคำตอบ")}
             onClick={() => void copy()}
           >
             {copied ? <Check size={16} /> : <Copy size={16} />}
@@ -206,8 +207,8 @@ export function ResponseActions({
         {onRetry && (
           <button
             type="button"
-            aria-label="สร้างคำตอบใหม่"
-            title="สร้างคำตอบใหม่ด้วยข้อความและการตั้งค่าเดิม อาจแก้ไฟล์หรือรันคำสั่งซ้ำ"
+            aria-label={tr("สร้างคำตอบใหม่")}
+            title={tr("สร้างคำตอบใหม่ด้วยข้อความและการตั้งค่าเดิม อาจแก้ไฟล์หรือรันคำสั่งซ้ำ")}
             disabled={disabled}
             onClick={onRetry}
           >
@@ -219,11 +220,11 @@ export function ResponseActions({
             <button
               ref={handoffTrigger}
               type="button"
-              aria-label={handoffDone ? 'ส่งต่องานแล้ว' : 'ส่งต่องาน (Handoff)'}
+              aria-label={handoffDone ? tr("ส่งต่องานแล้ว") : tr("ส่งต่องาน (Handoff)")}
               title={
                 handoffDone
-                  ? 'ส่งต่องานแล้ว'
-                  : 'ส่งต่องาน (Handoff) ไปยัง AI หรือ session อื่น'
+                  ? tr("ส่งต่องานแล้ว")
+                  : tr("ส่งต่องาน (Handoff) ไปยัง AI หรือ session อื่น")
               }
               aria-expanded={handoffOpen}
               disabled={disabled}
@@ -233,9 +234,9 @@ export function ResponseActions({
             </button>
             {handoffOpen && (
               <div className="response-handoff-menu" role="menu">
-                <div className="handoff-title">ส่งต่องานไปยัง</div>
+                <div className="handoff-title">{tr("ส่งต่องานไปยัง")}</div>
                 {loadingSessions && (
-                  <div className="handoff-loading">กำลังโหลด session…</div>
+                  <div className="handoff-loading">{tr("กำลังโหลด session…")}</div>
                 )}
                 {filteredTargets.length > 0 ? (
                   filteredTargets.map((s) => (
@@ -253,7 +254,7 @@ export function ResponseActions({
                   ))
                 ) : (
                   <>
-                    <div className="handoff-empty">ยังไม่มี session อื่นในโปรเจกต์</div>
+                    <div className="handoff-empty">{tr("ยังไม่มี session อื่นในโปรเจกต์")}</div>
                     {quickAgents.map((qa) => (
                       <button
                         key={qa.agentType}
@@ -270,10 +271,10 @@ export function ResponseActions({
                 <button
                   type="button"
                   role="menuitem"
-                  onClick={() => handleHandoff(undefined, 'ช่องคำสั่งทั่วไป')}
+                  onClick={() => handleHandoff(undefined, tr("ช่องคำสั่งทั่วไป"))}
                 >
                   <ArrowRightCircle size={14} />
-                  <span className="handoff-session-name">ใส่ในช่องคำสั่งทั่วไป</span>
+                  <span className="handoff-session-name">{tr("ใส่ในช่องคำสั่งทั่วไป")}</span>
                 </button>
               </div>
             )}
@@ -291,8 +292,8 @@ export function ResponseActions({
             <button
               ref={trigger}
               type="button"
-              aria-label="ตัวเลือกคำตอบ"
-              title="ตัวเลือกคำตอบ"
+              aria-label={tr("ตัวเลือกคำตอบ")}
+              title={tr("ตัวเลือกคำตอบ")}
               aria-expanded={open}
               disabled={disabled}
               onClick={() => setOpen(!open)}
@@ -310,7 +311,7 @@ export function ResponseActions({
                     }}
                   >
                     <Pencil size={14} />
-                    แก้ไขข้อความต้นฉบับ
+                    {tr("แก้ไขข้อความต้นฉบับ")}
                   </button>
                 )}
                 {onChanges && (
@@ -322,7 +323,7 @@ export function ResponseActions({
                     }}
                   >
                     <FilePen size={14} />
-                    ดูไฟล์ที่เปลี่ยน
+                    {tr("ดูไฟล์ที่เปลี่ยน")}
                   </button>
                 )}
               </div>
@@ -330,7 +331,7 @@ export function ResponseActions({
           </div>
         )}
         <span className="response-copy-status" role="status">
-          {handoffStatus || (copied ? 'คัดลอกแล้ว' : '')}
+          {handoffStatus || (copied ? tr("คัดลอกแล้ว") : '')}
         </span>
         {at ? (
           <time

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom';
 import { ImageOff, Maximize, Minus, Plus, X } from 'lucide-react';
 import '../message-attachments.css';
+import { tr } from '../i18n';
 
 export type ViewerImage = { src: string; name: string };
 
@@ -55,7 +56,7 @@ export function ImageViewer({ image, onClose }: { image: ViewerImage; onClose: (
     return () => area.removeEventListener('wheel', wheel);
   }, [changeZoom, size.width]);
   const ready = !!size.width && !failed;
-  return createPortal(<dialog ref={dialog} className="message-image-preview" aria-label={`ดูรูป ${image.name}`}
+  return createPortal(<dialog ref={dialog} className="message-image-preview" aria-label={tr`ดูรูป ${image.name}`}
     onCancel={event => { event.preventDefault(); onClose(); }}
     onClick={event => { if (event.target === event.currentTarget) onClose(); }}
     onKeyDown={event => {
@@ -64,9 +65,9 @@ export function ImageViewer({ image, onClose }: { image: ViewerImage; onClose: (
       else if (event.key === '-') { event.preventDefault(); changeZoom(0.8); }
       else if (event.key === '0') { event.preventDefault(); fit(); }
     }}>
-    <header><button type="button" aria-label="ปิดรูปภาพ" title="ปิดรูปภาพ (Esc)" onClick={onClose} autoFocus><X size={22} /><span>ปิดรูปภาพ</span><kbd>Esc</kbd></button><span className="message-image-title" title={image.name}>{image.name}</span></header>
-    {failed ? <p role="alert"><ImageOff size={24} />เปิดรูปไม่ได้ ไฟล์อาจถูกย้ายหรือลบ กรุณาเปิดใน Preview หรือตรวจที่อยู่ไฟล์</p>
-      : <div ref={viewport} className="image-viewer-viewport" aria-label="พื้นที่รูปภาพ เลื่อนล้อเมาส์เพื่อซูม"
+    <header><button type="button" aria-label={tr("ปิดรูปภาพ")} title={tr("ปิดรูปภาพ (Esc)")} onClick={onClose} autoFocus><X size={22} /><span>{tr("ปิดรูปภาพ")}</span><kbd>Esc</kbd></button><span className="message-image-title" title={image.name}>{image.name}</span></header>
+    {failed ? <p role="alert"><ImageOff size={24} />{tr("เปิดรูปไม่ได้ ไฟล์อาจถูกย้ายหรือลบ กรุณาเปิดใน Preview หรือตรวจที่อยู่ไฟล์")}</p>
+      : <div ref={viewport} className="image-viewer-viewport" aria-label={tr("พื้นที่รูปภาพ เลื่อนล้อเมาส์เพื่อซูม")}
         onPointerDown={event => {
           if (event.pointerType !== 'mouse' || event.button !== 0) return;
           const area = event.currentTarget;
@@ -84,12 +85,12 @@ export function ImageViewer({ image, onClose }: { image: ViewerImage; onClose: (
           onLoad={event => setSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
           onDoubleClick={() => scale === 1 ? fit() : setScale(1)} onError={() => setFailed(true)} /></div>
       </div>}
-    <div className="image-viewer-controls" role="group" aria-label="ซูมรูปภาพ">
-      <button disabled={!ready || scale <= 0.05} aria-label="ซูมออก" title="ซูมออก (-)" onClick={() => changeZoom(0.8)}><Minus size={18} /></button>
-      <output aria-live="polite" aria-label="ระดับการซูม">{ready ? `${Math.round(scale * 100)}%` : '—'}</output>
-      <button disabled={!ready || scale >= 8} aria-label="ซูมเข้า" title="ซูมเข้า (+)" onClick={() => changeZoom(1.25)}><Plus size={18} /></button>
-      <button disabled={!ready} onClick={() => setScale(1)} title="ขนาดจริง">100%</button>
-      <button disabled={!ready} onClick={fit} title="พอดีจอ (0)"><Maximize size={16} /> พอดีจอ</button>
+    <div className="image-viewer-controls" role="group" aria-label={tr("ซูมรูปภาพ")}>
+      <button disabled={!ready || scale <= 0.05} aria-label={tr("ซูมออก")} title={tr("ซูมออก (-)")} onClick={() => changeZoom(0.8)}><Minus size={18} /></button>
+      <output aria-live="polite" aria-label={tr("ระดับการซูม")}>{ready ? `${Math.round(scale * 100)}%` : '—'}</output>
+      <button disabled={!ready || scale >= 8} aria-label={tr("ซูมเข้า")} title={tr("ซูมเข้า (+)")} onClick={() => changeZoom(1.25)}><Plus size={18} /></button>
+      <button disabled={!ready} onClick={() => setScale(1)} title={tr("ขนาดจริง")}>100%</button>
+      <button disabled={!ready} onClick={fit} title={tr("พอดีจอ (0)")}><Maximize size={16} /> {tr("พอดีจอ")}</button>
     </div>
   </dialog>, document.body);
 }

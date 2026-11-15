@@ -25,8 +25,9 @@ const address = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ channel: process.env.SUPERAI_TEST_BROWSER || 'chrome', headless: true, args: ['--disable-gpu'] });
 let checks = 0;
 const check = (value, message) => { assert.ok(value, message); checks++; console.log(`PASS ${message}`); };
+async function runChecks() {
 try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+  const page = await browser.newPage({ locale: 'th-TH',  viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
   page.setDefaultTimeout(10000);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -118,9 +119,33 @@ try {
   const target = page.getByLabel('เป้าหมายคำสั่ง', { exact: true });
   await target.selectOption('active');
   await page.locator('.session-tabs .session-tab').filter({ hasText: 'One' }).locator('button').first().click();
-  check(JSON.stringify(await target.locator('option').allTextContents().then(items => items.map(text => text.trim()))) === JSON.stringify(['ที่เลือก', 'ทุก session']), 'composer offers exactly selected-session and all-session targets');
+  check(JSON.stringify(await target.locator('option').allTextContents().then(items => items.map(text => text.trim()))) === JSON.stringify(['ห้องนี้', 'ทุกห้อง']), 'composer offers exactly selected-session and all-session targets');
   const composer = page.getByLabel('คำสั่ง', { exact: true });
   const pane = page.locator('[data-session-id="ui-0"]');
+  // A provider burst must preserve its final text and leave the composer usable.
+  sockets.get('ui-0').send(JSON.stringify({ type: 'state', running: true }));
+  sockets.get('ui-0').send(JSON.stringify({ type: 'activity', activity: { startedAt: Date.now(), outputTokens: 0 } }));
+  await pane.locator('.chat-working').waitFor();
+  check((await pane.locator('.chat-working').innerText()).includes('กำลังทำงานกับ'), 'working state identifies the AI instead of showing only elapsed time');
+  if (process.argv.includes('--stream-only')) await page.screenshot({ path: path.join(output, 'chat-working.png') });
+  const streamStarted = Date.now();
+  for (let index = 0; index < 500; index++) {
+    sockets.get('ui-0').send(JSON.stringify({ type: 'item', item: { ...chatItems('ui-0')[1], text: `Streaming ${index}` } }));
+  }
+  sockets.get('ui-0').send(JSON.stringify({ type: 'state', running: false }));
+  await pane.getByText('Streaming 499', { exact: true }).waitFor();
+  check(await pane.locator('[data-message-id="reply-ui-0"]').count() === 1, 'provider burst updates one answer without duplicate messages');
+  await composer.fill('พิมพ์ต่อได้');
+  check(await composer.inputValue() === 'พิมพ์ต่อได้', 'composer remains editable after a 500-update burst');
+  console.log(JSON.stringify({ streamUpdates: 500, finalVisibleMs: Date.now() - streamStarted }));
+  await composer.fill('');
+  sockets.get('ui-0').send(JSON.stringify({ type: 'snapshot', chat: { items: chatItems('ui-0'), running: false } }));
+  await pane.locator('.chat-assistant').filter({ hasText: 'จัดโครงสร้างหน้าเข้าสู่ระบบ' }).waitFor();
+  if (process.argv.includes('--stream-only')) {
+    check(errors.length === 0, `no renderer errors: ${errors.join('; ')}`);
+    await fs.writeFile(path.join(output, 'stream-results.json'), JSON.stringify({ checks, errors, streamUpdates: 500 }, null, 2));
+    return;
+  }
   const imageButton = pane.getByRole('button', { name: 'ดูรูป first image.png', exact: true });
   await page.waitForFunction(() => document.querySelector('[data-session-id="ui-0"] .message-image-thumb img')?.naturalWidth > 0);
   check(await pane.locator('.message-image-thumb').count() === 3 && await pane.locator('.message-file').textContent() === 'guide.pdf', 'sent attachments show image thumbnails and keep PDF filenames');
@@ -346,7 +371,7 @@ try {
   check(rect.scrolls && !rect.overflow, 'the catalog scrolls internally without overflowing the document');
   check(await composer.getAttribute('aria-expanded') === 'true', 'composer exposes the open list to assistive technology');
   await page.screenshot({ path: path.join(output, 'code-slash-wide.png') });
-  await page.locator('.breadcrumb').click();
+  await pane.locator('.chat-scroll').click({ position: { x: 150, y: 20 } });
   await picker.waitFor({ state: 'hidden' });
   check(true, 'outside click dismisses the slash picker');
   await composer.fill('/rev');
@@ -518,6 +543,10 @@ try {
   await openTeam('Chat');
   check(await page.locator('.conversation-scroll .seat-picker, .chat-model-menu').count() === 0, 'Chat has one team editor and no duplicate model picker in the conversation or composer');
   const summaryToggle = teamDialog.getByRole('checkbox', { name: 'ให้ AI สรุปผลรวม', exact: true });
+  // A new Chat team has no summarizer; turn it on and save so there is a saved choice to restore.
+  await summaryToggle.check();
+  await teamDialog.getByRole('button', { name: 'บันทึกทีม', exact: true }).click();
+  await openTeam('Chat');
   await summaryToggle.uncheck();
   check(await teamDialog.getByLabel('ชื่อผู้สรุป', { exact: true }).count() === 0, 'turning off summarization hides its model fields');
   await teamDialog.getByRole('button', { name: 'ยกเลิก', exact: true }).click();
@@ -625,3 +654,5 @@ try {
   await browser.close();
   await new Promise(resolve => server.close(resolve));
 }
+}
+await runChecks();

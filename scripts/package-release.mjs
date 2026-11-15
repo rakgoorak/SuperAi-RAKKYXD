@@ -110,6 +110,8 @@ if (platform === 'windows') {
   }
 }
 await fs.copyFile('README.md', path.join(destination, 'README.md'));
+await fs.copyFile('README_TH.md', path.join(destination, 'README-TH.md'));
+await fs.copyFile('docs/DOWNLOADS_EN.md', path.join(destination, 'INSTALL.md'));
 await fs.copyFile('docs/DOWNLOADS.md', path.join(destination, 'INSTALL-TH.md'));
 await fs.mkdir('output', { recursive: true });
 const manifest = { directory: destination, main, platform, arch, version, label };

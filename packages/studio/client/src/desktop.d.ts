@@ -41,6 +41,8 @@ declare global {
         { success: true; previewCleared: true } | { success: false; error: string }
       >;
       onBrowser: (callback: (state: BrowserState) => void) => () => void;
+      /** The AI used the browser panel: show it. */
+      onBrowserReveal?: (callback: (detail: { tool: string }) => void) => () => void;
       /** Absolute path of a dropped file, or '' when it has none (e.g. dragged from a web page). */
       pathForFile: (file: File) => string;
       /** Puts an image file on the OS clipboard for a few seconds (Codex reads it on Ctrl+V). */
@@ -50,6 +52,9 @@ declare global {
       onUpdate: (callback: (state: UpdateState) => void) => () => void;
       /** Anonymous usage count: `available` is false in dev builds, `enabled` is the user's choice. */
       usage?: (action: "state" | "set", value?: boolean) => Promise<{ available: boolean; enabled: boolean }>;
+      /** "Let the AI control this computer": off unless the user turns it on. */
+      computer?: (action: "state" | "set", value?: boolean) => Promise<{ enabled: boolean; platform?: string }>;
+      onComputer?: (callback: (state: { enabled: boolean }) => void) => () => void;
       /** OS notification + taskbar flash; clicking it focuses the window and reports `target` via onNotifyOpen. */
       notify?: (notice: { tag: string; title: string; body: string; target: unknown }) => Promise<void>;
       onNotifyOpen?: (callback: (target: unknown) => void) => () => void;

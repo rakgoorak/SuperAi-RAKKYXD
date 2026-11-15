@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { StudioServer } from '../server/StudioServer.js';
 import { chatHistoryEntries, recentConversations, runHistoryEntries } from '../client/src/historyEntries.js';
-import { permissionDescription, permissionLabel } from '../client/src/providerIdentity.js';
+import { permissionChoices } from '../client/src/chatControls.js';
 import type { Run, Session } from '../client/src/api.js';
 
 test('general chat is idempotent and does not choose an existing user project', async () => {
@@ -55,9 +55,13 @@ test('history retains team answers and routes separate modes and workspaces inde
   assert.equal(recentConversations([...chatHistoryEntries(session, []), ...entries]).length, 4);
 });
 
-test('Codex edit labels explain command execution and OpenCode labels defer to its configured agent', () => {
-  assert.match(permissionLabel('codex', 'edit'), /รันคำสั่ง/);
-  assert.match(permissionDescription('codex', 'edit'), /ไม่ได้แยก/);
-  assert.match(permissionDescription('opencode', 'edit'), /ขึ้นอยู่กับ/);
-  assert.match(permissionDescription('claude-code', 'read'), /ไม่ให้แก้ไฟล์/);
+test('every AI offers the same short permission list, with only the levels it can really do', () => {
+  const values = (agent: string) => permissionChoices(agent).map(choice => choice.value);
+  assert.deepEqual(values('claude-code'), ['read', 'ask', 'auto', 'full']);
+  assert.deepEqual(values('codex'), ['read', 'ask', 'auto', 'full']);
+  assert.deepEqual(values('opencode'), ['read', 'ask', 'auto', 'approve_all']);
+  assert.deepEqual(values('antigravity'), ['read', 'auto', 'approve_all'], 'Antigravity cannot ask in chat');
+  assert.deepEqual(values('openrouter'), ['read', 'auto'], 'API rooms have no unrestricted mode');
+  assert.deepEqual(permissionChoices('codex').map(choice => choice.label), ['อ่านอย่างเดียว', 'ถามก่อนทำ', 'ทำเองอัตโนมัติ', 'เต็มสิทธิ์']);
+  assert.ok(permissionChoices('opencode').every(choice => choice.hint));
 });

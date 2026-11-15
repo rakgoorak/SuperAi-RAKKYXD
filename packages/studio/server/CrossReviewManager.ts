@@ -2,10 +2,11 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { cliEnv, findExecutable } from './CliCatalog.js';
-import { Seat } from './Providers.js';
+import { Seat, validateSeat } from './Providers.js';
 import { CliProvider } from './CliProvider.js';
 import { LocalProvider } from './AgentRunManager.js';
 import { createProvider, LLMMessage } from '@superai-rakkyxd/core';
+import { tr } from './i18n.js';
 
 const execAsync = promisify(execFile);
 
@@ -205,7 +206,7 @@ export class CrossReviewManager {
     customDiff?: string;
     targetFile?: string;
   }): Promise<CrossReviewResult> {
-    const reviewer = this.selectReviewer(options.authorProvider, options.reviewer);
+    const reviewer = validateSeat(this.selectReviewer(options.authorProvider, options.reviewer));
     const { diff, filesChanged } = options.customDiff !== undefined
       ? { diff: options.customDiff, filesChanged: 1 }
       : await this.getWorkingDiff(options.cwd, options.targetFile);
@@ -216,7 +217,7 @@ export class CrossReviewManager {
         authorProvider: options.authorProvider,
         verdict: 'approved',
         score: 100,
-        summary: 'ไม่พบการเปลี่ยนแปลงของไฟล์ในโปรเจกต์ (ไม่มี Diff ให้ตรวจสอบ)',
+        summary: tr("ไม่พบการเปลี่ยนแปลงของไฟล์ในโปรเจกต์ (ไม่มี Diff ให้ตรวจสอบ)"),
         issues: [],
         reviewedAt: Date.now(),
         diffStats: { filesChanged: 0, diffSnippet: '' },
@@ -234,7 +235,7 @@ export class CrossReviewManager {
       let rawResponse = '';
       if (reviewer.provider.startsWith('cli:')) {
         const cliId = reviewer.provider.slice(4);
-        const cliProvider = new CliProvider(cliId, options.cwd, ac.signal, false, reviewer.model, false, [], reviewer.effort || '');
+        const cliProvider = new CliProvider(cliId, options.cwd, ac.signal, false, reviewer.model, false, [], reviewer.effort || '', undefined, undefined, reviewer.accountId || 'system');
         const result = await cliProvider.generate([
           { role: 'system', content: REVIEWER_SYSTEM_PROMPT },
           { role: 'user', content: reviewPrompt },

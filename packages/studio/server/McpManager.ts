@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { tr } from './i18n.js';
 
 export interface McpServerRecord {
   id: string; // e.g. "claude:roblox-studio" or "codex:blender"
@@ -268,7 +269,7 @@ export function listMcpServers(cwd?: string, paths: McpPaths = defaultMcpPaths()
 export function saveMcpServer(input: AddMcpServerInput, cwd?: string, paths: McpPaths = defaultMcpPaths()): McpServerRecord {
   const name = input.name.trim();
   if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) {
-    throw new Error("ชื่อ MCP Server ต้องประกอบด้วยตัวอักษรภาษาอังกฤษ ตัวเลข ขีดลบ หรือขีดล่างเท่านั้น");
+    throw new Error(tr("ชื่อ MCP Server ต้องประกอบด้วยตัวอักษรภาษาอังกฤษ ตัวเลข ขีดลบ หรือขีดล่างเท่านั้น"));
   }
 
   const args = Array.isArray(input.args)
@@ -280,10 +281,10 @@ export function saveMcpServer(input: AddMcpServerInput, cwd?: string, paths: Mcp
   const type = input.type || (input.url ? "http" : "stdio");
 
   if (type === "stdio" && !input.command) {
-    throw new Error("กรุณาระบุ Command สำหรับ stdio server");
+    throw new Error(tr("กรุณาระบุ Command สำหรับ stdio server"));
   }
   if ((type === "http" || type === "sse") && !input.url) {
-    throw new Error("กรุณาระบุ URL สำหรับ HTTP/SSE server");
+    throw new Error(tr("กรุณาระบุ URL สำหรับ HTTP/SSE server"));
   }
 
   if (input.provider === "claude") {
@@ -404,7 +405,7 @@ export function saveMcpServer(input: AddMcpServerInput, cwd?: string, paths: Mcp
     };
   }
 
-  throw new Error(`ไม่รองรับ provider: ${input.provider}`);
+  throw new Error(tr`ไม่รองรับ provider: ${input.provider}`);
 }
 
 /** Removes an MCP server from configuration */

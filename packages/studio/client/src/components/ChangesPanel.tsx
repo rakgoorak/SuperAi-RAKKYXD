@@ -5,6 +5,7 @@ import { CrossReviewModal } from './CrossReviewModal';
 import { VisualDiffViewer } from './VisualDiffViewer';
 import { WorktreeModal } from './WorktreeModal';
 import { GitBranch, GitMerge, LoaderCircle, CheckCircle2, AlertCircle, FolderGit2, Activity, Scale } from 'lucide-react';
+import { tr } from '../i18n';
 
 export function ChangesPanel({
   workspaceId,
@@ -136,19 +137,19 @@ export function ChangesPanel({
       if (res.success) {
         setMergeNotice({
           type: 'success',
-          message: `รวมโค้ดจาก "${branch}" เข้าสู่ main สำเร็จแล้ว! (Commit: ${res.commit})${res.deleted ? ' พร้อมลบ Worktree เรียบร้อย' : ''}`,
+          message: tr`รวมโค้ดจาก "${branch}" เข้าสู่ main สำเร็จแล้ว! (Commit: ${res.commit})${res.deleted ? tr(" พร้อมลบ Worktree เรียบร้อย") : ''}`,
         });
         setRevision(n => n + 1);
       } else if (res.conflict) {
         setMergeNotice({
           type: 'error',
-          message: res.error || 'เกิดข้อขัดแย้งในการรวมโค้ด (Merge Conflict) ในไฟล์ที่ทับซ้อนกัน',
+          message: res.error || tr("เกิดข้อขัดแย้งในการรวมโค้ด (Merge Conflict) ในไฟล์ที่ทับซ้อนกัน"),
         });
       }
     } catch (err: any) {
       setMergeNotice({
         type: 'error',
-        message: err.message || 'รวมโค้ดไม่สำเร็จ',
+        message: err.message || tr("รวมโค้ดไม่สำเร็จ"),
       });
     } finally {
       setIsMerging(false);
@@ -168,15 +169,15 @@ export function ChangesPanel({
 
       {/* Smart Merge Banner when working inside a worktree */}
       {isCurrentWorktree && worktreeInfo?.current && (
-        <aside className="worktree-smart-merge-banner" aria-label="แถบรวมโค้ด Worktree เข้า main">
+        <aside className="worktree-smart-merge-banner" aria-label={tr("แถบรวมโค้ด Worktree เข้า main")}>
           <div className="worktree-merge-header">
             <GitBranch size={16} />
             <span>
-              กำลังทำงานบน Worktree: <strong>{worktreeInfo.current.branch}</strong> (แตกมาจาก main)
+              {tr("กำลังทำงานบน Worktree:")} <strong>{worktreeInfo.current.branch}</strong> {tr("(แตกมาจาก main)")}
             </span>
           </div>
           <p className="worktree-merge-details">
-            ต้องการรวมการเปลี่ยนแปลงทั้งหมดใน Worktree นี้เข้าสู่ main หรือไม่?
+            {tr("ต้องการรวมการเปลี่ยนแปลงทั้งหมดใน Worktree นี้เข้าสู่ main หรือไม่?")}
           </p>
           <div className="worktree-merge-actions-row">
             <label className="worktree-delete-checkbox">
@@ -185,7 +186,7 @@ export function ChangesPanel({
                 checked={deleteAfterMerge}
                 onChange={e => setDeleteAfterMerge(e.target.checked)}
               />
-              <span>ลบ Worktree หลังรวมเสร็จ</span>
+              <span>{tr("ลบ Worktree หลังรวมเสร็จ")}</span>
             </label>
             <button
               type="button"
@@ -194,7 +195,7 @@ export function ChangesPanel({
               disabled={isMerging}
             >
               {isMerging ? <LoaderCircle size={13} className="spin" /> : <GitMerge size={13} />}
-              <span>รวมโค้ดเข้า main ทันที (Merge)</span>
+              <span>{tr("รวมโค้ดเข้า main ทันที (Merge)")}</span>
             </button>
           </div>
         </aside>
@@ -205,7 +206,7 @@ export function ChangesPanel({
           type="button"
           className={`secondary btn-worktree-trigger ${isCurrentWorktree ? 'is-worktree' : ''}`}
           onClick={() => setWorktreeModalOpen(true)}
-          title="จัดการ Git Worktrees"
+          title={tr("จัดการ Git Worktrees")}
         >
           <FolderGit2 size={13} />
           <span>{worktreeInfo?.current ? (isCurrentWorktree ? worktreeInfo.current.branch : 'main') : 'Worktrees'}</span>
@@ -214,7 +215,7 @@ export function ChangesPanel({
           type="button"
           className="secondary btn-self-heal-trigger"
           onClick={() => setSelfHealOpen(true)}
-          title="รันคำสั่งทดสอบและซ่อมแซมโค้ดอัตโนมัติ (Self-Healing Loop)"
+          title={tr("รันคำสั่งทดสอบและซ่อมแซมโค้ดอัตโนมัติ (Self-Healing Loop)")}
           style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
         >
           <Activity size={13} style={{ color: '#10b981' }} />
@@ -224,27 +225,27 @@ export function ChangesPanel({
           type="button"
           className="secondary btn-cross-review-trigger"
           onClick={() => setCrossReviewOpen(true)}
-          title="ให้ AI ข้ามค่ายช่วยตรวจทานหาข้อบกพร่อง (AI Cross-Examination)"
+          title={tr("ให้ AI ข้ามค่ายช่วยตรวจทานหาข้อบกพร่อง (AI Cross-Examination)")}
           style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
         >
           <Scale size={13} style={{ color: '#6366f1' }} />
           <span>AI Cross-Review</span>
         </button>
         <button className="secondary" onClick={() => setRevision(n => n + 1)}>
-          ตรวจไฟล์อีกครั้ง
+          {tr("ตรวจไฟล์อีกครั้ง")}
         </button>
         <button className="primary" onClick={onPreview}>
-          เปิด Preview
+          {tr("เปิด Preview")}
         </button>
       </div>
       <p className="muted">
-        ไฟล์ที่เปลี่ยนเทียบกับ Git HEAD ของโปรเจกต์ รวมการแก้ไขของคุณด้วย ไม่ใช่เฉพาะงานของ AI
+        {tr("ไฟล์ที่เปลี่ยนเทียบกับ Git HEAD ของโปรเจกต์ รวมการแก้ไขของคุณด้วย ไม่ใช่เฉพาะงานของ AI")}
       </p>
-      {loading && <p role="status">กำลังตรวจ Git…</p>}
+      {loading && <p role="status">{tr("กำลังตรวจ Git…")}</p>}
       {problem && <p role="alert">{problem}</p>}
 
       <div className="changes-grid">
-        <nav aria-label="ไฟล์ที่เปลี่ยน">
+        <nav aria-label={tr("ไฟล์ที่เปลี่ยน")}>
           {files.map(name => (
             <button
               key={name}
@@ -268,7 +269,7 @@ export function ChangesPanel({
               onError={err => setProblem(err)}
             />
           ) : (
-            <p>{files.length ? 'เลือกไฟล์เพื่อดูเนื้อหาหรือ diff' : 'ยังไม่มีไฟล์ที่เปลี่ยน'}</p>
+            <p>{files.length ? tr("เลือกไฟล์เพื่อดูเนื้อหาหรือ diff") : tr("ยังไม่มีไฟล์ที่เปลี่ยน")}</p>
           )}
         </section>
       </div>

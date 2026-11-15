@@ -30,7 +30,7 @@ export function bufferText(buffer: TextBuffer): string {
  */
 export function loadTerminalThaiFont(fonts: FontFaceSet | undefined = typeof document === 'undefined' ? undefined : document.fonts): Promise<void> {
   if (!fonts) return Promise.resolve();
-  const sample = 'กขค่้๊๋ำ';
+  const sample = "กขค่้๊๋ำ";
   return Promise.all([
     fonts.load('15px "Noto Sans Thai"', sample),
     fonts.load('bold 15px "Noto Sans Thai"', sample),

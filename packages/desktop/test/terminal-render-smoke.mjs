@@ -25,7 +25,7 @@ wss.on('connection', ws => {
 let app;
 try {
 app = await electron.launch({ executablePath: require('electron'), args: [path.resolve('packages/desktop/test/terminal-render-main.mjs')],
-  env: { ...process.env, SUPERAI_RENDER_DATA: data, SUPERAI_RENDER_URL: `${vite.resolvedUrls.local[0]}test/terminal-render.html` }, timeout: 60000 });
+  env: { SUPERAI_LANG: 'th', ...process.env, SUPERAI_RENDER_DATA: data, SUPERAI_RENDER_URL: `${vite.resolvedUrls.local[0]}test/terminal-render.html` }, timeout: 60000 });
   const page = await app.firstWindow();
   await page.waitForSelector('.xterm-rows');
   await page.waitForFunction(() => document.fonts.status === 'loaded');

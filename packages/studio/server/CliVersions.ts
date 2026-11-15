@@ -7,6 +7,7 @@ import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { cliLaunch, cliEnv, cliInstallEnv, findExecutable, getCliDefinition, managedCliPrefix } from "./CliCatalog.js";
+import { tr } from './i18n.js';
 
 /**
  * Installed vs latest version of each AI CLI, and updating it with the CLI's own updater,
@@ -189,7 +190,7 @@ export function spawnCliUpdate(id: string, args: string[]): ChildProcess {
   const launch = cliLaunch(id, args);
   runStep(launch.command, launch.args, (code, error) => {
     if (!killed && (error || code !== 0) && npmStep) {
-      out.write(`\nกำลังอัปเดต ${pkg}@latest ผ่าน npm...\n`);
+      out.write(tr`\nกำลังอัปเดต ${pkg}@latest ผ่าน npm...\n`);
       runStep(npmStep.command, npmStep.args, (npmCode, npmErr) => {
         if (npmErr) wrapper.emit("error", npmErr);
         else wrapper.emit("close", npmCode);
@@ -271,14 +272,14 @@ export class CliVersionManager {
       const installed = installedText.startsWith("ERROR") ? null : parseVersion(installedText);
       // No registry to ask (Antigravity): trust the CLI's own updater for the version it confirmed.
       if (!latest && installed && this.confirmed[id] === installed) {
-        result = { id, name, installed, latest: installed, status: "latest", checkedAt: Date.now(), note: "CLI ยืนยันเองว่าเป็นเวอร์ชันล่าสุด (ตอนกดอัปเดตครั้งล่าสุด)" };
+        result = { id, name, installed, latest: installed, status: "latest", checkedAt: Date.now(), note: tr("CLI ยืนยันเองว่าเป็นเวอร์ชันล่าสุด (ตอนกดอัปเดตครั้งล่าสุด)") };
         this.cache.set(id, result);
         return result;
       }
       const status: CliVersion["status"] = !installed ? "error" : !latest ? "unknown" : compareVersions(installed, latest) < 0 ? "outdated" : "latest";
       result = {
         id, name, installed, latest, status, checkedAt: Date.now(),
-        note: !installed ? "อ่านเวอร์ชันไม่ได้" : !latest ? (NPM_PACKAGE[id] ? "ตรวจเวอร์ชันล่าสุดไม่ได้ (ต้องมีอินเทอร์เน็ต)" : "CLI นี้ไม่บอกเวอร์ชันล่าสุด กดอัปเดตเพื่อให้ CLI ตรวจเอง") : undefined,
+        note: !installed ? tr("อ่านเวอร์ชันไม่ได้") : !latest ? (NPM_PACKAGE[id] ? tr("ตรวจเวอร์ชันล่าสุดไม่ได้ (ต้องมีอินเทอร์เน็ต)") : tr("CLI นี้ไม่บอกเวอร์ชันล่าสุด กดอัปเดตเพื่อให้ CLI ตรวจเอง")) : undefined,
       };
     }
     this.cache.set(id, result);
@@ -295,10 +296,10 @@ export class CliVersionManager {
 
   /** Run the CLI's own updater. `inUse` refuses while a tab or Agent/Chat run uses the CLI. */
   startUpdate(id: string, inUse: (id: string) => boolean): UpdateJob {
-    if (!VERSIONED_CLIS.includes(id)) throw new Error("ไม่รู้จัก CLI นี้");
-    if (!this.deps.installed(id)) throw new Error("ยังไม่ได้ติดตั้ง CLI นี้");
-    if (this.jobs.some((j) => j.cliId === id && j.status === "running")) throw new Error("กำลังอัปเดตอยู่");
-    if (inUse(id)) throw new Error("CLI นี้กำลังเปิดใช้งานอยู่ กรุณาปิดแท็บและหยุดงาน Agent/Chat ที่ใช้ตัวนี้ก่อนอัปเดต");
+    if (!VERSIONED_CLIS.includes(id)) throw new Error(tr("ไม่รู้จัก CLI นี้"));
+    if (!this.deps.installed(id)) throw new Error(tr("ยังไม่ได้ติดตั้ง CLI นี้"));
+    if (this.jobs.some((j) => j.cliId === id && j.status === "running")) throw new Error(tr("กำลังอัปเดตอยู่"));
+    if (inUse(id)) throw new Error(tr("CLI นี้กำลังเปิดใช้งานอยู่ กรุณาปิดแท็บและหยุดงาน Agent/Chat ที่ใช้ตัวนี้ก่อนอัปเดต"));
     const job: UpdateJob = { id: randomUUID(), cliId: id, status: "running", log: "", before: this.cache.get(id)?.installed ?? null, startedAt: Date.now() };
     this.jobs.push(job);
     let proc: ChildProcess;
@@ -325,7 +326,7 @@ export class CliVersionManager {
       const after = await this.check(id, true).catch(() => null);
       job.after = after?.installed ?? null;
       job.status = code === 0 && !error ? "completed" : "failed";
-      if (job.status === "failed") job.error = error || `อัปเดตไม่สำเร็จ (exit ${code}) ดูรายละเอียดด้านล่าง`;
+      if (job.status === "failed") job.error = error || tr`อัปเดตไม่สำเร็จ (exit ${code}) ดูรายละเอียดด้านล่าง`;
     };
     proc.on("error", (err) => void done(null, err.message));
     proc.on("close", (code) => void done(code));

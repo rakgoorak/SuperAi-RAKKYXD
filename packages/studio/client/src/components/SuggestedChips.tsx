@@ -1,6 +1,7 @@
 import React from "react";
 import { Sparkles, GitBranch, Play, HelpCircle, FileText, RotateCcw } from "lucide-react";
 import type { SuggestionItem } from "../suggestions";
+import { tr } from '../i18n';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   git: <GitBranch size={12} />,
@@ -23,8 +24,8 @@ export function SuggestedChips({
   if (!items || items.length === 0) return null;
 
   return (
-    <div className="suggested-chips-bar" role="group" aria-label="ตัวเลือกแนะนำด่วน">
-      <span className="chips-label"><Sparkles size={12} /> แนะนำ:</span>
+    <div className="suggested-chips-bar" role="group" aria-label={tr("ตัวเลือกแนะนำด่วน")}>
+      <span className="chips-label"><Sparkles size={12} /> {tr("แนะนำ:")}</span>
       <div className="chips-scroll">
         {items.map((item) => (
           <button
@@ -33,7 +34,7 @@ export function SuggestedChips({
             className="chip-action-btn"
             disabled={disabled}
             onClick={() => onSelect(item.promptText)}
-            title={`คลิกเพื่อใส่คำสั่ง: ${item.promptText}`}
+            title={tr`คลิกเพื่อใส่คำสั่ง: ${item.promptText}`}
           >
             {item.icon && ICON_MAP[item.icon] ? ICON_MAP[item.icon] : <Sparkles size={11} />}
             <span>{item.label}</span>

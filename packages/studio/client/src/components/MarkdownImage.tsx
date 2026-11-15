@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { ImageViewer } from './ImageViewer';
+import { tr } from '../i18n';
 
 export const ImageEndpointContext = createContext<string | undefined>(undefined);
 
@@ -11,8 +12,8 @@ export function MarkdownImage({ path, label, fallback }: { path: string; label: 
   if (!endpoint) return fallback;
   const src = `${endpoint}?path=${encodeURIComponent(path)}`;
   return <span className="markdown-image">
-    <span className="markdown-image-caption">{fallback}<small>{failed ? 'เปิดรูปในแชทไม่ได้ · เปิดใน Preview' : 'เปิดใน Preview'}</small></span>
-    {!failed && <button type="button" className="markdown-image-open" aria-label={`ขยายรูป ${label}`} title="กดดูรูปและซูม"
+    <span className="markdown-image-caption">{fallback}<small>{failed ? tr("เปิดรูปในแชทไม่ได้ · เปิดใน Preview") : tr("เปิดใน Preview")}</small></span>
+    {!failed && <button type="button" className="markdown-image-open" aria-label={tr`ขยายรูป ${label}`} title={tr("กดดูรูปและซูม")}
       onClick={() => setOpen(true)}><img src={src} alt={label} loading="lazy" decoding="async" onError={() => setFailed(true)} /></button>}
     {open && <ImageViewer image={{ src, name: label }} onClose={() => setOpen(false)} />}
   </span>;

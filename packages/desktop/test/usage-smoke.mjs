@@ -23,7 +23,7 @@ const errors = [];
 let checks = 0;
 const check = (value, message) => { assert.ok(value, message); checks++; console.log('PASS ' + message); };
 try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, timezoneId: 'Asia/Bangkok', reducedMotion: 'reduce' });
+  const page = await browser.newPage({ locale: 'th-TH',  viewport: { width: 1440, height: 900 }, timezoneId: 'Asia/Bangkok', reducedMotion: 'reduce' });
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => { localStorage.setItem('superai-setup-dismissed', '1'); localStorage.setItem('superai-mode', 'code'); });
   await page.route('**/api/**', route => {

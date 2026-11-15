@@ -1,0 +1,8 @@
+.custom-provider { margin-top: 12px; }
+.api-key-row form.custom-provider-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 12px; }
+.custom-provider-form label { display: grid; gap: 6px; min-width: 0; font-size: 12px; }
+.api-key-row form.custom-provider-form input,
+.api-key-row form.custom-provider-form textarea { width: 100%; box-sizing: border-box; min-width: 0; }
+.custom-provider-form textarea { min-height: 84px; resize: vertical; }
+.custom-provider-form p, .custom-provider-form small { margin: 0; overflow-wrap: anywhere; }
+.api-key-row > small { min-width: 0; overflow-wrap: anywhere; }

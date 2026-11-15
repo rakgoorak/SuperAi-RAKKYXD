@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { tr } from '../i18n';
 
 interface Props {
   children: ReactNode;
@@ -40,7 +41,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <AlertTriangle className="w-8 h-8" />
               <div>
                 <h1 className="text-lg font-bold text-white">SuperAi & RAKKYXD</h1>
-                <p className="text-xs text-rose-300">หน้าจอเกิดข้อผิดพลาด กรุณากดโหลดใหม่</p>
+                <p className="text-xs text-rose-300">{tr("หน้าจอเกิดข้อผิดพลาด กรุณากดโหลดใหม่")}</p>
               </div>
             </div>
 
@@ -59,7 +60,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>โหลดหน้าจอใหม่</span>
+                <span>{tr("โหลดหน้าจอใหม่")}</span>
               </button>
             </div>
           </div>

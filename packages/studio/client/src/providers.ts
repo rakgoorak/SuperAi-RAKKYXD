@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Cli, type ModelList, type Seat } from "./api";
+import { tr } from './i18n';
 
 /** CLIs that can answer without a terminal; Freebuff only works in Code mode. */
 export const HEADLESS = ["claude-code", "codex", "antigravity", "opencode"];
@@ -14,15 +15,18 @@ export const PROVIDER_LABEL: Record<string, string> = {
   groq: "Groq",
   openrouter: "OpenRouter",
 };
-export const EFFORT_LABEL: Record<string, string> = {
-  minimal: "น้อยที่สุด",
-  low: "ต่ำ",
-  medium: "กลาง",
-  high: "สูง",
-  xhigh: "สูงมาก",
-  max: "สูงสุด",
-  ultra: "อัลตรา",
-};
+export function effortLabel(level: string): string {
+  switch (level) {
+    case "minimal": return tr("น้อยที่สุด");
+    case "low": return tr("ต่ำ");
+    case "medium": return tr("กลาง");
+    case "high": return tr("สูง");
+    case "xhigh": return tr("สูงมาก");
+    case "max": return tr("สูงสุด");
+    case "ultra": return tr("อัลตรา");
+    default: return level;
+  }
+}
 
 /** Effort levels each CLI accepts; shown while the live model list is still loading. */
 export const EFFORTS: Record<string, string[]> = {
@@ -32,13 +36,38 @@ export const EFFORTS: Record<string, string[]> = {
   opencode: ["minimal", "low", "medium", "high", "max"],
 };
 
+/** API providers connected with the user's own key (Settings > API Key). */
+export const CLOUD = ["openrouter", "deepseek", "groq"];
+export const isCloud = (provider: string) => CLOUD.includes(provider) || /^custom-[a-f0-9]{12}$/.test(provider);
+export interface CloudKeyStatus { id: string; name: string; hasKey: boolean; source: "settings" | "env" | null; keyPage: string; hint?: string; custom?: boolean; baseURL?: string; models?: string[] }
+const CLOUD_EVENT = "superai:cloud-keys-changed";
+export function notifyCloudKeysChanged() {
+  cache.clear(); fetchedAt.clear();
+  for (const id of CLOUD) {
+    for (const key of cache.keys()) if (key.startsWith(`${id}:`)) { cache.delete(key); fetchedAt.delete(key); }
+  }
+  window.dispatchEvent(new Event(CLOUD_EVENT));
+}
+/** Which API providers have a key; refreshed when a key is saved or removed. */
+export function useCloudKeys() {
+  const [keys, setKeys] = useState<CloudKeyStatus[]>([]);
+  useEffect(() => {
+    let live = true;
+    const load = () => void api<CloudKeyStatus[]>("/api/cloud-keys").then((k) => { if (live) { k.forEach(item => { PROVIDER_LABEL[item.id] = item.name; }); setKeys(k); } }).catch(() => {});
+    load();
+    window.addEventListener(CLOUD_EVENT, load);
+    return () => { live = false; window.removeEventListener(CLOUD_EVENT, load); };
+  }, []);
+  return keys;
+}
+
 export function providerName(provider: string) {
   if (provider.startsWith("cli:")) return PROVIDER_LABEL[provider.slice(4)] || provider.slice(4);
   if (PROVIDER_LABEL[provider]) return PROVIDER_LABEL[provider];
   return `Ollama · ${provider}`;
 }
 export function seatSummary(seat: Seat) {
-  return [providerName(seat.provider), seat.model || (seat.provider.startsWith("cli:") ? "รุ่นเริ่มต้น" : ""), seat.effort && `effort ${EFFORT_LABEL[seat.effort] || seat.effort}`]
+  return [providerName(seat.provider), seat.model || (seat.provider.startsWith("cli:") ? tr("รุ่นเริ่มต้น") : ""), seat.effort && `effort ${effortLabel(seat.effort)}`]
     .filter(Boolean)
     .join(" · ");
 }
@@ -76,7 +105,7 @@ export function confirmDefaults() {
 /** A seat for a CLI using the model/effort chosen in setup. */
 export function seatFor(cliId: string, name: string, defaults = loadDefaults()): Seat {
   const d = defaults[cliId] || { model: "", effort: "" };
-  return { name, provider: `cli:${cliId}`, model: d.model, effort: d.effort };
+  return { name, provider: isCloud(cliId) ? cliId : `cli:${cliId}`, model: d.model, effort: isCloud(cliId) ? '' : d.effort };
 }
 /** First installed headless CLI, preferring the order the user is most likely to want. */
 export function firstReady(clis: Cli[], skip: string[] = []) {
@@ -87,39 +116,41 @@ export function firstReady(clis: Cli[], skip: string[] = []) {
 const cache = new Map<string, Promise<ModelList>>();
 const fetchedAt = new Map<string, number>();
 const pending = new Set<string>();
-export function fetchModels(id: string, refresh = false) {
-  if (!pending.has(id) && (refresh || !cache.has(id) || Date.now() - (fetchedAt.get(id) || 0) > 60_000)) {
-    pending.add(id);
-    const request = api<ModelList>(`/api/providers/${id}/models`);
-    request.then(() => { fetchedAt.set(id, Date.now()); pending.delete(id); }, () => { pending.delete(id); cache.delete(id); });
-    if (refresh) request.then(() => window.dispatchEvent(new CustomEvent("superai:models-refreshed", { detail: id })), () => {});
-    cache.set(id, request);
+export function fetchModels(id: string, refresh = false, accountId?: string) {
+  const key = `${id}:${accountId || ""}`;
+  if (!pending.has(key) && (refresh || !cache.has(key) || Date.now() - (fetchedAt.get(key) || 0) > 60_000)) {
+    pending.add(key);
+    const request = api<ModelList>(`/api/providers/${id}/models${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`);
+    request.then(() => { fetchedAt.set(key, Date.now()); pending.delete(key); }, () => { pending.delete(key); cache.delete(key); });
+    if (refresh) request.then(() => window.dispatchEvent(new CustomEvent("superai:models-refreshed", { detail: key })), () => {});
+    cache.set(key, request);
   }
-  return cache.get(id)!;
+  return cache.get(key)!;
 }
-export function useModels(id: string) {
+export function useModels(id: string, accountId?: string) {
+  const key = `${id}:${accountId || ""}`;
   const [revision, setRevision] = useState(0);
   const [list, setList] = useState<ModelList | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
-    const refreshed = (event: Event) => { if ((event as CustomEvent<string>).detail === id) setRevision((n) => n + 1); };
+    const refreshed = (event: Event) => { if ((event as CustomEvent<string>).detail === key) setRevision((n) => n + 1); };
     window.addEventListener("superai:models-refreshed", refreshed);
     return () => window.removeEventListener("superai:models-refreshed", refreshed);
-  }, [id]);
+  }, [key]);
   useEffect(() => {
     if (!id) return setList(null);
     let ignore = false;
     setList(null);
     setError("");
-    fetchModels(id)
+    fetchModels(id, false, accountId)
       .then((value) => !ignore && setList(value))
       .catch((e) => !ignore && setError((e as Error).message));
     return () => {
       ignore = true;
     };
-  }, [id, revision]);
+  }, [id, accountId, revision]);
   const refresh = () => {
-    if (id) void fetchModels(id, true).then(() => setError(''), e => setError((e as Error).message));
+    if (id) void fetchModels(id, true, accountId).then(() => setError(''), e => setError((e as Error).message));
   };
   return { list, error, refresh };
 }

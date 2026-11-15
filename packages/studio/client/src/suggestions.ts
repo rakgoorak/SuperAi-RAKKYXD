@@ -1,3 +1,4 @@
+import { tr } from './i18n';
 export interface SuggestionItem {
   id: string;
   label: string;
@@ -36,7 +37,7 @@ export function getSuggestions({ lastRun }: SuggestionContext): SuggestionItem[]
   const unique = [...new Set(candidates.map(text => text.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/\*\*/g, "").trim()))]
     .filter(text => text.length >= 6 && text.length <= 180);
   if (unique.length) return unique.slice(0, 3).map((text, index) => ({
-    id: `answer-${index}`, label: text, promptText: `ช่วยทำขั้นตอนต่อไปจากคำตอบล่าสุด: ${text}`,
+    id: `answer-${index}`, label: text, promptText: tr`ช่วยทำขั้นตอนต่อไปจากคำตอบล่าสุด: ${text}`,
   }));
   return [];
 }

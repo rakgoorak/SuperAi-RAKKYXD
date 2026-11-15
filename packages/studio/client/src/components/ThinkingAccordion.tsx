@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Brain, ChevronDown, ChevronRight } from 'lucide-react';
+import { tr } from '../i18n';
 
 interface Props {
   thought: string;
@@ -20,11 +21,11 @@ export function ThinkingAccordion({ thought, durationSeconds }: Props) {
       >
         <span className="thinking-title">
           <Brain size={14} className="thinking-brain-icon" />
-          <span>กระบวนการคิดวิเคราะห์ (Thought process)</span>
+          <span>{tr("กระบวนการคิดวิเคราะห์ (Thought process)")}</span>
         </span>
         <span className="thinking-meta">
           <small className="thinking-badge">
-            {durationSeconds ? `คิด ${durationSeconds} วิ` : `${wordCount} คำ`}
+            {durationSeconds ? tr`คิด ${durationSeconds} วิ` : tr`${wordCount} คำ`}
           </small>
           {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </span>

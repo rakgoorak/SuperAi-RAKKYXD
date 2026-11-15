@@ -1,3 +1,4 @@
+import { tr } from './i18n.js';
 /** Structured CLI events used by team runs. Missing fields remain unknown. */
 export interface TokenUsage {
   input?: number;
@@ -22,7 +23,7 @@ export function createCliRunStream(id: string, onChunk: (text: string) => void) 
     try { event = JSON.parse(raw); } catch { return; }
     if (id === 'codex') {
       if (event.type === 'item.completed' && event.item?.type === 'agent_message') emit(event.item.text, String(event.item.id));
-      if (event.type === 'turn.failed' || event.type === 'error') error = String(event.error?.message || event.message || 'Codex ทำงานไม่สำเร็จ');
+      if (event.type === 'turn.failed' || event.type === 'error') error = String(event.error?.message || event.message || tr("Codex ทำงานไม่สำเร็จ"));
       if (event.type === 'turn.completed' && event.usage && typeof event.usage === 'object') {
         const u = event.usage;
         const values = { input: count(u.input_tokens), cachedInput: count(u.cached_input_tokens), output: count(u.output_tokens), inputIncludesCache: true };
@@ -36,7 +37,7 @@ export function createCliRunStream(id: string, onChunk: (text: string) => void) 
       });
       if (event.type === 'result') {
         finished = true;
-        if (event.is_error || event.subtype !== 'success') error = String(event.result || event.subtype || 'Claude ทำงานไม่สำเร็จ');
+        if (event.is_error || event.subtype !== 'success') error = String(event.result || event.subtype || tr("Claude ทำงานไม่สำเร็จ"));
         if (!error && !output) emit(event.result, 'result');
         const u = event.usage;
         if (u && typeof u === 'object') {

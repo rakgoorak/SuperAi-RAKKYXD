@@ -5,6 +5,7 @@ import { SPEECH_MODELS } from "../voice/models";
 import { Microphone } from "../voice/recorder";
 import type { VoiceSettings } from "../voice/speech";
 import { isModelCached, sharedRecognizer } from "../voice/stt";
+import { tr } from '../i18n';
 
 type State = "idle" | "confirm" | "loading" | "recording" | "transcribing";
 
@@ -41,11 +42,11 @@ export function DictationButton({ settings, onText, onError, onSettingsChange }:
       mic.current.close();
       mic.current = null;
       setLevel(0);
-      if (!audio || audio.length < 16000 * 0.3) { setState("idle"); return onError("ไม่ได้ยินเสียงพูด ลองพูดใกล้ไมค์อีกครั้ง"); }
+      if (!audio || audio.length < 16000 * 0.3) { setState("idle"); return onError(tr("ไม่ได้ยินเสียงพูด ลองพูดใกล้ไมค์อีกครั้ง")); }
       setState("transcribing");
       const text = (await sharedRecognizer().transcribe(settings.model, audio, settings.language)).trim();
       setState("idle");
-      if (text) onText(text); else onError("แปลงเสียงไม่ได้ ลองพูดอีกครั้ง");
+      if (text) onText(text); else onError(tr("แปลงเสียงไม่ได้ ลองพูดอีกครั้ง"));
     } catch (e) {
       mic.current?.close();
       mic.current = null;
@@ -86,31 +87,31 @@ export function DictationButton({ settings, onText, onError, onSettingsChange }:
   };
 
   const title =
-    state === "recording" ? "กำลังฟัง · ปล่อยปุ่มหรือกดอีกครั้งเพื่อใส่ข้อความ"
-      : state === "transcribing" ? "กำลังแปลงเสียงเป็นข้อความ…"
-      : state === "loading" ? (progress > 0 && progress < 1 ? `กำลังดาวน์โหลดโมเดล ${Math.round(progress * 100)}%` : "กำลังเตรียมไมโครโฟน…")
-      : "กดค้างเพื่ออัดเสียง หรือกดหนึ่งครั้งเพื่อเริ่ม/หยุด · คลิกขวาเพื่อตั้งค่าไมโครโฟน";
+    state === "recording" ? tr("กำลังฟัง · ปล่อยปุ่มหรือกดอีกครั้งเพื่อใส่ข้อความ")
+      : state === "transcribing" ? tr("กำลังแปลงเสียงเป็นข้อความ…")
+      : state === "loading" ? (progress > 0 && progress < 1 ? tr`กำลังดาวน์โหลดโมเดล ${Math.round(progress * 100)}%` : tr("กำลังเตรียมไมโครโฟน…"))
+      : tr("กดค้างเพื่ออัดเสียง หรือกดหนึ่งครั้งเพื่อเริ่ม/หยุด · คลิกขวาเพื่อตั้งค่าไมโครโฟน");
 
   return (
     <span className="dictation">
       {state === "confirm" && (
-        <span className="dictation-confirm" role="dialog" aria-label="ดาวน์โหลดโมเดลแปลงเสียง">
-          <span>ใช้ครั้งแรกต้องดาวน์โหลดโมเดลแปลงเสียง {model.size} ครั้งเดียว แล้วแปลงเสียงบนเครื่อง</span>
-          <button className="primary compact" onClick={() => void record()}><Check size={13} /> ดาวน์โหลด</button>
-          <button className="icon-button" title="ยกเลิก" onClick={() => setState("idle")}><X size={14} /></button>
+        <span className="dictation-confirm" role="dialog" aria-label={tr("ดาวน์โหลดโมเดลแปลงเสียง")}>
+          <span>{tr("ใช้ครั้งแรกต้องดาวน์โหลดโมเดลแปลงเสียง")} {model.size} {tr("ครั้งเดียว แล้วแปลงเสียงบนเครื่อง")}</span>
+          <button className="primary compact" onClick={() => void record()}><Check size={13} /> {tr("ดาวน์โหลด")}</button>
+          <button className="icon-button" title={tr("ยกเลิก")} onClick={() => setState("idle")}><X size={14} /></button>
         </span>
       )}
       {menu && (
-        <span className="dictation-menu" role="menu" aria-label="ตั้งค่าไมโครโฟน" onMouseLeave={() => setMenu(false)}>
-          <strong>ไมโครโฟน</strong>
-          {[{ deviceId: "", label: "ค่าเริ่มต้นของระบบ" }, ...mics].map((m) => (
+        <span className="dictation-menu" role="menu" aria-label={tr("ตั้งค่าไมโครโฟน")} onMouseLeave={() => setMenu(false)}>
+          <strong>{tr("ไมโครโฟน")}</strong>
+          {[{ deviceId: "", label: tr("ค่าเริ่มต้นของระบบ") }, ...mics].map((m) => (
             <button key={m.deviceId || "default"} role="menuitemradio" aria-checked={settings.microphone === m.deviceId}
               onClick={() => { onSettingsChange({ ...settings, microphone: m.deviceId }); setMenu(false); }}>
-              {settings.microphone === m.deviceId ? <Check size={13} /> : <span className="menu-gap" />} {m.label || "ไมโครโฟน"}
+              {settings.microphone === m.deviceId ? <Check size={13} /> : <span className="menu-gap" />} {m.label || tr("ไมโครโฟน")}
             </button>
           ))}
-          <strong>ภาษาที่พูด</strong>
-          {([["th", "ภาษาไทย"], ["en", "English"], ["auto", "ตรวจอัตโนมัติ"]] as const).map(([value, label]) => (
+          <strong>{tr("ภาษาที่พูด")}</strong>
+          {([["th", tr("ภาษาไทย")], ["en", "English"], ["auto", tr("ตรวจอัตโนมัติ")]] as const).map(([value, label]) => (
             <button key={value} role="menuitemradio" aria-checked={settings.language === value}
               onClick={() => { onSettingsChange({ ...settings, language: value }); setMenu(false); }}>
               {settings.language === value ? <Check size={13} /> : <span className="menu-gap" />} {label}

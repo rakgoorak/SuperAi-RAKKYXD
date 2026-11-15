@@ -36,9 +36,17 @@ jobs:
       - name: Build Monorepo Workspaces
         run: npm run build
 
+      - name: Every interface text has its translations
+        run: npm run i18n:check
+
       - name: Run Test Suite (Core, Studio, Desktop)
         run: npm test
         timeout-minutes: 8
+
+      - name: Run Tray Smoke (macOS menu-bar icon)
+        if: runner.os == 'macOS'
+        run: npm run test:tray
+        timeout-minutes: 5
 
       - name: Run Desktop Smoke Harness (Windows)
         if: runner.os == 'Windows'

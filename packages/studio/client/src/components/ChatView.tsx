@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ShieldCheck, Check, CheckCheck, CheckCircle2, ChevronRight, Circle, Clock3, Copy, FilePen, FileText, GitFork, Globe, ListChecks, Loader2, Paperclip, RotateCcw, Search, Send, Terminal as TerminalIcon, Wrench, X } from 'lucide-react';
 import { Markdown } from './Markdown';
 import { post } from '../api';
@@ -10,14 +10,21 @@ import { ConversationInteractions } from './ConversationInteractions';
 import { ConversationExport } from './ConversationExport';
 import { ArrowDown, Pencil } from 'lucide-react';
 import { MessageAttachments } from './MessageAttachments';
+import { stepLabel } from '../stepLabel';
+import { QuestionCard, type QuestionItem } from './QuestionCard';
+import { hideQuestionBlock } from '../questionBlock';
 import { ImageEndpointContext } from './MarkdownImage';
 import { ImageViewer } from './ImageViewer';
 import { renderTextWithLinks } from '../previewLinks';
 import { timeLabel, tokenLabel } from '../chatFormat';
+import { taskProgressNote } from '../taskProgress';
+import { createItemBatch } from '../chatStreamBatch';
 import { notifyDone, sessionNotice } from '../completionNotify';
 import { loadNextPromptSettings, predictNextPrompt, publishChatRunning, publishNextPrompt } from '../nextPrompt';
 import '../chat-idle.css';
 import '../chat-permission.css';
+import '../chat-task-progress.css';
+import { tr } from '../i18n';
 
 // Mirrors server/CliChat.ts.
 type ToolKind = 'command' | 'read' | 'edit' | 'search' | 'web' | 'plan' | 'other';
@@ -32,7 +39,8 @@ type ChatItem =
   | ToolItem
   | TodosItem
   | { id: string; kind: 'error' | 'notice'; text: string; at: number }
-  | PermissionItem;
+  | PermissionItem
+  | QuestionItem;
 type PermissionItem = { id: string; kind: 'permission'; requestId: string; tool: string; title: string; detail?: string; canAlways?: boolean; status: 'pending' | 'allowed' | 'always' | 'denied' | 'expired'; at: number };
 type Message =
   | { type: 'snapshot'; chat: { items: ChatItem[]; running: boolean; activity?: Activity; queued?: Queued[] } }
@@ -44,8 +52,8 @@ type Block = Exclude<ChatItem, ToolItem> | { id: string; kind: 'tools'; tools: T
 
 const ICONS = { command: TerminalIcon, read: FileText, edit: FilePen, search: Search, web: Globe, plan: ListChecks, other: Wrench };
 const COUNTS: Record<ToolKind, (n: number) => string> = {
-  command: (n) => `รัน ${n} คำสั่ง`, read: (n) => `อ่าน ${n} ไฟล์`, edit: (n) => `แก้ ${n} ไฟล์`, search: (n) => `ค้นหา ${n} ครั้ง`,
-  web: (n) => `เปิดเว็บ ${n} ครั้ง`, plan: () => 'อัปเดตแผนงาน', other: (n) => `ใช้เครื่องมือ ${n} ครั้ง`,
+  command: (n) => tr`เรียกคำสั่ง ${n} ครั้ง`, read: (n) => tr`เรียกอ่านไฟล์ ${n} ครั้ง`, edit: (n) => tr`เรียกแก้ไฟล์ ${n} ครั้ง`, search: (n) => tr`ค้นหา ${n} ครั้ง`,
+  web: (n) => tr`เปิดเว็บ ${n} ครั้ง`, plan: () => tr("อัปเดตแผนงาน"), other: (n) => tr`ใช้เครื่องมือ ${n} ครั้ง`,
 };
 
 /** Consecutive tool calls fold into one row, like "Ran 2 commands, read 1 file". */
@@ -68,20 +76,22 @@ function summary(tools: ToolItem[]) {
 /** A screenshot from a tool; click to see it full width. */
 function Shot({ src, small = false }: { src: string; small?: boolean }) {
   const [open, setOpen] = useState(false);
-  return <><button type="button" className={`chat-shot ${small ? 'thumb' : ''}`} title="ดูรูปและซูม"
-    onClick={(e) => { e.stopPropagation(); setOpen(true); }}><img src={src} alt="ภาพจากเครื่องมือ" loading="lazy" /></button>
-    {open && <ImageViewer image={{ src, name: 'ภาพจากเครื่องมือ' }} onClose={() => setOpen(false)} />}</>;
+  return <><button type="button" className={`chat-shot ${small ? 'thumb' : ''}`} title={tr("ดูรูปและซูม")}
+    onClick={(e) => { e.stopPropagation(); setOpen(true); }}><img src={src} alt={tr("ภาพจากเครื่องมือ")} loading="lazy" /></button>
+    {open && <ImageViewer image={{ src, name: tr("ภาพจากเครื่องมือ") }} onClose={() => setOpen(false)} />}</>;
 }
 
-const TOOL_BADGES: Record<ToolKind, string> = {
-  command: 'คำสั่ง',
-  read: 'อ่านไฟล์',
-  edit: 'แก้ไขโค้ด',
-  search: 'ค้นหา',
-  web: 'เว็บ',
-  plan: 'แผนงาน',
-  other: 'งาน',
-};
+function toolBadge(kind: ToolKind) {
+  switch (kind) {
+    case "command": return tr("คำสั่ง");
+    case "read": return tr("อ่านไฟล์");
+    case "edit": return tr("แก้ไขโค้ด");
+    case "search": return tr("ค้นหา");
+    case "web": return tr("เว็บ");
+    case "plan": return tr("แผนงาน");
+    default: return tr("งาน");
+  }
+}
 
 function ToolRow({ tool }: { tool: ToolItem }) {
   const [open, setOpen] = useState(false);
@@ -90,9 +100,9 @@ function ToolRow({ tool }: { tool: ToolItem }) {
     <li className={`chat-tool ${tool.status}`}>
       <button className="chat-tool-row" onClick={() => setOpen(!open)} disabled={!tool.output && !tool.images?.length} aria-expanded={open}>
         {tool.status === 'running' ? <Loader2 size={13} className="spin" /> : <Icon size={13} />}
-        <span className="chat-tool-badge">{TOOL_BADGES[tool.tool] || 'งาน'}</span>
+        <span className="chat-tool-badge">{toolBadge(tool.tool)}</span>
         <code>{tool.title}</code>
-        {tool.status === 'failed' && <span className="chat-tool-failed">ไม่สำเร็จ</span>}
+        {tool.status === 'failed' && <span className="chat-tool-failed">{tr("ไม่สำเร็จ")}</span>}
       </button>
       {open && tool.output && <pre data-search-body>{tool.output.trimEnd()}</pre>}
       {open && tool.images?.length ? <div className="chat-shots">{tool.images.map((src, i) => <Shot key={i} src={src} />)}</div> : null}
@@ -100,10 +110,15 @@ function ToolRow({ tool }: { tool: ToolItem }) {
   );
 }
 
-const PERMISSION_RESULT: Record<PermissionItem['status'], string> = {
-  pending: 'รอคำตอบ',
-  allowed: 'ส่งคำอนุญาตแล้ว', always: 'ส่งคำอนุญาตแล้ว · จำสิทธิ์ในห้องนี้', denied: 'ส่งคำปฏิเสธแล้ว', expired: 'คำขอหมดอายุหรือส่งไม่สำเร็จ',
-};
+function permissionResult(status: PermissionItem['status']) {
+  switch (status) {
+    case "pending": return tr("รอคำตอบ");
+    case "allowed": return tr("ส่งคำอนุญาตแล้ว");
+    case "always": return tr("ส่งคำอนุญาตแล้ว · จำสิทธิ์ในห้องนี้");
+    case "denied": return tr("ส่งคำปฏิเสธแล้ว");
+    case "expired": return tr("คำขอหมดอายุหรือส่งไม่สำเร็จ");
+  }
+}
 /** Claude asks before using a tool its permission mode does not cover, like the prompt in Claude's own app. */
 function PermissionCard({ item, sessionId, name, inPopup = false }: { item: PermissionItem; sessionId: string; name: string; inPopup?: boolean }) {
   const [busy, setBusy] = useState(false);
@@ -115,20 +130,20 @@ function PermissionCard({ item, sessionId, name, inPopup = false }: { item: Perm
     finally { setBusy(false); }
   };
   const pending = item.status === 'pending';
-  return <div className={`chat-permission ${item.status}`} role={pending && !inPopup ? 'alertdialog' : undefined} aria-label={`${name} ขออนุญาต${item.title}`}>
-    <div className="chat-permission-head"><ShieldCheck size={15} /><strong>{name} ขออนุญาต{item.title}</strong>{!pending && <small>{PERMISSION_RESULT[item.status]}</small>}</div>
+  return <div className={`chat-permission ${item.status}`} role={pending && !inPopup ? 'alertdialog' : undefined} aria-label={tr`${name} ขออนุญาต${item.title}`}>
+    <div className="chat-permission-head"><ShieldCheck size={15} /><strong>{name} {tr("ขออนุญาต")}{item.title}</strong>{!pending && <small>{permissionResult(item.status)}</small>}</div>
     {item.detail && <pre>{item.detail}</pre>}
     {pending && <div className="chat-permission-actions">
-      <button className="primary" disabled={busy} onClick={() => void answer('allow')}>อนุญาต</button>
-      {item.canAlways !== false && <button className="secondary" disabled={busy} onClick={() => void answer('always')} title={`ไม่ต้องถามอีกสำหรับ ${item.tool} ในห้องนี้`}>อนุญาตตลอดห้องนี้</button>}
-      <button className="secondary" disabled={busy} onClick={() => void answer('deny')}>ไม่อนุญาต</button>
+      <button className="primary" disabled={busy} onClick={() => void answer('allow')}>{tr("อนุญาต")}</button>
+      {item.canAlways !== false && <button className="secondary" disabled={busy} onClick={() => void answer('always')} title={tr`ไม่ต้องถามอีกสำหรับ ${item.tool} ในห้องนี้`}>{tr("อนุญาตตลอดห้องนี้")}</button>}
+      <button className="secondary" disabled={busy} onClick={() => void answer('deny')}>{tr("ไม่อนุญาต")}</button>
     </div>}
     {problem && <small role="alert">{problem}</small>}
   </div>;
 }
 
 /** Folded steps, like Claude's "Resized browser, waited, captured page ▸", with screenshot thumbnails. */
-function ToolGroup({ tools }: { tools: ToolItem[] }) {
+const ToolGroup = memo(function ToolGroup({ tools }: { tools: ToolItem[] }) {
   const running = tools.find((t) => t.status === 'running');
   const [open, setOpen] = useState(false);
   const images = tools.flatMap((t) => t.images || []);
@@ -137,7 +152,7 @@ function ToolGroup({ tools }: { tools: ToolItem[] }) {
       <div className="chat-tools-head">
         <button className="chat-tools-summary" onClick={() => setOpen(!open)} aria-expanded={open}>
           <span className={`chat-dot ${running ? 'running' : tools.some((t) => t.status === 'failed') ? 'failed' : ''}`} />
-          <span title={running ? running.title : undefined}>{running ? `กำลังทำงาน: ${running.title.split('\n')[0]}` : summary(tools)}</span>
+          <span title={running ? running.title : undefined}>{running ? tr`กำลังทำงาน: ${stepLabel(running.title)}` : summary(tools)}</span>
           <ChevronRight size={13} className={`chat-chevron ${open ? 'open' : ''}`} />
         </button>
         {!open && images.length > 0 && <span className="chat-thumbs">{images.slice(-3).map((src, i) => <Shot key={i} src={src} small />)}</span>}
@@ -145,18 +160,19 @@ function ToolGroup({ tools }: { tools: ToolItem[] }) {
       {open && <ul>{tools.map((t) => <ToolRow key={t.id} tool={t} />)}</ul>}
     </div>
   );
-}
+});
 
 /** The CLI's task list as a live checklist: ✓ done, spinner in progress, ○ waiting. */
-function TaskList({ item, live }: { item: TodosItem; live: boolean }) {
+function TaskList({ item, live, items }: { item: TodosItem; live: boolean; items: ChatItem[] }) {
   const done = item.todos.filter((t) => t.status === 'completed').length;
   const [open, setOpen] = useState(true);
   return (
-    <section className={`chat-tasks ${live ? 'live' : ''}`} aria-label="รายการงานของ AI">
+    <section className={`chat-tasks ${live ? 'live' : ''}`} aria-label={tr("รายการงานของ AI")}>
       <button type="button" className="chat-tasks-head" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <ListChecks size={14} /><span>รายการงาน</span><small>{done}/{item.todos.length}</small>
+        <ListChecks size={14} /><span>{tr("รายการงาน")}</span><small>{done}/{item.todos.length}</small>
         <ChevronRight size={13} className={`chat-chevron ${open ? 'open' : ''}`} />
       </button>
+      <p className="chat-task-progress" role="status">{taskProgressNote(items, items.indexOf(item), item.at, done === item.todos.length)}</p>
       {open && <ol>
         {item.todos.map((t, i) => <li key={i} className={t.status}>
           {t.status === 'completed' ? <CheckCircle2 size={15} /> : t.status === 'in_progress' && live ? <Loader2 size={15} className="spin" /> : <Circle size={15} />}
@@ -199,14 +215,14 @@ function UserMessageItem({
       clearTimeout(copyTimer.current);
       copyTimer.current = setTimeout(() => setCopied(false), 1500);
     } catch {
-      onProblem('คัดลอกข้อความไม่ได้ กรุณาลองเลือกข้อความแล้วคัดลอกเอง');
+      onProblem(tr("คัดลอกข้อความไม่ได้ กรุณาลองเลือกข้อความแล้วคัดลอกเอง"));
     }
   };
 
   const handleEdit = () => {
     prepareMessage(block.text, sessionId, { expand: false });
     if (block.attachments?.length) {
-      onProblem('กรุณาแนบไฟล์เดิมอีกครั้งก่อนส่งข้อความที่แก้ไข');
+      onProblem(tr("กรุณาแนบไฟล์เดิมอีกครั้งก่อนส่งข้อความที่แก้ไข"));
     }
   };
 
@@ -241,12 +257,12 @@ function UserMessageItem({
             </time>
           </span>
           <span className="chat-user-sep" aria-hidden="true">·</span>
-          <div className="chat-user-actions" role="group" aria-label="จัดการข้อความ">
+          <div className="chat-user-actions" role="group" aria-label={tr("จัดการข้อความ")}>
             <button
               type="button"
               className="chat-user-action-btn"
-              aria-label={copied ? 'คัดลอกแล้ว' : 'คัดลอกข้อความ'}
-              title={copied ? 'คัดลอกแล้ว' : 'คัดลอกข้อความ'}
+              aria-label={copied ? tr("คัดลอกแล้ว") : tr("คัดลอกข้อความ")}
+              title={copied ? tr("คัดลอกแล้ว") : tr("คัดลอกข้อความ")}
               onClick={() => void handleCopy()}
             >
               {copied ? <Check size={13} /> : <Copy size={13} />}
@@ -254,8 +270,8 @@ function UserMessageItem({
             <button
               type="button"
               className="chat-user-action-btn"
-              aria-label="แก้ไขข้อความ"
-              title="แก้ไขข้อความในช่องคำสั่ง"
+              aria-label={tr("แก้ไขข้อความ")}
+              title={tr("แก้ไขข้อความในช่องคำสั่ง")}
               disabled={running || pending}
               onClick={handleEdit}
             >
@@ -264,8 +280,8 @@ function UserMessageItem({
             <button
               type="button"
               className="chat-user-action-btn"
-              aria-label="แยกแชตใหม่ (Fork)"
-              title="สร้างห้องใหม่พร้อมประวัติถึงข้อความนี้ โดยเก็บห้องเดิมไว้"
+              aria-label={tr("แยกแชตใหม่ (Fork)")}
+              title={tr("สร้างห้องใหม่พร้อมประวัติถึงข้อความนี้ โดยเก็บห้องเดิมไว้")}
               disabled={running || pending}
               onClick={() => void handleFork()}
             >
@@ -293,7 +309,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   const stick = useRef(true);
   const [awayFromLatest, setAwayFromLatest] = useState(false);
   const [newOutput, setNewOutput] = useState(false);
-  const lastOutput = useRef('');
+  const lastOutput = useRef<ChatItem[] | null>(null);
   // Turn-finished notification: the previous `running` and the latest tab name for the socket handler.
   const wasRunning = useRef(false);
   const nameRef = useRef(name);
@@ -319,6 +335,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   const [pending, setPending] = useState(false);
   const [problem, setProblem] = useState('');
   const [search, setSearch] = useState('');
+  const groupedBlocks = useMemo(() => blocks(items), [items]);
   const lastUser = [...items].reverse().find(item => item.kind === 'user');
   const lastReply = [...items].reverse().find(item => item.kind === 'assistant');
   const replyIndex = lastReply ? items.indexOf(lastReply) : -1;
@@ -356,15 +373,30 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
     let socket: WebSocket | null = null;
     let retry: number | undefined;
     let disposed = false;
+    const itemBatch = createItemBatch<ChatItem>(updates => {
+      if (disposed) return;
+      setItems(current => {
+        const next = [...current];
+        const positions = new Map(current.map((item, index) => [item.id, index]));
+        for (const item of updates) {
+          const index = positions.get(item.id);
+          if (index === undefined) { positions.set(item.id, next.length); next.push(item); }
+          else next[index] = item;
+        }
+        return next;
+      });
+    }, callback => window.setTimeout(callback, 16), handle => window.clearTimeout(handle));
     const connect = () => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       socket = new WebSocket(`${protocol}//${window.location.host}/ws/chat/${sessionId}`);
       socket.onopen = () => setOffline(false);
       socket.onmessage = (event) => {
+        if (disposed) return;
         let message: Message;
         try { message = JSON.parse(event.data); } catch { return; }
-        if (message.type === 'snapshot') { setItems(message.chat.items); setRunning(message.chat.running); wasRunning.current = message.chat.running; publishChatRunning(sessionId, message.chat.running); setActivity(message.chat.activity); setQueued(message.chat.queued || []); }
+        if (message.type === 'snapshot') { itemBatch.reset(); setItems(message.chat.items); setRunning(message.chat.running); wasRunning.current = message.chat.running; publishChatRunning(sessionId, message.chat.running); setActivity(message.chat.activity); setQueued(message.chat.queued || []); }
         else if (message.type === 'state') {
+          itemBatch.flush();
           if (wasRunning.current && !message.running) { notifyDone(sessionNotice(sessionId, nameRef.current)); setTurnsDone(n => n + 1); }
           if (message.running) publishNextPrompt(sessionId, '');
           publishChatRunning(sessionId, message.running);
@@ -377,40 +409,38 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
           const item = message.item;
           // A question waits for the user: tell them even when the app is in the background.
           if (item.kind === 'permission' && item.status === 'pending')
-            notifyDone({ tag: `permission:${item.requestId}`, title: `${nameRef.current} ขออนุญาต${item.title}`, body: item.detail || 'กดเพื่อตอบในห้องแชท', failed: false, target: { kind: 'session', id: sessionId } }, { inactiveSession: !activeRef.current });
-          setItems((current) => {
-            const index = current.findIndex((i) => i.id === item.id);
-            if (index < 0) return [...current, item];
-            const next = [...current];
-            next[index] = item;
-            return next;
-          });
+            notifyDone({ tag: `permission:${item.requestId}`, title: tr`${nameRef.current} ขออนุญาต${item.title}`, body: item.detail || tr("กดเพื่อตอบในห้องแชท"), failed: false, target: { kind: 'session', id: sessionId } }, { inactiveSession: !activeRef.current });
+          if (item.kind === 'question' && item.status === 'waiting')
+            notifyDone({ tag: `question:${item.id}`, title: tr`${nameRef.current} ถามก่อนทำต่อ`, body: item.questions[0]?.question || tr("กดเพื่อตอบในห้องแชท"), failed: false, target: { kind: 'session', id: sessionId } });
+          itemBatch.push(item);
+          if (item.kind === 'permission' || item.kind === 'question' || item.kind === 'error') itemBatch.flush();
         }
       };
       socket.onclose = () => {
         if (disposed) return;
+        itemBatch.flush();
         setOffline(true);
         retry = window.setTimeout(connect, 1500);
       };
     };
     connect();
-    return () => { disposed = true; window.clearTimeout(retry); socket?.close(); };
+    return () => { disposed = true; itemBatch.reset(); window.clearTimeout(retry); socket?.close(); };
   }, [sessionId]);
 
   // Every second while working (live counter), every half minute otherwise (message times).
   useEffect(() => {
+    if (!active) return;
     setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), running ? 1000 : 30000);
     return () => window.clearInterval(timer);
-  }, [running]);
+  }, [running, active]);
 
   // Follow new output unless the user scrolled up to read.
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el || !items.length) return;
-    const signature = `${items.length}:${JSON.stringify(items.at(-1))}`;
-    const changed = !!lastOutput.current && lastOutput.current !== signature;
-    lastOutput.current = signature;
+    const changed = !!lastOutput.current && lastOutput.current !== items;
+    lastOutput.current = items;
     if (jumpToSaved()) { restored.current = true; return; }
     if (!restored.current) {
       restored.current = true;
@@ -429,6 +459,10 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   // The task list of the turn in progress stays pinned above the live counter, like Claude's.
   const liveTodos = running && lastUser ? [...turnItems].reverse().find((item): item is TodosItem => item.kind === 'todos') : undefined;
   const pendingPermissions = items.filter((item): item is PermissionItem => item.kind === 'permission' && item.status === 'pending');
+  const workingTool = [...turnItems].reverse().find((item): item is ToolItem => item.kind === 'tool' && item.status === 'running');
+  const workingLabel = pendingPermissions.length ? tr("รอคำอนุญาต")
+    : activity?.quiet ? tr("รอข้อมูลเพิ่มเติม")
+      : workingTool ? tr`กำลังทำงาน: ${stepLabel(workingTool.title)}` : tr`กำลังทำงานกับ ${name}`;
   const popupPermission = active && pendingPermissions.find(item => !dismissedPermissions.includes(item.id));
   const queueAction = (id: string, action: 'send' | 'remove') => {
     post(`/api/terminals/${sessionId}/chat/queue/${id}/${action}`).catch((error) => setProblem((error as Error).message));
@@ -437,13 +471,13 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   return (
     <ImageEndpointContext.Provider value={`/api/terminals/${encodeURIComponent(sessionId)}/preview-file`}><ConversationInteractions sessionId={sessionId} active={active} messages={items} revision={items} onSearch={setSearch}><div className="chat-view">
       <div className="conversation-export-position"><ConversationExport title={name} sessionId={sessionId} /></div>
-      <button type="button" className="conversation-rename-trigger" aria-label="เปลี่ยนชื่อห้อง" title="เปลี่ยนชื่อห้อง" onClick={() => window.dispatchEvent(new CustomEvent('superai:rename-session', { detail: sessionId }))}><Pencil size={13} /></button>
-      {pendingPermissions.length > 0 && <div className="chat-permission-banner" role="status"><span>รอการอนุญาต {pendingPermissions.length} รายการ · งานจะดำเนินต่อหลังตอบ</span><button type="button" className="secondary" onClick={() => scroller.current?.querySelector('.chat-permission.pending')?.scrollIntoView({ block: 'center', behavior: 'smooth' })}>ดูคำขอ</button></div>}
+      <button type="button" className="conversation-rename-trigger" aria-label={tr("เปลี่ยนชื่อห้อง")} title={tr("เปลี่ยนชื่อห้อง")} onClick={() => window.dispatchEvent(new CustomEvent('superai:rename-session', { detail: sessionId }))}><Pencil size={13} /></button>
+      {pendingPermissions.length > 0 && <div className="chat-permission-banner" role="status"><span>{tr("รอการอนุญาต")} {pendingPermissions.length} {tr("รายการ · งานจะดำเนินต่อหลังตอบ")}</span><button type="button" className="secondary" onClick={() => scroller.current?.querySelector('.chat-permission.pending')?.scrollIntoView({ block: 'center', behavior: 'smooth' })}>{tr("ดูคำขอ")}</button></div>}
       {popupPermission && <div className="chat-permission-overlay" role="presentation">
-        <div className="chat-permission-popup" role="dialog" aria-modal="true" aria-label={`${name} ขออนุญาต`}>
-          <button type="button" autoFocus className="chat-permission-dismiss" onClick={() => setDismissedPermissions(previous => [...previous, popupPermission.id])} aria-label="ปิดหน้าต่างคำขอ">×</button>
+        <div className="chat-permission-popup" role="dialog" aria-modal="true" aria-label={tr`${name} ขออนุญาต`}>
+          <button type="button" autoFocus className="chat-permission-dismiss" onClick={() => setDismissedPermissions(previous => [...previous, popupPermission.id])} aria-label={tr("ปิดหน้าต่างคำขอ")}>×</button>
           <PermissionCard item={popupPermission} sessionId={sessionId} name={name} inPopup />
-          <p>ปิดหน้าต่างนี้เพื่อกลับไปตอบจากแถบคำขอในแชทได้</p>
+          <p>{tr("ปิดหน้าต่างนี้เพื่อกลับไปตอบจากแถบคำขอในแชทได้")}</p>
         </div>
       </div>}
       <div className="chat-scroll" ref={scroller} onScroll={(e) => {
@@ -456,12 +490,12 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
         <div className="chat-column">
           {!items.length && (
             <div className="chat-empty">
-              <strong>คุยกับ {name}</strong>
-              <span>พิมพ์ในช่องคำสั่งด้านล่างแล้วกดส่ง {name} ทำงานในโฟลเดอร์โปรเจกต์นี้ แก้ไฟล์และรันคำสั่งได้เอง</span>
-              <small>เลือก Model, Effort, /skills และเข้าสู่ระบบได้ที่ช่องคำสั่งด้านล่าง เมื่อเลือก session นี้อยู่</small>
+              <strong>{tr("คุยกับ")} {name}</strong>
+              <span>{tr("พิมพ์ในช่องคำสั่งด้านล่างแล้วกดส่ง")} {name} {tr("ทำงานในโฟลเดอร์โปรเจกต์นี้ แก้ไฟล์และรันคำสั่งได้เอง")}</span>
+              <small>{tr("เลือก Model, Effort, /skills และเข้าสู่ระบบได้ที่ช่องคำสั่งด้านล่าง เมื่อเลือก session นี้อยู่")}</small>
             </div>
           )}
-          {blocks(items).map((block) => {
+          {groupedBlocks.map((block) => {
             if (block.kind === 'user')
               return (
                 <UserMessageItem
@@ -478,62 +512,63 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
               const latest = block.id === lastReply?.id && !!lastUser && replyIndex > items.indexOf(lastUser);
               const currentTurn = !!lastUser && items.indexOf(block) > items.indexOf(lastUser);
               return <div key={block.id} data-message-id={block.id}>
-                <div className="chat-assistant" data-message-body={block.id}><Markdown text={block.text} /></div>
+                <div className="chat-assistant" data-message-body={block.id}><Markdown text={hideQuestionBlock(block.text)} /></div>
                 {!(running && currentTurn) && <ResponseActions text={block.text} at={block.at} now={now} disabled={pending || offline || running}
                   agentName={name}
                   currentSessionId={sessionId}
                   onRetry={latest && !turnFailed && !search.trim() && (lastUser?.request || !lastUser?.attachments?.length) ? () => void retry() : undefined}
-                  onEdit={latest ? () => { prepareMessage(lastUser!.text, sessionId, { expand: false }); if (lastUser!.attachments?.length) setProblem('กรุณาแนบไฟล์เดิมอีกครั้งก่อนส่งข้อความที่แก้ไข'); } : undefined}
+                  onEdit={latest ? () => { prepareMessage(lastUser!.text, sessionId, { expand: false }); if (lastUser!.attachments?.length) setProblem(tr("กรุณาแนบไฟล์เดิมอีกครั้งก่อนส่งข้อความที่แก้ไข")); } : undefined}
                   onChanges={latest && turnEdited ? () => showChanges(sessionId) : undefined} />}
                 {block.id === lastReply?.id && <NextSteps items={nextSteps} sessionId={sessionId} />}
               </div>;
             }
             if (block.kind === 'tools') return <ToolGroup key={block.id} tools={block.tools} />;
             if (block.kind === 'permission') return <PermissionCard key={block.id} item={block} sessionId={sessionId} name={name} />;
-            if (block.kind === 'todos') return block === liveTodos ? null : <TaskList key={block.id} item={block} live={false} />;
+            if (block.kind === 'question') return <QuestionCard key={block.id} item={block} sessionId={sessionId} onError={setProblem} />;
+            if (block.kind === 'todos') return block === liveTodos || !block.todos.length ? null : <TaskList key={block.id} item={block} live={false} items={items} />;
             if (block.kind === 'error') {
               const oldTimeout = lastUser && items.indexOf(block) < items.indexOf(lastUser) && /ไม่มีข้อมูลใหม่.*จึงหยุดรอบนี้/.test(block.text);
-              return <div key={block.id} role={oldTimeout ? undefined : 'alert'} className={oldTimeout ? 'chat-notice' : 'chat-error'}><AlertTriangle size={14} /><span>{oldTimeout ? `รอบก่อนถูกหยุด: ${block.text}` : block.text}</span></div>;
+              return <div key={block.id} role={oldTimeout ? undefined : 'alert'} className={oldTimeout ? 'chat-notice' : 'chat-error'}><AlertTriangle size={14} /><span>{oldTimeout ? tr`รอบก่อนถูกหยุด: ${block.text}` : block.text}</span></div>;
             }
             return <div key={block.id} className="chat-notice">{block.text}</div>;
           })}
-          {liveTodos && <TaskList key={liveTodos.id} item={liveTodos} live />}
-          {running && activity?.quiet && !pendingPermissions.length && <div className="chat-idle-warning" role="status" aria-label="รอข้อมูลจากงานปัจจุบัน">
-            <div><Clock3 size={16} /><strong>ยังไม่ได้รับข้อมูลใหม่ครบ {Math.max(1, Math.ceil(activity.quiet.timeoutMs / 60000))} นาที</strong></div>
-            <p>โปรแกรมยังไม่หยุดงาน อาจกำลังรอเครื่องมือหรือ Subagent และยังยืนยันไม่ได้ว่างานค้าง</p>
+          {liveTodos && liveTodos.todos.length > 0 && <TaskList key={liveTodos.id} item={liveTodos} live items={items} />}
+          {running && activity?.quiet && !pendingPermissions.length && <div className="chat-idle-warning" role="status" aria-label={tr("รอข้อมูลจากงานปัจจุบัน")}>
+            <div><Clock3 size={16} /><strong>{tr("ยังไม่ได้รับข้อมูลใหม่ครบ")} {Math.max(1, Math.ceil(activity.quiet.timeoutMs / 60000))} {tr("นาที")}</strong></div>
+            <p>{tr("โปรแกรมยังไม่หยุดงาน อาจกำลังรอเครื่องมือหรือ Subagent และยังยืนยันไม่ได้ว่างานค้าง")}</p>
             <div className="chat-idle-actions">
-              <button className="secondary" disabled={pending || offline} onClick={() => void quietAction('wait')}>รอต่อ</button>
-              <button className="secondary" onClick={() => showChanges(sessionId)}>ดูไฟล์ที่เปลี่ยน</button>
-              <button className="secondary" disabled={pending || offline} onClick={() => void quietAction('cancel')}>หยุดงาน</button>
+              <button className="secondary" disabled={pending || offline} onClick={() => void quietAction('wait')}>{tr("รอต่อ")}</button>
+              <button className="secondary" onClick={() => showChanges(sessionId)}>{tr("ดูไฟล์ที่เปลี่ยน")}</button>
+              <button className="secondary" disabled={pending || offline} onClick={() => void quietAction('cancel')}>{tr("หยุดงาน")}</button>
             </div>
           </div>}
           {running && (
-            <div className="chat-working" role="status" title={`${name} ${activity?.quiet ? 'รอข้อมูลเพิ่มเติม' : 'กำลังทำงาน'} · กดหยุดได้ที่ช่องคำสั่งด้านล่าง`}>
+            <div className="chat-working" role="status" title={tr`${name} ${activity?.quiet ? tr("รอข้อมูลเพิ่มเติม") : tr("กำลังทำงาน")} · กดหยุดได้ที่ช่องคำสั่งด้านล่าง`}>
               {activity?.quiet ? <Clock3 size={14} aria-hidden="true" /> : <span className="chat-pulse" aria-hidden="true"><i /><i /><i /></span>}
-              {/* Codex reports tokens only when its turn ends: show the time alone until then. */}
-              <span>{activity?.quiet ? 'รอข้อมูล · ' : ''}{activity?.outputTokens ? `${tokenLabel(activity.outputTokens)} tokens · ` : ''}{seconds >= 60 ? `${Math.floor(seconds / 60)} นาที ${seconds % 60} วิ` : `${seconds} วิ`}</span>
+              {/* Activity describes observed state; token counts appear only when supplied. */}
+              <span>{workingLabel} · {activity?.outputTokens ? `${tokenLabel(activity.outputTokens)} tokens · ` : ''}{seconds >= 60 ? tr`${Math.floor(seconds / 60)} นาที ${seconds % 60} วิ` : tr`${seconds} วิ`}</span>
             </div>
           )}
           {queued.length > 0 && (
-            <div className="chat-queue" aria-label="ข้อความที่รอคิว">
+            <div className="chat-queue" aria-label={tr("ข้อความที่รอคิว")}>
               {queued.map((q) => (
                 <div key={q.id} className="chat-queued">
                   <Clock3 size={13} />
                   <span>{q.text}{q.attachments?.length ? <small><Paperclip size={11} /> {q.attachments.join(', ')}</small> : null}</span>
-                  <small>{running ? 'รอคิว' : 'หยุดไว้'}</small>
-                  {!running && <button type="button" title="ส่งข้อความนี้เลย" onClick={() => queueAction(q.id, 'send')}><Send size={13} /></button>}
-                  <button type="button" title="เอาออกจากคิว" onClick={() => queueAction(q.id, 'remove')}><X size={13} /></button>
+                  <small>{running ? tr("รอคิว") : tr("หยุดไว้")}</small>
+                  {!running && <button type="button" title={tr("ส่งข้อความนี้เลย")} onClick={() => queueAction(q.id, 'send')}><Send size={13} /></button>}
+                  <button type="button" title={tr("เอาออกจากคิว")} onClick={() => queueAction(q.id, 'remove')}><X size={13} /></button>
                 </div>
               ))}
             </div>
           )}
-          {!running && lastUser && turnFailed && <div className="recovery-actions"><button disabled={pending || offline || (!lastUser.request && !!lastUser.attachments?.length)} onClick={() => void retry()}>ลองส่งอีกครั้ง</button></div>}
+          {!running && lastUser && turnFailed && <div className="recovery-actions"><button disabled={pending || offline || (!lastUser.request && !!lastUser.attachments?.length)} onClick={() => void retry()}>{tr("ลองส่งอีกครั้ง")}</button></div>}
           {problem && <div role="alert" className="chat-error">{recoveryHint(problem)}<br />{problem}</div>}
-          {items.at(-1)?.kind === 'error' && <p className="recovery-note">{recoveryHint((items.at(-1) as { text: string }).text)} <button onClick={() => window.dispatchEvent(new Event('superai:open-setup'))}>ตรวจบัญชีและเครื่องมือ</button></p>}
-          {offline && <div className="chat-notice">ขาดการเชื่อมต่อ กำลังเชื่อมต่อใหม่…</div>}
+          {items.at(-1)?.kind === 'error' && <p className="recovery-note">{recoveryHint((items.at(-1) as { text: string }).text)} <button onClick={() => window.dispatchEvent(new Event('superai:open-setup'))}>{tr("ตรวจบัญชีและเครื่องมือ")}</button></p>}
+          {offline && <div className="chat-notice">{tr("ขาดการเชื่อมต่อ กำลังเชื่อมต่อใหม่…")}</div>}
         </div>
       </div>
-      {awayFromLatest && !search.trim() && <button type="button" className="conversation-latest" aria-label="กลับข้อความล่าสุด" onClick={() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; stick.current = true; setAwayFromLatest(false); setNewOutput(false); }}><ArrowDown size={14} />{newOutput ? 'มีข้อความใหม่ · กลับล่าสุด' : 'กลับข้อความล่าสุด'}</button>}
+      {awayFromLatest && !search.trim() && <button type="button" className="conversation-latest" aria-label={tr("กลับข้อความล่าสุด")} onClick={() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; stick.current = true; setAwayFromLatest(false); setNewOutput(false); }}><ArrowDown size={14} />{newOutput ? tr("มีข้อความใหม่ · กลับล่าสุด") : tr("กลับข้อความล่าสุด")}</button>}
     </div></ConversationInteractions></ImageEndpointContext.Provider>
   );
 }

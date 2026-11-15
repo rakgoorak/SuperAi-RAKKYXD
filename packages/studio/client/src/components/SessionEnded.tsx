@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RotateCw, X } from "lucide-react";
 import type { Session } from "../api";
+import { tr } from '../i18n';
 
 // Ids restarted after a self-update recently, so a CLI that keeps updating cannot loop forever.
 const restartedAt = new Map<string, number>();
@@ -43,28 +44,28 @@ export function SessionEnded({ session, onRestart, onClose }: { session: Session
     return (
       <div className="session-ended" role="status">
         <div>
-          <strong>{session.name} พักไว้</strong>
-          <small>เปิดต่อเพื่อทำงานต่อจากบทสนทนาเดิม</small>
+          <strong>{session.name} {tr("พักไว้")}</strong>
+          <small>{tr("เปิดต่อเพื่อทำงานต่อจากบทสนทนาเดิม")}</small>
         </div>
         <div className="session-ended-actions">
-          <button className="secondary" onClick={() => onRestart(session.id)}><RotateCw size={13} /> เปิดต่อ</button>
-          <button className="secondary" onClick={() => { window.dispatchEvent(new CustomEvent("superai:delete-session", { detail: { id: session.id, name: session.name } })); }}><X size={13} /> ลบ</button>
+          <button className="secondary" onClick={() => onRestart(session.id)}><RotateCw size={13} /> {tr("เปิดต่อ")}</button>
+          <button className="secondary" onClick={() => { window.dispatchEvent(new CustomEvent("superai:delete-session", { detail: { id: session.id, name: session.name } })); }}><X size={13} /> {tr("ลบ")}</button>
         </div>
       </div>
     );
 
   const title = autoRestart
-    ? `${session.name} อัปเดตตัวเองเสร็จแล้ว`
+    ? tr`${session.name} อัปเดตตัวเองเสร็จแล้ว`
     : clean
-      ? `${session.name} จบการทำงานแล้ว`
-      : `${session.name} หยุดทำงาน${session.exitCode !== null ? ` (exit ${session.exitCode})` : ""}`;
+      ? tr`${session.name} จบการทำงานแล้ว`
+      : tr`${session.name} หยุดทำงาน${session.exitCode !== null ? ` (exit ${session.exitCode})` : ""}`;
   const detail = autoRestart && !kept
-    ? `กำลังเปิดใหม่ใน ${seconds} วินาที…`
+    ? tr`กำลังเปิดใหม่ใน ${seconds} วินาที…`
     : clean && !kept
-      ? `ปิดหน้าต่างนี้ใน ${seconds} วินาที`
+      ? tr`ปิดหน้าต่างนี้ใน ${seconds} วินาที`
       : autoRestart || clean
-        ? "เก็บหน้าต่างไว้แล้ว"
-        : "ดูข้อความด้านบนว่าเกิดอะไรขึ้น แล้วเลือกเปิดใหม่หรือปิด";
+        ? tr("เก็บหน้าต่างไว้แล้ว")
+        : tr("ดูข้อความด้านบนว่าเกิดอะไรขึ้น แล้วเลือกเปิดใหม่หรือปิด");
 
   return (
     <div className={`session-ended ${clean || autoRestart ? "" : "failed"}`} role="status">
@@ -74,13 +75,13 @@ export function SessionEnded({ session, onRestart, onClose }: { session: Session
       </div>
       <div className="session-ended-actions">
         {(autoRestart || clean) && !kept && (
-          <button className="text-button" onClick={() => setKept(true)}>ยกเลิก</button>
+          <button className="text-button" onClick={() => setKept(true)}>{tr("ยกเลิก")}</button>
         )}
         <button className="secondary" onClick={() => { fired.current = true; restartedAt.set(session.id, Date.now()); onRestart(session.id); }}>
-          <RotateCw size={13} /> เปิดใหม่
+          <RotateCw size={13} /> {tr("เปิดใหม่")}
         </button>
         <button className="secondary" onClick={() => { fired.current = true; onClose(session.id); }}>
-          <X size={13} /> ปิด
+          <X size={13} /> {tr("ปิด")}
         </button>
       </div>
     </div>

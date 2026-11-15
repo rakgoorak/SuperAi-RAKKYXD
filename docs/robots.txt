@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://rakgoorak.github.io/SuperAi-RAKKYXD/sitemap.xml

@@ -23,7 +23,7 @@ const errors = [];
 const check = (condition, label) => { assert.ok(condition, label); checks++; console.log('PASS ' + label); };
 try {
   browser = await chromium.launch({ channel: 'chrome', headless: true });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+  const page = await browser.newPage({ locale: 'th-TH',  viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
   page.setDefaultTimeout(12000);
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => {
@@ -102,8 +102,8 @@ try {
     const bounds = element.getBoundingClientRect();
     return { width: bounds.width, height: bounds.height, buttons: [...element.querySelectorAll('button')].map(button => ({ text: button.innerText.trim(), label: button.getAttribute('aria-label'), title: button.title })) };
   });
-  check(modeGeometry.width <= 110 && modeGeometry.height <= 36 && modeGeometry.buttons.length === 3 && modeGeometry.buttons.every(button => !button.text && button.label && button.title), 'mode switch is a compact three-icon control with accessible names and tooltips');
-  check(await modeSwitch.getByRole('button', { name: 'Code', exact: true }).getAttribute('aria-pressed') === 'true', 'the current icon mode exposes its selected state');
+  check(modeGeometry.height <= 36 && modeGeometry.buttons.length === 3 && modeGeometry.buttons.every(button => button.text && button.label && button.title), 'mode switch is one compact row of three labelled modes with accessible names and tooltips');
+  check(await modeSwitch.locator('button[aria-pressed="true"]').count() === 1 && await modeSwitch.locator('button').last().getAttribute('aria-pressed') === 'true', 'the current mode exposes its selected state');
   check(await page.locator('.composer-options-popover:visible').count() === 0, 'secondary composer settings start folded');
   await page.locator('.quick-chat-controls .composer-options > summary').click();
   check(await page.getByText('เริ่มด้วยสิทธิ์อ่านและวางแผน ปรับสิทธิ์แก้ไฟล์และรันคำสั่งได้ในห้องคุย', { exact: true }).isVisible(), 'new-conversation permission details remain available in the compact menu');
@@ -126,11 +126,12 @@ try {
   check(await composer.inputValue() === '' && await page.locator('.attachment-cards li').count() === 0, 'accepted send clears only the submitted draft and attachments');
   await page.locator('.session-chat-controls .provider-badge[aria-label="ChatGPT (Codex)"]').waitFor();
   // Claude-style footer: permission on the left, provider/model/effort on the right, the rest folded.
+  await page.locator('.session-chat-controls .chat-effort-select').waitFor();
   check(await page.locator('.session-chat-controls .chat-permission-select').isVisible() && await page.locator('.session-chat-controls .chat-effort-select').isVisible(), 'permission and effort sit in the footer under the composer');
-  await page.locator('.session-chat-controls .chat-permission-select').selectOption('edit');
+  await page.locator('.session-chat-controls .chat-permission-select').selectOption('auto');
   await page.locator('.session-chat-controls .chat-effort-select').selectOption('low');
   await page.locator('.session-chat-controls .composer-options > summary').click();
-  check(await page.locator('.permission-description').innerText().then(text => text.includes('ไม่ได้แยกสิทธิ์')), 'Codex permission explanation states that edit also permits command execution');
+  check(await page.locator('.session-chat-controls .chat-permission-select option').allTextContents().then(items => JSON.stringify(items) === JSON.stringify(['อ่านอย่างเดียว', 'ถามก่อนทำ', 'ทำเองอัตโนมัติ', 'เต็มสิทธิ์'])), 'every AI offers the same short list of permissions');
   await page.screenshot({ path: path.join(output, 'options-desktop.png') });
   await page.keyboard.press('Escape');
   check(await page.locator('.session-chat-controls .composer-options > summary').evaluate(element => element === document.activeElement), 'Escape restores focus to the options control');
@@ -194,6 +195,8 @@ try {
   await setup.getByRole('heading', { name: 'เลือก AI ที่คุณอยากคุยด้วย' }).waitFor();
   check(workspaces.length === 1, 'setup can use general chat without choosing a user folder or duplicating its workspace');
   await setup.getByRole('button', { name: 'ปิดไว้ก่อน', exact: true }).click();
+  // Closing the setup guide starts the guided tour, which covers the toolbar until it is skipped.
+  await page.getByTitle(/Esc/).click();
   failFirst = true;
   await page.getByRole('button', { name: 'บทสนทนาใหม่', exact: true }).click();
   await page.getByLabel('AI สำหรับบทสนทนาใหม่').selectOption('antigravity');
@@ -207,6 +210,7 @@ try {
   await send.click();
   await page.locator('.session-chat-controls .provider-badge[aria-label="Antigravity"]').waitFor();
   check(spawns.length === countBeforeReload, 'first-send recovery also reuses the pending room after reload');
+  await page.waitForTimeout(800); await page.screenshot({ path: path.join(output, 'dbg-198.png') }); console.log('DBG', JSON.stringify(await page.getByRole('button', { name: 'บทสนทนาใหม่', exact: true }).evaluateAll(els => els.map(e => ({ d: e.disabled, top: document.elementFromPoint(e.getBoundingClientRect().x + 5, e.getBoundingClientRect().y + 5)?.className })))));
   failFirst = true;
   await page.getByRole('button', { name: 'บทสนทนาใหม่', exact: true }).click();
   await page.getByLabel('AI สำหรับบทสนทนาใหม่').selectOption('opencode');

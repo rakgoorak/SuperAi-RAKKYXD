@@ -405,7 +405,8 @@ test('preview forgetting closes tabs and clears shared cookies/storage/cache; bl
     const source = fs.readFileSync(new URL('../../desktop/browser.mjs', import.meta.url), 'utf8')
       .replace('import { WebContentsView, session } from "electron";',
         'const WebContentsView = null; const session = globalThis.__previewSessionTest;')
-      .replace('"./browser-url.mjs"', JSON.stringify(new URL('../../desktop/browser-url.mjs', import.meta.url).href));
+      .replace('"./browser-url.mjs"', JSON.stringify(new URL('../../desktop/browser-url.mjs', import.meta.url).href))
+      .replace("'./i18n.mjs'", JSON.stringify(new URL('../../desktop/i18n.mjs', import.meta.url).href));
     const { BrowserController } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
     const controller = new BrowserController({ on() {}, isDestroyed: () => false,
       webContents: { send: () => events.push('emit') } });
@@ -424,4 +425,36 @@ test('preview forgetting closes tabs and clears shared cookies/storage/cache; bl
     await assert.rejects(controller.forgetSession(), /mock failure/);
     assert.equal(controller.forgetting, false);
   } finally { delete (globalThis as any).__previewSessionTest; }
+});
+
+test('API keys are saved encrypted, limited to known providers, and can be removed', t => {
+  const { dir, store } = fixture(t);
+  store.saveApi('openrouter', 'sk-or-secret-123');
+  assert.equal(store.get('api', 'openrouter'), 'sk-or-secret-123');
+  assert.ok(!fs.readFileSync(path.join(dir, 'credentials.enc'), 'utf8').includes('"api:openrouter":"sk-or-secret-123"'), 'the file is not plain JSON');
+  assert.throws(() => store.saveApi('elsewhere', 'x'), /Unsupported/);
+  assert.throws(() => store.saveApi('groq', 'two words'), /Invalid/);
+  store.forgetApi('openrouter');
+  assert.equal(store.get('api', 'openrouter'), undefined);
+});
+
+test('a key can still be saved when the old store was encrypted with another key', t => {
+  const { dir } = fixture(t);
+  new CredentialStore(dir, cipher()).saveSession('chatgpt', token);
+  const store = new CredentialStore(dir, cipher());
+  assert.throws(() => store.get('api', 'openrouter'), /Unable to read/, 'reading still fails closed');
+  store.saveApi('openrouter', 'sk-or-new');
+  assert.equal(store.get('api', 'openrouter'), 'sk-or-new');
+  assert.equal(store.get('session', 'chatgpt'), undefined, 'nothing from the unreadable store is reused');
+  assert.equal(fs.readdirSync(dir).filter(f => f.startsWith('credentials.enc.unreadable-')).length, 1, 'the old file is kept aside');
+  const off = new CredentialStore(dir, { ...cipher(), isEncryptionAvailable: () => false });
+  assert.throws(() => off.saveApi('groq', 'gsk'), /unavailable/, 'no encryption: nothing is moved or written');
+  assert.equal(fs.readdirSync(dir).filter(f => f.startsWith('credentials.enc.unreadable-')).length, 1);
+});
+
+test('the store lives in the app data folder when one is set', () => {
+  const before = process.env.SUPERAI_DATA_DIR;
+  process.env.SUPERAI_DATA_DIR = path.join(os.tmpdir(), 'superai-data-x');
+  try { assert.equal((new CredentialStore() as any).directory, process.env.SUPERAI_DATA_DIR); }
+  finally { if (before === undefined) delete process.env.SUPERAI_DATA_DIR; else process.env.SUPERAI_DATA_DIR = before; }
 });

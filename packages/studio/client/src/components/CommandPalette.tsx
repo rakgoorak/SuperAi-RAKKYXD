@@ -15,10 +15,11 @@ import {
   X,
 } from 'lucide-react';
 import type { Session, Workspace } from '../api';
+import { tr } from '../i18n';
 
 interface CommandItem {
   id: string;
-  category: 'คำสั่งด่วน' | 'เซสชัน' | 'โปรเจกต์';
+  category: string;
   title: string;
   subtitle?: string;
   icon: React.ReactNode;
@@ -67,9 +68,9 @@ export function CommandPalette({
     // Quick Actions
     {
       id: 'act-new-session',
-      category: 'คำสั่งด่วน',
-      title: 'เปิด Session ใหม่',
-      subtitle: 'เลือก CLI, Model และจำนวนแท็บ',
+      category: tr("คำสั่งด่วน"),
+      title: tr("เปิด Session ใหม่"),
+      subtitle: tr("เลือก CLI, Model และจำนวนแท็บ"),
       icon: <Plus size={15} style={{ color: 'var(--accent)' }} />,
       action: () => {
         onAction('session');
@@ -78,9 +79,9 @@ export function CommandPalette({
     },
     {
       id: 'act-new-project',
-      category: 'คำสั่งด่วน',
-      title: 'เพิ่มโปรเจกต์ใหม่',
-      subtitle: 'เชื่อมต่อโฟลเดอร์บนเครื่อง',
+      category: tr("คำสั่งด่วน"),
+      title: tr("เพิ่มโปรเจกต์ใหม่"),
+      subtitle: tr("เชื่อมต่อโฟลเดอร์บนเครื่อง"),
       icon: <Folder size={15} style={{ color: 'var(--accent)' }} />,
       action: () => {
         onAction('project');
@@ -89,9 +90,9 @@ export function CommandPalette({
     },
     {
       id: 'act-settings',
-      category: 'คำสั่งด่วน',
-      title: 'การตั้งค่าระบบ (Settings)',
-      subtitle: 'จัดการ Model, Effort และเครื่องมือ',
+      category: tr("คำสั่งด่วน"),
+      title: tr("การตั้งค่าระบบ (Settings)"),
+      subtitle: tr("จัดการ Model, Effort และเครื่องมือ"),
       icon: <Settings size={15} />,
       action: () => {
         onAction('settings');
@@ -100,9 +101,9 @@ export function CommandPalette({
     },
     {
       id: 'act-tour',
-      category: 'คำสั่งด่วน',
-      title: 'ทัวร์แนะนำโปรแกรม (Interactive Tour)',
-      subtitle: 'เรียนรู้เครื่องมือหลัก 5 ขั้นตอน',
+      category: tr("คำสั่งด่วน"),
+      title: tr("ทัวร์แนะนำโปรแกรม (Interactive Tour)"),
+      subtitle: tr("เรียนรู้เครื่องมือหลัก 5 ขั้นตอน"),
       icon: <Compass size={15} style={{ color: 'var(--accent)' }} />,
       action: () => {
         onAction('tour');
@@ -111,9 +112,9 @@ export function CommandPalette({
     },
     {
       id: 'act-history',
-      category: 'คำสั่งด่วน',
-      title: 'ประวัติการสนทนา (History)',
-      subtitle: 'ค้นหาข้อความและผลงานเก่า',
+      category: tr("คำสั่งด่วน"),
+      title: tr("ประวัติการสนทนา (History)"),
+      subtitle: tr("ค้นหาข้อความและผลงานเก่า"),
       icon: <History size={15} />,
       action: () => {
         onAction('history');
@@ -122,9 +123,9 @@ export function CommandPalette({
     },
     {
       id: 'act-changes',
-      category: 'คำสั่งด่วน',
-      title: 'ตรวจการแก้ไขโค้ด (Git Changes)',
-      subtitle: 'ดูไฟล์ที่เปลี่ยนแปลงและ Diff',
+      category: tr("คำสั่งด่วน"),
+      title: tr("ตรวจการแก้ไขโค้ด (Git Changes)"),
+      subtitle: tr("ดูไฟล์ที่เปลี่ยนแปลงและ Diff"),
       icon: <GitBranch size={15} />,
       action: () => {
         onAction('changes');
@@ -133,9 +134,9 @@ export function CommandPalette({
     },
     {
       id: 'act-preview',
-      category: 'คำสั่งด่วน',
-      title: 'เปิดหน้าต่าง Preview',
-      subtitle: 'ดูตัวอย่างหน้าเว็บ localhost:3000',
+      category: tr("คำสั่งด่วน"),
+      title: tr("เปิดหน้าต่าง Preview"),
+      subtitle: tr("ดูตัวอย่างหน้าเว็บ localhost:3000"),
       icon: <Globe size={15} />,
       action: () => {
         onAction('preview');
@@ -144,9 +145,9 @@ export function CommandPalette({
     },
     {
       id: 'act-setup',
-      category: 'คำสั่งด่วน',
-      title: 'คู่มือการติดตั้ง (Setup Guide)',
-      subtitle: 'ตรวจความพร้อมของ Node, Git และ CLIs',
+      category: tr("คำสั่งด่วน"),
+      title: tr("คู่มือการติดตั้ง (Setup Guide)"),
+      subtitle: tr("ตรวจความพร้อมของ Node, Git และ CLIs"),
       icon: <BookOpen size={15} />,
       action: () => {
         onAction('setup');
@@ -157,9 +158,9 @@ export function CommandPalette({
     // Sessions
     ...sessions.map((s) => ({
       id: `session-${s.id}`,
-      category: 'เซสชัน' as const,
+      category: tr("เซสชัน"),
       title: s.name,
-      subtitle: `${s.agentType || 'Terminal'} · ${s.id === selectedSession ? 'แท็บปัจจุบัน' : s.status === 'running' ? 'กำลังทำงาน' : 'หยุดแล้ว'}`,
+      subtitle: `${s.agentType || 'Terminal'} · ${s.id === selectedSession ? tr("แท็บปัจจุบัน") : s.status === 'running' ? tr("กำลังทำงาน") : tr("หยุดแล้ว")}`,
       icon: s.agentType ? <MessageSquare size={15} /> : <Terminal size={15} />,
       action: () => {
         onSelectSession(s.id);
@@ -170,7 +171,7 @@ export function CommandPalette({
     // Projects
     ...workspaces.map((w) => ({
       id: `ws-${w.id}`,
-      category: 'โปรเจกต์' as const,
+      category: tr("โปรเจกต์"),
       title: w.name,
       subtitle: w.rootPath,
       icon: <Folder size={15} style={{ color: activeWs === w.id ? 'var(--accent)' : 'inherit' }} />,
@@ -222,7 +223,7 @@ export function CommandPalette({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="command-palette-dialog" role="dialog" aria-modal="true" aria-label="ค้นหาคำสั่งด่วน">
+      <div className="command-palette-dialog" role="dialog" aria-modal="true" aria-label={tr("ค้นหาคำสั่งด่วน")}>
         <div className="command-palette-search">
           <Search size={16} className="command-search-icon" />
           <input
@@ -234,17 +235,17 @@ export function CommandPalette({
               setActiveIndex(0);
             }}
             onKeyDown={handleKeyDown}
-            placeholder="ค้นหาเซสชัน, โปรเจกต์ หรือคำสั่งด่วน..."
-            aria-label="ค้นหาคำสั่งด่วน"
+            placeholder={tr("ค้นหาเซสชัน, โปรเจกต์ หรือคำสั่งด่วน...")}
+            aria-label={tr("ค้นหาคำสั่งด่วน")}
           />
-          <button type="button" className="icon-button" onClick={onClose} title="ปิด (Esc)">
+          <button type="button" className="icon-button" onClick={onClose} title={tr("ปิด (Esc)")}>
             <X size={15} />
           </button>
         </div>
 
         <div className="command-palette-list" role="listbox" id={`${id}-list`}>
           {filtered.length === 0 ? (
-            <div className="command-palette-empty">ไม่พบผลลัพธ์ที่ตรงกับ "{query}"</div>
+            <div className="command-palette-empty">{tr("ไม่พบผลลัพธ์ที่ตรงกับ \"")}{query}"</div>
           ) : (
             filtered.map((item, index) => (
               <button
@@ -268,9 +269,9 @@ export function CommandPalette({
         </div>
 
         <footer className="command-palette-footer">
-          <span>↑ ↓ นำทาง · Enter เลือก · Esc ปิด</span>
+          <span>{tr("↑ ↓ นำทาง · Enter เลือก · Esc ปิด")}</span>
           <span>
-            คีย์ลัด <kbd>Ctrl</kbd> + <kbd>K</kbd>
+            {tr("คีย์ลัด")} <kbd>Ctrl</kbd> + <kbd>K</kbd>
           </span>
         </footer>
       </div>

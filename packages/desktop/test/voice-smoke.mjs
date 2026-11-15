@@ -27,7 +27,7 @@ await fs.mkdir(project, { recursive: true });
 const raw = path.join(scratch, "speech.wav");
 execFileSync("powershell.exe", ["-NoProfile", "-Command",
   "Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.SetOutputToWaveFile($env:SUPERAI_WAV); $s.Speak('Please build a landing page for my coffee shop.'); $s.Dispose()"],
-  { env: { ...process.env, SUPERAI_WAV: raw }, windowsHide: true });
+  { env: { SUPERAI_LANG: 'th', ...process.env, SUPERAI_WAV: raw }, windowsHide: true });
 const wav = path.join(scratch, "mic.wav");
 await fs.writeFile(wav, withSilence(await fs.readFile(raw), 3));
 
@@ -47,7 +47,7 @@ await new Promise((r) => model.listen(0, "127.0.0.1", r));
 const app = await electron.launch({
   executablePath: require("electron"),
   args: [path.join(root, "packages/desktop"), "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-audio-capture=${wav}`],
-  env: { ...process.env, SUPERAI_DATA_DIR: data, SUPERAI_OLLAMA_URL: `http://127.0.0.1:${model.address().port}` },
+  env: { SUPERAI_LANG: 'th', ...process.env, SUPERAI_DATA_DIR: data, SUPERAI_OLLAMA_URL: `http://127.0.0.1:${model.address().port}` },
   timeout: 60000,
 });
 const passed = [];

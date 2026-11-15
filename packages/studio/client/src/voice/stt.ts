@@ -1,4 +1,5 @@
 import type { SpeechModelId } from "./models";
+import { tr } from '../i18n';
 
 type Pending = { resolve: (text: string) => void; reject: (error: Error) => void; progress?: (loaded: number, total: number) => void };
 
@@ -20,7 +21,7 @@ export class SpeechRecognizer {
       else job.resolve(data.text || "");
     };
     worker.onerror = (event) => {
-      for (const job of this.pending.values()) job.reject(new Error(event.message || "ระบบแปลงเสียงหยุดทำงาน"));
+      for (const job of this.pending.values()) job.reject(new Error(event.message || tr("ระบบแปลงเสียงหยุดทำงาน")));
       this.pending.clear();
       this.worker?.terminate();
       this.worker = null;
@@ -47,7 +48,7 @@ export class SpeechRecognizer {
   dispose() {
     this.worker?.terminate();
     this.worker = null;
-    for (const job of this.pending.values()) job.reject(new Error("ปิดโหมดเสียงแล้ว"));
+    for (const job of this.pending.values()) job.reject(new Error(tr("ปิดโหมดเสียงแล้ว")));
     this.pending.clear();
   }
 }

@@ -1,4 +1,5 @@
 name: Build Windows and macOS Release
+
 on:
   push:
     tags: ['v*']
@@ -8,11 +9,14 @@ on:
         description: Existing version tag to build
         required: true
         default: v1.0.0
+
 permissions:
   contents: read
+
 concurrency:
   group: release-${{ github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
+
 jobs:
   build:
     strategy:
@@ -21,36 +25,173 @@ jobs:
         include:
           - runner: windows-2022
             label: windows-x64
+            target_arch: x64
           - runner: macos-15
             label: macos-arm64
+            target_arch: arm64
           - runner: macos-15-intel
             label: macos-x64
+            target_arch: x64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    # Windows waits for a person to approve each SignPath signing request.
+    timeout-minutes: ${{ matrix.runner == 'windows-2022' && 150 || 30 }}
+    env:
+      TARGET_ARCH: ${{ matrix.target_arch }}
+      # Optional SignPath signing: skipped unless SIGNPATH_API_TOKEN and SIGNPATH_ORGANIZATION_ID are set.
+      HAS_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
+      HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
+
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
           cache: npm
+
       - run: npm ci
       - run: npm run build
       - run: npm test
         timeout-minutes: 3
       - run: npm run test:team
         timeout-minutes: 3
-      - run: npm run package:release
+
+      # macOS Developer ID signing. Store the .p12 as base64 in
+      # APPLE_CERTIFICATE_BASE64, its password in APPLE_CERTIFICATE_PASSWORD,
+      # and the identity in APPLE_SIGNING_IDENTITY.
+      - name: Import Apple signing certificate
+        if: runner.os == 'macOS' && env.HAS_APPLE_CERT == 'true'
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/apple-signing.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p actions "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p actions "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions "$KEYCHAIN_PATH"
+
+      - name: Package release
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: npm run package:release
+
+      # The app's own executable is signed before the ZIP and the installer are made from it.
+      - name: Find app executable
+        if: runner.os == 'Windows' && env.HAS_SIGNPATH == 'true'
+        shell: pwsh
+        run: |
+          $manifest = Get-Content output/release-manifest.json -Raw | ConvertFrom-Json
+          "APP_EXE=$($manifest.main)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "APP_VERSION=$($manifest.version)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Stage app executable for signing
+        if: runner.os == 'Windows' && env.HAS_SIGNPATH == 'true'
+        id: unsigned-app
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: unsigned-app
+          path: ${{ env.APP_EXE }}
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign app executable (SignPath)
+        if: runner.os == 'Windows' && env.HAS_SIGNPATH == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'SuperAi-RAKKYXD' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: app-exe
+          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          # Must match the version in the file's metadata (artifact configuration restriction).
+          parameters: |
+            version: ${{ toJSON(env.APP_VERSION) }}
+          output-artifact-directory: signed-app
+
+      - name: Use signed app executable
+        if: runner.os == 'Windows' && env.HAS_SIGNPATH == 'true'
+        shell: pwsh
+        run: |
+          Copy-Item signed-app/SuperAi-RAKKYXD.exe $env:APP_EXE -Force
+          $sig = Get-AuthenticodeSignature $env:APP_EXE
+          if ($sig.Status -ne 'Valid') { throw "App executable signature is not valid: $($sig.Status)" }
+
       - run: npm run test:release
         timeout-minutes: 5
       - run: npm run archive:release
+
       - name: Ensure NSIS (Windows installer)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           if (-not (Get-Command makensis -ErrorAction SilentlyContinue) -and -not (Test-Path "${env:ProgramFiles(x86)}\NSIS\makensis.exe")) { choco install nsis -y --no-progress }
-      - run: npm run installer:release
+
+      # Notarizes + staples the DMG when Apple credentials exist.
+      - name: Build installer
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run installer:release
+
+      - name: Stage installer for signing
+        if: runner.os == 'Windows' && env.HAS_SIGNPATH == 'true'
+        id: unsigned-installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: unsigned-installer
+          path: release-assets/SuperAi-RAKKYXD-Setup.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign installer (SignPath)
+        if: runner.os == 'Windows' && env.HAS_SIGNPATH == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'SuperAi-RAKKYXD' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          # Must match the version in the file's metadata (artifact configuration restriction).
+          parameters: |
+            version: ${{ toJSON(env.APP_VERSION) }}
+          output-artifact-directory: signed-installer
+
+      # Signing changes the file, so its checksum is written again.
+      - name: Use signed installer
+        if: runner.os == 'Windows' && env.HAS_SIGNPATH == 'true'
+        shell: pwsh
+        run: |
+          $setup = 'release-assets/SuperAi-RAKKYXD-Setup.exe'
+          Copy-Item signed-installer/SuperAi-RAKKYXD-Setup.exe $setup -Force
+          $sig = Get-AuthenticodeSignature $setup
+          $sig | Format-List Status, StatusMessage, SignerCertificate
+          if ($sig.Status -ne 'Valid') { throw "Installer signature is not valid: $($sig.Status)" }
+          $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
+          [IO.File]::WriteAllText("$setup.sha256", "$hash  SuperAi-RAKKYXD-Setup.exe`n")
+
+      - name: Verify macOS signature and notarization
+        if: runner.os == 'macOS' && env.HAS_APPLE_CERT == 'true'
+        run: |
+          APP=$(find release -maxdepth 2 -name '*.app' -type d | head -1)
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          DMG=$(find release-assets -maxdepth 1 -name '*.dmg' | head -1)
+          xcrun stapler validate "$DMG"
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: release-${{ matrix.label }}
@@ -58,6 +199,7 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: failure()
         with:
@@ -66,51 +208,49 @@ jobs:
             output/release-check-*/*.png
             output/team-check-*/*.png
           if-no-files-found: ignore
+
   publish:
     needs: build
     if: always() && (needs.build.result == 'success' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
+
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         continue-on-error: true
         with:
           pattern: release-*
           merge-multiple: true
           path: release-assets
+
+      # SuperAi-RAKKYXD-releases is the single download home for the app and the
+      # in-app updater. The source repository intentionally does not publish releases.
       - name: Fallback to existing release assets on workflow_dispatch
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          PUBLIC_REPO: rakgoorak/SuperAi-RAKKYXD-releases
         shell: bash
         run: |
           mkdir -p release-assets
           if [ -z "$(ls -A release-assets 2>/dev/null)" ]; then
-            gh release download "$RELEASE_TAG" --dir release-assets --clobber
+            gh release download "$RELEASE_TAG" --repo "$PUBLIC_REPO" --dir release-assets --clobber
           fi
-      # docs/RELEASE.md keeps every version; a release shows only the newest section. Apps up to
-      # v1.0.38 read the hard-update marker from the whole notes, so old sections must stay out.
+
+      # docs/RELEASE.md keeps every version; a release shows only the newest section.
+      # Apps up to v1.0.38 read the hard-update marker from the whole notes, so old
+      # sections must stay out.
       - name: Latest release notes only
         shell: bash
-        run: awk '/^---[[:space:]]*$/ {exit} {print}' docs/RELEASE.md > release-notes.md
-      - name: Publish tested downloads
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
-        shell: bash
         run: |
-          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --draft --verify-tag --title "SuperAi & RAKKYXD $RELEASE_TAG" --notes-file release-notes.md
-          fi
-          gh release upload "$RELEASE_TAG" release-assets/* --clobber
-          gh release edit "$RELEASE_TAG" --draft=false --latest
-      # The in-app updater reads releases from this public repository (the source repo is private).
-      # Needs a fine-grained token with "Contents: write" on that repository, saved as RELEASES_TOKEN.
-      - name: Publish to public releases repository
+          awk '/^---[[:space:]]*$/ {exit} {print}' docs/RELEASE.md > release-notes.md
+          printf '\n---\n[Privacy](https://github.com/rakgoorak/SuperAi-RAKKYXD/blob/main/PRIVACY.md)\n' >> release-notes.md
+
+      - name: Publish tested downloads
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
@@ -118,8 +258,8 @@ jobs:
         shell: bash
         run: |
           if [ -z "$GH_TOKEN" ]; then
-            echo "::warning::RELEASES_TOKEN is not set; the in-app updater will not see $RELEASE_TAG"
-            exit 0
+            echo "::error::RELEASES_TOKEN is not set; cannot publish $RELEASE_TAG"
+            exit 1
           fi
           if ! gh release view "$RELEASE_TAG" --repo "$PUBLIC_REPO" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --repo "$PUBLIC_REPO" --draft --title "SuperAi & RAKKYXD $RELEASE_TAG" --notes-file release-notes.md

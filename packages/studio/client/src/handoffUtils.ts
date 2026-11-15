@@ -1,3 +1,4 @@
+import { tr } from './i18n';
 export interface HandoffOptions {
   agentName?: string;
   text?: string;
@@ -64,10 +65,10 @@ export function formatHandoffPrompt(
   const cleanNext = nextInstruction.trim();
 
   const nextSection = cleanNext
-    ? `ช่วยดำเนินการขั้นถัดไป: ${cleanNext}`
-    : 'ช่วยดำเนินการขั้นถัดไป: ';
+    ? tr`ช่วยดำเนินการขั้นถัดไป: ${cleanNext}`
+    : tr("ช่วยดำเนินการขั้นถัดไป: ");
 
-  return `จากข้อสรุป / ผลลัพธ์ของ ${cleanName}:\n\n${cleanContent}\n\n${nextSection}`;
+  return tr`จากข้อสรุป / ผลลัพธ์ของ ${cleanName}:\n\n${cleanContent}\n\n${nextSection}`;
 }
 
 /**
@@ -110,7 +111,7 @@ export function formatSessionLabel(session: {
   view?: string;
 }): string {
   const type = session.agentType ? `${session.agentType} · ` : '';
-  const viewKind = session.view === 'chat' ? 'แชต' : 'Terminal';
+  const viewKind = session.view === 'chat' ? tr("แชต") : 'Terminal';
   return `${session.name} (${type}${viewKind})`;
 }
 
@@ -179,7 +180,7 @@ export function getQuickAgentTargets(
         id: match.id,
         name: match.name,
         agentType: agent.agentType,
-        label: `ส่งต่อให้ ${match.name}`,
+        label: tr`ส่งต่อให้ ${match.name}`,
         existing: true,
       };
     }
@@ -187,7 +188,7 @@ export function getQuickAgentTargets(
     return {
       name: agent.name,
       agentType: agent.agentType,
-      label: `ส่งต่อให้ ${agent.name}`,
+      label: tr`ส่งต่อให้ ${agent.name}`,
       existing: false,
     };
   });

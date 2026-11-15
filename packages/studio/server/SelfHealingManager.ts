@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
 import { cliEnv, findExecutable } from './CliCatalog.js';
+import { tr } from './i18n.js';
 
 const execAsync = promisify(execFile);
 
@@ -160,12 +161,12 @@ export class SelfHealingManager {
     const attempts: SelfHealAttempt[] = [];
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      options.onProgress?.(attempt, maxAttempts, 'testing', `กำลังรันคำสั่งตรวจสอบ: ${command}`);
+      options.onProgress?.(attempt, maxAttempts, 'testing', tr`กำลังรันคำสั่งตรวจสอบ: ${command}`);
       const verification = await this.runVerification(options.cwd, command);
 
       if (verification.passed) {
         attempts.push({ attempt, verification });
-        options.onProgress?.(attempt, maxAttempts, 'success', 'การทดสอบทั้งหมดผ่านสมบูรณ์ 100%');
+        options.onProgress?.(attempt, maxAttempts, 'success', tr("การทดสอบทั้งหมดผ่านสมบูรณ์ 100%"));
         return {
           success: true,
           command,
@@ -188,7 +189,7 @@ export class SelfHealingManager {
       });
 
       if (attempt < maxAttempts) {
-        options.onProgress?.(attempt, maxAttempts, 'fixing', `พบข้อผิดพลาด - กำลังส่งผลให้ AI แก้ไขไฟล์ (รอบ ${attempt}/${maxAttempts})`);
+        options.onProgress?.(attempt, maxAttempts, 'fixing', tr`พบข้อผิดพลาด - กำลังส่งผลให้ AI แก้ไขไฟล์ (รอบ ${attempt}/${maxAttempts})`);
         try {
           await options.agentSend(fixPrompt);
         } catch (error: any) {
@@ -197,19 +198,19 @@ export class SelfHealingManager {
             command,
             totalAttempts: attempt,
             attempts,
-            error: `ส่งคำสั่งให้ Agent แก้ไขไม่สำเร็จ: ${error.message}`,
+            error: tr`ส่งคำสั่งให้ Agent แก้ไขไม่สำเร็จ: ${error.message}`,
           };
         }
       }
     }
 
-    options.onProgress?.(maxAttempts, maxAttempts, 'failed', `ครบ ${maxAttempts} รอบแล้ว แต่การทดสอบยังไม่ผ่าน`);
+    options.onProgress?.(maxAttempts, maxAttempts, 'failed', tr`ครบ ${maxAttempts} รอบแล้ว แต่การทดสอบยังไม่ผ่าน`);
     return {
       success: false,
       command,
       totalAttempts: maxAttempts,
       attempts,
-      error: `ไม่สามารถแก้โค้ดให้ผ่านการทดสอบได้หลังพยายาม ${maxAttempts} ครั้ง`,
+      error: tr`ไม่สามารถแก้โค้ดให้ผ่านการทดสอบได้หลังพยายาม ${maxAttempts} ครั้ง`,
     };
   }
 }
