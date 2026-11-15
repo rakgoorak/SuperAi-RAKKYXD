@@ -497,6 +497,7 @@ const text: Record<string, string> = {
   "เริ่มตัวติดตั้งไม่สำเร็จ (หมดเวลา) กรุณาลองใหม่": "Could not start the installer (timed out). Please try again",
   "เริ่มตัวติดตั้งไม่สำเร็จ (รหัส {0})": "Could not start the installer (code {0})",
   "/{0} ของ {1} ใช้ได้เฉพาะในหน้า Terminal กรุณาสลับห้องนี้เป็น Terminal แล้วพิมพ์ /{2} อีกครั้ง": "{1}'s /{0} works only in the Terminal view. Switch this room to Terminal and type /{2} again",
-  "{0} ไม่มีคำสั่ง /{1} · คำสั่งนี้ใช้ได้กับ {2}": "{0} has no /{1} command · it works with {2}"
+  "{0} ไม่มีคำสั่ง /{1} · คำสั่งนี้ใช้ได้กับ {2}": "{0} has no /{1} command · it works with {2}",
+  "อัปเดตแอปนี้ผ่าน Microsoft Store เท่านั้น": "This app updates only through the Microsoft Store"
 };
 export default text;

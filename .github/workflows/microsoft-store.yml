@@ -1,0 +1,32 @@
+name: Build Microsoft Store MSIX
+on:
+  push:
+    branches: ['codex/microsoft-store-msix-*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:msix
+      - run: node --test packages/desktop/updater.test.mjs
+      - run: npm run package:release
+      - run: npm run test:release
+        timeout-minutes: 5
+      - run: npm run package:msix
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: microsoft-store-msix
+          path: store-assets/*.msix
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
