@@ -1,24 +1,124 @@
 name: Build Microsoft Store MSIX
+# Builds the Store MSIX and, for stable releases, submits it to Partner Center.
+#
+# Triggers:
+# - release published (by a person or a PAT): stable releases only.
+# - workflow_run of the release workflow: release.yml publishes the GitHub
+#   release with GITHUB_TOKEN, and GitHub never starts other workflows for
+#   events created by GITHUB_TOKEN, so `release: published` alone would not
+#   fire for normal tag-push releases. Only successful tag pushes of a stable
+#   vX.Y.Z tag are submitted.
+# - workflow_dispatch: build any ref/tag; submit only when `submit` is ticked.
+# - push to codex/microsoft-store-msix-*: build only.
+#
+# Submission needs four repository secrets (see docs/MICROSOFT-STORE.md):
+# PARTNER_CENTER_TENANT_ID, PARTNER_CENTER_CLIENT_ID,
+# PARTNER_CENTER_CLIENT_SECRET, PARTNER_CENTER_SELLER_ID.
+# Without them the MSIX is still built and uploaded, and submission is skipped.
 on:
   push:
     branches: ['codex/microsoft-store-msix-*']
+  release:
+    types: [published]
+  workflow_run:
+    workflows: ['Build Windows and macOS Release']
+    types: [completed]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Version tag to build (for example v1.0.49). Empty builds the selected branch.
+        required: false
+        default: ''
+      submit:
+        description: Submit the MSIX to the Microsoft Store (needs a stable vX.Y.Z tag)
+        type: boolean
+        required: false
+        default: false
 permissions:
   contents: read
+concurrency:
+  group: microsoft-store-${{ github.event.release.tag_name || github.event.workflow_run.head_branch || github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+env:
+  STORE_PRODUCT_ID: 9NZH79QL515K
 jobs:
+  plan:
+    # workflow_run: only a successful tag push of the release workflow.
+    # release: skip prereleases.
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'release' && !github.event.release.prerelease) ||
+      (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.plan.outputs.ref }}
+      submit: ${{ steps.plan.outputs.submit }}
+    steps:
+      - id: plan
+        name: Decide ref and whether to submit
+        env:
+          EVENT: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RUN_TAG: ${{ github.event.workflow_run.head_branch }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          INPUT_SUBMIT: ${{ github.event.inputs.submit }}
+          CURRENT_REF: ${{ github.ref }}
+        shell: bash
+        run: |
+          case "$EVENT" in
+            release)      ref="$RELEASE_TAG"; submit=true ;;
+            workflow_run) ref="$RUN_TAG";     submit=true ;;
+            workflow_dispatch)
+              ref="${INPUT_TAG:-$CURRENT_REF}"
+              submit="$INPUT_SUBMIT" ;;
+            *)            ref="$CURRENT_REF"; submit=false ;;
+          esac
+          if [ "$submit" = "true" ] && ! [[ "$ref" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            if [ "$EVENT" = "workflow_dispatch" ]; then
+              echo "::error::Submission needs a stable vX.Y.Z tag, got '$ref'."
+              exit 1
+            fi
+            echo "::notice::'$ref' is not a stable vX.Y.Z tag; building only, not submitting to the Microsoft Store."
+            submit=false
+          fi
+          echo "Ref: $ref, submit: $submit"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "submit=$submit" >> "$GITHUB_OUTPUT"
+
   package:
+    needs: plan
     runs-on: windows-2022
     timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
           cache: npm
+      - id: version
+        name: Check package version matches the tag
+        env:
+          REF: ${{ needs.plan.outputs.ref }}
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$REF" =~ ^v[0-9] ]] && [ "v$version" != "$REF" ]; then
+            echo "::error::Tag $REF does not match package.json version $version."
+            exit 1
+          fi
+          echo "Building MSIX for version $version"
       - run: npm ci
       - run: npm run build
       - run: npm run test:msix
-      - run: node --test packages/desktop/updater.test.mjs
+      - run: node --env-file=packages/desktop/test/test.env --test packages/desktop/updater.test.mjs
       - run: npm run package:release
       - run: npm run test:release
         timeout-minutes: 5
@@ -30,3 +130,61 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+
+  submit:
+    needs: [plan, package]
+    if: needs.plan.outputs.submit == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - id: secrets
+        name: Check Partner Center secrets
+        env:
+          TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+          SELLER_ID: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
+        shell: bash
+        run: |
+          missing=()
+          [ -n "$TENANT_ID" ] || missing+=(PARTNER_CENTER_TENANT_ID)
+          [ -n "$CLIENT_ID" ] || missing+=(PARTNER_CENTER_CLIENT_ID)
+          [ -n "$CLIENT_SECRET" ] || missing+=(PARTNER_CENTER_CLIENT_SECRET)
+          [ -n "$SELLER_ID" ] || missing+=(PARTNER_CENTER_SELLER_ID)
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::warning::Skipping Microsoft Store submission: missing repository secrets ${missing[*]}. The MSIX was still built (artifact microsoft-store-msix). See docs/MICROSOFT-STORE.md for setup."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.secrets.outputs.ready == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: microsoft-store-msix
+          path: store-assets
+      - if: steps.secrets.outputs.ready == 'true'
+        uses: microsoft/microsoft-store-apppublisher@cc9910a8d59f2eb55cbb83df0a3800cf3b5300e0 # v1.4
+      - if: steps.secrets.outputs.ready == 'true'
+        name: Configure Microsoft Store Developer CLI
+        env:
+          TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+          SELLER_ID: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
+        shell: pwsh
+        run: |
+          msstore reconfigure --tenantId $env:TENANT_ID --sellerId $env:SELLER_ID --clientId $env:CLIENT_ID --clientSecret $env:CLIENT_SECRET
+          if ($LASTEXITCODE -ne 0) { throw "msstore reconfigure failed with exit code $LASTEXITCODE" }
+      - if: steps.secrets.outputs.ready == 'true'
+        name: Replace package in a new submission and commit it for certification
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+        shell: pwsh
+        run: |
+          $msix = Get-ChildItem store-assets -Filter "SuperAi-RAKKYXD-$env:VERSION.0-*.msix" | Select-Object -First 1
+          if (-not $msix) { throw "No MSIX for version $env:VERSION in store-assets" }
+          Write-Host "Submitting $($msix.Name) to Store product $env:STORE_PRODUCT_ID"
+          # Marks the previous packages for deletion, uploads this MSIX, and commits the submission.
+          msstore publish $msix.FullName --appId $env:STORE_PRODUCT_ID
+          if ($LASTEXITCODE -ne 0) { throw "msstore publish failed with exit code $LASTEXITCODE" }
+          Write-Host "::notice::Submitted $($msix.Name) to the Microsoft Store for certification."

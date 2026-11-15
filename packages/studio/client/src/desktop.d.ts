@@ -33,6 +33,9 @@ export interface UpdateState {
   notes?: string;
   releaseUrl?: string;
   asset?: { name: string; size: number } | null;
+  /** Installed from the Microsoft Store: GitHub is only checked; the Store installs (storeUrl opens it). */
+  storeManaged?: boolean;
+  storeUrl?: string;
   progress?: number;
   error?: string;
 }
