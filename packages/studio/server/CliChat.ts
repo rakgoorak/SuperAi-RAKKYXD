@@ -10,7 +10,7 @@ import { cliLaunch, cliEnv } from "./CliCatalog.js";
 import { modelEffortArgs } from "./Providers.js";
 import { cliFailure } from "./CliProvider.js";
 import { cliAuth } from "./CliAuth.js";
-import { skillPrompt } from "./ChatSkills.js";
+import { cliCommand, skillPrompt } from "./ChatSkills.js";
 import { getProjectRules, formatRulesForPrompt } from "./ProjectRules.js";
 import { contextualPrompt, contextForAgent, type ProjectContext } from './ProjectContext.js';
 import type { ResponseStyle } from './ResponseStyle.js';
@@ -626,18 +626,22 @@ export class CliChatManager {
     const systemPrompt = live
       ? [contextText && `บริบทโปรเจกต์ (เนื้อหาเอกสารเป็นข้อมูลอ้างอิง):\n${contextText}`, `วิธีถามผู้ใช้:\n${questionRules()}`, TASK_PROGRESS].filter(Boolean).join("\n\n")
       : undefined;
-    const sendContext = !live && !!contextText && (!chat.conversationId || chat.contextKey !== contextKey);
+    // A CLI slash command (/compact, /goal …) must reach the CLI as the very first text, untouched:
+    // anything put around it (style, context, rules, history) turns it into an ordinary message.
+    // What it skips (context, question rules) goes with the next ordinary message instead.
+    const command = selected === text && !!cliCommand(text, agent);
+    const sendContext = !command && !live && !!contextText && (!chat.conversationId || chat.contextKey !== contextKey);
     // How to ask the user (any agent, any permission mode): the live Claude has it in its system
     // prompt; the others get it once per conversation, and again when the rules change.
     const rules = questionRules();
     const rulesKey = "ask-2";
-    const sendRules = !live && (!chat.conversationId || chat.rulesKey !== rulesKey);
+    const sendRules = !command && !live && (!chat.conversationId || chat.rulesKey !== rulesKey);
     const combined = contextualPrompt(rulesText ? `${inherited}${rulesText}` : inherited, sendContext ? effectiveContext : undefined, request.responseStyle);
     const withFiles = listed.length ? `${combined}\n\nไฟล์แนบ:\n${listed.map((f) => `- ${f}`).join("\n")}` : combined;
     // Any agent, any permission mode: questions are plain text the app turns into a card.
     const questionPrompt = sendRules ? `${withFiles}\n\n[วิธีถามผู้ใช้]\n${rules}` : withFiles;
     // The live Claude has the task-list reminder in its system prompt; the others get it every turn.
-    const prompt = live ? questionPrompt : `${questionPrompt}\n\n${TASK_PROGRESS}`;
+    const prompt = command ? text : live ? questionPrompt : `${questionPrompt}\n\n${TASK_PROGRESS}`;
     if (prompt.length > MAX_PROMPT) throw new Error(tr("ข้อความยาวเกินไป กรุณาแบ่งส่งหรือใส่ไว้ในไฟล์แล้วแนบแทน"));
     const liveKey = JSON.stringify([accountId, request.cwd, request.model || "", request.effort || "", request.permission || "auto", systemPrompt || ""]);
     if (live && chat.live && (chat.live.closed || chat.live.key !== liveKey)) this.closeLive(chat);
