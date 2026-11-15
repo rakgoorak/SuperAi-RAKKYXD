@@ -11,7 +11,9 @@ import { fileURLToPath } from "node:url";
 export const BROWSER_MCP = "superai-browser";
 
 export interface BrowserToolResult { text: string; image?: { data: string; mimeType: string } }
-export type BrowserHandler = (tool: string, args: Record<string, unknown>) => Promise<BrowserToolResult>;
+/** Who asked: the chat whose CLI started the MCP server (empty when unknown, e.g. a test). */
+export interface BrowserCaller { chatId: string; chatName: string }
+export type BrowserHandler = (tool: string, args: Record<string, unknown>, caller: BrowserCaller) => Promise<BrowserToolResult>;
 
 const str = (description: string) => ({ type: "string", description });
 const num = (description: string) => ({ type: "number", description });
@@ -35,19 +37,27 @@ export const BROWSER_TOOLS = [
   tool("browser_screenshot", "Take a screenshot of what the page shows now."),
   tool("browser_back", "Go back in the current tab."),
   tool("browser_forward", "Go forward in the current tab."),
-  tool("browser_tabs", "List the open tabs, or switch to one.", { select: str("tab id to switch to") }),
+  tool("browser_tabs", "List the open tabs, or switch to one.", { select: str("tab id or number from the list") }),
+  tool("browser_dialog", "Say how to answer the page's next confirm() / prompt() (they are cancelled by default and reported in the snapshot), then repeat the action that shows it.",
+    { accept: { type: "boolean", description: "true = OK, false = Cancel" }, text: str("text for a prompt()") }, ["accept"]),
   tool("browser_wait", "Wait for the page: until a text appears, or a number of seconds (max 20).", { text: str("text to wait for"), seconds: num("seconds") }),
 ];
 // Computer use: the whole screen, mouse and keyboard. Off until the user turns it on in Settings.
 const computerTool = (name: string, description: string, properties: Record<string, unknown> = {}, required: string[] = []) =>
   ({ name, description, inputSchema: { type: "object", properties, required, additionalProperties: false } });
 export const COMPUTER_TOOLS = [
-  computerTool("computer_screenshot", "See the user's whole screen (main display). Use its pixel coordinates in the other computer_ tools. Prefer the browser_ tools for web pages."),
+  computerTool("computer_screenshot", "See the user's whole screen (main display). Use its pixel coordinates in the other computer_ tools. Prefer the browser_ tools for web pages. The first computer_ call in a chat waits while the user answers an Allow / Deny window."),
   computerTool("computer_click", "Click at a point of the latest computer_screenshot. Returns a new screenshot.",
-    { x: num("x in the screenshot"), y: num("y in the screenshot"), button: { type: "string", enum: ["left", "right", "middle"] }, double: { type: "boolean" } }, ["x", "y"]),
+    { x: num("x in the screenshot"), y: num("y in the screenshot"), button: { type: "string", enum: ["left", "right", "middle"] }, double: { type: "boolean" }, clicks: num("1-3, e.g. 3 selects a line") }, ["x", "y"]),
+  computerTool("computer_drag", "Press the left button at one point, move to another and release (drag and drop, select text, move a slider). Returns a new screenshot.",
+    { fromX: num("start x"), fromY: num("start y"), toX: num("end x"), toY: num("end y") }, ["fromX", "fromY", "toX", "toY"]),
+  computerTool("computer_zoom", "See a region of the screen at full resolution, to read small text. Coordinates stay those of the latest computer_screenshot.",
+    { x: num("left"), y: num("top"), width: num("width"), height: num("height") }, ["x", "y", "width", "height"]),
+  computerTool("computer_cursor", "Where the mouse is now, in coordinates of the latest screenshot."),
+  computerTool("computer_wait", "Wait (max 10 s) for something to load, then return a new screenshot.", { seconds: num("seconds, default 1") }),
   computerTool("computer_move", "Move the mouse to a point of the latest screenshot.", { x: num("x"), y: num("y") }, ["x", "y"]),
   computerTool("computer_type", "Type text where the keyboard focus is (any language). A newline presses Enter.", { text: str("text to type") }, ["text"]),
-  computerTool("computer_key", "Press a key or a combination, e.g. Enter, Escape, Tab, ctrl+c, ctrl+shift+t, alt+f4, win, cmd+space.", { key: str("key or combination") }, ["key"]),
+  computerTool("computer_key", "Press a key or a combination, e.g. Enter, Escape, Tab, F5, ctrl+c, ctrl+shift+t, ctrl+/, alt+f4, win, cmd+space. Use cmd on macOS where Windows uses ctrl.", { key: str("key or combination") }, ["key"]),
   computerTool("computer_scroll", "Scroll at a point of the screen.", { x: num("x"), y: num("y"), direction: { type: "string", enum: ["up", "down", "left", "right"] }, amount: num("notches, default 3") }, ["direction"]),
 ];
 
@@ -63,36 +73,38 @@ export const browserToken = () => token;
 export function setBrowserBase(url: string) { base = url; }
 
 /** How a CLI starts the MCP server; null when there is no browser to drive (not the desktop app). */
-export function browserMcpLaunch(): { command: string; args: string[]; env: Record<string, string> } | null {
+export function browserMcpLaunch(chatId = ""): { command: string; args: string[]; env: Record<string, string> } | null {
   // Chrome / Edge work without the desktop app; the panel needs it (its tools then say so).
   if (!base) return null;
   const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "BrowserMcp.js");
   // The desktop app's own executable runs the script as plain Node, so no separate Node is needed.
   const env: Record<string, string> = { SUPERAI_BROWSER_URL: base, SUPERAI_BROWSER_TOKEN: token };
   if (process.versions.electron) env.ELECTRON_RUN_AS_NODE = "1";
-  return { command: process.execPath, args: [script], env };
+  // The chat id lets the app ask "chat X wants to control the computer" and remember the answer per chat.
+  return { command: process.execPath, args: chatId ? [script, "--chat", chatId] : [script], env };
 }
 
 /** Claude Code: --mcp-config takes the JSON itself. */
-export function claudeBrowserArgs(): string[] {
-  const launch = browserMcpLaunch();
+export function claudeBrowserArgs(chatId = ""): string[] {
+  const launch = browserMcpLaunch(chatId);
   return launch ? ["--mcp-config", JSON.stringify({ mcpServers: { [BROWSER_MCP]: { type: "stdio", ...launch } } })] : [];
 }
 
 /** Codex: config overrides on the command line. Values are TOML, and JSON strings are valid TOML strings. */
-export function codexBrowserArgs(): string[] {
-  const launch = browserMcpLaunch();
+export function codexBrowserArgs(chatId = ""): string[] {
+  const launch = browserMcpLaunch(chatId);
   if (!launch) return [];
   const key = `mcp_servers.${BROWSER_MCP}`;
   const env = Object.entries(launch.env).map(([k, v]) => `${k} = ${JSON.stringify(v)}`).join(", ");
   return ["-c", `${key}.command=${JSON.stringify(launch.command)}`, "-c", `${key}.args=${JSON.stringify(launch.args)}`, "-c", `${key}.env={ ${env} }`,
-    // The panel is visible to the user and holds no project files, so its tools need no approval.
+    // The panel is visible to the user and holds no project files, so its tools need no approval here;
+    // computer_ tools are approved in the app's own Allow / Deny window instead (desktop/computer-control.mjs).
     "-c", `${key}.default_tools_approval_mode="approve"`];
 }
 
 /** OpenCode: merged into OPENCODE_CONFIG_CONTENT. */
-export function withOpenCodeBrowser(config: string | undefined): string | undefined {
-  const launch = browserMcpLaunch();
+export function withOpenCodeBrowser(config: string | undefined, chatId = ""): string | undefined {
+  const launch = browserMcpLaunch(chatId);
   if (!launch) return config;
   let data: Record<string, any> = {};
   if (config?.trim()) {

@@ -16,6 +16,34 @@ const NAME: Record<ExternalKind, string> = { chrome: "Google Chrome", edge: "Mic
 
 const contexts = new Map<ExternalKind, Promise<BrowserContext>>();
 const active = new Map<ExternalKind, Page>();
+/** Dialogs each page showed since its last snapshot, and the answer browser_dialog set for the next confirm / prompt. */
+const dialogLog = new WeakMap<Page, string[]>();
+const dialogAnswer = new Map<ExternalKind, { accept: boolean; text?: string }>();
+/** Short tab ids that stay the same while the tab is open ("t1", "t2" …). */
+const tabIds = new WeakMap<Page, string>();
+let nextTab = 0;
+const tabId = (p: Page) => { let id = tabIds.get(p); if (!id) { id = `t${++nextTab}`; tabIds.set(p, id); } return id; };
+
+/** A dialog left open freezes the page: answer it at once and report it in the next snapshot. */
+function watchDialogs(kind: ExternalKind, p: Page) {
+  if (dialogLog.has(p)) return;
+  dialogLog.set(p, []);
+  p.on("dialog", async (dialog) => {
+    const type = dialog.type();
+    let result = "OK";
+    if (type === "alert" || type === "beforeunload") await dialog.accept().catch(() => {});
+    else {
+      const answer = dialogAnswer.get(kind);
+      dialogAnswer.delete(kind);
+      if (answer?.accept) {
+        const text = type === "prompt" ? answer.text ?? dialog.defaultValue() : undefined;
+        await dialog.accept(text).catch(() => {});
+        if (text !== undefined) result = JSON.stringify(text);
+      } else { await dialog.dismiss().catch(() => {}); result = "Cancel"; }
+    }
+    dialogLog.get(p)?.push(`${type} "${dialog.message().slice(0, 300)}" -> ${result}`);
+  });
+}
 
 const profileDir = (kind: ExternalKind) =>
   path.join(process.env.SUPERAI_DATA_DIR || path.join(os.homedir(), ".opencode-multi"), "browser-profiles", kind);
@@ -29,7 +57,8 @@ async function context(kind: ExternalKind): Promise<BrowserContext> {
       .then((ctx) => {
         // Closed by the user: the next tool call opens it again.
         ctx.on("close", () => { contexts.delete(kind); active.delete(kind); });
-        ctx.on("page", (page) => active.set(kind, page));
+        ctx.on("page", (page) => { active.set(kind, page); watchDialogs(kind, page); });
+        for (const existing of ctx.pages()) watchDialogs(kind, existing);
         return ctx;
       })
       .catch((error) => {
@@ -60,7 +89,10 @@ async function settled(p: Page, limit = 15000) {
 /** Reads the page, waiting out a navigation that a click or key just started. */
 async function snapshot(p: Page): Promise<string> {
   for (let attempt = 0; ; attempt++) {
-    try { return describe(await p.evaluate(SNAPSHOT) as PageSnapshot); }
+    try {
+      const snap = await p.evaluate(SNAPSHOT) as PageSnapshot;
+      return describe({ ...snap, dialogs: [...(snap.dialogs || []), ...(dialogLog.get(p)?.splice(0) || [])] });
+    }
     catch (error) {
       if (attempt >= 4 || !/context was destroyed|navigat/i.test(String((error as Error).message))) throw error;
       await p.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
@@ -91,13 +123,20 @@ export async function runExternal(kind: ExternalKind, tool: string, args: Record
   if (tool === "browser_tabs") {
     const ctx = await context(kind);
     const pages = ctx.pages();
-    if (args.select !== undefined) {
-      const chosen = pages[Number(args.select)];
-      if (!chosen) throw new Error("No tab with that number");
+    if (args.select !== undefined && args.select !== "") {
+      // A tab id, or its number in the list (the same as the SuperAi panel).
+      const wanted = String(args.select);
+      const chosen = pages.find((p) => tabId(p) === wanted) || pages[Number(wanted)];
+      if (!chosen) throw new Error("No tab with that id or number");
       active.set(kind, chosen); await chosen.bringToFront();
     }
     const current = active.get(kind);
-    return { text: (await Promise.all(pages.map(async (p, i) => `${p === current ? "* " : "  "}${i}  ${await p.title().catch(() => "")}  ${p.url()}`))).join("\n") || "(no tabs)" };
+    return { text: (await Promise.all(pages.map(async (p, i) => `${p === current ? "* " : "  "}${i}  ${tabId(p)}  ${await p.title().catch(() => "")}  ${p.url()}`))).join("\n") || "(no tabs)" };
+  }
+  if (tool === "browser_dialog") {
+    const answer = { accept: args.accept !== false, ...(args.text !== undefined ? { text: String(args.text) } : {}) };
+    dialogAnswer.set(kind, answer);
+    return { text: `The page's next confirm / prompt will be answered ${answer.accept ? "OK" : "Cancel"}${answer.text !== undefined ? ` with "${answer.text}"` : ""}. Now repeat the action that shows it.` };
   }
   const p = await page(kind);
   if (tool === "browser_snapshot") return { text: await snapshot(p) };

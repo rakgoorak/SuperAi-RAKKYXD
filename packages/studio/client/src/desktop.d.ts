@@ -10,10 +10,21 @@ export interface BrowserState {
     canForward: boolean;
   }[];
 }
+/** Computer use as the desktop app reports it. `os`: macOS permissions ("granted", "denied", "not-determined"…). */
+export interface ComputerState {
+  enabled: boolean;
+  platform?: string;
+  os?: { accessibility: string; screen: string };
+  /** Chats the user allowed in the Allow / Deny window: for the whole chat, or for the current task. */
+  allowed?: { chatId: string; chatName?: string; scope: "chat" | "task" }[];
+}
 export interface UpdateState {
   status: "idle" | "checking" | "latest" | "none" | "available" | "unsupported" | "downloading" | "extracting" | "ready" | "waiting" | "installing" | "error";
   currentVersion: string;
   packaged: boolean;
+  /** Installed from the Microsoft Store: GitHub is only checked; the Store installs (storeUrl opens it). */
+  storeManaged?: boolean;
+  storeUrl?: string;
   latestVersion?: string;
   /** Hard update: this version must be updated before the app can be used. */
   mandatory?: boolean;
@@ -22,9 +33,6 @@ export interface UpdateState {
   notes?: string;
   releaseUrl?: string;
   asset?: { name: string; size: number } | null;
-  /** Installed from the Microsoft Store: GitHub is only checked; the Store installs (storeUrl opens it). */
-  storeManaged?: boolean;
-  storeUrl?: string;
   progress?: number;
   error?: string;
 }
@@ -55,9 +63,9 @@ declare global {
       onUpdate: (callback: (state: UpdateState) => void) => () => void;
       /** Anonymous usage count: `available` is false in dev builds, `enabled` is the user's choice. */
       usage?: (action: "state" | "set", value?: boolean) => Promise<{ available: boolean; enabled: boolean }>;
-      /** "Let the AI control this computer": off unless the user turns it on. */
-      computer?: (action: "state" | "set", value?: boolean) => Promise<{ enabled: boolean; platform?: string }>;
-      onComputer?: (callback: (state: { enabled: boolean }) => void) => () => void;
+      /** "Let the AI control this computer": off unless the user turns it on; each chat is then asked once in an Allow / Deny window. */
+      computer?: (action: "state" | "set" | "revoke" | "os-settings", value?: boolean | "accessibility" | "screen") => Promise<ComputerState>;
+      onComputer?: (callback: (state: ComputerState) => void) => () => void;
       /** OS notification + taskbar flash; clicking it focuses the window and reports `target` via onNotifyOpen. */
       notify?: (notice: { tag: string; title: string; body: string; target: unknown }) => Promise<void>;
       onNotifyOpen?: (callback: (target: unknown) => void) => () => void;

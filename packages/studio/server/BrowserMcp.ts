@@ -8,13 +8,15 @@ import { BROWSER_MCP, BROWSER_TOOLS, COMPUTER_TOOLS } from "./BrowserTools.js";
 
 const base = process.env.SUPERAI_BROWSER_URL || "";
 const token = process.env.SUPERAI_BROWSER_TOKEN || "";
+const chatAt = process.argv.indexOf("--chat");
+const chat = chatAt >= 0 ? String(process.argv[chatAt + 1] || "") : "";
 const send = (message: unknown) => process.stdout.write(JSON.stringify(message) + "\n");
 
 async function call(name: string, args: unknown) {
   try {
     const res = await fetch(`${base}/api/browser-tool`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-SuperAi-Browser-Token": token },
+      headers: { "Content-Type": "application/json", "X-SuperAi-Browser-Token": token, ...(chat ? { "X-SuperAi-Chat": chat } : {}) },
       body: JSON.stringify({ tool: name, args: args && typeof args === "object" ? args : {} }),
     });
     const data: any = await res.json().catch(() => ({}));
@@ -34,7 +36,7 @@ createInterface({ input: process.stdin }).on("line", async (line) => {
   if (id === undefined || id === null) return; // notifications need no reply
   if (method === "initialize")
     return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion || "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: BROWSER_MCP, version: "1.0.0" },
-      instructions: "browser_ tools control a web browser the user watches live (the SuperAi panel, or Chrome / Edge). Use browser_snapshot to read a page and get element refs before clicking or typing. computer_ tools see and control the whole computer; they work only when the user has turned them on in SuperAi, and each action returns a fresh screenshot." } });
+      instructions: "browser_ tools control a web browser the user watches live (the SuperAi panel, or Chrome / Edge). Use browser_snapshot to read a page and get element refs before clicking or typing. computer_ tools see and control the whole computer; they work only when the user has turned them on in SuperAi, and the first one in a chat shows the user an Allow / Deny window and waits for the answer. If the user denies, stop and tell them instead of retrying. Each action returns a fresh screenshot." } });
   if (method === "ping") return send({ jsonrpc: "2.0", id, result: {} });
   if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: [...BROWSER_TOOLS, ...COMPUTER_TOOLS] } });
   if (method === "tools/call") return send({ jsonrpc: "2.0", id, result: await call(String(params?.name || ""), params?.arguments) });

@@ -191,6 +191,10 @@ ipcMain.handle("computer:action", async (e, action, value) => {
   if (!computer) throw new Error(tr("คำสั่งไม่ถูกต้อง"));
   if (action === "state") return computer.state();
   if (action === "set") return computer.setEnabled(value === true);
+  // Forget every "Allow" given so far: the next computer_ call asks again.
+  if (action === "revoke") return computer.revoke();
+  // macOS: open System Settings at Accessibility or Screen Recording (and ask the OS first).
+  if (action === "os-settings") { computer.openOsSettings(String(value)); return computer.state(); }
   throw new Error(tr("คำสั่งไม่ถูกต้อง"));
 });
 ipcMain.handle("usage:action", async (e, action, value) => {
@@ -282,8 +286,8 @@ else {
         const candidate = new StudioServer({
           port,
           // The AI's browser tools act on the side browser panel of this window.
-          browser: (tool, args) => {
-            if (tool.startsWith("computer_")) return computer ? computer.run(tool, args) : Promise.reject(new Error("The SuperAi window is not open yet"));
+          browser: (tool, args, caller) => {
+            if (tool.startsWith("computer_")) return computer ? computer.run(tool, args, caller) : Promise.reject(new Error("The SuperAi window is not open yet"));
             if (!browserAutomation) return Promise.reject(new Error("The SuperAi window is not open yet"));
             return browserAutomation(tool, args);
           },
@@ -333,6 +337,8 @@ else {
         settingsFile: path.join(app.getPath("userData"), "computer-use.json"),
         // The Stop button on the bar turns it off; the settings screen shows the new state.
         onStop: () => { if (!window.isDestroyed()) window.webContents.send("computer:state", computer.state()); },
+        // Allow / revoke / switch changes: Settings shows the chats that may control the computer.
+        onChange: (state) => { if (window && !window.isDestroyed()) window.webContents.send("computer:state", state); },
       });
       browserAutomation = createBrowserAutomation(browser, {
         reveal: () => { if (!window.isDestroyed()) window.webContents.send("browser:reveal", {}); },

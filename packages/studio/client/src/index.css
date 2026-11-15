@@ -3060,6 +3060,13 @@ img.small-brand { width: 18px; height: auto; background: none; border-radius: 0;
 .computer-use-panel { display: grid; gap: 10px; max-width: 640px; }
 .computer-use-panel h3 { display: flex; align-items: center; gap: 8px; margin: 0; }
 .computer-use-panel p { margin: 0; line-height: 1.55; }
+.computer-use-os { display: grid; gap: 6px; padding: 8px 10px; border-radius: 6px; background: color-mix(in srgb, var(--text-secondary) 8%, transparent); }
+.computer-use-os div { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.computer-use-os .granted { color: #3ddc84; }
+.computer-use-os .missing { color: #f5a524; }
+.computer-use-allowed { display: grid; gap: 6px; }
+.computer-use-allowed ul { margin: 0; padding-left: 18px; }
+.computer-use-panel button.text-button { justify-self: start; }
 .computer-use-warning { padding: 8px 10px; border-left: 3px solid #e5484d; border-radius: 4px; background: color-mix(in srgb, #e5484d 10%, transparent); }
 
 /* Account picker as buttons: the user's accounts side by side, the one in use filled. */

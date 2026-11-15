@@ -1,4 +1,5 @@
 // Computer use, end to end on the real desktop: the tools refuse while the switch is off; once on,
+// the first call waits for the Allow / Deny window (Deny refuses, Allow lets it through), then
 // the AI sees the screen, clicks the app's own message box and types into it with real OS input
 // (Thai included), presses keys, and the switch is turned off again. Moves the real mouse briefly.
 import { _electron as electron } from 'playwright-core';
@@ -43,19 +44,57 @@ try {
   assert.equal(refused.isError, true);
   assert.match(refused.content[0].text, /turned off/);
 
-  steps.step('turn it on from Settings and see the screen');
-  assert.deepEqual(await page.evaluate(() => window.superai.computer('set', true)), { enabled: true });
-  const shot = await call('computer_screenshot');
+  steps.step('turn it on from Settings');
+  assert.equal((await page.evaluate(() => window.superai.computer('set', true))).enabled, true);
+
+  // The Allow / Deny window: always on top, kept out of screenshots; the call waits for it.
+  const permissionWindow = async () => {
+    for (let i = 0; i < 100; i++) {
+      for (const w of desktop.windows()) if ((await w.title().catch(() => '')) === 'SuperAi permission') return w;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error('The Allow / Deny window did not appear');
+  };
+  steps.step('Deny refuses, and is not asked again right away');
+  const deniedCall = call('computer_screenshot');
+  await (await permissionWindow()).click('#deny');
+  const denied = await deniedCall;
+  assert.equal(denied.isError, true);
+  assert.match(denied.content[0].text, /denied/);
+  const again = await call('computer_screenshot');
+  assert.equal(again.isError, true, 'a second call right after Deny is refused without a new window');
+  assert.match(again.content[0].text, /denied/);
+
+  steps.step('revoke, then Allow this chat');
+  await page.evaluate(() => window.superai.computer('revoke'));
+  const allowedCall = call('computer_screenshot');
+  const askWindow = await permissionWindow();
+  await askWindow.waitForTimeout(500);
+  await askWindow.screenshot({ path: path.join(output, 'permission-window.png') });
+  await askWindow.click('#allow-chat');
+  const shot = await allowedCall;
+  // The status bar the user sees while the AI acts (hidden from the AI's own screenshots).
+  for (const w of desktop.windows()) if ((await w.evaluate(() => !!window.setStatus).catch(() => false))) { await w.waitForTimeout(400); await w.screenshot({ path: path.join(output, 'status-bar.png') }); }
   assert.ok(!shot.isError, shot.content?.[0]?.text);
   assert.equal(shot.content[1].type, 'image');
   await fs.writeFile(path.join(output, 'screen.png'), Buffer.from(shot.content[1].data, 'base64'));
   const [, w] = /Screen (\d+)x(\d+)/.exec(shot.content[0].text).map(Number);
+  const state = await page.evaluate(() => window.superai.computer('state'));
+  assert.equal(state.allowed.length, 1, 'Settings lists the allowed chat');
+  assert.equal(state.allowed[0].scope, 'chat');
+  steps.step('no second window once allowed; zoom and cursor work');
+  const zoomed = await call('computer_zoom', { x: 0, y: 0, width: 200, height: 120 });
+  assert.ok(!zoomed.isError, zoomed.content?.[0]?.text);
+  assert.equal(zoomed.content[1].type, 'image');
+  const cursor = await call('computer_cursor');
+  assert.ok(!cursor.isError, cursor.content?.[0]?.text);
+  assert.match(cursor.content[0].text, /x=-?\d+ y=-?\d+/);
 
   steps.step('click the message box and type with real input');
   const composer = page.getByLabel('คำสั่ง', { exact: true });
   await composer.fill('');
   const point = await page.evaluate(() => { const r = document.querySelector('textarea[aria-label="คำสั่ง"]').getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2 }; });
-  const where = await desktop.evaluate(({ BrowserWindow, screen }) => { const win = BrowserWindow.getAllWindows().filter((x) => x.isVisible()).sort((a, b) => b.getBounds().width - a.getBounds().width)[0]; const d = screen.getPrimaryDisplay(); return { content: win.getContentBounds(), scaleFactor: d.scaleFactor, width: d.size.width }; });
+  const where = await desktop.evaluate(({ BrowserWindow, screen }) => { const win = BrowserWindow.getAllWindows().filter((x) => x.isVisible()).sort((a, b) => b.getBounds().width * b.getBounds().height - a.getBounds().width * a.getBounds().height)[0]; const d = screen.getPrimaryDisplay(); return { content: win.getContentBounds(), scaleFactor: d.scaleFactor, width: d.size.width }; });
   const toShot = (dip) => Math.round(dip * where.scaleFactor * w / (where.width * where.scaleFactor));
   const x = toShot(where.content.x + point.x), y = toShot(where.content.y + point.y);
   const clicked = await call('computer_click', { x, y });
@@ -74,7 +113,9 @@ try {
   await page.screenshot({ path: path.join(output, 'app.png') });
 
   steps.step('turn it off again');
-  assert.deepEqual(await page.evaluate(() => window.superai.computer('set', false)), { enabled: false });
+  const off = await page.evaluate(() => window.superai.computer('set', false));
+  assert.equal(off.enabled, false);
+  assert.equal(off.allowed.length, 0, 'turning it off forgets every Allow');
   assert.equal((await call('computer_screenshot')).isError, true);
   console.log(JSON.stringify({ passed: true, screenshotWidth: w, scaleFactor: where.scaleFactor, output }));
 } finally {

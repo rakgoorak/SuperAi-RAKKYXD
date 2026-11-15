@@ -831,7 +831,10 @@ export class StudioServer {
         if (target !== "app") return res.json(await runExternal(target as ExternalKind, tool, args));
         const handler = browserHandler();
         if (!handler) return res.status(503).json({ error: tr("Browser ในแอปใช้ได้เฉพาะแอป Desktop") + " (browser: chrome / edge)" });
-        res.json(await handler(tool, args));
+        // The chat that asked, so computer use can ask the user "chat X wants control" and remember the answer per chat.
+        const chatId = String(req.headers["x-superai-chat"] || "").slice(0, 200);
+        const session = chatId ? this.terminalManager.getSession(chatId) : undefined;
+        res.json(await handler(tool, args, { chatId, chatName: session?.name || "" }));
       } catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
 

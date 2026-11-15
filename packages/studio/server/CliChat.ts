@@ -338,9 +338,9 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
  */
 /** Claude Code tools preapproved by the legacy read/edit/auto modes. */
 /** OpenCode's config for a chat: the temp-folder rule for headless runs, and the app's browser tools. */
-function openCodeEnv(existing: string | undefined, headless: boolean): Record<string, string> {
+function openCodeEnv(existing: string | undefined, headless: boolean, chatId = ""): Record<string, string> {
   const base = headless ? openCodePermissionEnv(existing).OPENCODE_CONFIG_CONTENT ?? existing : existing;
-  const config = withOpenCodeBrowser(base);
+  const config = withOpenCodeBrowser(base, chatId);
   return config ? { OPENCODE_CONFIG_CONTENT: config } : {};
 }
 export const WEB_TOOLS = "WebSearch,WebFetch";
@@ -355,7 +355,7 @@ function claudePermissionArgs(permission: ChatPermission): string[] {
   return ['--permission-mode', permission === 'read' ? 'plan' : 'acceptEdits', '--allowedTools', claudeAllowed(permission, browser)];
 }
 
-export function chatArguments(agent: string, o: { prompt: string; conversationId?: string; model?: string; effort?: string; files?: string[]; permission?: ChatPermission }): string[] {
+export function chatArguments(agent: string, o: { prompt: string; conversationId?: string; model?: string; effort?: string; files?: string[]; permission?: ChatPermission; chatId?: string }): string[] {
   const permission = o.permission || "auto";
   if (!supportsChatPermission(agent, permission)) throw new Error(tr("สิทธิ์นี้ไม่รองรับสำหรับ provider นี้"));
   if (permission === 'ask') throw new Error(tr("การขออนุมัติในแชตต้องใช้ Claude แบบ live"));
@@ -368,7 +368,7 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
       // `-p` cannot ask for approval, so anything not allowed here is refused. Web search/fetch only
       // read, so every mode gets them; "auto" also runs commands.
       ...claudePermissionArgs(permission),
-      ...claudeBrowserArgs(),
+      ...claudeBrowserArgs(o.chatId),
     ];
   if (agent === "opencode")
     return [
@@ -415,7 +415,7 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
  * permission prompts answered by us (`--permission-prompt-tool stdio`) and project context in the
  * system prompt instead of every message.
  */
-export function claudeLiveArguments(o: { conversationId?: string; model?: string; effort?: string; permission?: ChatPermission; systemPrompt?: string }): string[] {
+export function claudeLiveArguments(o: { conversationId?: string; model?: string; effort?: string; permission?: ChatPermission; systemPrompt?: string; chatId?: string }): string[] {
   const permission = o.permission || "auto";
   return [
     "-p",
@@ -424,7 +424,7 @@ export function claudeLiveArguments(o: { conversationId?: string; model?: string
     ...(o.conversationId ? ["--resume", o.conversationId] : []),
     ...modelEffortArgs("claude-code", o.model, o.effort),
     ...(permission === 'ask' ? ['--permission-mode', 'default'] : claudePermissionArgs(permission)),
-    ...claudeBrowserArgs(),
+    ...claudeBrowserArgs(o.chatId),
     // Anything else Claude wants to use comes to us as a can_use_tool request instead of being refused.
     "--permission-prompt-tool", "stdio",
     ...(o.systemPrompt ? ["--append-system-prompt", o.systemPrompt] : []),
@@ -652,11 +652,11 @@ export class CliChatManager {
     const openCodePassword = openCodeAsk ? randomBytes(32).toString('hex') : '';
     // Windows: without this Codex drops to read-only on a home that has no sandbox set up.
     const codexSandbox = agent === 'codex' && request.permission !== 'read' && request.permission !== 'full' ? codexSandboxArgs(accountEnv) : [];
-    const baseArgs = codexAsk ? ['app-server', ...codexSandbox, ...codexBrowserArgs()] : openCodeAsk ? ['serve', '--hostname', '127.0.0.1', '--port', String(openCodePort)] : live
-      ? claudeLiveArguments({ conversationId: chat.conversationId, model: request.model, effort: request.effort, permission: request.permission, systemPrompt })
-      : chatArguments(agent, { prompt, conversationId: chat.conversationId, model: request.model, effort: request.effort, files: attached, permission: request.permission });
+    const baseArgs = codexAsk ? ['app-server', ...codexSandbox, ...codexBrowserArgs(id)] : openCodeAsk ? ['serve', '--hostname', '127.0.0.1', '--port', String(openCodePort)] : live
+      ? claudeLiveArguments({ conversationId: chat.conversationId, model: request.model, effort: request.effort, permission: request.permission, systemPrompt, chatId: id })
+      : chatArguments(agent, { prompt, conversationId: chat.conversationId, model: request.model, effort: request.effort, files: attached, permission: request.permission, chatId: id });
     // Codex: the sandbox and the app's browser tools are config options that go right after `exec`.
-    const codexExtra = agent === 'codex' && !codexAsk ? [...codexSandbox, ...codexBrowserArgs()] : [];
+    const codexExtra = agent === 'codex' && !codexAsk ? [...codexSandbox, ...codexBrowserArgs(id)] : [];
     const args = codexExtra.length ? [baseArgs[0], ...codexExtra, ...baseArgs.slice(1)] : baseArgs;
 
     // Resolved first: a CLI that is not installed is refused before the message joins the chat.
@@ -742,7 +742,7 @@ export class CliChatManager {
           windowsHide: true,
           stdio: ["pipe", "pipe", "pipe"],
           env: { ...accountEnv, ...cliEnv(), NO_COLOR: "1", FORCE_COLOR: "0", ...(openCodeAsk ? { OPENCODE_SERVER_PASSWORD: openCodePassword, OPENCODE_SERVER_USERNAME: 'superai' } : {}),
-            ...(agent === 'opencode' ? openCodeEnv(accountEnv.OPENCODE_CONFIG_CONTENT, !openCodeAsk) : {}) },
+            ...(agent === 'opencode' ? openCodeEnv(accountEnv.OPENCODE_CONFIG_CONTENT, !openCodeAsk, id) : {}) },
         });
       } catch (error: any) {
         finish(tr`เปิด ${NAMES[agent]} ไม่สำเร็จ: ${error.message}`);

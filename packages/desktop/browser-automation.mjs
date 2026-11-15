@@ -3,13 +3,22 @@
 // in studio/server/BrowserPage.ts), while clicks and keys are sent as real input events so pages
 // react the way they do to a person.
 import { normalizeBrowserUrl } from "./browser-url.mjs";
-import { SNAPSHOT, SELECT_ALL, clickScript, describe, findScript, focusScript, hasTextScript, scrollScript, selectScript } from "../studio/dist/BrowserPage.js";
+import { SNAPSHOT, SELECT_ALL, DIALOG_RELEASE, clickScript, describe, dialogGuardScript, findScript, focusScript, hasTextScript, scrollScript, selectScript } from "../studio/dist/BrowserPage.js";
 
 const KEYS = { enter: "Enter", tab: "Tab", escape: "Escape", esc: "Escape", backspace: "Backspace", delete: "Delete", space: "Space",
   arrowup: "Up", arrowdown: "Down", arrowleft: "Left", arrowright: "Right", up: "Up", down: "Down", left: "Left", right: "Right",
   pageup: "PageUp", pagedown: "PageDown", home: "Home", end: "End" };
 
 function wait(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+/** Runs a page script, but never waits forever: a page that is frozen (or shows its own dialog) gets an error instead. */
+function js(wc, code, limit = 15000) {
+  let timer;
+  return Promise.race([
+    wc.executeJavaScript(code, true).finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("The page did not answer in time (busy, or showing its own dialog). Try browser_press Escape or browser_screenshot.")), limit); }),
+  ]);
+}
 
 /** Resolves when the page stops loading (or after `limit` ms). */
 async function settled(wc, limit = 20000) {
@@ -25,15 +34,21 @@ export function createBrowserAutomation(controller, { reveal } = {}) {
     if (!tab) throw new Error("No browser tab is open. Use browser_open first.");
     return tab.view.webContents;
   };
-  const snapshot = async (wc) => describe(await wc.executeJavaScript(SNAPSHOT, true));
+  const snapshot = async (wc) => describe(await js(wc, SNAPSHOT));
+  // The answer browser_dialog set for the page's next confirm / prompt.
+  let dialogAnswer;
+  const guard = async (wc) => { await js(wc, dialogGuardScript(dialogAnswer), 5000).catch(() => {}); dialogAnswer = undefined; };
+  const release = (wc) => js(wc, DIALOG_RELEASE, 5000).catch(() => {});
   const point = async (wc, ref, text) => {
-    const target = await wc.executeJavaScript(findScript(ref, text), true);
+    const target = await js(wc, findScript(ref, text));
     if (!target) throw new Error(ref ? `No element with ref ${ref}. Take a new browser_snapshot; refs change when the page changes.` : `No clickable element shows "${text}".`);
     await wait(120);
     return target;
   };
   // Real mouse input only reaches the page while its view is on screen.
   const onScreen = () => controller.visible && controller.bounds.width > 0 && controller.bounds.height > 0;
+  // reveal() asks the window to show the panel; give it a moment to come on screen before real input.
+  const shown = async () => { for (let i = 0; i < 12 && !onScreen(); i++) await wait(100); return onScreen(); };
   const key = (wc, name, modifiers = []) => {
     const keyCode = KEYS[String(name).toLowerCase()] || name;
     wc.sendInputEvent({ type: "keyDown", keyCode, modifiers });
@@ -43,7 +58,7 @@ export function createBrowserAutomation(controller, { reveal } = {}) {
     wc.sendInputEvent({ type: "keyUp", keyCode, modifiers });
   };
 
-  return async function run(tool, args = {}) {
+  async function run(tool, args = {}) {
     // The user should see what the AI does: bring the browser panel forward on every action.
     reveal?.();
     if (tool === "browser_open") {
@@ -55,11 +70,28 @@ export function createBrowserAutomation(controller, { reveal } = {}) {
       return { text: await snapshot(wc) };
     }
     if (tool === "browser_tabs") {
-      if (args.select) await controller.action("select", { id: String(args.select) });
+      const before = controller.state();
+      if (args.select !== undefined && args.select !== "") {
+        // A tab id, or its number in the list (the same as Chrome / Edge).
+        const wanted = String(args.select);
+        const tab = before.tabs.find((t) => t.id === wanted) || before.tabs[Number(wanted)];
+        if (!tab) throw new Error("No tab with that id or number");
+        await controller.action("select", { id: tab.id });
+      }
       const state = controller.state();
-      return { text: state.tabs.map((t) => `${t.id === state.activeId ? "* " : "  "}${t.id}  ${t.title}  ${t.url}`).join("\n") || "(no tabs)" };
+      return { text: state.tabs.map((t, i) => `${t.id === state.activeId ? "* " : "  "}${i}  ${t.id}  ${t.title}  ${t.url}`).join("\n") || "(no tabs)" };
+    }
+    if (tool === "browser_dialog") {
+      dialogAnswer = { accept: args.accept !== false, ...(args.text !== undefined ? { text: String(args.text) } : {}) };
+      return { text: `The page's next confirm / prompt will be answered ${dialogAnswer.accept ? "OK" : "Cancel"}${dialogAnswer.text !== undefined ? ` with "${dialogAnswer.text}"` : ""}. Now repeat the action that shows it.` };
     }
     const wc = await active();
+    const acting = ["browser_click", "browser_type", "browser_press", "browser_select"].includes(tool);
+    if (acting) await guard(wc);
+    try { return await act(wc, tool, args); } finally { if (acting) await release(wc); }
+  };
+
+  async function act(wc, tool, args) {
     if (tool === "browser_snapshot") return { text: await snapshot(wc) };
     if (tool === "browser_screenshot") {
       let image = await wc.capturePage();
@@ -72,21 +104,21 @@ export function createBrowserAutomation(controller, { reveal } = {}) {
     }
     if (tool === "browser_click") {
       const target = await point(wc, args.ref, args.text);
-      if (onScreen()) for (const type of ["mouseMove", "mouseDown", "mouseUp"]) wc.sendInputEvent({ type, x: target.x, y: target.y, button: "left", clickCount: 1 });
-      else await wc.executeJavaScript(clickScript(args.ref, args.text), true);
+      if (await shown()) for (const type of ["mouseMove", "mouseDown", "mouseUp"]) wc.sendInputEvent({ type, x: target.x, y: target.y, button: "left", clickCount: 1 });
+      else await js(wc, clickScript(args.ref, args.text));
       await settled(wc, 8000);
       return { text: await snapshot(wc) };
     }
     if (tool === "browser_type") {
       await point(wc, args.ref);
-      if (!(await wc.executeJavaScript(focusScript(args.ref), true))) throw new Error(`Element ${args.ref} cannot take text. Take a new browser_snapshot and pick an input.`);
+      if (!(await js(wc, focusScript(args.ref)))) throw new Error(`Element ${args.ref} cannot take text. Take a new browser_snapshot and pick an input.`);
       wc.focus();
       await wait(60);
-      if (!args.append) {
-        await wc.executeJavaScript(SELECT_ALL, true);
-        key(wc, "Backspace");
-      }
-      await wc.insertText(String(args.text ?? ""));
+      const text = String(args.text ?? "");
+      // Typed text replaces the selected old value. (A Backspace input event could land after the
+      // inserted text and eat its last letter.) Nothing to type: delete the selection instead.
+      if (!args.append) await js(wc, SELECT_ALL);
+      if (text) await wc.insertText(text); else if (!args.append) wc.delete();
       if (args.submit) { await wait(80); key(wc, "Enter"); await settled(wc, 8000); }
       return { text: await snapshot(wc) };
     }
@@ -97,11 +129,11 @@ export function createBrowserAutomation(controller, { reveal } = {}) {
       return { text: await snapshot(wc) };
     }
     if (tool === "browser_select") {
-      if (!(await wc.executeJavaScript(selectScript(args.ref, args.value), true))) throw new Error("Select element or option not found. Take a new browser_snapshot.");
+      if (!(await js(wc, selectScript(args.ref, args.value)))) throw new Error("Select element or option not found. Take a new browser_snapshot.");
       return { text: await snapshot(wc) };
     }
     if (tool === "browser_scroll") {
-      await wc.executeJavaScript(scrollScript(args.direction, args.amount), true);
+      await js(wc, scrollScript(args.direction, args.amount));
       await wait(300);
       return { text: await snapshot(wc) };
     }
@@ -115,7 +147,7 @@ export function createBrowserAutomation(controller, { reveal } = {}) {
       const started = Date.now();
       if (args.text) {
         while (Date.now() - started < limit) {
-          if (await wc.executeJavaScript(hasTextScript(args.text), true)) return { text: await snapshot(wc) };
+          if (await js(wc, hasTextScript(args.text)).catch(() => false)) return { text: await snapshot(wc) };
           await wait(300);
         }
         throw new Error(`"${args.text}" did not appear within ${limit / 1000} s`);
@@ -124,5 +156,7 @@ export function createBrowserAutomation(controller, { reveal } = {}) {
       return { text: await snapshot(wc) };
     }
     throw new Error(`Unknown browser tool: ${tool}`);
-  };
+  }
+
+  return run;
 }
