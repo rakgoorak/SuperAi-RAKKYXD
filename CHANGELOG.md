@@ -6,6 +6,24 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.0.49] - 2026-11-16
+
+### Added
+- Computer use asks first: an Allow / Deny window (this task or the whole chat)
+  before the AI looks at or controls the screen. Deny is remembered briefly so
+  the AI does not ask again at once; Settings > AI control lists allowed chats
+  and can revoke them all.
+- Every screen: the status bar with Stop and the edge glow show on each display,
+  the AI can work on screen 2 and 3, and clicks land right at mixed scaling.
+- New computer tools: drag, zoom, cursor position, wait, double/triple click.
+- /goal and /boost can be sent from chat; slash commands reach the AI as typed.
+- The Microsoft Store build says when a newer version exists.
+
+### Fixed
+- The AI's browser reaches same-origin iframes and open shadow roots, page
+  confirm()/prompt() no longer freeze it, typing no longer drops the last
+  letter, and tabs can be picked by number.
+
 ## [1.0.48] - 2026-11-13
 
 ### Added
