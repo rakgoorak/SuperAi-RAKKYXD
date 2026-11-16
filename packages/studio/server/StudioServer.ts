@@ -4,7 +4,7 @@ import { SelfHealingManager } from './SelfHealingManager.js';
 import { CrossReviewManager } from './CrossReviewManager.js';
 import { projectChanges, projectFile, stageFile, unstageFile, discardFile, saveProjectFile } from "./ProjectChanges.js";
 import { listWorktrees, createWorktree, mergeWorktree, removeWorktree } from "./GitWorktrees.js";
-import { readPreviewFile } from './PreviewFiles.js';
+import { readPreviewFile, OutsideProjectError } from './PreviewFiles.js';
 import { workingContext } from './WorkingContext.js';
 import { branchChoices, selectBranch } from './BranchSelection.js';
 import { listProjectFiles } from './ProjectFiles.js';
@@ -557,20 +557,36 @@ export class StudioServer {
         res.status(500).json({ error: error.message });
       }
     });
+    // Files outside the project that the user chose to open from the preview panel ("Open this file").
+    // Allowed only through a JSON POST, which a web page on another site cannot send here.
+    const allowedOutside = new Set<string>();
     const previewFile = (folder: (req: Request) => string | undefined) => async (req: Request, res: Response) => {
       const root = folder(req);
       if (!root) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์หรือ session สำหรับเปิดไฟล์นี้") });
       try {
-        const file = await readPreviewFile(root, String(req.query.path || ''));
+        const file = await readPreviewFile(root, String(req.query.path || ''), allowedOutside);
         res.setHeader('Content-Type', file.contentType);
         res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox; style-src 'unsafe-inline'");
         res.setHeader('Cache-Control', 'no-store');
+        if (file.file) return res.sendFile(file.file, { headers: { 'Content-Type': file.contentType }, dotfiles: 'allow' });
         res.send(file.content);
       } catch (error) {
         const missing = (error as NodeJS.ErrnoException).code === 'ENOENT';
-        res.status(missing ? 404 : 400).json({ error: missing ? tr("ไม่พบไฟล์นี้แล้ว ตรวจที่อยู่ไฟล์หรือให้ AI สร้างไฟล์ใหม่") : (error as Error).message });
+        const outside = error instanceof OutsideProjectError;
+        res.status(missing ? 404 : outside ? 403 : 400).json({ error: missing ? tr("ไม่พบไฟล์นี้แล้ว ตรวจที่อยู่ไฟล์หรือให้ AI สร้างไฟล์ใหม่") : (error as Error).message, ...(outside ? { outside: true, file: error.file } : {}) });
       }
     };
+    this.app.post('/api/preview-file/allow', async (req: Request, res: Response) => {
+      if (!req.is('application/json')) return res.status(415).json({ error: tr("คำสั่งไม่ถูกต้อง") });
+      const requested = String(req.body?.path || '');
+      if (!requested || !path.isAbsolute(requested) || /[\u0000-\u001f]/.test(requested)) return res.status(400).json({ error: tr("ที่อยู่ไฟล์ไม่ถูกต้อง") });
+      try {
+        const real = await fs.promises.realpath(requested);
+        if (!(await fs.promises.stat(real)).isFile()) return res.status(400).json({ error: tr("กรุณาเลือกไฟล์ ไม่ใช่โฟลเดอร์") });
+        allowedOutside.add(real);
+        res.json({ ok: true });
+      } catch { res.status(404).json({ error: tr("ไม่พบไฟล์นี้แล้ว ตรวจที่อยู่ไฟล์หรือให้ AI สร้างไฟล์ใหม่") }); }
+    });
     this.app.get('/api/workspaces/:wsId/preview-file', previewFile(req => this.workspaceRegistry.getWorkspace(String(req.params.wsId))?.rootPath));
     this.app.get('/api/terminals/:id/preview-file', previewFile(req => this.terminalManager.getSession(String(req.params.id))?.cwd));
     

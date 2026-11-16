@@ -15,3 +15,6 @@
 #root .preview-file-text > span.highlighted { background: var(--selected); color: var(--text); }
 #root .markdown a.md-link { color: #e7b99d; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; overflow-wrap: anywhere; }
 #root .markdown a.md-link:hover { color: var(--text); }
+#root .preview-video { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 12px; background: #000; }
+#root .preview-video video { display: block; max-width: 100%; max-height: 100%; }
+#root .preview-outside-path { font-family: var(--font-mono, monospace); font-size: 12px; word-break: break-all; max-width: 100%; }

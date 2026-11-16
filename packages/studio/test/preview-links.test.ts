@@ -68,6 +68,40 @@ test('preview endpoint serves registered project bytes with safe content types a
   } finally { await server.stop(); await fs.rm(root, { recursive: true, force: true }); }
 });
 
+test('videos stream with seeking, and a file outside the project opens only after the user allows it', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'superai-preview-video-'));
+  const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'superai-preview-allow-'));
+  const server = new StudioServer({ port: 0, customWorkspacePath: path.join(root, 'workspaces.json') });
+  try {
+    await fs.writeFile(path.join(root, 'demo.mp4'), Buffer.alloc(30 * 1024 * 1024, 1)); // bigger than the 20 MB media limit
+    const elsewhere = path.join(outside, 'clip.mp4');
+    await fs.writeFile(elsewhere, Buffer.from('outside video'));
+    await server.start();
+    const base = `http://localhost:${server.getPort()}`;
+    const workspace = await fetch(base + '/api/workspaces', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Video fixture', rootPath: root }) }).then(response => response.json()) as { id: string };
+    const url = `${base}/api/workspaces/${workspace.id}/preview-file?path=`;
+    const part = await fetch(url + 'demo.mp4', { headers: { Range: 'bytes=0-9' } });
+    assert.equal(part.status, 206, 'videos support seeking');
+    assert.equal(part.headers.get('content-type'), 'video/mp4');
+    assert.equal((await part.arrayBuffer()).byteLength, 10);
+
+    const blocked = await fetch(url + encodeURIComponent(elsewhere));
+    assert.equal(blocked.status, 403);
+    const body = await blocked.json() as { outside?: boolean; file?: string };
+    assert.equal(body.outside, true, 'the panel learns the file is outside the project');
+    assert.equal(body.file, await fs.realpath(elsewhere));
+    const formPost = await fetch(base + '/api/preview-file/allow', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ path: elsewhere }) });
+    assert.equal(formPost.status, 415, 'only a JSON request (not a plain form) can allow a file');
+    const foreign = await fetch(base + '/api/preview-file/allow', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://other.example' }, body: JSON.stringify({ path: elsewhere }) });
+    assert.equal(foreign.status, 403, 'another site cannot allow a file');
+    assert.equal((await fetch(base + '/api/preview-file/allow', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: body.file }) })).status, 200);
+    const opened = await fetch(url + encodeURIComponent(elsewhere));
+    assert.equal(opened.status, 200);
+    assert.equal(await opened.text(), 'outside video');
+    assert.equal((await fetch(url + encodeURIComponent(path.join(outside, 'other.txt')))).status, 404);
+  } finally { await server.stop(); await fs.rm(root, { recursive: true, force: true }); await fs.rm(outside, { recursive: true, force: true }); }
+});
+
 test('saved session images remain readable in dormant sessions and cannot escape their folder', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'superai-session-images-'));
   const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'superai-session-images-outside-'));
@@ -90,9 +124,9 @@ test('saved session images remain readable in dormant sessions and cannot escape
     assert.equal((await fetch(`${base}/api/terminals/missing/preview-file?path=x.png`)).status, 404);
     assert.equal((await fetch(url + encodeURIComponent('.superai/attachments/missing.png'))).status, 404);
     await fs.writeFile(path.join(outside, 'private.png'), png);
-    assert.equal((await fetch(url + encodeURIComponent(path.join(outside, 'private.png')))).status, 400);
+    assert.equal((await fetch(url + encodeURIComponent(path.join(outside, 'private.png')))).status, 403, 'outside the folder: refused until the user allows it');
     await fs.symlink(outside, path.join(root, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
-    assert.equal((await fetch(url + encodeURIComponent('linked/private.png'))).status, 400);
+    assert.equal((await fetch(url + encodeURIComponent('linked/private.png'))).status, 403);
     assert.equal((await fetch(url + encodeURIComponent(saved.path), { headers: { Origin: 'https://other.example' } })).status, 403);
   } finally {
     await server.stop();
