@@ -39,7 +39,8 @@ try {
   mcp.stdout.on('data', (chunk) => { buffer += chunk; for (let i; (i = buffer.indexOf('\n')) >= 0;) { const m = JSON.parse(buffer.slice(0, i)); buffer = buffer.slice(i + 1); waiting.get(m.id)?.(m); } });
   let next = 0;
   const rpc = (method, params) => new Promise((resolve) => { const id = ++next; waiting.set(id, resolve); mcp.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n'); });
-  const call = async (name, args = {}) => (await rpc('tools/call', { name, arguments: args })).result;
+  const timings = [];
+  const call = async (name, args = {}) => { const t = performance.now(); const r = (await rpc('tools/call', { name, arguments: args })).result; timings.push([name, Math.round(performance.now() - t)]); return r; };
   await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke', version: '1' } });
   const tools = (await rpc('tools/list', {})).result.tools.map((t) => t.name);
   assert.ok(tools.includes('computer_screenshot') && tools.includes('computer_click') && tools.includes('computer_type'));
@@ -116,7 +117,8 @@ try {
   for (const w of desktop.windows()) if ((await w.evaluate(() => !!window.setStatus).catch(() => false))) { await w.waitForTimeout(400); await w.screenshot({ path: path.join(output, 'status-bar.png') }); }
   assert.ok(!shot.isError, shot.content?.[0]?.text);
   assert.equal(shot.content[1].type, 'image');
-  await fs.writeFile(path.join(output, 'screen.png'), Buffer.from(shot.content[1].data, 'base64'));
+  assert.equal(shot.content[1].mimeType, 'image/jpeg', 'screenshots go to the AI as JPEG');
+  await fs.writeFile(path.join(output, 'screen.jpg'), Buffer.from(shot.content[1].data, 'base64'));
   const [, w] = /Screen (\d+)x(\d+)/.exec(shot.content[0].text).map(Number);
   const state = await page.evaluate(() => window.superai.computer('state'));
   assert.equal(state.allowed.length, 1, 'Settings lists the allowed chat');
@@ -281,6 +283,7 @@ try {
   assert.equal(off.enabled, false);
   assert.equal(off.allowed.length, 0, 'turning it off forgets every Allow');
   assert.equal((await call('computer_screenshot')).isError, true);
+  { const by = {}; for (const [n, ms] of timings) if (!/request_access/.test(n)) (by[n] ||= []).push(ms); steps.log('timings ms: ' + Object.entries(by).map(([n, a]) => n.replace('computer_', '') + ' ' + Math.round(a.reduce((x, y) => x + y, 0) / a.length) + ' avg (' + a.length + ')').join(', ')); }
   console.log(JSON.stringify({ passed: true, screenshotWidth: w, scaleFactor: where.scaleFactor, output }));
 } finally {
   clearTimeout(guard);
