@@ -1,10 +1,11 @@
 // Computer use, end to end on the real desktop: the tools refuse while the switch is off; once on,
-// the first call waits for the Allow / Deny window (Deny refuses, Allow lets it through), then
+// the AI asks for apps in the Allow / Deny window (Deny refuses, Allow lets it through, and clicks
+// reach only allowed apps; SuperAi's own window is allowed here only through a test switch), then
 // the AI sees the screen, clicks the app's own message box and types into it with real OS input
 // (Thai included), presses keys, and the switch is turned off again. Moves the real mouse briefly.
 import { _electron as electron } from 'playwright-core';
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -18,7 +19,7 @@ let desktop, mcp;
 const guard = watchdog(120000, steps, () => closeApp(desktop, steps));
 try {
   steps.step('launch app');
-  desktop = await electron.launch({ executablePath: require('electron'), args: [path.resolve('packages/desktop/test/browser-tools-main.mjs')], env: { SUPERAI_LANG: 'th', ...process.env, SUPERAI_DATA_DIR: data }, timeout: 60000 });
+  desktop = await electron.launch({ executablePath: require('electron'), args: [path.resolve('packages/desktop/test/browser-tools-main.mjs')], env: { SUPERAI_LANG: 'th', ...process.env, SUPERAI_DATA_DIR: data, SUPERAI_COMPUTER_ALLOW_SELF: '1' }, timeout: 60000 });
   const page = await desktop.firstWindow();
   watchPage(page, steps);
   await page.waitForSelector('.app-shell');
@@ -56,23 +57,31 @@ try {
     throw new Error('The Allow / Deny window did not appear');
   };
   steps.step('Deny refuses, and is not asked again right away');
-  const deniedCall = call('computer_screenshot');
+  const noAsk = await call('computer_screenshot');
+  assert.equal(noAsk.isError, true, 'nothing works before computer_request_access');
+  assert.match(noAsk.content[0].text, /computer_request_access/);
+  const deniedCall = call('computer_request_access', { apps: ['SuperAi'] });
   await (await permissionWindow()).click('#deny');
   const denied = await deniedCall;
   assert.equal(denied.isError, true);
   assert.match(denied.content[0].text, /denied/);
-  const again = await call('computer_screenshot');
+  const again = await call('computer_request_access', { apps: ['SuperAi'] });
   assert.equal(again.isError, true, 'a second call right after Deny is refused without a new window');
   assert.match(again.content[0].text, /denied/);
 
   steps.step('revoke, then Allow this chat');
   await page.evaluate(() => window.superai.computer('revoke'));
-  const allowedCall = call('computer_screenshot');
+  const allowedCall = call('computer_request_access', { apps: ['Notepad', 'Google Chrome', 'Windows Terminal'], reason: 'smoke test' });
   const askWindow = await permissionWindow();
   await askWindow.waitForTimeout(500);
   await askWindow.screenshot({ path: path.join(output, 'permission-window.png') });
   await askWindow.click('#allow-chat');
-  const shot = await allowedCall;
+  const granted = await allowedCall;
+  assert.ok(!granted.isError, granted.content?.[0]?.text);
+  assert.ok(granted.content[0].text.includes('Notepad (full control)'), granted.content[0].text);
+  assert.ok(granted.content[0].text.includes('Google Chrome (view only'), 'browsers are view-only');
+  assert.ok(granted.content[0].text.includes('Windows Terminal (left-click and scroll only'), 'terminals take clicks only');
+  const shot = await call('computer_screenshot');
   // The status bar the user sees while the AI acts (hidden from the AI's own screenshots).
   for (const w of desktop.windows()) if ((await w.evaluate(() => !!window.setStatus).catch(() => false))) { await w.waitForTimeout(400); await w.screenshot({ path: path.join(output, 'status-bar.png') }); }
   assert.ok(!shot.isError, shot.content?.[0]?.text);
@@ -82,6 +91,7 @@ try {
   const state = await page.evaluate(() => window.superai.computer('state'));
   assert.equal(state.allowed.length, 1, 'Settings lists the allowed chat');
   assert.equal(state.allowed[0].scope, 'chat');
+  assert.deepEqual(state.allowed[0].apps, ['Notepad', 'Google Chrome', 'Windows Terminal'], 'Settings lists the allowed apps');
   steps.step('screens: a wrong number is refused; every screen can be seen');
   const screens = await desktop.evaluate(({ screen }) => screen.getAllDisplays().length);
   const wrong = await call('computer_screenshot', { display: screens + 1 });
@@ -123,6 +133,12 @@ try {
   const where = await desktop.evaluate(({ BrowserWindow, screen }) => { const win = BrowserWindow.getAllWindows().filter((x) => x.isVisible()).sort((a, b) => b.getBounds().width * b.getBounds().height - a.getBounds().width * a.getBounds().height)[0]; const d = screen.getPrimaryDisplay(); return { content: win.getContentBounds(), scaleFactor: d.scaleFactor, width: d.size.width }; });
   const toShot = (dip) => Math.round(dip * where.scaleFactor * w / (where.width * where.scaleFactor));
   const x = toShot(where.content.x + point.x), y = toShot(where.content.y + point.y);
+  const blocked = await call('computer_click', { x, y });
+  assert.equal(blocked.isError, true, 'a click on an app that was not allowed is refused');
+  assert.match(blocked.content[0].text, /not among the apps the user allowed/);
+  const moreCall = call('computer_request_access', { apps: ['SuperAi'] });
+  await (await permissionWindow()).click('#allow-chat');
+  assert.ok(!(await moreCall).isError);
   const clicked = await call('computer_click', { x, y });
   assert.ok(!clicked.isError, clicked.content?.[0]?.text);
   steps.log(JSON.stringify({ x, y, w, where, point }));
@@ -137,6 +153,41 @@ try {
   await page.waitForTimeout(200);
   assert.equal(await composer.inputValue(), '', 'key combinations work');
   await page.screenshot({ path: path.join(output, 'app.png') });
+
+  // The accessibility tools (agent-desktop), on a tiny app built here: read it, fill the box, press Save.
+  const csc = path.join(process.env.WINDIR || 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe');
+  if (process.platform === 'win32' && await fs.stat(csc).then(() => true, () => false)) {
+    steps.step('accessibility tools: read an app, fill a box and press a button without the mouse');
+    const source = path.join(output, 'UiTestPad.cs'), exe = path.join(output, 'UiTestPad.exe');
+    await fs.writeFile(source, `using System.Windows.Forms; static class P { static void Main() { var f = new Form { Text = "UiTestPad", Width = 480, Height = 260 };
+      var t = new TextBox { Multiline = true, Dock = DockStyle.Fill, AccessibleName = "Note" }; var b = new Button { Text = "Save", Dock = DockStyle.Bottom };
+      b.Click += (s, e) => f.Text = "UiTestPad saved " + t.Text.Length; f.Controls.Add(t); f.Controls.Add(b); Application.Run(f); } }`);
+    execFileSync(csc, ['/nologo', '/target:winexe', `/out:${exe}`, source]);
+    const pad = spawn(exe, [], { stdio: 'ignore' });
+    try {
+      await new Promise((r) => setTimeout(r, 1500));
+      const notYet = await call('computer_ui_snapshot', { app: 'UiTestPad' });
+      assert.equal(notYet.isError, true, 'an app that was not allowed cannot be read');
+      assert.match(notYet.content[0].text, /not among the apps the user allowed/);
+      const padCall = call('computer_request_access', { apps: ['UiTestPad'] });
+      await (await permissionWindow()).click('#allow-chat');
+      assert.ok(!(await padCall).isError);
+      const started = performance.now();
+      const ui = await call('computer_ui_snapshot', { app: 'UiTestPad' });
+      assert.ok(!ui.isError, ui.content?.[0]?.text);
+      const text = ui.content[0].text;
+      steps.log(text);
+      const box = /(e\d+) textfield "Note"/.exec(text)?.[1], save = /(e\d+) button "Save"/.exec(text)?.[1];
+      assert.ok(box && save, 'the box and the button are listed with refs');
+      const filled = await call('computer_ui_action', { ref: box, action: 'set_value', text: 'hello ไทย 日本' });
+      assert.ok(!filled.isError, filled.content?.[0]?.text);
+      assert.match(filled.content[0].text, /textfield "Note" = "hello ไทย 日本"/, 'the new list shows the value, any language');
+      const pressed = await call('computer_ui_action', { ref: save, action: 'click' });
+      assert.ok(!pressed.isError, pressed.content?.[0]?.text);
+      assert.match(pressed.content[0].text, /UiTestPad saved 12/, 'the button ran');
+      steps.log(`read + fill + press + 2 re-reads: ${Math.round(performance.now() - started)} ms; list ${text.length} chars`);
+    } finally { pad.kill(); }
+  }
 
   steps.step('turn it off again');
   const off = await page.evaluate(() => window.superai.computer('set', false));
