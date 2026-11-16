@@ -9,6 +9,11 @@ on:
         description: Existing version tag to build
         required: true
         default: v1.0.0
+      dry_run:
+        description: Build and collect the downloads, but publish nothing (to test changes to this workflow)
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -41,11 +46,11 @@ jobs:
       HAS_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: npm
@@ -93,7 +98,7 @@ jobs:
       - name: Stage app executable for signing
         if: runner.os == 'Windows' && env.HAS_SIGNPATH == 'true'
         id: unsigned-app
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unsigned-app
           path: ${{ env.APP_EXE }}
@@ -147,7 +152,7 @@ jobs:
       - name: Stage installer for signing
         if: runner.os == 'Windows' && env.HAS_SIGNPATH == 'true'
         id: unsigned-installer
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unsigned-installer
           path: release-assets/SuperAi-RAKKYXD-Setup.exe
@@ -192,7 +197,7 @@ jobs:
           DMG=$(find release-assets -maxdepth 1 -name '*.dmg' | head -1)
           xcrun stapler validate "$DMG"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-${{ matrix.label }}
           path: release-assets/*
@@ -200,7 +205,7 @@ jobs:
           compression-level: 0
           retention-days: 14
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: diagnostics-${{ matrix.label }}
@@ -216,11 +221,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         continue-on-error: true
         with:
           pattern: release-*
@@ -230,6 +235,7 @@ jobs:
       # SuperAi-RAKKYXD-releases is the single download home for the app and the
       # in-app updater. The source repository intentionally does not publish releases.
       - name: Fallback to existing release assets on workflow_dispatch
+        if: github.event.inputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
@@ -250,7 +256,16 @@ jobs:
           awk '/^---[[:space:]]*$/ {exit} {print}' docs/RELEASE.md > release-notes.md
           printf '\n---\n[Privacy](https://github.com/rakgoorak/SuperAi-RAKKYXD/blob/main/PRIVACY.md)\n' >> release-notes.md
 
+      - name: Dry run - list what would be published
+        if: github.event.inputs.dry_run == 'true'
+        shell: bash
+        run: |
+          ls -l release-assets
+          test -n "$(ls -A release-assets 2>/dev/null)" || { echo "::error::no downloads were collected"; exit 1; }
+          head -n 5 release-notes.md
+
       - name: Publish tested downloads
+        if: github.event.inputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
