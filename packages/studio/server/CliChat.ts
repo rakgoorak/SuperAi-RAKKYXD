@@ -20,6 +20,7 @@ import { codexSandboxArgs } from './CodexSandbox.js';
 import { BROWSER_MCP, READ_ONLY_BROWSER_TOOLS, claudeBrowserArgs, codexBrowserArgs, withOpenCodeBrowser } from './BrowserTools.js';
 import type { LLMProvider } from '@superai-rakkyxd/core';
 import { tr } from './i18n.js';
+import { writeFileSafely, readJsonSafely } from './SafeFile.js';
 
 // Chat view for Code sessions: each message runs the CLI headless with its JSON event stream and
 // resumes the same conversation, so the client can draw messages and tool calls instead of a TUI.
@@ -478,8 +479,9 @@ export class CliChatManager {
     chat = { items: [], running: false, turns: 0, listeners: new Set(), queue: [], permissions: new Map(), alwaysAllowed: new Set(), asks: new Map() };
     const file = this.file(id);
     try {
-      if (file && fs.existsSync(file)) {
-        const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+      // A file damaged by a power cut is set aside (not saved over) and the chat starts empty.
+      const saved = file ? readJsonSafely(file).value as any : undefined;
+      if (saved && typeof saved === "object") {
         // A turn cut off by quitting the app: its unfinished tools did not complete.
         if (Array.isArray(saved.items)) chat.items = saved.items.map((i: ChatItem) => i.kind === "tool" && i.status === "running" ? { ...i, status: "failed" } : i.kind === 'permission' && i.status === 'pending' ? { ...i, status: 'expired' } : i.kind === 'question' && i.status === 'waiting' && i.requestId ? { ...i, status: 'expired' } : i);
         if (typeof saved.conversationId === "string" && saved.conversationId) chat.conversationId = saved.conversationId;
@@ -500,8 +502,8 @@ export class CliChatManager {
     clearTimeout(chat.saveTimer);
     const write = () => {
       try {
-        fs.mkdirSync(this.dir!, { recursive: true });
-        fs.writeFileSync(file, JSON.stringify({ conversationId: chat.conversationId, turns: chat.turns, items: chat.items, seed: chat.seed, contextKey: chat.contextKey, rulesKey: chat.rulesKey }));
+        // Crash-safe: a power cut leaves the previous version, never a half-written file.
+        writeFileSafely(file, JSON.stringify({ conversationId: chat.conversationId, turns: chat.turns, items: chat.items, seed: chat.seed, contextKey: chat.contextKey, rulesKey: chat.rulesKey }));
       } catch {
         // a full disk must not break the chat on screen
       }
