@@ -109,7 +109,7 @@ try {
   const shot = await call('browser_screenshot');
   steps.log(JSON.stringify(shot.content.map((c) => ({ type: c.type, text: c.text?.slice(0, 80), size: c.data?.length }))));
   assert.equal(shot.content[1].type, 'image');
-  await fs.writeFile(path.join(output, 'ai-screenshot.png'), Buffer.from(shot.content[1].data, 'base64'));
+  await fs.writeFile(path.join(output, 'ai-screenshot.jpg'), Buffer.from(shot.content[1].data, 'base64'));
   await page.screenshot({ path: path.join(output, 'app.png') });
 
   steps.step('iframe, shadow DOM and confirm() in the panel');
@@ -159,7 +159,7 @@ try {
   assert.match(snap, /size=l/);
   const outside = await call('browser_screenshot');
   assert.equal(outside.content[1].type, 'image');
-  await fs.writeFile(path.join(output, `${external}-screenshot.png`), Buffer.from(outside.content[1].data, 'base64'));
+  await fs.writeFile(path.join(output, `${external}-screenshot.jpg`), Buffer.from(outside.content[1].data, 'base64'));
   steps.step('iframe, shadow DOM and confirm() in ' + external);
   await extras(external);
   snap = (await call('browser_snapshot', { browser: 'app' })).content[0].text;

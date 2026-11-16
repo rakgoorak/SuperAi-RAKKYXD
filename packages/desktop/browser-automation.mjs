@@ -105,7 +105,7 @@ export function createBrowserAutomation(controller, { reveal } = {}) {
       if (image.isEmpty()) throw new Error(`The browser panel is hidden, so nothing could be captured (visible=${controller.visible}). Use browser_snapshot to read the page instead.`);
       const size = image.getSize();
       const small = size.width > 1280 ? image.resize({ width: 1280 }) : image;
-      return { text: `Screenshot of ${wc.getURL()}`, image: { data: small.toPNG().toString("base64"), mimeType: "image/png" } };
+      return { text: `Screenshot of ${wc.getURL()}`, image: { data: small.toJPEG(80).toString("base64"), mimeType: "image/jpeg" } };
     }
     if (tool === "browser_click") {
       const target = await point(wc, args.ref, args.text);

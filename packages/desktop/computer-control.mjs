@@ -31,11 +31,32 @@ const BAR_IDLE = 20_000;
 // answered "ok [data]" or "error message".
 const HELPER = String.raw`
 $ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, WindowsBase
-$refs = [AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { @('UIAutomationClient', 'UIAutomationTypes', 'WindowsBase') -contains $_.GetName().Name } | ForEach-Object { $_.Location }
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, WindowsBase, System.Drawing
+$refs = [AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { @('UIAutomationClient', 'UIAutomationTypes', 'WindowsBase', 'System.Drawing') -contains $_.GetName().Name } | ForEach-Object { $_.Location }
 Add-Type -ReferencedAssemblies $refs -TypeDefinition @'
 using System; using System.Text; using System.Runtime.InteropServices;
+using System.Drawing; using System.Drawing.Drawing2D; using System.Drawing.Imaging;
 public static class SuperAiInput {
+  // One screen (or part of it) in physical pixels, scaled to at most outWidth, saved as JPEG.
+  // About 10x faster than Electron's desktopCapturer, which grabs every screen at full size.
+  static ImageCodecInfo jpeg;
+  public static string Shot(int x, int y, int w, int h, int outWidth, int quality, string path) {
+    using (var full = new Bitmap(w, h, PixelFormat.Format24bppRgb)) {
+      using (var g = Graphics.FromImage(full)) g.CopyFromScreen(x, y, 0, 0, new Size(w, h), CopyPixelOperation.SourceCopy);
+      Bitmap image = full;
+      if (outWidth > 0 && outWidth < w) {
+        int oh = Math.Max(1, (int)Math.Round((double)h * outWidth / w));
+        image = new Bitmap(outWidth, oh, PixelFormat.Format24bppRgb);
+        using (var g = Graphics.FromImage(image)) { g.InterpolationMode = InterpolationMode.HighQualityBicubic; g.PixelOffsetMode = PixelOffsetMode.HighQuality; g.DrawImage(full, 0, 0, outWidth, oh); }
+      }
+      try {
+        if (jpeg == null) foreach (var e in ImageCodecInfo.GetImageEncoders()) if (e.MimeType == "image/jpeg") jpeg = e;
+        var ps = new EncoderParameters(1); ps.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (long)quality);
+        image.Save(path, jpeg, ps);
+        return image.Width + " " + image.Height;
+      } finally { if (image != full) image.Dispose(); }
+    }
+  }
   [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
   [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr value);
   [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
@@ -180,6 +201,7 @@ while ($true) {
       'at' { $out = Describe ([SuperAiInput]::At([int]$p[1], [int]$p[2])) }
       'front' { $out = Describe ([SuperAiInput]::Front()) }
       'secret' { $out = [SuperAiInput]::Secret() }
+      'shot' { $out = [SuperAiInput]::Shot([int]$p[1], [int]$p[2], [int]$p[3], [int]$p[4], [int]$p[5], [int]$p[6], [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p[7]))) }
       'quiet' { $out = [SuperAiInput]::Quiet([int]$p[1], [int]$p[2], [int]$p[3], [int]$p[4]) }
       'apps' { $out = (Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | ForEach-Object { $d = ''; if ($_.ProcessName -eq 'ApplicationFrameHost') { $d = $_.MainWindowTitle } else { try { $d = $_.MainModule.FileVersionInfo.FileDescription } catch {} }; if ($d) { $d } else { $_.ProcessName } } | Sort-Object -Unique) -join $tab }
     }
@@ -277,7 +299,8 @@ function lineHelper(start) {
       p.stdin.write(command + "\n");
     });
   };
-  return { send, kill: () => proc?.kill() };
+  // warm: start it ahead of the first command (compiling the Windows helper takes a second or two).
+  return { send, warm: () => { try { ensure(); } catch {} }, kill: () => proc?.kill() };
 }
 
 const windowsInput = lineHelper(() => {
@@ -403,6 +426,8 @@ const toolLabel = (tool) => ({
 export function createComputerControl({ settingsFile, onStop, onChange }) {
   const read = () => { try { return JSON.parse(fs.readFileSync(settingsFile, "utf8")).enabled === true; } catch { return false; } };
   let enabled = read();
+  // Already turned on: have the input helper ready before the AI first needs it (after start-up settles).
+  if (enabled) setTimeout(() => { if (enabled) input().warm(); }, 4000).unref?.();
   let scale = 1; // screen pixels per screenshot pixel, from the last screenshot
   let hideTimer, prompt;
   /** chatId → { chat: true } (whole chat) or { until } ("this task", extended on every call), with the allowed apps (normalized name → { name, tier }). */
@@ -419,6 +444,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     enabled = value === true;
     try { fs.mkdirSync(path.dirname(settingsFile), { recursive: true }); fs.writeFileSync(settingsFile, JSON.stringify({ enabled })); } catch {}
     if (!enabled) { hideBar(); grants.clear(); denied.clear(); prompt?.answer("deny"); }
+    else input().warm();
     // Turning it on on macOS: ask for what is still missing right away, while the user is in Settings.
     if (enabled && process.platform === "darwin") {
       const access = osAccess(false);
@@ -827,17 +853,33 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     return `\nScreens (choose with computer_screenshot display=N): ${list.map((d, i) => `${i + 1}${i === 0 ? " main" : ""} ${d.size.width}x${d.size.height}${d.id === active.id ? " ← this one" : ""}`).join(", ")}.`;
   };
 
+  // Screenshots go to the AI as JPEG: about 4x smaller than PNG (fewer tokens, faster replies) and text stays readable.
+  const JPEG_QUALITY = 80;
+  const shotFile = path.join(os.tmpdir(), `superai-shot-${process.pid}.jpg`);
+  /** Windows ignores content protection for transparent windows (in every capture API): hide the bar,
+   *  the glow and the AI cursor on that screen for the moment of the capture, so the AI sees only the user's screen. */
+  async function withoutOverlays(d, grab) {
+    const b = d.bounds;
+    const over = (r) => r.x < b.x + b.width && r.x + r.width > b.x && r.y < b.y + b.height && r.y + r.height > b.y;
+    const hidden = process.platform === "win32" ? [...overlays(), aiCursor].filter((w) => w && !w.isDestroyed() && w.isVisible() && over(w.getBounds())) : [];
+    for (const w of hidden) w.hide();
+    if (hidden.length) await wait(80);
+    try { return await grab(); } finally { for (const w of hidden) if (!w.isDestroyed()) w.showInactive(); }
+  }
+  /** Windows: the helper grabs just this rectangle (input = physical pixels) straight to JPEG. */
+  async function fastShot(d, rect, outWidth) {
+    const r = { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) };
+    const size = await withoutOverlays(d, () => send(`shot ${r.x} ${r.y} ${r.width} ${r.height} ${Math.round(outWidth)} ${JPEG_QUALITY} ${Buffer.from(shotFile).toString("base64")}`));
+    const [width, height] = String(size).split(" ").map(Number);
+    if (!(width > 0 && height > 0)) throw new Error("no image");
+    return { width, height, data: (await fs.promises.readFile(shotFile)).toString("base64") };
+  }
+  const asJpeg = (image) => ({ ...image.getSize(), data: image.toJPEG(JPEG_QUALITY).toString("base64") });
+
   async function capture(d = display()) {
     requireOs("screen");
     const width = Math.round(d.size.width * d.scaleFactor), height = Math.round(d.size.height * d.scaleFactor);
-    // Windows ignores content protection for transparent windows: hide the bar, the glow and the AI
-    // cursor for the moment of the capture, so the AI sees only the user's screen.
-    const hidden = process.platform === "win32" ? [...overlays(), aiCursor].filter((w) => w && !w.isDestroyed() && w.isVisible()) : [];
-    for (const w of hidden) w.hide();
-    if (hidden.length) await wait(80);
-    let sources;
-    try { sources = await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width, height } }); }
-    finally { for (const w of hidden) if (!w.isDestroyed()) w.showInactive(); }
+    const sources = await withoutOverlays(d, () => desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width, height } }));
     // display_id is empty on some systems with one screen: fall back to the only source then.
     const source = sources.find((s) => String(s.display_id) === String(d.id)) || (sources.length === 1 ? sources[0] : undefined);
     if (!source || source.thumbnail.isEmpty()) throw new Error(process.platform === "darwin"
@@ -853,9 +895,18 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   }
   async function screenshot() {
     const d = display();
-    let image = await capture(d);
-    if (image.getSize().width > MAX_WIDTH) image = image.resize({ width: MAX_WIDTH, quality: "good" });
-    const shown = image.getSize();
+    let shot;
+    if (process.platform === "win32") {
+      requireOs("screen");
+      const r = inputRect(d);
+      shot = await fastShot(d, r, Math.min(MAX_WIDTH, r.width)).catch(() => undefined);
+    }
+    if (!shot) {
+      let image = await capture(d);
+      if (image.getSize().width > MAX_WIDTH) image = image.resize({ width: MAX_WIDTH, quality: "good" });
+      shot = asJpeg(image);
+    }
+    const shown = { width: shot.width, height: shot.height };
     scale = pixelWidth(d) / shown.width;
     const list = displays(), n = list.findIndex((x) => x.id === d.id) + 1;
     let front = "";
@@ -863,22 +914,33 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     const g = grantFor(current);
     const allowed = g ? ` Allowed apps: ${[...g.apps.values()].map((a) => a.name).join(", ")}.` : "";
     return { text: `Screen ${shown.width}x${shown.height}${list.length > 1 ? ` (screen ${n} of ${list.length})` : ""} (coordinates for computer_click etc. are in this image).${front}${allowed}${describeScreens()}`,
-      image: { data: image.toPNG().toString("base64"), mimeType: "image/png" } };
+      image: { data: shot.data, mimeType: "image/jpeg" } };
   }
   async function zoom(args) {
     const x = num(args.x, "x"), y = num(args.y, "y"), w = num(args.width, "width"), h = num(args.height, "height");
     if (w <= 0 || h <= 0) throw new Error("width and height must be positive");
     const d = display();
-    const full = await capture(d);
-    const size = full.getSize();
-    const k = scale * size.width / pixelWidth(d); // screenshot pixels → captured pixels
-    const rect = { x: Math.max(0, Math.round(x * k)), y: Math.max(0, Math.round(y * k)) };
-    rect.width = Math.max(1, Math.min(size.width - rect.x, Math.round(w * k)));
-    rect.height = Math.max(1, Math.min(size.height - rect.y, Math.round(h * k)));
-    let image = full.crop(rect);
-    if (image.getSize().width > MAX_WIDTH) image = image.resize({ width: MAX_WIDTH, quality: "good" });
+    const region = (size, k) => {
+      const rect = { x: Math.max(0, Math.round(x * k)), y: Math.max(0, Math.round(y * k)) };
+      rect.width = Math.max(1, Math.min(size.width - rect.x, Math.round(w * k)));
+      rect.height = Math.max(1, Math.min(size.height - rect.y, Math.round(h * k)));
+      return rect;
+    };
+    let shot;
+    if (process.platform === "win32") {
+      requireOs("screen");
+      const r = inputRect(d), rect = region(r, scale); // screenshot pixels → physical pixels
+      shot = await fastShot(d, { ...rect, x: r.x + rect.x, y: r.y + rect.y }, Math.min(MAX_WIDTH, rect.width)).catch(() => undefined);
+    }
+    if (!shot) {
+      const full = await capture(d);
+      const size = full.getSize();
+      let image = full.crop(region(size, scale * size.width / pixelWidth(d))); // screenshot pixels → captured pixels
+      if (image.getSize().width > MAX_WIDTH) image = image.resize({ width: MAX_WIDTH, quality: "good" });
+      shot = asJpeg(image);
+    }
     return { text: `Zoomed view of the region x=${x} y=${y} ${w}x${h} at full resolution. Keep using the coordinates of the latest computer_screenshot (not of this image) in other tools.`,
-      image: { data: image.toPNG().toString("base64"), mimeType: "image/png" } };
+      image: { data: shot.data, mimeType: "image/jpeg" } };
   }
 
   const send = (command) => input().send(command);
@@ -1087,8 +1149,9 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     if (!found.length) throw new Error(`No open app called "${name}". Open apps: ${apps.map((a) => String(a.name).replace(/\.exe$/i, "")).join(", ")}.`);
     return found.find((a) => a.pid !== process.pid) || found[0];
   }
-  async function uiSnapshot(args) {
-    const target = await uiApp(String(args.app || ""));
+  /** known: the app of the previous snapshot, re-read after an action without looking it up again. */
+  async function uiSnapshot(args, known) {
+    const target = known || await uiApp(String(args.app || ""));
     permit(target, "read", current);
     const scope = args.window ? ["--window-id", String(args.window)] : ["--app", target.raw];
     const rootRef = args.root && last?.app.pid === target.pid ? (String(args.root).startsWith("@") ? String(args.root) : `@${last.id}:${args.root}`) : "";
@@ -1118,8 +1181,8 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     if (["set_value", "type"].includes(action) && node && /password|protected|secure/i.test([node.role, node.role_description, node.subrole, ...(node.states || [])].join(" ")))
       throw new Error("That is a password field. The AI does not type passwords: ask the user to type it themselves.");
     await agentDesktop(commands[action], ["set_value", "type"].includes(action) ? text : undefined);
-    await wait(250);
-    const after = await uiSnapshot({ app: last.app.raw, window: last.scope[0] === "--window-id" ? last.scope[1] : undefined });
+    await wait(150);
+    const after = await uiSnapshot({ app: last.app.raw, window: last.scope[0] === "--window-id" ? last.scope[1] : undefined }, last.app);
     return { text: `Done: ${action} ${raw}.\n${after.text}` };
   }
 

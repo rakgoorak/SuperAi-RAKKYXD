@@ -148,8 +148,8 @@ async function runTool(kind: ExternalKind, tool: string, args: Record<string, an
   const p = await page(kind);
   if (tool === "browser_snapshot") return { text: await snapshot(p) };
   if (tool === "browser_screenshot") {
-    const data = await p.screenshot({ type: "png" });
-    return { text: `Screenshot of ${p.url()} in ${NAME[kind]}`, image: { data: data.toString("base64"), mimeType: "image/png" } };
+    const data = await p.screenshot({ type: "jpeg", quality: 80 });
+    return { text: `Screenshot of ${p.url()} in ${NAME[kind]}`, image: { data: data.toString("base64"), mimeType: "image/jpeg" } };
   }
   if (tool === "browser_click" || tool === "browser_type") {
     const target = await p.evaluate(findScript(args.ref, args.text)) as { x: number; y: number } | null;
