@@ -81,8 +81,12 @@ jobs:
           # spaces in the base64) before using them.
           printf '%s' "$APPLE_CERTIFICATE_BASE64" | tr -d '\r\n \t' | base64 --decode > "$CERT_PATH"
           CERT_PASSWORD=$(printf '%s' "$APPLE_CERTIFICATE_PASSWORD" | tr -d '\r\n')
-          # Safe to log (reveals neither secret): tells a wrong secret from a wrong file.
-          echo "certificate file sha256: $(shasum -a 256 "$CERT_PATH" | cut -c1-16); password length: ${#CERT_PASSWORD}; password bytes: $(printf '%s' "$CERT_PASSWORD" | wc -c | tr -d ' ')"
+          # The .p12 must use 3DES and a SHA-1 MAC (macOS `security import` cannot read RC2 or AES
+          # and calls it a wrong passphrase); see docs/MAC-SIGNING.md. Fail with a clear message
+          # when the password does not open it.
+          export CERT_PASSWORD
+          openssl pkcs12 -in "$CERT_PATH" -passin env:CERT_PASSWORD -noout 2>/dev/null \
+            || { echo "::error::APPLE_CERTIFICATE_PASSWORD does not open APPLE_CERTIFICATE_BASE64 (or the .p12 is not 3DES / SHA-1)"; exit 1; }
           security create-keychain -p actions "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p actions "$KEYCHAIN_PATH"

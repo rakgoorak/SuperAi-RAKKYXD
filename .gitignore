@@ -40,6 +40,7 @@ docs/*.md
 !docs/DOWNLOADS.md
 !docs/DOWNLOADS_EN.md
 !docs/MULTI_ACCOUNT.md
+!docs/MAC-SIGNING.md
 # Design and product context written for AI tools.
 /DESIGN.md
 /PRODUCT.md
