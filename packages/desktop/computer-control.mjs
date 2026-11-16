@@ -369,7 +369,8 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   // any of them under a point the AI clicks steps aside meanwhile.
   /** display id → { bar, glows } */
   const ui = new Map();
-  const GLOW = 14;
+  const GLOW = 18;
+  const PULSE = 2600; // ms; every strip on every screen breathes in step
   const barSize = { width: 460, height: 64 };
   const overlays = () => [...ui.values()].flatMap(({ bar, glows }) => [bar, ...glows]).filter((w) => w && !w.isDestroyed());
   const hideBar = () => { for (const w of overlays()) w.hide(); };
@@ -412,11 +413,11 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     </body></html>`;
   const glowHtml = (to) => `<!doctype html><meta charset="utf-8"><style>
       html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
-      .edge { position: fixed; inset: 0; background: linear-gradient(to ${to}, rgba(61,220,132,.95) 0 3px, rgba(56,189,248,.45) 3px, rgba(167,139,250,0));
-        animation: breathe 2.6s ease-in-out infinite, in .4s ease-out; }
-      @keyframes breathe { 50% { opacity: .55; filter: hue-rotate(40deg); } }
-      @keyframes in { from { opacity: 0; } }
-    </style><div class="edge"></div>`;
+      .edge { position: fixed; inset: 0; background: linear-gradient(to ${to}, rgba(61,220,132,1) 0 4px, rgba(56,189,248,.6) 4px, rgba(56,189,248,.22) 55%, rgba(167,139,250,0));
+        animation: breathe ${PULSE}ms ease-in-out infinite; }
+      @keyframes breathe { 50% { opacity: .6; filter: hue-rotate(40deg); } }
+    </style><div class="edge"></div>
+    <script>document.querySelector('.edge').style.animationDelay = -(Date.now() % ${PULSE}) + 'ms';</script>`;
   const overlayWindow = (rect, extra = {}) => {
     const w = new BrowserWindow({ ...rect, frame: false, resizable: false, alwaysOnTop: true, skipTaskbar: true, focusable: false, show: false,
       transparent: true, hasShadow: false, webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false }, ...extra });
@@ -433,12 +434,17 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       if (url.startsWith("superai-stop:")) { setEnabled(false); onStop?.(); }
     });
     bar.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(barHtml()));
-    // Each strip fades from the screen edge inwards; "to" is the direction of the fade.
+    // Each strip fades from the screen edge inwards; "to" is the direction of the fade. Every strip
+    // runs the whole length of its edge, so the line is unbroken at the corners (where they overlap).
+    // The sides come in two halves: Windows cuts a window taller than the space above the taskbar.
+    const half = Math.ceil(b.height / 2);
     const strips = [
       { x: b.x, y: b.y, width: b.width, height: GLOW, to: "bottom" },
       { x: b.x, y: b.y + b.height - GLOW, width: b.width, height: GLOW, to: "top" },
-      { x: b.x, y: b.y + GLOW, width: GLOW, height: b.height - 2 * GLOW, to: "right" },
-      { x: b.x + b.width - GLOW, y: b.y + GLOW, width: GLOW, height: b.height - 2 * GLOW, to: "left" },
+      ...[b.y, b.y + b.height - half].flatMap((y) => [
+        { x: b.x, y, width: GLOW, height: half, to: "right" },
+        { x: b.x + b.width - GLOW, y, width: GLOW, height: half, to: "left" },
+      ]),
     ];
     const glows = strips.map(({ to, ...rect }) => {
       const w = overlayWindow(rect, { movable: false });
@@ -460,8 +466,9 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       const { bar } = set;
       const apply = () => bar.webContents.executeJavaScript(status).catch(() => {});
       if (bar.webContents.isLoading()) bar.webContents.once("did-finish-load", apply); else apply();
-      for (const w of set.glows) w.showInactive();
-      bar.showInactive();
+      // The taskbar is always-on-top too: raise the strips over it again on every call.
+      for (const w of set.glows) { w.showInactive(); w.setAlwaysOnTop(true, "screen-saver"); w.moveTop(); }
+      bar.showInactive(); bar.moveTop();
     }
     clearTimeout(hideTimer);
     hideTimer = setTimeout(hideBar, BAR_IDLE);
