@@ -77,11 +77,14 @@ jobs:
         run: |
           CERT_PATH="$RUNNER_TEMP/apple-signing.p12"
           KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
-          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          # Secrets piped or pasted on Windows can end in a line break: drop line breaks (and
+          # spaces in the base64) before using them.
+          printf '%s' "$APPLE_CERTIFICATE_BASE64" | tr -d '\r\n \t' | base64 --decode > "$CERT_PATH"
+          CERT_PASSWORD=$(printf '%s' "$APPLE_CERTIFICATE_PASSWORD" | tr -d '\r\n')
           security create-keychain -p actions "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p actions "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security list-keychain -d user -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions "$KEYCHAIN_PATH"
           security find-certificate -p "$KEYCHAIN_PATH" > "$RUNNER_TEMP/signing-cert.pem"
