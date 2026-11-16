@@ -6,6 +6,24 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.1.0] - 2026-11-16
+
+### Added
+- Computer use asks for apps by name: the Allow / Deny window lists them with
+  their level, and clicks and typing reach only those apps. Web browsers are
+  view-only, terminals and code editors take clicks and scrolling only, and
+  the AI can never control SuperAi itself. Settings lists the allowed apps.
+- The AI can read an app as a short list of its buttons and fields and act on
+  them without screenshots or moving the mouse (agent-desktop, bundled).
+
+### Changed
+- Updates download quietly and then offer "Restart to update"; a downloaded
+  update also installs when you quit the app.
+
+### Fixed
+- The edge glow while the AI controls the computer is unbroken: no gaps at the
+  corners, not hidden by the taskbar, and every edge pulses together.
+
 ## [1.0.49] - 2026-11-16
 
 ### Added
