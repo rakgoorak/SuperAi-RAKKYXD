@@ -97,6 +97,8 @@ jobs:
           if [ "$(openssl x509 -in "$RUNNER_TEMP/signing-cert.pem" -noout -subject)" = "subject=$(openssl x509 -in "$RUNNER_TEMP/signing-cert.pem" -noout -issuer | sed 's/^issuer=//')" ]; then
             echo "Self-signed certificate: trusting it for code signing on this runner"
             sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/signing-cert.pem"
+            # Apple notarizes only Developer ID apps: there is no ticket to check for this one.
+            echo "MAC_SELF_SIGNED=true" >> "$GITHUB_ENV"
           fi
           SIGN_ID=$(openssl x509 -in "$RUNNER_TEMP/signing-cert.pem" -noout -fingerprint -sha1 | sed 's/.*=//; s/://g')
           echo "Signing identity (SHA-1): $SIGN_ID"
@@ -216,8 +218,14 @@ jobs:
         run: |
           APP=$(find release -maxdepth 2 -name '*.app' -type d | head -1)
           codesign --verify --deep --strict --verbose=2 "$APP"
-          DMG=$(find release-assets -maxdepth 1 -name '*.dmg' | head -1)
-          xcrun stapler validate "$DMG"
+          # What macOS ties the user's permissions to: must name the certificate, not a build hash.
+          codesign -d -r- "$APP"
+          if [ "$MAC_SELF_SIGNED" = "true" ]; then
+            echo "Self-signed: not notarized (Apple notarizes Developer ID apps only); skipping the stapler check"
+          else
+            DMG=$(find release-assets -maxdepth 1 -name '*.dmg' | head -1)
+            xcrun stapler validate "$DMG"
+          fi
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
