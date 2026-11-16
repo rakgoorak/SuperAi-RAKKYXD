@@ -496,6 +496,7 @@ const text: Record<string, string> = {
   "ควบคุมได้เต็มที่": "Full control",
   "คลิกและเลื่อนได้เท่านั้น": "Click and scroll only",
   "ดูได้อย่างเดียว": "View only",
+  "ข้อมูลสำคัญ · ดูได้อย่างเดียว": "Sensitive · view only",
   "AI ในแชต": "The AI in a chat",
   "macOS ยังไม่อนุญาต Accessibility (ใช้เมาส์และคีย์บอร์ด)": "macOS has not allowed Accessibility yet (mouse and keyboard)",
   "macOS ยังไม่อนุญาต Screen Recording (ดูหน้าจอ)": "macOS has not allowed Screen Recording yet (seeing the screen)",

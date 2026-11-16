@@ -71,7 +71,7 @@ try {
 
   steps.step('revoke, then Allow this chat');
   await page.evaluate(() => window.superai.computer('revoke'));
-  const allowedCall = call('computer_request_access', { apps: ['Notepad', 'Google Chrome', 'Windows Terminal'], reason: 'smoke test' });
+  const allowedCall = call('computer_request_access', { apps: ['Notepad', 'Google Chrome', 'Windows Terminal', '1Password'], reason: 'smoke test' });
   const askWindow = await permissionWindow();
   await askWindow.waitForTimeout(500);
   await askWindow.screenshot({ path: path.join(output, 'permission-window.png') });
@@ -81,6 +81,7 @@ try {
   assert.ok(granted.content[0].text.includes('Notepad (full control)'), granted.content[0].text);
   assert.ok(granted.content[0].text.includes('Google Chrome (view only'), 'browsers are view-only');
   assert.ok(granted.content[0].text.includes('Windows Terminal (left-click and scroll only'), 'terminals take clicks only');
+  assert.ok(granted.content[0].text.includes('1Password (view only: it holds passwords'), 'password managers are view-only');
   const shot = await call('computer_screenshot');
   // The status bar the user sees while the AI acts (hidden from the AI's own screenshots).
   for (const w of desktop.windows()) if ((await w.evaluate(() => !!window.setStatus).catch(() => false))) { await w.waitForTimeout(400); await w.screenshot({ path: path.join(output, 'status-bar.png') }); }
@@ -91,7 +92,7 @@ try {
   const state = await page.evaluate(() => window.superai.computer('state'));
   assert.equal(state.allowed.length, 1, 'Settings lists the allowed chat');
   assert.equal(state.allowed[0].scope, 'chat');
-  assert.deepEqual(state.allowed[0].apps, ['Notepad', 'Google Chrome', 'Windows Terminal'], 'Settings lists the allowed apps');
+  assert.deepEqual(state.allowed[0].apps, ['Notepad', 'Google Chrome', 'Windows Terminal', '1Password'], 'Settings lists the allowed apps');
   steps.step('screens: a wrong number is refused; every screen can be seen');
   const screens = await desktop.evaluate(({ screen }) => screen.getAllDisplays().length);
   const wrong = await call('computer_screenshot', { display: screens + 1 });
@@ -145,6 +146,9 @@ try {
   const moreCall = call('computer_request_access', { apps: ['SuperAi'] });
   await (await permissionWindow()).click('#allow-chat');
   assert.ok(!(await moreCall).isError);
+  // When the permission window closes, Windows may raise another app (the user's) over the test window.
+  await desktop.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows().filter((x) => x.isVisible()).sort((a, b) => b.getBounds().width * b.getBounds().height - a.getBounds().width * a.getBounds().height)[0]; w.show(); w.focus(); w.moveTop(); });
+  await page.waitForTimeout(300);
   const clicked = await call('computer_click', { x, y });
   assert.ok(!clicked.isError, clicked.content?.[0]?.text);
   steps.log(JSON.stringify({ x, y, w, where, point }));
@@ -167,9 +171,11 @@ try {
     const source = path.join(output, 'UiTestPad.cs'), exe = path.join(output, 'UiTestPad.exe');
     await fs.writeFile(source, `using System.Windows.Forms; static class P { static void Main() { var f = new Form { Text = "UiTestPad", Width = 480, Height = 260 };
       var t = new TextBox { Multiline = true, Dock = DockStyle.Fill, AccessibleName = "Note" }; var b = new Button { Text = "Save", Dock = DockStyle.Bottom };
-      int n = 0; b.Click += (s, e) => f.Text = "UiTestPad saved " + t.Text.Length + " #" + (++n); f.Controls.Add(t); f.Controls.Add(b);
+      var pw = new TextBox { UseSystemPasswordChar = true, Dock = DockStyle.Top, AccessibleName = "Secret" };
+      int n = 0; b.Click += (s, e) => f.Text = "UiTestPad saved " + t.Text.Length + " #" + (++n); f.Controls.Add(t); f.Controls.Add(pw); f.Controls.Add(b);
       f.StartPosition = FormStartPosition.Manual; f.Location = new System.Drawing.Point(80, 80);
-      f.Shown += (s, e) => { var r = b.RectangleToScreen(b.ClientRectangle); System.Console.WriteLine((r.X + r.Width / 2) + " " + (r.Y + r.Height / 2)); };
+      f.Shown += (s, e) => { var r = b.RectangleToScreen(b.ClientRectangle); var q = pw.RectangleToScreen(pw.ClientRectangle);
+        System.Console.WriteLine((r.X + r.Width / 2) + " " + (r.Y + r.Height / 2) + " " + (q.X + 30) + " " + (q.Y + q.Height / 2)); };
       Application.Run(f); } }`);
     execFileSync(csc, ['/nologo', '/target:exe', `/out:${exe}`, source]);
     const pad = spawn(exe, [], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: false });
@@ -196,7 +202,7 @@ try {
       assert.ok(!pressed.isError, pressed.content?.[0]?.text);
       assert.match(pressed.content[0].text, /UiTestPad saved 12 #1/, 'the button ran');
       // computer_click on the same button from a screenshot: done through accessibility, the user's mouse stays put.
-      const [bx, by] = await saveAt;
+      const [bx, by, qx, qy] = await saveAt;
       const shot1 = await call('computer_screenshot', { display: 1 });
       const [, s1] = /Screen (\d+)x/.exec(shot1.content[0].text).map(Number);
       const px = await desktop.evaluate(({ screen }) => { const d = screen.getPrimaryDisplay(); return d.size.width * d.scaleFactor; });
@@ -208,8 +214,37 @@ try {
       assert.deepEqual(await mouseNow(), mouseBefore, 'the user keeps the mouse');
       const after = await call('computer_ui_snapshot', { app: 'UiTestPad' });
       assert.match(after.content[0].text, /UiTestPad saved 12 #2/, 'the click reached the button');
+      steps.step('the AI never types into a password field');
+      steps.log('secret field: ' + (after.content[0].text.split('\n').find((l) => /password/.test(l)) || '(not listed)'));
+      const secretRef = /(e\d+) textfield[^\n]*\(password/.exec(after.content[0].text)?.[1];
+      assert.ok(secretRef, 'the element list marks the password field');
+      {
+        const viaTree = await call('computer_ui_action', { ref: secretRef, action: 'set_value', text: 'hunter2' });
+        steps.log('set_value on it: ' + viaTree.content[0].text.split('\n')[0]);
+        assert.equal(viaTree.isError, true, 'set_value into a password field is refused');
+        assert.match(viaTree.content[0].text, /password field/);
+      }
+      await call('computer_click', { x: Math.round(qx * s1 / px), y: Math.round(qy * s1 / px) });
+      const typedSecret = await call('computer_type', { text: 'hunter2' });
+      assert.equal(typedSecret.isError, true, 'typing into a password field is refused');
+      assert.match(typedSecret.content[0].text, /password field/);
       steps.log(`read + fill + press + 2 re-reads: ${Math.round(performance.now() - started)} ms; list ${text.length} chars`);
     } finally { pad.kill(); }
+  }
+
+  if (process.platform === 'win32') {
+    steps.step('the stop key stops the AI from anywhere');
+    await call('computer_screenshot');
+    const { stopKey } = await page.evaluate(() => window.superai.computer('state'));
+    const keys = { 'Ctrl+Alt+Esc': ['Control+Alt+Escape', '^%{ESC}'], 'Ctrl+Alt+End': ['Control+Alt+End', '^%{END}'], 'Ctrl+Shift+Alt+S': ['Control+Shift+Alt+S', '^+%s'] }[stopKey];
+    assert.ok(keys, `a stop key is held while the AI has control (got "${stopKey}")`);
+    steps.log(`stop key: ${stopKey}`);
+    assert.equal(await desktop.evaluate(({ globalShortcut }, k) => globalShortcut.isRegistered(k), keys[0]), true);
+    execFileSync('powershell.exe', ['-NoProfile', '-Command', `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${keys[1]}')`]);
+    let stopped = false;
+    for (let i = 0; i < 30 && !stopped; i++) { stopped = !(await page.evaluate(() => window.superai.computer('state'))).enabled; if (!stopped) await new Promise((r) => setTimeout(r, 100)); }
+    assert.ok(stopped, 'the stop key turned computer control off');
+    assert.equal(await desktop.evaluate(({ globalShortcut }, k) => globalShortcut.isRegistered(k), keys[0]), false, 'the key is let go once control is off');
   }
 
   steps.step('turn it off again');
