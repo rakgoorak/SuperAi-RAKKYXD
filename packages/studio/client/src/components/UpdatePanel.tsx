@@ -150,7 +150,7 @@ export function UpdatePanel({ state, onError }: { state: UpdateState | null; onE
           <button className="text-button" onClick={() => void window.superai?.openExternal(state.releaseUrl!)}><ExternalLink size={13} /> {tr("ดูหน้า release")}</button>
         )}
       </div>
-      <p className="muted">{tr("ระบบตรวจอัปเดตเองทุกครั้งที่เปิดโปรแกรมและทุก 30 นาที แล้วดาวน์โหลดไว้เบื้องหลัง · ตอนติดตั้งจะรอให้ CLI ที่กำลังตอบทำงานเสร็จก่อน แล้วเปิดแท็บเดิมกลับมาคุยต่อจากเดิม โปรเจกต์ ประวัติ และการตั้งค่าอยู่ครบ")}</p>
+      <p className="muted">{tr("ระบบตรวจอัปเดตเองทุกครั้งที่เปิดโปรแกรมและทุก 30 นาที แล้วดาวน์โหลดไว้เบื้องหลัง · ดาวน์โหลดเสร็จแล้วจะติดตั้งให้เองตอนปิดโปรแกรม หรือกดรีสตาร์ทเพื่ออัปเดตเลยก็ได้ · ตอนติดตั้งจะรอให้ CLI ที่กำลังตอบทำงานเสร็จก่อน แล้วเปิดแท็บเดิมกลับมาคุยต่อจากเดิม โปรเจกต์ ประวัติ และการตั้งค่าอยู่ครบ")}</p>
     </div>
   );
 }
@@ -174,6 +174,8 @@ export function UpdatePrompt({ state, onError, onDetails }: { state: UpdateState
   if (!show && !(hard && state?.status === "error")) return null;
   if (!hard && later === state!.latestVersion && !["waiting", "installing"].includes(state!.status)) return null;
   const s = state!.status;
+  // Like Claude Desktop: a soft update downloads quietly and only speaks up once it is ready to restart into.
+  if (!hard && !state!.storeManaged && ["available", "downloading", "extracting"].includes(s)) return null;
   const actions = (
     <div className="update-actions">
       {s === "waiting" ? (
@@ -186,6 +188,7 @@ export function UpdatePrompt({ state, onError, onDetails }: { state: UpdateState
           <button className="primary" disabled={busy || (hard && s !== "error")} onClick={() => void run("apply")}>
             {s === "error" ? <><RefreshCw size={14} /> {tr("ลองอีกครั้ง")}</>
               : state!.storeManaged ? <><ExternalLink size={14} /> {tr("อัปเดตใน Microsoft Store")}</>
+              : s === "ready" && !hard ? <><RotateCw size={14} /> {tr("รีสตาร์ทเพื่ออัปเดต")}</>
               : <><Download size={14} /> {tr("อัปเดตตอนนี้")}</>}
           </button>
           {!hard && <button className="secondary" onClick={() => setLater(state!.latestVersion || "")}>{tr("ไว้ทีหลัง")}</button>}
@@ -213,8 +216,8 @@ export function UpdatePrompt({ state, onError, onDetails }: { state: UpdateState
 
   return (
     <aside className="update-toast" role="status" aria-live="polite">
-      <strong>{tr("มีเวอร์ชันใหม่ v")}{state!.latestVersion}</strong>
-      <small>{state!.storeManaged ? tr("อัปเดตได้ใน Microsoft Store") : s === "available" || s === "ready" ? tr("อัปเดตแล้วโปรแกรมจะเปิดกลับมาที่เดิม งานไม่หาย") : statusLine(state!)}</small>
+      <strong>{s === "ready" && !state!.storeManaged ? tr`อัปเดต v${state!.latestVersion || ""} พร้อมแล้ว` : <>{tr("มีเวอร์ชันใหม่ v")}{state!.latestVersion}</>}</strong>
+      <small>{state!.storeManaged ? tr("อัปเดตได้ใน Microsoft Store") : s === "ready" ? tr("รีสตาร์ทตอนนี้ หรือปิดโปรแกรมเมื่อไหร่ก็จะอัปเดตให้เอง แท็บและงานไม่หาย") : statusLine(state!)}</small>
       {actions}
     </aside>
   );

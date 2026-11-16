@@ -228,8 +228,9 @@ export class Updater {
     throw new Error(tr("ไม่พบโปรแกรมในไฟล์อัปเดต"));
   }
 
-  /** Start the detached copier; the caller must quit the app right after this returns. */
-  async install({ execPath = process.execPath, pid = process.pid } = {}) {
+  /** Start the detached copier; the caller must quit the app right after this returns.
+   *  relaunch=false installs on the way out (the user chose Exit) without reopening the app. */
+  async install({ execPath = process.execPath, pid = process.pid, relaunch = true } = {}) {
     if (this.storeManaged) throw new Error(tr("อัปเดตแอปนี้ผ่าน Microsoft Store เท่านั้น"));
     if (!["ready", "waiting"].includes(this.state.status)) throw new Error(tr("ดาวน์โหลดอัปเดตให้เสร็จก่อน"));
     const target = installTarget(execPath);
@@ -263,7 +264,7 @@ export class Updater {
         // Installed with Setup.exe: keep the version in Settings > Apps in step with the files.
         `$key = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SuperAi-RAKKYXD'`,
         `if ($app -lt 8 -and (Test-Path $key) -and ((Get-ItemProperty $key).InstallLocation -eq ${q(target)})) { Set-ItemProperty $key -Name DisplayVersion -Value ${q(this.state.latestVersion)} }`,
-        `Start-Process -FilePath ${q(exe)}`,
+        ...(relaunch ? [`Start-Process -FilePath ${q(exe)}`] : []),
         `Stop-Transcript | Out-Null`,
         `if ($app -lt 8 -and $rest -lt 8) { Remove-Item -LiteralPath ${q(source)} -Recurse -Force -ErrorAction SilentlyContinue }`,
       ].join("\r\n"), "utf8");
@@ -289,7 +290,7 @@ export class Updater {
         `rm -rf ${q(target + ".old")}`,
         `if mv ${q(target)} ${q(target + ".old")} && ditto ${q(source)} ${q(target)}; then rm -rf ${q(target + ".old")}; else rm -rf ${q(target)}; mv ${q(target + ".old")} ${q(target)}; fi`,
         `xattr -cr ${q(target)} 2>/dev/null || true`,
-        `open ${q(target)}`,
+        ...(relaunch ? [`open ${q(target)}`] : []),
       ].join("\n"), { mode: 0o755 });
       spawn("/bin/sh", [script], { detached: true, stdio: "ignore" }).unref();
     }

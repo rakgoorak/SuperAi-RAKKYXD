@@ -16,7 +16,7 @@ export interface ComputerState {
   platform?: string;
   os?: { accessibility: string; screen: string };
   /** Chats the user allowed in the Allow / Deny window: for the whole chat, or for the current task. */
-  allowed?: { chatId: string; chatName?: string; scope: "chat" | "task" }[];
+  allowed?: { chatId: string; chatName?: string; scope: "chat" | "task"; apps?: string[] }[];
 }
 export interface UpdateState {
   status: "idle" | "checking" | "latest" | "none" | "available" | "unsupported" | "downloading" | "extracting" | "ready" | "waiting" | "installing" | "error";

@@ -5,8 +5,8 @@ import type { ComputerState } from '../desktop';
 
 /**
  * "Let the AI control this computer": the AI may see the screen and use the mouse and keyboard.
- * Off by default. When on, each chat still has to be allowed in an Allow / Deny window the first
- * time it wants control; the list here shows the chats allowed so far and can take it back.
+ * Off by default. When on, each chat still has to ask for the apps it wants to use in an Allow / Deny
+ * window (like Claude Desktop); the list here shows the chats and apps allowed so far and can take it back.
  * The Stop bar shown while the AI acts turns the whole thing off again.
  */
 export function ComputerUsePanel({ onError }: { onError: (message: string) => void }) {
@@ -40,7 +40,7 @@ export function ComputerUsePanel({ onError }: { onError: (message: string) => vo
       <input type="checkbox" checked={!!state?.enabled} disabled={!state} onChange={(event) => void call('set', event.target.checked)} />
       {tr("อนุญาตให้ AI ควบคุมคอมพิวเตอร์เครื่องนี้")}
     </label>
-    <p className="muted">{tr("ครั้งแรกที่แชตไหนจะควบคุมคอมพิวเตอร์ จะมีหน้าต่างให้กด \"อนุญาต\" หรือ \"ปฏิเสธ\" ก่อนเสมอ")}</p>
+    <p className="muted">{tr("AI ต้องขอใช้ทีละแอปในหน้าต่าง \"อนุญาต\" หรือ \"ปฏิเสธ\" ก่อนเสมอ แล้วคลิกและพิมพ์ได้เฉพาะแอปที่อนุญาต · เบราว์เซอร์ดูได้อย่างเดียว · Terminal และโปรแกรมเขียนโค้ดคลิกและเลื่อนได้เท่านั้น · AI ควบคุม SuperAi เองไม่ได้")}</p>
     <p className="computer-use-warning">{tr("AI จะทำได้ทุกอย่างที่คุณทำได้บนเครื่องนี้ รวมถึงเปิดไฟล์ ส่งข้อความ หรือลบข้อมูล เปิดเฉพาะตอนที่ต้องใช้ ดูหน้าจอระหว่างที่ AI ทำงาน และปิดเมื่อเสร็จ")}</p>
     {mac && <div className="computer-use-os">
       <p className="muted">{tr("macOS ต้องอนุญาต SuperAi ใน System Settings > Privacy & Security")}</p>
@@ -49,7 +49,7 @@ export function ComputerUsePanel({ onError }: { onError: (message: string) => vo
     </div>}
     {allowed.length > 0 && <div className="computer-use-allowed">
       <span>{tr("แชตที่อนุญาตแล้ว")}</span>
-      <ul>{allowed.map((a) => <li key={a.chatId || '-'}>{a.chatName || tr("AI ในแชต")} · {a.scope === 'chat' ? tr("ตลอดแชตนี้") : tr("งานนี้")}</li>)}</ul>
+      <ul>{allowed.map((a) => <li key={a.chatId || '-'}>{a.chatName || tr("AI ในแชต")} · {a.scope === 'chat' ? tr("ตลอดแชตนี้") : tr("งานนี้")}{a.apps?.length ? <> · {a.apps.join(", ")}</> : null}</li>)}</ul>
       <button type="button" className="text-button" onClick={() => void call('revoke')}>{tr("ยกเลิกสิทธิ์ทั้งหมด")}</button>
     </div>}
     {!mac && <p className="muted">{tr("Windows: AI สั่งงานหน้าต่างที่เปิดแบบ Administrator ไม่ได้ ถ้าต้องใช้ ให้เปิดแอปนั้นแบบปกติ")}</p>}

@@ -13,7 +13,8 @@
 // input through user32 (a long-lived PowerShell helper); macOS posts CoreGraphics events through a
 // long-lived JavaScript-for-Automation helper. Only the main screen is used.
 import { app, BrowserWindow, clipboard, desktopCapturer, screen, shell, systemPreferences } from "electron";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -63,6 +64,21 @@ public static class SuperAiInput {
   public static void Key(ushort vk, bool up) { Send(new INPUT[] { KeyInput(vk, 0, (up ? 2u : 0u) | (Extended(vk) ? 1u : 0u)) }); }
   // Virtual key and shift state that type this character on the current keyboard layout (-1 = none).
   public static int Scan(char c) { return VkKeyScanW(c); }
+  [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
+  [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
+  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowTextW(IntPtr h, StringBuilder s, int n);
+  // "pid<TAB>title" of a top-level window (the title names the app of a UWP window, whose process is ApplicationFrameHost).
+  static string Owner(IntPtr h) {
+    if (h == IntPtr.Zero) return "0\t";
+    uint pid; GetWindowThreadProcessId(h, out pid);
+    StringBuilder s = new StringBuilder(256); GetWindowTextW(h, s, 256);
+    return pid + "\t" + s.ToString().Replace("\t", " ");
+  }
+  // Click-through windows (the status bar's glow) are skipped by WindowFromPoint.
+  public static string At(int x, int y) { POINT p; p.X = x; p.Y = y; IntPtr h = WindowFromPoint(p); return Owner(h == IntPtr.Zero ? h : GetAncestor(h, 2)); }
+  public static string Front() { return Owner(GetForegroundWindow()); }
   // Types any Unicode text; newline = Enter, tab = Tab. One character (a surrogate pair stays
   // together) per SendInput with a short pause: a single burst of many events is sometimes dropped.
   public static void Text(string s) {
@@ -78,6 +94,19 @@ public static class SuperAiInput {
 }
 '@
 [SuperAiInput]::Init()
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$tab = [char]9
+# "pid<TAB>title<TAB>process name<TAB>description" of the app that owns a window.
+function Describe([string]$owner) {
+  $f = $owner.Split([char[]]@($tab), 2)
+  $procId = [int]$f[0]
+  $title = ''
+  if ($f.Length -gt 1) { $title = $f[1] }
+  if ($procId -eq 0) { return '0' }
+  $name = '?'; $desc = ''
+  try { $pr = Get-Process -Id $procId -ErrorAction Stop; $name = $pr.ProcessName; try { $desc = $pr.MainModule.FileVersionInfo.FileDescription } catch {} } catch {}
+  return "$procId$tab$title$tab$name$tab$desc"
+}
 while ($true) {
   $line = [Console]::In.ReadLine()
   if ($line -eq $null) { break }
@@ -92,6 +121,9 @@ while ($true) {
       'key' { [SuperAiInput]::Key([uint16]$p[1], $p[2] -eq 'up') }
       'scan' { $out = [string][SuperAiInput]::Scan([char][int]$p[1]) }
       'text' { [SuperAiInput]::Text([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p[1]))) }
+      'at' { $out = Describe ([SuperAiInput]::At([int]$p[1], [int]$p[2])) }
+      'front' { $out = Describe ([SuperAiInput]::Front()) }
+      'apps' { $out = (Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | ForEach-Object { $d = ''; if ($_.ProcessName -eq 'ApplicationFrameHost') { $d = $_.MainWindowTitle } else { try { $d = $_.MainModule.FileVersionInfo.FileDescription } catch {} }; if ($d) { $d } else { $_.ProcessName } } | Sort-Object -Unique) -join $tab }
     }
     [Console]::Out.WriteLine(('ok ' + $out).Trim())
   } catch { [Console]::Out.WriteLine('error ' + $_.Exception.Message) }
@@ -102,7 +134,7 @@ while ($true) {
 // macOS input helper: CoreGraphics events (needs only the Accessibility permission, no Apple
 // Events), one osascript process for the whole session, same line protocol as on Windows.
 const MAC_HELPER = String.raw`
-ObjC.import('Foundation'); ObjC.import('CoreGraphics');
+ObjC.import('Foundation'); ObjC.import('CoreGraphics'); ObjC.import('AppKit');
 const out = $.NSFileHandle.fileHandleWithStandardOutput;
 const input = $.NSFileHandle.fileHandleWithStandardInput;
 const reply = (s) => out.writeData($(s + "\n").dataUsingEncoding($.NSUTF8StringEncoding));
@@ -114,6 +146,26 @@ function mouse(type, x, y, button, clicks) {
 }
 function key(code, down, flags) { const e = $.CGEventCreateKeyboardEvent(null, code, down); $.CGEventSetFlags(e, flags); post(e); }
 function pos() { const p = $.CGEventGetLocation($.CGEventCreate(null)); return Math.round(p.x) + " " + Math.round(p.y); }
+// "pid<TAB><TAB>name<TAB><TAB>bundle id", like the Windows helper (no title, no description).
+function appInfo(pid) {
+  const a = $.NSRunningApplication.runningApplicationWithProcessIdentifier(pid);
+  if (!a || (a.isNil && a.isNil())) return pid + "\t\t?\t\t";
+  return pid + "\t\t" + ObjC.unwrap(a.localizedName) + "\t\t" + (ObjC.unwrap(a.bundleIdentifier) || "");
+}
+function front() { return appInfo($.NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier); }
+// The frontmost normal window (layer 0) under the point; the menu bar and the desktop count as the front app.
+function at(x, y) {
+  try {
+    const list = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(1 | 16, 0))) || [];
+    for (const w of list) {
+      if (w.kCGWindowLayer !== 0) continue;
+      const b = w.kCGWindowBounds;
+      if (x >= b.X && x < b.X + b.Width && y >= b.Y && y < b.Y + b.Height) return appInfo(w.kCGWindowOwnerPID);
+    }
+  } catch (e) {}
+  return front();
+}
+function apps() { return ObjC.unwrap($.NSWorkspace.sharedWorkspace.runningApplications).filter((a) => a.activationPolicy == 0).map((a) => ObjC.unwrap(a.localizedName)).join("\t"); }
 let buffer = "";
 for (;;) {
   const data = input.availableData;
@@ -130,6 +182,9 @@ for (;;) {
       else if (p[0] === "key") key(n[1], p[2] === "down", n[3]);
       else if (p[0] === "scroll") post($.CGEventCreateScrollWheelEvent(null, 1, 2, n[1], n[2]));
       else if (p[0] === "pos") result = pos();
+      else if (p[0] === "at") result = at(n[1], n[2]);
+      else if (p[0] === "front") result = front();
+      else if (p[0] === "apps") result = apps();
       else throw new Error("unknown command " + p[0]);
       reply(("ok " + result).trim());
     } catch (e) { reply("error " + e); }
@@ -231,10 +286,49 @@ export function openOsSettings(kind) {
   return true;
 }
 
-const TOOLS = ["computer_screenshot", "computer_click", "computer_move", "computer_type", "computer_key", "computer_scroll", "computer_drag", "computer_cursor", "computer_wait", "computer_zoom"];
+// ---------------------------------------------------------------------------------------------
+// Apps. Like Claude Desktop, the user allows the AI app by app (computer_request_access); clicks and
+// typing reach only the allowed apps. Web browsers are view-only (the browser_ tools are for web
+// pages) and terminals / code editors take left-clicks and scrolling only, never typing.
+const norm = (s) => String(s || "").toLowerCase().replace(/\.(exe|app)$/, "").replace(/[^\p{L}\p{N}]+/gu, "");
+const VIEW_ONLY = new Set(["chrome", "googlechrome", "msedge", "edge", "microsoftedge", "firefox", "mozillafirefox", "brave", "bravebrowser", "opera", "operagx",
+  "vivaldi", "arc", "safari", "iexplore", "internetexplorer", "chromium", "waterfox", "librewolf", "torbrowser", "zenbrowser", "floorp"]);
+const CLICK_ONLY = new Set(["windowsterminal", "terminal", "wt", "cmd", "windowscommandprocessor", "commandprompt", "powershell", "windowspowershell", "pwsh",
+  "conhost", "consolewindowhost", "openconsole", "wsl", "bash", "mintty", "gitbash", "code", "codeinsiders", "vscode", "visualstudiocode", "cursor", "windsurf",
+  "antigravity", "devenv", "visualstudio", "microsoftvisualstudio", "idea", "idea64", "intellijidea", "pycharm", "pycharm64", "webstorm", "webstorm64", "rider",
+  "rider64", "clion", "clion64", "goland", "goland64", "phpstorm", "phpstorm64", "rubymine", "rubymine64", "studio64", "androidstudio", "sublimetext", "iterm",
+  "iterm2", "warp", "wezterm", "weztermgui", "alacritty", "kitty", "hyper", "tabby", "xcode", "zed", "fleet", "ghostty"]);
+const VIEW_BUNDLES = /(google\.chrome|microsoft\.edgemac|mozilla\.firefox|apple\.safari|brave\.browser|thebrowsercompany|operasoftware|vivaldi|chromium)/i;
+const CLICK_BUNDLES = /(apple\.terminal|googlecode\.iterm2|microsoft\.vscode|dev\.warp|todesktop|jetbrains|apple\.dt\.xcode|wezterm|alacritty|kovidgoyal\.kitty|dev\.zed|ghostty|windsurf)/i;
+const RANK = { read: 0, click: 1, full: 2 };
+/** "read" (look only), "click" (left-click and scroll) or "full". */
+function appTier(names, bundle = "") {
+  const keys = names.map(norm).filter(Boolean);
+  if (VIEW_BUNDLES.test(bundle) || keys.some((k) => VIEW_ONLY.has(k))) return "read";
+  if (CLICK_BUNDLES.test(bundle) || keys.some((k) => CLICK_ONLY.has(k))) return "click";
+  return "full";
+}
+/** Other names the user may know an app by (exact matches only). */
+const ALIASES = { msedge: ["microsoftedge"], explorer: ["fileexplorer", "desktop", "taskbar", "startmenu"], windowsexplorer: ["fileexplorer", "desktop", "taskbar", "startmenu"], finder: ["desktop"] };
+const isFrame = (app) => /^applicationframehost$/i.test(app.name || "");
+const appNames = (app) => [app.name, app.desc, app.bundle, String(app.bundle || "").split(".").pop(), isFrame(app) ? app.title : ""];
+const appLabel = (app) => (isFrame(app) && app.title) || app.desc || app.name || "an unknown window";
+function parseApp(line) {
+  const [pid = "0", title = "", name = "", desc = "", bundle = ""] = String(line || "").split("\t");
+  return { pid: Number(pid) || 0, title, name, desc, bundle };
+}
+/** Does an allowed name (normalized) mean this app? */
+function appMatches(app, key) {
+  const keys = appNames(app).map(norm).filter(Boolean);
+  if (keys.some((k) => k === key || (Math.min(k.length, key.length) >= 4 && (k.includes(key) || key.includes(k))))) return true;
+  return keys.some((k) => (ALIASES[k] || []).includes(key));
+}
+const ownName = (name) => /superai|rakkyxd/.test(norm(name));
+
+const TOOLS = ["computer_request_access", "computer_ui_snapshot", "computer_ui_action", "computer_screenshot", "computer_click", "computer_move", "computer_type", "computer_key", "computer_scroll", "computer_drag", "computer_cursor", "computer_wait", "computer_zoom"];
 /** What a tool does, in the window's language (literal tr() calls, so the dictionaries pick them up). */
 const toolLabel = (tool) => ({
-  computer_screenshot: tr("ดูหน้าจอ"), computer_click: tr("คลิก"), computer_move: tr("ขยับเมาส์"), computer_type: tr("พิมพ์ข้อความ"), computer_key: tr("กดปุ่มคีย์บอร์ด"),
+  computer_request_access: tr("ขอสิทธิ์ใช้แอป"), computer_ui_snapshot: tr("อ่านหน้าต่างแอป"), computer_ui_action: tr("กดหรือกรอกในแอป"), computer_screenshot: tr("ดูหน้าจอ"), computer_click: tr("คลิก"), computer_move: tr("ขยับเมาส์"), computer_type: tr("พิมพ์ข้อความ"), computer_key: tr("กดปุ่มคีย์บอร์ด"),
   computer_scroll: tr("เลื่อนหน้าจอ"), computer_drag: tr("ลากเมาส์"), computer_cursor: tr("ดูตำแหน่งเมาส์"), computer_wait: tr("รอแล้วดูหน้าจอ"), computer_zoom: tr("ซูมดูหน้าจอ"),
 }[tool] || tool);
 
@@ -244,13 +338,13 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   let enabled = read();
   let scale = 1; // screen pixels per screenshot pixel, from the last screenshot
   let hideTimer, prompt;
-  /** chatId → { chat: true } (whole chat) or { until } ("this task", extended on every call). */
+  /** chatId → { chat: true } (whole chat) or { until } ("this task", extended on every call), with the allowed apps (normalized name → { name, tier }). */
   const grants = new Map();
   /** chatId → time until which a Deny still stands. */
   const denied = new Map();
   let queue = Promise.resolve();
 
-  const state = () => ({ enabled, platform: process.platform, os: osAccess(false), allowed: [...grants.entries()].filter(([, g]) => g.chat || g.until > Date.now()).map(([id, g]) => ({ chatId: id, chatName: g.name, scope: g.chat ? "chat" : "task" })) });
+  const state = () => ({ enabled, platform: process.platform, os: osAccess(false), allowed: [...grants.entries()].filter(([, g]) => g.chat || g.until > Date.now()).map(([id, g]) => ({ chatId: id, chatName: g.name, scope: g.chat ? "chat" : "task", apps: [...g.apps.values()].map((a) => a.name) })) });
   const changed = () => onChange?.(state());
 
   const revoke = () => { grants.clear(); denied.clear(); prompt?.answer("deny"); changed(); return state(); };
@@ -275,7 +369,8 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   // any of them under a point the AI clicks steps aside meanwhile.
   /** display id → { bar, glows } */
   const ui = new Map();
-  const GLOW = 14;
+  const GLOW = 18;
+  const PULSE = 2600; // ms; every strip on every screen breathes in step
   const barSize = { width: 460, height: 64 };
   const overlays = () => [...ui.values()].flatMap(({ bar, glows }) => [bar, ...glows]).filter((w) => w && !w.isDestroyed());
   const hideBar = () => { for (const w of overlays()) w.hide(); };
@@ -318,11 +413,11 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     </body></html>`;
   const glowHtml = (to) => `<!doctype html><meta charset="utf-8"><style>
       html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
-      .edge { position: fixed; inset: 0; background: linear-gradient(to ${to}, rgba(61,220,132,.95) 0 3px, rgba(56,189,248,.45) 3px, rgba(167,139,250,0));
-        animation: breathe 2.6s ease-in-out infinite, in .4s ease-out; }
-      @keyframes breathe { 50% { opacity: .55; filter: hue-rotate(40deg); } }
-      @keyframes in { from { opacity: 0; } }
-    </style><div class="edge"></div>`;
+      .edge { position: fixed; inset: 0; background: linear-gradient(to ${to}, rgba(61,220,132,1) 0 4px, rgba(56,189,248,.6) 4px, rgba(56,189,248,.22) 55%, rgba(167,139,250,0));
+        animation: breathe ${PULSE}ms ease-in-out infinite; }
+      @keyframes breathe { 50% { opacity: .6; filter: hue-rotate(40deg); } }
+    </style><div class="edge"></div>
+    <script>document.querySelector('.edge').style.animationDelay = -(Date.now() % ${PULSE}) + 'ms';</script>`;
   const overlayWindow = (rect, extra = {}) => {
     const w = new BrowserWindow({ ...rect, frame: false, resizable: false, alwaysOnTop: true, skipTaskbar: true, focusable: false, show: false,
       transparent: true, hasShadow: false, webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false }, ...extra });
@@ -339,12 +434,17 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       if (url.startsWith("superai-stop:")) { setEnabled(false); onStop?.(); }
     });
     bar.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(barHtml()));
-    // Each strip fades from the screen edge inwards; "to" is the direction of the fade.
+    // Each strip fades from the screen edge inwards; "to" is the direction of the fade. Every strip
+    // runs the whole length of its edge, so the line is unbroken at the corners (where they overlap).
+    // The sides come in two halves: Windows cuts a window taller than the space above the taskbar.
+    const half = Math.ceil(b.height / 2);
     const strips = [
       { x: b.x, y: b.y, width: b.width, height: GLOW, to: "bottom" },
       { x: b.x, y: b.y + b.height - GLOW, width: b.width, height: GLOW, to: "top" },
-      { x: b.x, y: b.y + GLOW, width: GLOW, height: b.height - 2 * GLOW, to: "right" },
-      { x: b.x + b.width - GLOW, y: b.y + GLOW, width: GLOW, height: b.height - 2 * GLOW, to: "left" },
+      ...[b.y, b.y + b.height - half].flatMap((y) => [
+        { x: b.x, y, width: GLOW, height: half, to: "right" },
+        { x: b.x + b.width - GLOW, y, width: GLOW, height: half, to: "left" },
+      ]),
     ];
     const glows = strips.map(({ to, ...rect }) => {
       const w = overlayWindow(rect, { movable: false });
@@ -366,8 +466,9 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       const { bar } = set;
       const apply = () => bar.webContents.executeJavaScript(status).catch(() => {});
       if (bar.webContents.isLoading()) bar.webContents.once("did-finish-load", apply); else apply();
-      for (const w of set.glows) w.showInactive();
-      bar.showInactive();
+      // The taskbar is always-on-top too: raise the strips over it again on every call.
+      for (const w of set.glows) { w.showInactive(); w.setAlwaysOnTop(true, "screen-saver"); w.moveTop(); }
+      bar.showInactive(); bar.moveTop();
     }
     clearTimeout(hideTimer);
     hideTimer = setTimeout(hideBar, BAR_IDLE);
@@ -388,7 +489,8 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
 
   // ------------------------------------------------------------------------------------------
   // The Allow / Deny window.
-  function ask(caller, tool) {
+  const TIER_TEXT = () => ({ full: tr("ควบคุมได้เต็มที่"), click: tr("คลิกและเลื่อนได้เท่านั้น"), read: tr("ดูได้อย่างเดียว") });
+  function ask(caller, apps, reason) {
     return new Promise((resolve) => {
       const access = osAccess(false);
       const missing = process.platform === "darwin" ? ["accessibility", "screen"].filter((k) => access[k] !== "granted") : [];
@@ -414,11 +516,19 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
         .btn:hover{filter:brightness(1.2);transform:translateY(-1px)} .btn:active{transform:scale(.97)} .btn:focus-visible{outline:2px solid #38bdf8;outline-offset:2px}
         .deny{color:#ffc9ce;border-color:rgba(229,72,77,.45)} .allow{background:linear-gradient(135deg,#3ddc84,#38bdf8);color:#05110b;border-color:transparent;font-weight:700;box-shadow:0 6px 18px rgba(61,220,132,.3)}
         .ghost{padding:4px 10px;font-size:12px}
+        .apps{display:flex;flex-direction:column;gap:6px;max-height:212px;overflow:auto}
+        .app{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:7px 10px}
+        .app i{flex:none;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-style:normal;font-weight:700;background:rgba(56,189,248,.15);color:#9be7ff}
+        .app b{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .tier{flex:none;font-size:11px;padding:2px 9px;border-radius:99px;background:rgba(61,220,132,.14);color:#9ff0c4}
+        .tier.click{background:rgba(245,165,36,.14);color:#f6cf8a} .tier.read{background:rgba(56,189,248,.14);color:#9be7ff}
+        .why{color:#8fa79c;font-size:12px}
       </style></head><body><div class="wrap">
-        <h1><span class="icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#05110b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="19" height="13" rx="2"/><path d="M8 20.5h8M12 16.5v4"/><path d="M10 7.5l4.5 3-2 .5-1 2z" fill="#05110b"/></svg></span>${escapeHtml(tr("อนุญาตให้ AI ควบคุมคอมพิวเตอร์?"))}</h1>
-        <p>${escapeHtml(tr`${who} ต้องการดูหน้าจอ ขยับเมาส์ คลิก และพิมพ์บนเครื่องนี้`)}</p>
-        <p class="first">${escapeHtml(tr`คำสั่งแรก: ${toolLabel(tool)}`)}</p>
-        <div class="warn">${escapeHtml(tr("AI จะทำได้ทุกอย่างที่คุณทำได้ อนุญาตเฉพาะแชตที่คุณไว้ใจ และกด \"หยุด\" ที่แถบด้านบนของจอเพื่อยกเลิกได้ทุกเมื่อ"))}</div>
+        <h1><span class="icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#05110b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="19" height="13" rx="2"/><path d="M8 20.5h8M12 16.5v4"/><path d="M10 7.5l4.5 3-2 .5-1 2z" fill="#05110b"/></svg></span>${escapeHtml(tr("อนุญาตให้ AI ใช้แอปเหล่านี้?"))}</h1>
+        <p>${escapeHtml(tr`${who} ต้องการดูหน้าจอ และใช้เมาส์กับคีย์บอร์ดในแอปต่อไปนี้`)}</p>
+        <div class="apps">${apps.map((a) => `<div class="app"><i>${escapeHtml([...a.name.trim()][0]?.toUpperCase() || "?")}</i><b>${escapeHtml(a.name)}</b><span class="tier ${a.tier}">${escapeHtml(TIER_TEXT()[a.tier])}</span></div>`).join("")}</div>
+        ${reason ? `<p class="why">${escapeHtml(tr`เหตุผล: ${reason}`)}</p>` : ""}
+        <div class="warn">${escapeHtml(tr("AI เห็นทั้งหน้าจอ แต่คลิกและพิมพ์ได้เฉพาะในแอปที่อนุญาต อนุญาตเฉพาะแชตที่คุณไว้ใจ และกด \"หยุด\" ที่แถบด้านบนของจอเพื่อยกเลิกได้ทุกเมื่อ"))}</div>
         ${osRows}
         <div class="row">
           <a id="deny" class="btn deny" href="superai-perm:deny">${escapeHtml(tr("ปฏิเสธ"))}</a>
@@ -428,7 +538,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
         <script>addEventListener('keydown', (e) => { if (e.key === 'Escape') location.href = 'superai-perm:deny'; });</script>
       </body></html>`;
       const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-      const width = 480, height = 296 + missing.length * 52;
+      const width = 480, height = 262 + Math.min(apps.length, 5) * 44 + missing.length * 52 + (reason ? 26 : 0);
       const win = new BrowserWindow({ width, height, x: Math.round(workArea.x + (workArea.width - width) / 2), y: Math.round(workArea.y + (workArea.height - height) / 3),
         frame: false, resizable: false, minimizable: false, maximizable: false, fullscreenable: false, alwaysOnTop: true, skipTaskbar: false, show: false,
         title: tr("SuperAi ขออนุญาต"), transparent: true, hasShadow: true, webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } });
@@ -461,22 +571,75 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     });
   }
 
-  async function authorize(caller, tool) {
-    const id = caller.chatId || "";
-    const now = Date.now();
-    const grant = grants.get(id);
-    if (grant && (grant.chat || grant.until > now)) { if (!grant.chat) grant.until = now + TASK_IDLE; return; }
-    if ((denied.get(id) || 0) > now)
-      throw new Error("The user denied computer control for this chat a moment ago. Do not retry; tell the user what you wanted to do and let them decide.");
-    const answer = await ask(caller, tool);
-    if (answer === "deny") {
-      denied.set(id, Date.now() + DENY_QUIET);
-      throw new Error("The user denied computer control. Do not retry computer_ tools; tell the user what you wanted to do and let them decide.");
-    }
-    denied.delete(id);
-    grants.set(id, answer === "chat" ? { chat: true, name: caller.chatName } : { until: Date.now() + TASK_IDLE, name: caller.chatName });
-    changed();
+  const DENIED = "The user denied computer control for this chat a moment ago. Do not retry; tell the user what you wanted to do and let them decide.";
+  /** The chat's live grant ("this task" grants are extended on every call). */
+  function grantFor(caller) {
+    const g = grants.get(caller.chatId || "");
+    if (!g) return undefined;
+    if (g.chat) return g;
+    if (g.until > Date.now()) { g.until = Date.now() + TASK_IDLE; return g; }
+    return undefined;
   }
+  function authorize(caller) {
+    const g = grantFor(caller);
+    if (g?.apps.size) return g;
+    if ((denied.get(caller.chatId || "") || 0) > Date.now()) throw new Error(DENIED);
+    throw new Error('First ask the user which apps you may use: call computer_request_access with their names (for example ["Notepad", "File Explorer"]). The user answers in an Allow / Deny window.');
+  }
+  async function openApps() {
+    try { return (await send("apps")).split("\t").filter(Boolean); } catch { return []; }
+  }
+  const tierNote = (tier) => tier === "read" ? "view only: no clicks or typing; use the browser_ tools for web pages" : tier === "click" ? "left-click and scroll only, no typing" : "full control";
+  async function requestAccess(caller, args) {
+    const id = caller.chatId || "";
+    const list = Array.isArray(args.apps) ? args.apps : typeof args.apps === "string" ? [args.apps] : [];
+    const names = list.map((s) => String(s).trim()).filter(Boolean).slice(0, 20);
+    if (!names.length) throw new Error('apps must list the applications you need, e.g. ["Notepad", "File Explorer"]');
+    const self = process.env.SUPERAI_COMPUTER_ALLOW_SELF !== "1" && names.some(ownName);
+    let grant = grantFor(caller);
+    const fresh = [];
+    for (const name of names) {
+      const key = norm(name);
+      if (!key || (self && ownName(name)) || grant?.apps.has(key) || fresh.some((f) => f.key === key)) continue;
+      fresh.push({ key, name, tier: appTier([name]) });
+    }
+    if (fresh.length) {
+      if ((denied.get(id) || 0) > Date.now()) throw new Error(DENIED);
+      const answer = await ask(caller, fresh, String(args.reason || "").trim().slice(0, 300));
+      if (answer === "deny") {
+        denied.set(id, Date.now() + DENY_QUIET);
+        throw new Error("The user denied access to those apps. Do not retry; tell the user what you wanted to do and let them decide.");
+      }
+      denied.delete(id);
+      grant = grantFor(caller);
+      if (!grant) grants.set(id, grant = answer === "chat" ? { chat: true, name: caller.chatName, apps: new Map() } : { until: Date.now() + TASK_IDLE, name: caller.chatName, apps: new Map() });
+      else if (answer === "chat") grant.chat = true;
+      for (const f of fresh) grant.apps.set(f.key, { name: f.name, tier: f.tier });
+      changed();
+    }
+    const allowed = grant ? [...grant.apps.values()].map((a) => `${a.name} (${tierNote(a.tier)})`).join(", ") : "none";
+    const open = await openApps();
+    return { text: `Allowed apps for this chat: ${allowed}.${self ? " SuperAi itself cannot be controlled by the AI." : ""}${open.length ? ` Open apps: ${open.join(", ")}.` : ""} Take a computer_screenshot to start.` };
+  }
+  /** Clicks and typing reach only an allowed app, at its tier; never SuperAi itself. */
+  function permit(app, need, caller) {
+    if (app.pid && app.pid === process.pid) {
+      if (process.env.SUPERAI_COMPUTER_ALLOW_SELF !== "1") throw new Error("That is SuperAi's own window. The AI cannot control SuperAi itself; ask the user to do it, or click the app you want first.");
+      app = { ...app, name: "SuperAi", desc: "SuperAi" };
+    }
+    const g = authorize(caller);
+    const label = appLabel(app);
+    const hit = [...g.apps.entries()].find(([key]) => appMatches(app, key));
+    if (!hit) throw new Error(`${label} is not among the apps the user allowed for this chat (${[...g.apps.values()].map((a) => a.name).join(", ")}). If you need it, call computer_request_access with ["${label}"].`);
+    const actual = appTier(appNames(app), app.bundle);
+    const tier = RANK[actual] < RANK[hit[1].tier] ? actual : hit[1].tier;
+    if (RANK[tier] < RANK[need]) throw new Error(tier === "read"
+      ? `${label} is a web browser, allowed for viewing only: clicks and typing in it are blocked. Use the browser_ tools for web pages.`
+      : `${label} is a terminal or code editor, allowed for left-click and scroll only: typing, keys, right-click and drag are blocked there.`);
+  }
+  let current = { chatId: "", chatName: "" }; // the caller of the running tool
+  const appAt = async (sx, sy) => parseApp(await send(`at ${Math.round(sx)} ${Math.round(sy)}`));
+  const frontApp = async () => parseApp(await send("front"));
 
   /** On macOS input silently does nothing without Accessibility: say so instead. */
   function requireOs(kind) {
@@ -546,7 +709,11 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     const shown = image.getSize();
     scale = pixelWidth(d) / shown.width;
     const list = displays(), n = list.findIndex((x) => x.id === d.id) + 1;
-    return { text: `Screen ${shown.width}x${shown.height}${list.length > 1 ? ` (screen ${n} of ${list.length})` : ""} (coordinates for computer_click etc. are in this image).${describeScreens()}`,
+    let front = "";
+    try { const app = await frontApp(); front = ` App in front: ${app.pid === process.pid ? "SuperAi" : appLabel(app)}.`; } catch {}
+    const g = grantFor(current);
+    const allowed = g ? ` Allowed apps: ${[...g.apps.values()].map((a) => a.name).join(", ")}.` : "";
+    return { text: `Screen ${shown.width}x${shown.height}${list.length > 1 ? ` (screen ${n} of ${list.length})` : ""} (coordinates for computer_click etc. are in this image).${front}${allowed}${describeScreens()}`,
       image: { data: image.toPNG().toString("base64"), mimeType: "image/png" } };
   }
   async function zoom(args) {
@@ -572,7 +739,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   }
   async function click(x, y, button, clicks) {
     const [sx, sy] = toScreen(x, y);
-    return aside([[sx, sy]], () => clickAt(sx, sy, button, clicks));
+    return aside([[sx, sy]], async () => { permit(await appAt(sx, sy), button === "left" ? "click" : "full", current); await clickAt(sx, sy, button, clicks); });
   }
   async function clickAt(sx, sy, button, clicks) {
     if (process.platform === "darwin") {
@@ -587,7 +754,10 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   }
   async function drag(args) {
     const [fx, fy] = toScreen(args.fromX, args.fromY), [tx, ty] = toScreen(args.toX, args.toY);
-    return aside([[fx, fy], [tx, ty]], () => dragBetween(fx, fy, tx, ty));
+    return aside([[fx, fy], [tx, ty]], async () => {
+      permit(await appAt(fx, fy), "full", current); permit(await appAt(tx, ty), "full", current);
+      await dragBetween(fx, fy, tx, ty);
+    });
   }
   async function dragBetween(fx, fy, tx, ty) {
     const steps = 12;
@@ -672,8 +842,10 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
 
   async function scroll(x, y, direction, amount) {
     const steps = Math.max(1, Math.min(20, Number(amount) || 3));
-    if (x !== undefined && y !== undefined) { const [sx, sy] = toScreen(x, y); await moveTo(sx, sy); }
     if (!["up", "down", "left", "right"].includes(direction)) throw new Error("direction must be up, down, left or right");
+    const [sx, sy] = x !== undefined && y !== undefined ? toScreen(x, y) : (await send("pos")).split(" ").map(Number);
+    await aside([[sx, sy]], async () => permit(await appAt(sx, sy), "click", current));
+    await moveTo(sx, sy);
     if (process.platform === "darwin") {
       const dy = direction === "up" ? steps : direction === "down" ? -steps : 0, dx = direction === "left" ? steps : direction === "right" ? -steps : 0;
       await send(`scroll ${dy} ${dx}`);
@@ -684,8 +856,97 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     await send(`wheel ${sign * 120 * steps} ${horizontal ? "h" : "v"}`);
   }
 
+  // ------------------------------------------------------------------------------------------
+  // Apps through their accessibility tree (agent-desktop): the AI reads an app as a short list of
+  // elements with refs and acts on a ref, without screenshots and without moving the mouse.
+  // Same per-app permission as the rest; refs are short ("e12") and belong to the latest ui snapshot.
+  let last; // { id, app, args } of the latest computer_ui_snapshot
+  const UI_LINES = 400;
+  function agentDesktop(args, input) {
+    let exe;
+    try {
+      const dir = path.join(path.dirname(createRequire(import.meta.url).resolve("agent-desktop/package.json")), "bin");
+      const arch = process.arch === "arm64" ? "arm64" : "x64";
+      exe = path.join(dir, process.platform === "win32" ? `agent-desktop-win32-${arch}.exe` : `agent-desktop-${process.platform}-${arch}`);
+    } catch { throw new Error("The accessibility tools are not installed in this build. Use computer_screenshot and computer_click instead."); }
+    return new Promise((resolve, reject) => {
+      const child = execFile(exe, ["--session", "superai", ...args], { encoding: "utf8", timeout: 30000, windowsHide: true, maxBuffer: 64 << 20 }, (error, stdout) => {
+        let out;
+        try { out = JSON.parse(stdout); } catch { return reject(new Error(`agent-desktop failed: ${String(stdout || error?.message || "").slice(0, 300)}`)); }
+        if (!out.ok) return reject(new Error(`${out.error?.code || "ERROR"}: ${out.error?.message || ""}${out.error?.suggestion ? ` ${out.error.suggestion}` : ""}`));
+        resolve(out.data);
+      });
+      child.stdin?.end(input ?? "");
+    });
+  }
+  const UI_ACTIONS = { Click: "click", SetValue: "set_value", Select: "select", Toggle: "toggle", Expand: "expand", Collapse: "collapse", ScrollTo: "scroll_to" };
+  const UI_STATES = ["focused", "selected", "checked", "disabled", "expanded", "collapsed"];
+  /** One line per element: "e12 button "Save" = value (focused) [click]", indented by nesting. */
+  function terse(tree) {
+    const lines = [];
+    let more = 0;
+    (function walk(n, depth) {
+      if (!n) return;
+      let next = depth;
+      if (n.ref_id) {
+        if (lines.length >= UI_LINES) more++;
+        else {
+          const value = n.value === undefined || n.value === null || n.value === "" ? "" : ` = "${String(n.value).replace(/\s+/g, " ").slice(0, 120)}"`;
+          const states = (n.states || []).filter((s) => UI_STATES.includes(s));
+          const acts = [...new Set((n.available_actions || []).map((a) => UI_ACTIONS[a]).filter(Boolean))];
+          lines.push(`${"  ".repeat(depth)}${n.ref_id.split(":").pop()} ${n.role || "element"}${n.name ? ` "${String(n.name).slice(0, 100)}"` : ""}${value}${states.length ? ` (${states.join(", ")})` : ""}${acts.length ? ` [${acts.join(", ")}]` : ""}`);
+        }
+        next = depth + 1;
+      }
+      for (const c of n.children || []) walk(c, next);
+    })(tree, 0);
+    if (more) lines.push(`… ${more} more elements: look inside one part with computer_ui_snapshot root=<ref>.`);
+    return lines;
+  }
+  async function uiApp(name) {
+    const wanted = norm(name);
+    if (!wanted) throw new Error("app is required, e.g. \"Notepad\"");
+    const { apps = [] } = await agentDesktop(["list-apps"]);
+    const found = apps.map((a) => ({ pid: a.pid, name: String(a.name || "").replace(/\.(exe|app)$/i, ""), raw: a.name }))
+      .filter((a) => appMatches(a, wanted) || norm(a.name) === wanted);
+    if (!found.length) throw new Error(`No open app called "${name}". Open apps: ${apps.map((a) => String(a.name).replace(/\.exe$/i, "")).join(", ")}.`);
+    return found.find((a) => a.pid !== process.pid) || found[0];
+  }
+  async function uiSnapshot(args) {
+    const target = await uiApp(String(args.app || ""));
+    permit(target, "read", current);
+    const scope = args.window ? ["--window-id", String(args.window)] : ["--app", target.raw];
+    const rootRef = args.root && last?.app.pid === target.pid ? (String(args.root).startsWith("@") ? String(args.root) : `@${last.id}:${args.root}`) : "";
+    const data = await agentDesktop(["snapshot", ...scope, "-i", "--compact", ...(rootRef ? ["--root", rootRef] : [])]);
+    last = { id: data.snapshot_id, app: target, scope };
+    const lines = terse(data.tree);
+    return { text: `${target.name}${data.tree?.name ? ` · window "${data.tree.name}"` : ""} · ${lines.length} elements. Act on one with computer_ui_action ref=<e…>; refs are valid until the next computer_ui_snapshot.\n${lines.join("\n")}` };
+  }
+  async function uiAction(args) {
+    if (!last) throw new Error("Take a computer_ui_snapshot of the app first.");
+    const action = String(args.action || "click");
+    const raw = String(args.ref || "").trim();
+    if (!raw) throw new Error("ref is required (e.g. e12 from the latest computer_ui_snapshot)");
+    const ref = raw.startsWith("@") ? raw : `@${last.id}:${raw}`;
+    const text = args.text === undefined || args.text === null ? "" : String(args.text);
+    const commands = {
+      click: ["click", ref], double_click: ["double-click", ref], right_click: ["right-click", ref], focus: ["focus", ref],
+      toggle: ["toggle", ref], expand: ["expand", ref], collapse: ["collapse", ref], scroll_to: ["scroll-to", ref],
+      select: ["select", ref, text], clear: ["clear", ref], set_value: ["set-value", ref, "--stdin"], type: ["type", ref, "--stdin"],
+    };
+    if (!commands[action]) throw new Error(`action must be one of: ${Object.keys(commands).join(", ")}`);
+    if (action === "select" && !text) throw new Error("select needs text: the option to choose");
+    permit(last.app, ["set_value", "type", "clear", "right_click"].includes(action) ? "full" : "click", current);
+    await agentDesktop(commands[action], ["set_value", "type"].includes(action) ? text : undefined);
+    await wait(250);
+    const after = await uiSnapshot({ app: last.app.raw, window: last.scope[0] === "--window-id" ? last.scope[1] : undefined });
+    return { text: `Done: ${action} ${raw}.\n${after.text}` };
+  }
+
   async function act(tool, args) {
     const pause = () => wait(450);
+    if (tool === "computer_ui_snapshot") return uiSnapshot(args);
+    if (tool === "computer_ui_action") return uiAction(args);
     if (tool === "computer_screenshot") return screenshot();
     if (tool === "computer_zoom") return zoom(args);
     if (tool === "computer_wait") { await wait(Math.min(10, Math.max(0, Number(args.seconds) || 1)) * 1000); return screenshot(); }
@@ -694,6 +955,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     if (tool === "computer_click") { await click(args.x, args.y, String(args.button || "left"), args.double ? 2 : Math.max(1, Math.min(3, Number(args.clicks) || 1))); await pause(); return screenshot(); }
     if (tool === "computer_move") { const [sx, sy] = toScreen(args.x, args.y); await moveTo(sx, sy); return { text: "Moved" }; }
     if (tool === "computer_drag") { await drag(args); await pause(); return screenshot(); }
+    if (tool === "computer_type" || tool === "computer_key") permit(await frontApp(), "full", current);
     if (tool === "computer_type") { await typeText(String(args.text ?? "")); await pause(); return screenshot(); }
     if (tool === "computer_key") { await pressKeys(String(args.key || "")); await pause(); return screenshot(); }
     if (tool === "computer_scroll") { await scroll(args.x, args.y, String(args.direction || "down"), args.amount); await pause(); return screenshot(); }
@@ -705,9 +967,10 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     const next = queue.then(async () => {
       if (!enabled) throw new Error("Computer control is turned off. Ask the user to turn on \"Let the AI control this computer\" in SuperAi Settings > AI control, then try again.");
       if (!TOOLS.includes(tool)) throw new Error(`Unknown computer tool: ${tool}`);
-      await authorize(caller, tool);
-      if (!enabled) throw new Error("Computer control was turned off.");
       const given = args && typeof args === "object" ? args : {};
+      current = caller;
+      if (tool === "computer_request_access") return requestAccess(caller, given);
+      authorize(caller);
       if (tool === "computer_screenshot") choose(given);
       showBar(tool, caller);
       return act(tool, given);

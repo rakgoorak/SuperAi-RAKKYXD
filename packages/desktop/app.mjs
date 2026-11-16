@@ -400,7 +400,18 @@ else {
       app.quit();
     }
   });
-  app.on("before-quit", () => {
+  let installedOnQuit = false;
+  app.on("before-quit", (event) => {
+    // Like Claude Desktop: a downloaded update installs quietly when the app exits; it opens on the new version next time.
+    if (!installedOnQuit && !applying && updater.state.status === "ready" && updater.packaged && !updater.storeManaged && !process.env.SUPERAI_TEST_MODE) {
+      installedOnQuit = true;
+      event.preventDefault();
+      updater.install({ relaunch: false })
+        .then((state) => log(`Installing update ${state.latestVersion} on exit`))
+        .catch((error) => log(`Update on exit failed: ${error.message}`))
+        .finally(() => app.quit());
+      return;
+    }
     app.isQuitting = true;
     browser?.destroy();
     computer?.dispose();

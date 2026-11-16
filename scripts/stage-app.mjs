@@ -38,6 +38,10 @@ export async function stageApp(appRoot, root = process.cwd()) {
       try { await include(dependency, directory, target); } catch (error) { if (!(dependency in (data.optionalDependencies || {}))) throw error; }
     }
   }
-  for (const name of ['express', 'ws', '@lydell/node-pty', '@superai-rakkyxd/core']) await include(name, root, appRoot);
+  for (const name of ['express', 'ws', '@lydell/node-pty', '@superai-rakkyxd/core', 'agent-desktop']) await include(name, root, appRoot);
+  // agent-desktop ships native binaries for every OS: keep only the target's (and its helpers).
+  const target = `${process.env.TARGET_PLATFORM === 'macos' || (!process.env.TARGET_PLATFORM && process.platform === 'darwin') ? 'darwin' : 'win32'}-${process.env.TARGET_ARCH || (process.platform === 'darwin' ? process.arch : 'x64')}`;
+  const bin = path.join(modules, 'agent-desktop', 'bin');
+  for (const file of await fs.readdir(bin).catch(() => [])) if (/-(darwin|linux|win32)-(x64|arm64)/.test(file) && !file.includes(target)) await fs.rm(path.join(bin, file), { force: true });
   return visited.size;
 }
