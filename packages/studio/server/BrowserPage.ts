@@ -84,6 +84,59 @@ export const findScript = (ref?: unknown, text?: unknown) => wrap(`
   return { x: Math.round(again.ox + r.left + r.width / 2), y: Math.round(again.oy + r.top + r.height / 2), tag: hit.el.tagName.toLowerCase() };
 `);
 
+/**
+ * The AI's own pointer in the page: an arrow with an "AI" tag that glides to (x, y) and pulses.
+ * It lives in a closed shadow root and takes no clicks, so page scripts, snapshots and the
+ * element under the point never see it; the user's own mouse is never used.
+ */
+export const aiCursorScript = (x: number, y: number, label = "") => `(() => {
+  const ID = '__superai_ai_cursor';
+  let host = document.getElementById(ID);
+  if (!host) {
+    host = document.createElement('div');
+    host.id = ID;
+    host.setAttribute('aria-hidden', 'true');
+    host.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;z-index:2147483647;pointer-events:none;';
+    const root = host.attachShadow({ mode: 'closed' });
+    root.innerHTML = '<style>.c{position:fixed;left:0;top:0;transition:transform .32s cubic-bezier(.2,.8,.2,1),opacity .3s;filter:drop-shadow(0 3px 6px rgba(0,0,0,.4))}'
+      + '.t{position:absolute;left:18px;top:20px;padding:2px 8px;border-radius:99px;font:700 11px system-ui,sans-serif;color:#05110b;background:linear-gradient(135deg,#3ddc84,#38bdf8);white-space:nowrap}'
+      + '.r{position:absolute;left:-9px;top:-9px;width:18px;height:18px;border-radius:50%;border:2px solid #3ddc84;opacity:0}'
+      + '.r.go{animation:r .5s ease-out}@keyframes r{from{opacity:1;transform:scale(.4)}to{opacity:0;transform:scale(1.8)}}.c.idle{opacity:0}'
+      + '.s:not(:empty)::before{content:" · "}.t.k .s{background:linear-gradient(90deg,#05110b 0 35%,#f2fff8 50%,#05110b 65% 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sh 1.6s linear infinite}'
+      + '@keyframes sh{from{background-position:100% 0}to{background-position:-150% 0}}.d{display:none}.t.k .d{display:inline-flex;gap:2px;margin-left:4px;vertical-align:middle}'
+      + '.d i{width:3px;height:3px;border-radius:50%;background:#05110b;animation:hp 1s ease-in-out infinite}.d i:nth-child(2){animation-delay:.15s}.d i:nth-child(3){animation-delay:.3s}@keyframes hp{50%{transform:translateY(-3px);opacity:.5}}</style>'
+      + '<div class="c"><span class="r"></span><svg width="22" height="26" viewBox="0 0 22 26"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3ddc84"/><stop offset="1" stop-color="#38bdf8"/></linearGradient></defs>'
+      + '<path d="M1.5 1.5 L1.5 21 L7 16 L10.5 24 L14 22.5 L10.5 15 L18 15 Z" fill="url(#g)" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg><span class="t"><b>AI</b><span class="s"></span><span class="d"><i></i><i></i><i></i></span></span></div>';
+    const c = root.querySelector('.c');
+    c.style.transform = 'translate(' + (${x} - 90) + 'px,' + (${y} - 60) + 'px)';
+    Object.defineProperty(host, '__c', { value: c });
+    (document.body || document.documentElement).appendChild(host);
+    void c.offsetWidth;
+  }
+  const c = host.__c, ring = c.querySelector('.r');
+  c.classList.remove('idle');
+  c.querySelector('.t').classList.remove('k');
+  c.querySelector('.s').textContent = ${JSON.stringify(String(label))};
+  c.style.transform = 'translate(' + ${x} + 'px,' + ${y} + 'px)';
+  clearTimeout(host.__t);
+  host.__t = setTimeout(() => { ring.classList.remove('go'); void ring.offsetWidth; ring.classList.add('go'); }, 300);
+  clearTimeout(host.__h);
+  host.__h = setTimeout(() => c.classList.add('idle'), 20000);
+  return true;
+})()`;
+
+/** The label next to the AI cursor while the AI works out its next step (no cursor yet: nothing). */
+export const aiThinkingScript = (label: string) => `(() => {
+  const host = document.getElementById('__superai_ai_cursor');
+  if (!host || !host.__c) return false;
+  const c = host.__c;
+  c.querySelector('.s').textContent = ${JSON.stringify(String(label))};
+  c.querySelector('.t').classList.add('k');
+  clearTimeout(host.__h);
+  host.__h = setTimeout(() => c.classList.add('idle'), 20000);
+  return true;
+})()`;
+
 /** A click done by the page itself, for when real input cannot reach it. */
 export const clickScript = (ref?: unknown, text?: unknown) => wrap(`
   const hit = __byRef(${JSON.stringify(String(ref || ""))}) || __byText(${JSON.stringify(String(text || ""))});

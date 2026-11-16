@@ -31,7 +31,9 @@ const BAR_IDLE = 20_000;
 // answered "ok [data]" or "error message".
 const HELPER = String.raw`
 $ErrorActionPreference = 'Stop'
-Add-Type -TypeDefinition @'
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, WindowsBase
+$refs = [AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { @('UIAutomationClient', 'UIAutomationTypes', 'WindowsBase') -contains $_.GetName().Name } | ForEach-Object { $_.Location }
+Add-Type -ReferencedAssemblies $refs -TypeDefinition @'
 using System; using System.Text; using System.Runtime.InteropServices;
 public static class SuperAiInput {
   [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
@@ -79,6 +81,56 @@ public static class SuperAiInput {
   // Click-through windows (the status bar's glow) are skipped by WindowFromPoint.
   public static string At(int x, int y) { POINT p; p.X = x; p.Y = y; IntPtr h = WindowFromPoint(p); return Owner(h == IntPtr.Zero ? h : GetAncestor(h, 2)); }
   public static string Front() { return Owner(GetForegroundWindow()); }
+  [DllImport("user32.dll")] static extern bool ScreenToClient(IntPtr h, ref POINT p);
+  [DllImport("user32.dll")] static extern bool PostMessageW(IntPtr h, uint m, IntPtr w, IntPtr l);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassNameW(IntPtr h, StringBuilder s, int n);
+  // Windows that ignore clicks posted to them (Chromium, UWP, WPF, games): those need the real mouse.
+  static readonly string[] NoPost = { "Chrome_", "Windows.UI.Core.CoreWindow", "ApplicationFrame", "HwndWrapper", "Intermediate D3D", "UnityWndClass", "SDL_app", "GLFW", "Qt5", "Qt6", "MozillaWindowClass" };
+  // Runs an accessibility action on its own thread: Invoke can block while the app shows a modal dialog.
+  static void Run(Action a) { var t = new System.Threading.Thread(() => { try { a(); } catch {} }); t.IsBackground = true; t.Start(); t.Join(1500); }
+  // A left click as an accessibility action on the element at the point (or a parent of it), in the
+  // app that owns the window there. "mouse" = a text field (it needs real focus), null = no action.
+  static string Uia(int x, int y, uint pid) {
+    System.Windows.Automation.AutomationElement el;
+    try { el = System.Windows.Automation.AutomationElement.FromPoint(new System.Windows.Point(x, y)); } catch { return null; }
+    if (el == null) return null;
+    try { if ((uint)el.Current.ProcessId != pid) return null; } catch { return null; }
+    for (int i = 0; el != null && i < 4; i++) {
+      var ct = el.Current.ControlType;
+      if (ct == System.Windows.Automation.ControlType.Edit || ct == System.Windows.Automation.ControlType.Document) return "mouse";
+      if (ct == System.Windows.Automation.ControlType.Window) return null;
+      object p;
+      if (el.TryGetCurrentPattern(System.Windows.Automation.InvokePattern.Pattern, out p)) { var q = (System.Windows.Automation.InvokePattern)p; Run(() => q.Invoke()); return "invoke"; }
+      if (el.TryGetCurrentPattern(System.Windows.Automation.TogglePattern.Pattern, out p)) { var q = (System.Windows.Automation.TogglePattern)p; Run(() => q.Toggle()); return "toggle"; }
+      if (el.TryGetCurrentPattern(System.Windows.Automation.SelectionItemPattern.Pattern, out p)) { var q = (System.Windows.Automation.SelectionItemPattern)p; Run(() => q.Select()); return "select"; }
+      if (el.TryGetCurrentPattern(System.Windows.Automation.ExpandCollapsePattern.Pattern, out p)) {
+        var q = (System.Windows.Automation.ExpandCollapsePattern)p;
+        Run(() => { if (q.Current.ExpandCollapseState == System.Windows.Automation.ExpandCollapseState.Collapsed) q.Expand(); else q.Collapse(); });
+        return "expand";
+      }
+      try { el = System.Windows.Automation.TreeWalker.ControlViewWalker.GetParent(el); } catch { return null; }
+    }
+    return null;
+  }
+  // Clicks without moving the user's mouse: an accessibility action for a plain left click, else
+  // mouse messages posted to the window under the point. "mouse" = this window needs the real mouse.
+  public static string Quiet(int x, int y, int button, int clicks) {
+    POINT p; p.X = x; p.Y = y;
+    IntPtr h = WindowFromPoint(p);
+    if (h == IntPtr.Zero) return "mouse";
+    uint pid; GetWindowThreadProcessId(GetAncestor(h, 2), out pid);
+    if (button == 0 && clicks == 1) { string a = Uia(x, y, pid); if (a != null) return a; }
+    StringBuilder s = new StringBuilder(256); GetClassNameW(h, s, 256);
+    string cls = s.ToString();
+    foreach (string n in NoPost) if (cls.StartsWith(n)) return "mouse";
+    ScreenToClient(h, ref p);
+    IntPtr l = (IntPtr)((p.Y << 16) | (p.X & 0xFFFF));
+    uint down = button == 1 ? 0x204u : button == 2 ? 0x207u : 0x201u;
+    IntPtr keys = (IntPtr)(button == 1 ? 2 : button == 2 ? 0x10 : 1);
+    PostMessageW(h, 0x200, IntPtr.Zero, l);
+    for (int i = 0; i < clicks; i++) { PostMessageW(h, i == 1 ? down + 2 : down, keys, l); PostMessageW(h, down + 1, IntPtr.Zero, l); }
+    return "posted";
+  }
   // Types any Unicode text; newline = Enter, tab = Tab. One character (a surrogate pair stays
   // together) per SendInput with a short pause: a single burst of many events is sometimes dropped.
   public static void Text(string s) {
@@ -123,6 +175,7 @@ while ($true) {
       'text' { [SuperAiInput]::Text([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p[1]))) }
       'at' { $out = Describe ([SuperAiInput]::At([int]$p[1], [int]$p[2])) }
       'front' { $out = Describe ([SuperAiInput]::Front()) }
+      'quiet' { $out = [SuperAiInput]::Quiet([int]$p[1], [int]$p[2], [int]$p[3], [int]$p[4]) }
       'apps' { $out = (Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | ForEach-Object { $d = ''; if ($_.ProcessName -eq 'ApplicationFrameHost') { $d = $_.MainWindowTitle } else { try { $d = $_.MainModule.FileVersionInfo.FileDescription } catch {} }; if ($d) { $d } else { $_.ProcessName } } | Sort-Object -Unique) -join $tab }
     }
     [Console]::Out.WriteLine(('ok ' + $out).Trim())
@@ -373,7 +426,65 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   const PULSE = 2600; // ms; every strip on every screen breathes in step
   const barSize = { width: 460, height: 64 };
   const overlays = () => [...ui.values()].flatMap(({ bar, glows }) => [bar, ...glows]).filter((w) => w && !w.isDestroyed());
-  const hideBar = () => { for (const w of overlays()) w.hide(); };
+  const hideBar = () => { for (const w of overlays()) w.hide(); if (aiCursor && !aiCursor.isDestroyed()) aiCursor.hide(); };
+  // The AI's own pointer: an arrow with an "AI" tag that glides to where the AI acts, so the user
+  // sees it while keeping the real mouse. Click-through, just off the point it shows.
+  let aiCursor;
+  const cursorHtml = () => `<!doctype html><meta charset="utf-8"><style>
+      html, body { margin: 0; background: transparent; overflow: hidden; }
+      .c { position: relative; width: 260px; height: 44px; filter: drop-shadow(0 3px 6px rgba(0,0,0,.45)); }
+      .c svg { position: absolute; left: 0; top: 0; }
+      .tag { position: absolute; left: 18px; top: 20px; padding: 2px 8px; border-radius: 99px; font: 700 11px "Segoe UI", system-ui, sans-serif; color: #05110b;
+        background: linear-gradient(135deg, #3ddc84, #38bdf8); white-space: nowrap; max-width: 230px; overflow: hidden; text-overflow: ellipsis; }
+      #say:not(:empty)::before { content: " · "; }
+      /* Thinking: the words shimmer and three dots bounce, like the AI is working on its next step. */
+      .tag.think #say { background: linear-gradient(90deg, #05110b 0 35%, #f2fff8 50%, #05110b 65% 100%); background-size: 250% 100%;
+        -webkit-background-clip: text; background-clip: text; color: transparent; animation: shine 1.6s linear infinite; }
+      @keyframes shine { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+      .dots { display: none; } .tag.think .dots { display: inline-flex; gap: 2px; margin-left: 4px; vertical-align: middle; }
+      .dots i { width: 3px; height: 3px; border-radius: 50%; background: #05110b; animation: hop 1s ease-in-out infinite; }
+      .dots i:nth-child(2) { animation-delay: .15s; } .dots i:nth-child(3) { animation-delay: .3s; }
+      @keyframes hop { 50% { transform: translateY(-3px); opacity: .5; } }
+      .ring { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; border: 2px solid #3ddc84; opacity: 0; }
+      .ring.go { animation: ring .5s ease-out; } @keyframes ring { from { opacity: 1; transform: scale(.4); } to { opacity: 0; transform: scale(1.8); } }
+    </style><div class="c"><span class="ring" id="ring"></span>
+      <svg width="22" height="26" viewBox="0 0 22 26"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3ddc84"/><stop offset="1" stop-color="#38bdf8"/></linearGradient></defs>
+        <path d="M1.5 1.5 L1.5 21 L7 16 L10.5 24 L14 22.5 L10.5 15 L18 15 Z" fill="url(#g)" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <span class="tag" id="tag"><b>AI</b><span id="say"></span><span class="dots"><i></i><i></i><i></i></span></span></div>
+    <script>window.pulse = () => { const r = document.getElementById('ring'); r.classList.remove('go'); void r.offsetWidth; r.classList.add('go'); };
+      window.say = (text, thinking) => { document.getElementById('say').textContent = text || ''; document.getElementById('tag').classList.toggle('think', !!thinking); };</script>`;
+  function cursorWindow() {
+    if (aiCursor && !aiCursor.isDestroyed()) return aiCursor;
+    aiCursor = overlayWindow({ x: 0, y: 0, width: 260, height: 44 }, { movable: false });
+    aiCursor.setIgnoreMouseEvents(true);
+    aiCursor.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(cursorHtml()));
+    return aiCursor;
+  }
+  let saying = ["", false];
+  /** What the label next to the AI cursor says: the action, or "thinking" between actions. */
+  function cursorSay(text, thinking = false) {
+    saying = [text, thinking];
+    if (!aiCursor || aiCursor.isDestroyed()) return;
+    const run = () => aiCursor.webContents.executeJavaScript(`window.say && window.say(${JSON.stringify(text)}, ${thinking})`).catch(() => {});
+    if (aiCursor.webContents.isLoading()) aiCursor.webContents.once("did-finish-load", run); else run();
+  }
+  /** Glides the AI cursor to a screen point (pixels on Windows, points on macOS). */
+  async function pointAt(sx, sy) {
+    try {
+      const p = process.platform === "win32" && screen.screenToDipPoint ? screen.screenToDipPoint({ x: sx, y: sy }) : { x: sx, y: sy };
+      const w = cursorWindow();
+      const to = { x: Math.round(p.x) + 1, y: Math.round(p.y) + 1 };
+      const from = w.isVisible() ? w.getBounds() : { x: to.x - 90, y: to.y - 60 };
+      w.showInactive(); w.setAlwaysOnTop(true, "screen-saver"); w.moveTop();
+      for (let i = 1; i <= 8; i++) {
+        const t = 1 - Math.pow(1 - i / 8, 3);
+        w.setPosition(Math.round(from.x + (to.x - from.x) * t), Math.round(from.y + (to.y - from.y) * t));
+        await wait(14);
+      }
+      w.webContents.executeJavaScript("window.pulse && window.pulse()").catch(() => {});
+      cursorSay(...saying);
+    } catch {}
+  }
   const dropOverlays = () => { for (const w of overlays()) w.destroy(); ui.clear(); };
   // Screens plugged in, removed or rearranged: build the overlays again on the next action.
   for (const event of ["display-added", "display-removed", "display-metrics-changed"]) screen.on(event, () => {
@@ -737,11 +848,30 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   async function moveTo(sx, sy) {
     if (process.platform === "darwin") await send(`mouse 5 ${sx} ${sy} 0 0`); else await send(`move ${sx} ${sy}`);
   }
-  async function click(x, y, button, clicks) {
+  async function click(x, y, button, clicks, force) {
     const [sx, sy] = toScreen(x, y);
-    return aside([[sx, sy]], async () => { permit(await appAt(sx, sy), button === "left" ? "click" : "full", current); await clickAt(sx, sy, button, clicks); });
+    await pointAt(sx, sy);
+    return aside([[sx, sy]], async () => { permit(await appAt(sx, sy), button === "left" ? "click" : "full", current); return clickAt(sx, sy, button, clicks, force); });
   }
-  async function clickAt(sx, sy, button, clicks) {
+  /** Windows: an accessibility action or a click posted to the window, so the user keeps the mouse.
+   *  Text fields, windows that ignore posted clicks, macOS, or mouse=true: the real mouse, put back after. */
+  async function clickAt(sx, sy, button, clicks, force) {
+    if (!force && process.platform === "win32") {
+      const how = await send(`quiet ${sx} ${sy} ${button === "right" ? 1 : button === "middle" ? 2 : 0} ${clicks}`).catch(() => "mouse");
+      if (how && how !== "mouse") return how;
+    }
+    await withMouse(() => mouseClick(sx, sy, button, clicks));
+    return "mouse";
+  }
+  /** Uses the real mouse, then puts it back where the user had it. */
+  async function withMouse(action) {
+    const saved = await send("pos").catch(() => "");
+    try { return await action(); } finally {
+      const [x, y] = saved.split(" ").map(Number);
+      if (saved && Number.isFinite(x) && Number.isFinite(y)) await moveTo(x, y).catch(() => {});
+    }
+  }
+  async function mouseClick(sx, sy, button, clicks) {
     if (process.platform === "darwin") {
       const [b, down, up] = MAC_BUTTON[button] || MAC_BUTTON.left;
       await moveTo(sx, sy);
@@ -756,7 +886,9 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     const [fx, fy] = toScreen(args.fromX, args.fromY), [tx, ty] = toScreen(args.toX, args.toY);
     return aside([[fx, fy], [tx, ty]], async () => {
       permit(await appAt(fx, fy), "full", current); permit(await appAt(tx, ty), "full", current);
-      await dragBetween(fx, fy, tx, ty);
+      await pointAt(fx, fy);
+      await withMouse(() => dragBetween(fx, fy, tx, ty));
+      await pointAt(tx, ty);
     });
   }
   async function dragBetween(fx, fy, tx, ty) {
@@ -845,15 +977,20 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     if (!["up", "down", "left", "right"].includes(direction)) throw new Error("direction must be up, down, left or right");
     const [sx, sy] = x !== undefined && y !== undefined ? toScreen(x, y) : (await send("pos")).split(" ").map(Number);
     await aside([[sx, sy]], async () => permit(await appAt(sx, sy), "click", current));
-    await moveTo(sx, sy);
-    if (process.platform === "darwin") {
-      const dy = direction === "up" ? steps : direction === "down" ? -steps : 0, dx = direction === "left" ? steps : direction === "right" ? -steps : 0;
-      await send(`scroll ${dy} ${dx}`);
-      return;
-    }
-    const horizontal = direction === "left" || direction === "right";
-    const sign = direction === "up" || direction === "right" ? 1 : -1;
-    await send(`wheel ${sign * 120 * steps} ${horizontal ? "h" : "v"}`);
+    await pointAt(sx, sy);
+    // The wheel goes to the window under the mouse: borrow it for a moment.
+    await withMouse(async () => {
+      await moveTo(sx, sy);
+      if (process.platform === "darwin") {
+        const dy = direction === "up" ? steps : direction === "down" ? -steps : 0, dx = direction === "left" ? steps : direction === "right" ? -steps : 0;
+        await send(`scroll ${dy} ${dx}`);
+        return;
+      }
+      const horizontal = direction === "left" || direction === "right";
+      const sign = direction === "up" || direction === "right" ? 1 : -1;
+      await send(`wheel ${sign * 120 * steps} ${horizontal ? "h" : "v"}`);
+      await wait(60);
+    });
   }
 
   // ------------------------------------------------------------------------------------------
@@ -952,8 +1089,16 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     if (tool === "computer_wait") { await wait(Math.min(10, Math.max(0, Number(args.seconds) || 1)) * 1000); return screenshot(); }
     requireOs("input");
     if (tool === "computer_cursor") return cursor();
-    if (tool === "computer_click") { await click(args.x, args.y, String(args.button || "left"), args.double ? 2 : Math.max(1, Math.min(3, Number(args.clicks) || 1))); await pause(); return screenshot(); }
-    if (tool === "computer_move") { const [sx, sy] = toScreen(args.x, args.y); await moveTo(sx, sy); return { text: "Moved" }; }
+    if (tool === "computer_click") {
+      const how = await click(args.x, args.y, String(args.button || "left"), args.double ? 2 : Math.max(1, Math.min(3, Number(args.clicks) || 1)), args.mouse === true);
+      await pause();
+      const shot = await screenshot();
+      const note = how === "mouse" ? "Clicked with the mouse (put back where the user had it)."
+        : how === "posted" ? "Clicked by sending the click to the window; the user's mouse did not move. If nothing changed, click again with mouse: true."
+        : `Clicked through accessibility (${how}); the user's mouse did not move.`;
+      return { ...shot, text: `${note} ${shot.text}` };
+    }
+    if (tool === "computer_move") { const [sx, sy] = toScreen(args.x, args.y); await pointAt(sx, sy); return { text: "The AI cursor points there now (the user's mouse did not move)." }; }
     if (tool === "computer_drag") { await drag(args); await pause(); return screenshot(); }
     if (tool === "computer_type" || tool === "computer_key") permit(await frontApp(), "full", current);
     if (tool === "computer_type") { await typeText(String(args.text ?? "")); await pause(); return screenshot(); }
@@ -973,7 +1118,8 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       authorize(caller);
       if (tool === "computer_screenshot") choose(given);
       showBar(tool, caller);
-      return act(tool, given);
+      cursorSay(toolLabel(tool));
+      try { return await act(tool, given); } finally { cursorSay(tr("กำลังคิด…"), true); }
     });
     queue = next.catch(() => {});
     return next;
@@ -981,6 +1127,6 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
 
   return {
     run, state, setEnabled, revoke, openOsSettings,
-    dispose: () => { windowsInput.kill(); macInput.kill(); prompt?.answer("deny"); for (const w of overlays()) w.destroy(); },
+    dispose: () => { windowsInput.kill(); macInput.kill(); prompt?.answer("deny"); for (const w of overlays()) w.destroy(); if (aiCursor && !aiCursor.isDestroyed()) aiCursor.destroy(); },
   };
 }
