@@ -324,7 +324,10 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------------------------------------------------------------------------------------------
 // What the operating system allows. Windows has no such permissions for this.
+const TEST_OS_ACCESS = process.env.SUPERAI_TEST_MODE ? process.env.SUPERAI_TEST_OS_ACCESS : undefined;
 export function osAccess(prompt = false) {
+  // Tests on Windows can stand in for a Mac that has not granted access yet (a JSON file they edit).
+  if (TEST_OS_ACCESS) try { return { accessibility: "granted", screen: "granted", ...JSON.parse(fs.readFileSync(TEST_OS_ACCESS, "utf8")) }; } catch { return { accessibility: "denied", screen: "denied" }; }
   if (process.platform !== "darwin") return { accessibility: "granted", screen: "granted" };
   let accessibility = "unknown", screenAccess = "unknown";
   try { accessibility = systemPreferences.isTrustedAccessibilityClient(prompt) ? "granted" : "denied"; } catch {}
@@ -336,6 +339,7 @@ const MAC_SETTINGS = {
   screen: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
 };
 export function openOsSettings(kind) {
+  if (TEST_OS_ACCESS && MAC_SETTINGS[kind]) return true;
   if (process.platform !== "darwin" || !MAC_SETTINGS[kind]) return false;
   // Asking once also adds SuperAi to the list, so the user only has to tick it.
   if (kind === "accessibility") osAccess(true);
@@ -633,11 +637,18 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   function ask(caller, apps, reason) {
     return new Promise((resolve) => {
       const access = osAccess(false);
-      const missing = process.platform === "darwin" ? ["accessibility", "screen"].filter((k) => access[k] !== "granted") : [];
+      const missing = process.platform === "darwin" || TEST_OS_ACCESS ? ["accessibility", "screen"].filter((k) => access[k] !== "granted") : [];
       const who = caller.chatName ? tr`แชต "${caller.chatName}"` : tr("AI ในแชต");
-      const osRows = missing.map((kind) => `<div class="os"><span>${escapeHtml(kind === "accessibility"
-        ? tr("macOS ยังไม่อนุญาต Accessibility (ใช้เมาส์และคีย์บอร์ด)") : tr("macOS ยังไม่อนุญาต Screen Recording (ดูหน้าจอ)"))}</span>
-        <a class="btn ghost" href="superai-perm:os-${kind}">${escapeHtml(tr("เปิด System Settings"))}</a></div>`).join("");
+      // macOS lets only the user turn these on, in System Settings (an app cannot grant them, even with
+      // the admin password). Walk them through it: SuperAi is already in the list, they flip its switch,
+      // and the row turns green by itself. Screen Recording only takes effect after SuperAi reopens.
+      const osRows = missing.length ? `<div class="setup"><b>${escapeHtml(tr("ตั้งค่าครั้งแรกบน Mac (ทำครั้งเดียว)"))}</b>
+        <span class="steps">${escapeHtml(tr("กด \"เปิด System Settings\" → เปิดสวิตช์ข้าง SuperAi → ใส่รหัสผ่านหรือ Touch ID"))}</span>
+        ${missing.map((kind) => `<div class="os" id="os-${kind}"><span class="dot"></span><span class="what">${escapeHtml(kind === "accessibility"
+          ? tr("Accessibility (ใช้เมาส์และคีย์บอร์ด)") : tr("Screen Recording (ดูหน้าจอ)"))}</span><span class="state">${escapeHtml(tr("ยังไม่อนุญาต"))}</span>
+          <a class="btn ghost open" href="superai-perm:os-${kind}">${escapeHtml(tr("เปิด System Settings"))}</a>
+          ${kind === "screen" ? `<a class="btn ghost reopen" href="superai-perm:relaunch">${escapeHtml(tr("เปิด SuperAi ใหม่"))}</a>` : ""}</div>`).join("")}
+        <span class="note" id="reopen-note">${escapeHtml(tr("เปิดสวิตช์ Screen Recording แล้ว กด \"เปิด SuperAi ใหม่\" ให้มีผล แล้วสั่งงานเดิมอีกครั้ง"))}</span></div>` : "";
       const html = `<!doctype html><html><head><meta charset="utf-8"><title>SuperAi permission</title><style>
         @property --a{syntax:'<angle>';initial-value:0deg;inherits:false}
         *{box-sizing:border-box} html,body{height:100%} body{margin:0;font:13px "Segoe UI",system-ui,-apple-system,sans-serif;background:transparent;color:#e8ece9;user-select:none;overflow:hidden}
@@ -650,7 +661,14 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
         .icon{flex:none;width:36px;height:36px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(135deg,#3ddc84,#38bdf8);box-shadow:0 6px 18px rgba(56,189,248,.35)}
         p{margin:0;line-height:1.5;color:#c9d1cc} .first{color:#8fa79c;font-size:12px} .first b{color:#c9f7dd}
         .warn{background:rgba(245,165,36,.08);border:1px solid rgba(245,165,36,.35);border-radius:10px;padding:9px 11px;color:#f3dcb3;font-size:12px;line-height:1.45}
-        .os{display:flex;align-items:center;gap:8px;justify-content:space-between;background:rgba(229,72,77,.1);border:1px solid rgba(229,72,77,.4);border-radius:10px;padding:8px 10px;font-size:12px;color:#f8c9cd}
+        .setup{display:flex;flex-direction:column;gap:6px;font-size:12px} .setup b{color:#e8ece9} .steps{color:#8fa79c}
+        .os{display:flex;align-items:center;gap:8px;background:rgba(229,72,77,.1);border:1px solid rgba(229,72,77,.4);border-radius:10px;padding:7px 10px;color:#f8c9cd;transition:background .3s,border-color .3s}
+        .os .what{flex:1} .os .state{color:#ffb4b9} .dot{flex:none;width:8px;height:8px;border-radius:50%;background:#e5484d}
+        .os .reopen,.note{display:none} .note{color:#f6cf8a}
+        .os.opened{background:rgba(245,165,36,.08);border-color:rgba(245,165,36,.4);color:#f3dcb3} .os.opened .dot{background:#f5a524;animation:blink 1s infinite} .os.opened .state{color:#f6cf8a}
+        .os.restart .reopen{display:inline-block} .os.restart .open{display:none} .setup.restart .note{display:block}
+        .os.granted{background:rgba(61,220,132,.08);border-color:rgba(61,220,132,.4);color:#c9f7dd} .os.granted .dot{background:#3ddc84} .os.granted .state{color:#9ff0c4} .os.granted .btn{display:none}
+        @keyframes blink{50%{opacity:.3}}
         .row{display:flex;gap:8px;justify-content:flex-end;margin-top:auto;flex-wrap:wrap}
         .btn{display:inline-block;padding:9px 15px;border-radius:10px;text-decoration:none;color:#e8ece9;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);white-space:nowrap;transition:transform .12s,filter .12s}
         .btn:hover{filter:brightness(1.2);transform:translateY(-1px)} .btn:active{transform:scale(.97)} .btn:focus-visible{outline:2px solid #38bdf8;outline-offset:2px}
@@ -675,10 +693,14 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
           <a id="allow-task" class="btn" href="superai-perm:task">${escapeHtml(tr("อนุญาตงานนี้"))}</a>
           <a id="allow-chat" class="btn allow" href="superai-perm:chat">${escapeHtml(tr("อนุญาตตลอดแชตนี้"))}</a>
         </div></div>
-        <script>addEventListener('keydown', (e) => { if (e.key === 'Escape') location.href = 'superai-perm:deny'; });</script>
+        <script>addEventListener('keydown', (e) => { if (e.key === 'Escape') location.href = 'superai-perm:deny'; });
+          const OS_TEXT = ${JSON.stringify({ opened: tr("รอคุณเปิดสวิตช์…"), restart: tr("เปิด SuperAi ใหม่ให้มีผล"), granted: tr("อนุญาตแล้ว") })};
+          window.setOs = (kind, state) => { const row = document.getElementById('os-' + kind); if (!row) return;
+            row.className = 'os ' + state; row.querySelector('.state').textContent = OS_TEXT[state] || row.querySelector('.state').textContent;
+            document.querySelector('.setup').classList.toggle('restart', !!document.querySelector('.os.restart')); };</script>
       </body></html>`;
       const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-      const width = 480, height = 262 + Math.min(apps.length, 5) * 44 + missing.length * 52 + (reason ? 26 : 0);
+      const width = 480, height = 262 + Math.min(apps.length, 5) * 44 + (missing.length ? 62 + missing.length * 44 : 0) + (reason ? 26 : 0);
       const win = new BrowserWindow({ width, height, x: Math.round(workArea.x + (workArea.width - width) / 2), y: Math.round(workArea.y + (workArea.height - height) / 3),
         frame: false, resizable: false, minimizable: false, maximizable: false, fullscreenable: false, alwaysOnTop: true, skipTaskbar: false, show: false,
         title: tr("SuperAi ขออนุญาต"), transparent: true, hasShadow: true, webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } });
@@ -687,9 +709,23 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       win.setContentProtection(true);
       let done = false;
       const timer = setTimeout(() => finish("deny"), ASK_TIMEOUT);
+      // Watch System Settings: each row turns green as soon as macOS reports the switch on.
+      const opened = new Set(), shown = {};
+      const watch = missing.length ? setInterval(() => {
+        if (win.isDestroyed()) return;
+        const now = osAccess(false);
+        let pending = 0;
+        for (const kind of missing) {
+          const state = now[kind] === "granted" ? "granted" : !opened.has(kind) ? "" : kind === "screen" ? "restart" : "opened";
+          if (state !== "granted") pending++;
+          if (state && shown[kind] !== state) { shown[kind] = state; win.webContents.executeJavaScript(`setOs(${JSON.stringify(kind)}, ${JSON.stringify(state)})`).catch(() => {}); }
+        }
+        // Everything granted after a trip to System Settings: bring the question back on top.
+        if (!pending && opened.size) { opened.clear(); win.setAlwaysOnTop(true, "screen-saver"); if (process.platform === "darwin") app.focus({ steal: true }); win.show(); win.focus(); }
+      }, 1000) : undefined;
       const finish = (answer) => {
         if (done) return;
-        done = true; clearTimeout(timer); prompt = undefined;
+        done = true; clearTimeout(timer); clearInterval(watch); prompt = undefined;
         if (!win.isDestroyed()) win.destroy();
         resolve(answer);
       };
@@ -697,7 +733,15 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       win.webContents.on("will-navigate", (event, url) => {
         event.preventDefault();
         const answer = url.replace(/^superai-perm:/, "");
-        if (answer.startsWith("os-")) return void openOsSettings(answer.slice(3));
+        if (answer.startsWith("os-")) {
+          const kind = answer.slice(3);
+          if (!openOsSettings(kind)) return;
+          opened.add(kind);
+          // Let System Settings come in front of this window while the user flips the switch.
+          win.setAlwaysOnTop(false);
+          return;
+        }
+        if (answer === "relaunch") { finish("deny"); app.relaunch(); app.quit(); return; }
         if (["deny", "task", "chat"].includes(answer)) finish(answer);
       });
       win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
