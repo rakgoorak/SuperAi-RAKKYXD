@@ -202,7 +202,7 @@ try {
   assert.ok(!typed.isError, typed.content?.[0]?.text);
   await page.waitForTimeout(300);
   assert.equal(await composer.inputValue(), 'hello ไทย 日本', 'real keyboard input reached the focused box, in any language');
-  await call('computer_key', { key: 'ctrl+a' });
+  await call('computer_key', { key: process.platform === 'darwin' ? 'cmd+a' : 'ctrl+a' });
   await call('computer_key', { key: 'Backspace' });
   await page.waitForTimeout(200);
   assert.equal(await composer.inputValue(), '', 'key combinations work');

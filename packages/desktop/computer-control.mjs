@@ -233,14 +233,20 @@ function appInfo(pid) {
   return pid + "\t\t" + ObjC.unwrap(a.localizedName) + "\t\t" + (ObjC.unwrap(a.bundleIdentifier) || "");
 }
 function front() { return appInfo($.NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier); }
-// The frontmost normal window (layer 0) under the point; the menu bar and the desktop count as the front app.
-function at(x, y) {
+// The topmost window under the point, front to back, including the Dock and floating panels (higher
+// layers). Skipped: SuperAi's own overlays (the bar, the glow and the AI cursor float above layer 0 and
+// let clicks through) and invisible windows. The menu bar and the desktop count as the front app.
+function at(x, y, owner) {
   try {
     const list = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(1 | 16, 0))) || [];
     for (const w of list) {
-      if (w.kCGWindowLayer !== 0) continue;
+      const layer = w.kCGWindowLayer, pid = w.kCGWindowOwnerPID;
+      if (w.kCGWindowAlpha === 0) continue;
+      if (layer !== 0 && pid === owner) continue;
       const b = w.kCGWindowBounds;
-      if (x >= b.X && x < b.X + b.Width && y >= b.Y && y < b.Y + b.Height) return appInfo(w.kCGWindowOwnerPID);
+      if (!(x >= b.X && x < b.X + b.Width && y >= b.Y && y < b.Y + b.Height)) continue;
+      if (layer < 0 || w.kCGWindowOwnerName === "Window Server") break; // desktop, menu bar
+      return appInfo(pid);
     }
   } catch (e) {}
   return front();
@@ -262,7 +268,7 @@ for (;;) {
       else if (p[0] === "key") key(n[1], p[2] === "down", n[3]);
       else if (p[0] === "scroll") post($.CGEventCreateScrollWheelEvent(null, 1, 2, n[1], n[2]));
       else if (p[0] === "pos") result = pos();
-      else if (p[0] === "at") result = at(n[1], n[2]);
+      else if (p[0] === "at") result = at(n[1], n[2], n[3]);
       else if (p[0] === "front") result = front();
       else if (p[0] === "apps") result = apps();
       else throw new Error("unknown command " + p[0]);
@@ -421,7 +427,7 @@ function appTier(names, bundle = "") {
   return "full";
 }
 /** Other names the user may know an app by (exact matches only). */
-const ALIASES = { msedge: ["microsoftedge"], explorer: ["fileexplorer", "desktop", "taskbar", "startmenu"], windowsexplorer: ["fileexplorer", "desktop", "taskbar", "startmenu"], finder: ["desktop"] };
+const ALIASES = { msedge: ["microsoftedge"], explorer: ["fileexplorer", "desktop", "taskbar", "startmenu"], windowsexplorer: ["fileexplorer", "desktop", "taskbar", "startmenu"], finder: ["desktop"], dock: ["finder"] }; // macOS: clicking the Dock is covered by a Finder grant (like the taskbar by Explorer)
 const isFrame = (app) => /^applicationframehost$/i.test(app.name || "");
 const appNames = (app) => [app.name, app.desc, app.bundle, String(app.bundle || "").split(".").pop(), isFrame(app) ? app.title : ""];
 const appLabel = (app) => (isFrame(app) && app.title) || app.desc || app.name || "an unknown window";
@@ -885,7 +891,8 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       : `${label} is a terminal or code editor, allowed for left-click and scroll only: typing, keys, right-click and drag are blocked there.`);
   }
   let current = { chatId: "", chatName: "" }; // the caller of the running tool
-  const appAt = async (sx, sy) => parseApp(await send(`at ${Math.round(sx)} ${Math.round(sy)}`));
+  // macOS also gets SuperAi's process id, to look past its click-through overlays (Windows ignores it).
+  const appAt = async (sx, sy) => parseApp(await send(`at ${Math.round(sx)} ${Math.round(sy)} ${process.pid}`));
   const frontApp = async () => parseApp(await send("front"));
 
   /** On macOS input silently does nothing without Accessibility: say so instead. */
@@ -1096,18 +1103,24 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   async function typeText(text) {
     if (process.platform === "darwin") {
       // Any language: paste through the clipboard, then put back what the user had there.
+      // The target app reads the clipboard after it handles ⌘V, which can take a few hundred ms on a busy
+      // or older Mac: restoring too soon made it paste the user's old clipboard instead (seen on macOS 12 Intel).
       const saved = { text: clipboard.readText(), image: clipboard.readImage() };
+      let last = "";
       try {
         for (const [i, part] of String(text).split("\n").entries()) {
           if (i) await pressKeys("enter");
           if (!part) continue;
           clipboard.writeText(part);
+          last = part;
+          await wait(40); // let the pasteboard settle before the keystroke
           await pressKeys("cmd+v");
-          await wait(120);
+          await wait(250);
         }
       } finally {
-        await wait(150);
-        if (!saved.image.isEmpty()) clipboard.writeImage(saved.image); else clipboard.writeText(saved.text);
+        await wait(500);
+        // Put back what the user had, unless they copied something new meanwhile.
+        if (!last || clipboard.readText() === last) { if (!saved.image.isEmpty()) clipboard.writeImage(saved.image); else clipboard.writeText(saved.text); }
       }
       return;
     }
