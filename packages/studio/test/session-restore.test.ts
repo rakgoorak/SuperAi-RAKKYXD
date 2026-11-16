@@ -94,10 +94,10 @@ test('the conversation each tab had is found on disk', () => {
     rollout('first', work, opened + 2000);
     rollout('second', work, opened + 9000);
     const taken = new Set<string>();
-    assert.equal(findCodexSession(work, opened, taken, home), 'first');
+    assert.equal(findCodexSession(work, opened, taken, home, path.join(home, '.codex')), 'first');
     taken.add('first');
-    assert.equal(findCodexSession(work, opened, taken, home), 'second');
-    assert.equal(findCodexSession(path.join(home, 'none'), opened, new Set(), home), null);
+    assert.equal(findCodexSession(work, opened, taken, home, path.join(home, '.codex')), 'second');
+    assert.equal(findCodexSession(path.join(home, 'none'), opened, new Set(), home, path.join(home, '.codex')), null);
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }

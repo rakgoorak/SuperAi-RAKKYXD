@@ -9,6 +9,8 @@ import { createServer } from 'node:http';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
+import { existsSync } from 'node:fs';
 import { closeApp, stepper, watchdog, watchPage } from './smoke-harness.mjs';
 
 const require = createRequire(import.meta.url), steps = stepper('browser-tools');
@@ -149,7 +151,9 @@ try {
   assert.equal(refused.status, 403, 'calls without the token are refused');
 
   steps.step('Chrome or Edge on the computer, in its own window');
-  const external = process.platform === 'win32' ? 'edge' : 'chrome';
+  // Whichever is installed (Edge on Windows; on macOS Chrome, else Edge). SUPERAI_TEST_BROWSER picks one.
+  const installed = (app) => existsSync(`/Applications/${app}.app`) || existsSync(path.join(os.homedir(), 'Applications', `${app}.app`));
+  const external = process.env.SUPERAI_TEST_BROWSER || (process.platform === 'win32' ? 'edge' : installed('Google Chrome') || !installed('Microsoft Edge') ? 'chrome' : 'edge');
   snap = (await call('browser_open', { url: pageUrl, browser: external })).content[0].text;
   assert.match(snap, /Order form/);
   snap = (await call('browser_type', { ref: refOf(snap, 'Your name'), text: 'Lin' })).content[0].text;

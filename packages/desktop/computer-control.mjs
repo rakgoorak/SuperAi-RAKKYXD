@@ -233,14 +233,20 @@ function appInfo(pid) {
   return pid + "\t\t" + ObjC.unwrap(a.localizedName) + "\t\t" + (ObjC.unwrap(a.bundleIdentifier) || "");
 }
 function front() { return appInfo($.NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier); }
-// The frontmost normal window (layer 0) under the point; the menu bar and the desktop count as the front app.
-function at(x, y) {
+// The topmost window under the point, front to back, including the Dock and floating panels (higher
+// layers). Skipped: SuperAi's own overlays (the bar, the glow and the AI cursor float above layer 0 and
+// let clicks through) and invisible windows. The menu bar and the desktop count as the front app.
+function at(x, y, owner) {
   try {
     const list = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(1 | 16, 0))) || [];
     for (const w of list) {
-      if (w.kCGWindowLayer !== 0) continue;
+      const layer = w.kCGWindowLayer, pid = w.kCGWindowOwnerPID;
+      if (w.kCGWindowAlpha === 0) continue;
+      if (layer !== 0 && pid === owner) continue;
       const b = w.kCGWindowBounds;
-      if (x >= b.X && x < b.X + b.Width && y >= b.Y && y < b.Y + b.Height) return appInfo(w.kCGWindowOwnerPID);
+      if (!(x >= b.X && x < b.X + b.Width && y >= b.Y && y < b.Y + b.Height)) continue;
+      if (layer < 0 || w.kCGWindowOwnerName === "Window Server") break; // desktop, menu bar
+      return appInfo(pid);
     }
   } catch (e) {}
   return front();
@@ -262,7 +268,7 @@ for (;;) {
       else if (p[0] === "key") key(n[1], p[2] === "down", n[3]);
       else if (p[0] === "scroll") post($.CGEventCreateScrollWheelEvent(null, 1, 2, n[1], n[2]));
       else if (p[0] === "pos") result = pos();
-      else if (p[0] === "at") result = at(n[1], n[2]);
+      else if (p[0] === "at") result = at(n[1], n[2], n[3]);
       else if (p[0] === "front") result = front();
       else if (p[0] === "apps") result = apps();
       else throw new Error("unknown command " + p[0]);
@@ -361,6 +367,24 @@ const MAC_SETTINGS = {
   accessibility: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
   screen: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
 };
+// macOS remembers these permissions by the app's code signature. A build signed ad hoc gets a new
+// signature with every update, so the switch can show "on" while macOS no longer counts it. Resetting
+// SuperAi's own entry (no admin password needed) lets the user turn it on again for this build.
+const TCC_SERVICE = { accessibility: "Accessibility", screen: "ScreenCapture" };
+function bundleId() {
+  try {
+    const plist = fs.readFileSync(path.resolve(path.dirname(process.execPath), "..", "Info.plist"), "utf8");
+    const m = /<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/.exec(plist);
+    if (m) return m[1];
+  } catch {}
+  return "com.rakgoorak.superai";
+}
+export function resetOsAccess(kind) {
+  if (!TCC_SERVICE[kind]) return Promise.resolve(false);
+  if (TEST_OS_ACCESS) return Promise.resolve(!process.env.SUPERAI_TEST_TCC_FAIL);
+  if (process.platform !== "darwin") return Promise.resolve(false);
+  return new Promise((resolve) => execFile("/usr/bin/tccutil", ["reset", TCC_SERVICE[kind], bundleId()], { timeout: 10000 }, (error) => resolve(!error)));
+}
 export function openOsSettings(kind) {
   if (TEST_OS_ACCESS && MAC_SETTINGS[kind]) return true;
   if (process.platform !== "darwin" || !MAC_SETTINGS[kind]) return false;
@@ -403,7 +427,7 @@ function appTier(names, bundle = "") {
   return "full";
 }
 /** Other names the user may know an app by (exact matches only). */
-const ALIASES = { msedge: ["microsoftedge"], explorer: ["fileexplorer", "desktop", "taskbar", "startmenu"], windowsexplorer: ["fileexplorer", "desktop", "taskbar", "startmenu"], finder: ["desktop"] };
+const ALIASES = { msedge: ["microsoftedge"], explorer: ["fileexplorer", "desktop", "taskbar", "startmenu"], windowsexplorer: ["fileexplorer", "desktop", "taskbar", "startmenu"], finder: ["desktop"], dock: ["finder"] }; // macOS: clicking the Dock is covered by a Finder grant (like the taskbar by Explorer)
 const isFrame = (app) => /^applicationframehost$/i.test(app.name || "");
 const appNames = (app) => [app.name, app.desc, app.bundle, String(app.bundle || "").split(".").pop(), isFrame(app) ? app.title : ""];
 const appLabel = (app) => (isFrame(app) && app.title) || app.desc || app.name || "an unknown window";
@@ -673,8 +697,11 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
         ${missing.map((kind) => `<div class="os" id="os-${kind}"><span class="dot"></span><span class="what">${escapeHtml(kind === "accessibility"
           ? tr("Accessibility (ใช้เมาส์และคีย์บอร์ด)") : tr("Screen Recording (ดูหน้าจอ)"))}</span><span class="state">${escapeHtml(tr("ยังไม่อนุญาต"))}</span>
           <a class="btn ghost open" href="superai-perm:os-${kind}">${escapeHtml(tr("เปิด System Settings"))}</a>
-          ${kind === "screen" ? `<a class="btn ghost reopen" href="superai-perm:relaunch">${escapeHtml(tr("เปิด SuperAi ใหม่"))}</a>` : ""}</div>`).join("")}
-        <span class="note" id="reopen-note">${escapeHtml(tr("เปิดสวิตช์ Screen Recording แล้ว กด \"เปิด SuperAi ใหม่\" ให้มีผล แล้วสั่งงานเดิมอีกครั้ง"))}</span></div>` : "";
+          ${kind === "screen" ? `<a class="btn ghost reopen" href="superai-perm:relaunch">${escapeHtml(tr("เปิด SuperAi ใหม่"))}</a>` : ""}
+          <a class="btn ghost reset" href="superai-perm:reset-${kind}" title="${escapeHtml(tr("ลบสิทธิ์เดิมของ SuperAi แล้วขอใหม่"))}">${escapeHtml(tr("รีเซ็ต"))}</a></div>`).join("")}
+        <span class="hint">${escapeHtml(tr("สวิตช์เปิดอยู่แล้วแต่ยังเป็นสีแดง (มักเกิดหลังอัปเดต)? กด \"รีเซ็ต\" แล้วเปิดสวิตช์ใหม่อีกครั้ง"))}</span>
+        <span class="note" id="reopen-note">${escapeHtml(tr("เปิดสวิตช์ Screen Recording แล้ว กด \"เปิด SuperAi ใหม่\" ให้มีผล แล้วสั่งงานเดิมอีกครั้ง"))}</span>
+        <span class="fail" id="reset-fail">${escapeHtml(tr("รีเซ็ตเองไม่ได้: ใน System Settings เลือก SuperAi แล้วกดปุ่ม − เพื่อลบ จากนั้นกด \"เปิด System Settings\" ที่นี่อีกครั้ง"))}</span></div>` : "";
       const html = `<!doctype html><html><head><meta charset="utf-8"><title>SuperAi permission</title><style>
         @property --a{syntax:'<angle>';initial-value:0deg;inherits:false}
         *{box-sizing:border-box} html,body{height:100%} body{margin:0;font:13px "Segoe UI",system-ui,-apple-system,sans-serif;background:transparent;color:#e8ece9;user-select:none;overflow:hidden}
@@ -690,7 +717,8 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
         .setup{display:flex;flex-direction:column;gap:6px;font-size:12px} .setup b{color:#e8ece9} .steps{color:#8fa79c}
         .os{display:flex;align-items:center;gap:8px;background:rgba(229,72,77,.1);border:1px solid rgba(229,72,77,.4);border-radius:10px;padding:7px 10px;color:#f8c9cd;transition:background .3s,border-color .3s}
         .os .what{flex:1} .os .state{color:#ffb4b9} .dot{flex:none;width:8px;height:8px;border-radius:50%;background:#e5484d}
-        .os .reopen,.note{display:none} .note{color:#f6cf8a}
+        .os .reopen,.note,.fail{display:none} .note{color:#f6cf8a} .hint{color:#8fa79c;font-size:11px}
+        .os .reset{color:#8fa79c} .setup.failed .fail{display:block;color:#ffb4b9} .setup.failed .hint{display:none}
         .os.opened{background:rgba(245,165,36,.08);border-color:rgba(245,165,36,.4);color:#f3dcb3} .os.opened .dot{background:#f5a524;animation:blink 1s infinite} .os.opened .state{color:#f6cf8a}
         .os.restart .reopen{display:inline-block} .os.restart .open{display:none} .setup.restart .note{display:block}
         .os.granted{background:rgba(61,220,132,.08);border-color:rgba(61,220,132,.4);color:#c9f7dd} .os.granted .dot{background:#3ddc84} .os.granted .state{color:#9ff0c4} .os.granted .btn{display:none}
@@ -723,10 +751,11 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
           const OS_TEXT = ${JSON.stringify({ opened: tr("รอคุณเปิดสวิตช์…"), restart: tr("เปิด SuperAi ใหม่ให้มีผล"), granted: tr("อนุญาตแล้ว") })};
           window.setOs = (kind, state) => { const row = document.getElementById('os-' + kind); if (!row) return;
             row.className = 'os ' + state; row.querySelector('.state').textContent = OS_TEXT[state] || row.querySelector('.state').textContent;
-            document.querySelector('.setup').classList.toggle('restart', !!document.querySelector('.os.restart')); };</script>
+            document.querySelector('.setup').classList.toggle('restart', !!document.querySelector('.os.restart')); };
+          window.resetFailed = (failed) => document.querySelector('.setup').classList.toggle('failed', failed);</script>
       </body></html>`;
       const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-      const width = 480, height = 262 + Math.min(apps.length, 5) * 44 + (missing.length ? 62 + missing.length * 44 : 0) + (reason ? 26 : 0);
+      const width = missing.length ? 560 : 480, height = 262 + Math.min(apps.length, 5) * 44 + (missing.length ? 120 + missing.length * 44 : 0) + (reason ? 26 : 0);
       const win = new BrowserWindow({ width, height, x: Math.round(workArea.x + (workArea.width - width) / 2), y: Math.round(workArea.y + (workArea.height - height) / 3),
         frame: false, resizable: false, minimizable: false, maximizable: false, fullscreenable: false, alwaysOnTop: true, skipTaskbar: false, show: false,
         title: tr("SuperAi ขออนุญาต"), transparent: true, hasShadow: true, webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } });
@@ -759,6 +788,18 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       win.webContents.on("will-navigate", (event, url) => {
         event.preventDefault();
         const answer = url.replace(/^superai-perm:/, "");
+        if (answer.startsWith("reset-")) {
+          // Forget SuperAi's stale entry, then ask again: macOS adds this build to the list, switch off.
+          const kind = answer.slice(6);
+          void resetOsAccess(kind).then((ok) => {
+            if (win.isDestroyed()) return;
+            win.webContents.executeJavaScript(`resetFailed(${!ok})`).catch(() => {});
+            if (!ok) return;
+            delete shown[kind];
+            if (openOsSettings(kind)) { opened.add(kind); win.setAlwaysOnTop(false); }
+          });
+          return;
+        }
         if (answer.startsWith("os-")) {
           const kind = answer.slice(3);
           if (!openOsSettings(kind)) return;
@@ -850,7 +891,8 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       : `${label} is a terminal or code editor, allowed for left-click and scroll only: typing, keys, right-click and drag are blocked there.`);
   }
   let current = { chatId: "", chatName: "" }; // the caller of the running tool
-  const appAt = async (sx, sy) => parseApp(await send(`at ${Math.round(sx)} ${Math.round(sy)}`));
+  // macOS also gets SuperAi's process id, to look past its click-through overlays (Windows ignores it).
+  const appAt = async (sx, sy) => parseApp(await send(`at ${Math.round(sx)} ${Math.round(sy)} ${process.pid}`));
   const frontApp = async () => parseApp(await send("front"));
 
   /** On macOS input silently does nothing without Accessibility: say so instead. */
@@ -859,10 +901,10 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     const access = osAccess(false);
     if (kind === "input" && access.accessibility !== "granted") {
       osAccess(true);
-      throw new Error("macOS has not allowed SuperAi to use the mouse and keyboard. Ask the user to allow SuperAi in System Settings > Privacy & Security > Accessibility (a window to do so was opened), then try again.");
+      throw new Error("macOS has not allowed SuperAi to use the mouse and keyboard. Ask the user to allow SuperAi in System Settings > Privacy & Security > Accessibility (a window to do so was opened), then try again. If the switch already shows on (common after an update), they press Reset in SuperAi Settings > AI control and turn it on again.");
     }
     if (kind === "screen" && (access.screen === "denied" || access.screen === "restricted"))
-      throw new Error("macOS has not allowed SuperAi to see the screen. Ask the user to allow SuperAi in System Settings > Privacy & Security > Screen Recording and restart SuperAi, then try again.");
+      throw new Error("macOS has not allowed SuperAi to see the screen. Ask the user to allow SuperAi in System Settings > Privacy & Security > Screen Recording and restart SuperAi, then try again. If the switch already shows on (common after an update), they press Reset in SuperAi Settings > AI control, turn it on again and restart SuperAi.");
   }
 
   // ------------------------------------------------------------------------------------------
@@ -1061,18 +1103,24 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   async function typeText(text) {
     if (process.platform === "darwin") {
       // Any language: paste through the clipboard, then put back what the user had there.
+      // The target app reads the clipboard after it handles ⌘V, which can take a few hundred ms on a busy
+      // or older Mac: restoring too soon made it paste the user's old clipboard instead (seen on macOS 12 Intel).
       const saved = { text: clipboard.readText(), image: clipboard.readImage() };
+      let last = "";
       try {
         for (const [i, part] of String(text).split("\n").entries()) {
           if (i) await pressKeys("enter");
           if (!part) continue;
           clipboard.writeText(part);
+          last = part;
+          await wait(40); // let the pasteboard settle before the keystroke
           await pressKeys("cmd+v");
-          await wait(120);
+          await wait(250);
         }
       } finally {
-        await wait(150);
-        if (!saved.image.isEmpty()) clipboard.writeImage(saved.image); else clipboard.writeText(saved.text);
+        await wait(500);
+        // Put back what the user had, unless they copied something new meanwhile.
+        if (!last || clipboard.readText() === last) { if (!saved.image.isEmpty()) clipboard.writeImage(saved.image); else clipboard.writeText(saved.text); }
       }
       return;
     }
@@ -1279,6 +1327,8 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
 
   return {
     run, state, setEnabled, revoke, openOsSettings,
+    /** Settings > AI control "Reset": forget SuperAi's stale macOS entry and ask again. */
+    resetOsAccess: async (kind) => { const ok = await resetOsAccess(kind); if (ok) openOsSettings(kind); return { ...state(), resetFailed: !ok }; },
     dispose: () => { windowsInput.kill(); macInput.kill(); prompt?.answer("deny"); for (const w of overlays()) w.destroy(); if (aiCursor && !aiCursor.isDestroyed()) aiCursor.destroy(); },
   };
 }
