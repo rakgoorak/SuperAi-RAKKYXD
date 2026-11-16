@@ -99,8 +99,12 @@ if (platform === 'windows') {
     await fs.cp(path.join(built, `${name}.app`), app, { recursive: true, verbatimSymlinks: true });
     const identity = process.env.APPLE_SIGNING_IDENTITY || process.env.CSC_NAME;
     if (identity) {
-      console.log(`Signing with Apple Developer Identity: ${identity}`);
+      console.log(`Signing with the release certificate: ${identity}`);
       execFileSync('codesign', ['--force', '--deep', '--options', 'runtime', '--sign', identity, '--entitlements', path.resolve('scripts/entitlements.mac.plist'), app], { stdio: 'inherit' });
+      // The designated requirement is what macOS ties permissions to: it must name the certificate
+      // (not a per-build hash), so it stays the same from one release to the next.
+      execFileSync('codesign', ['--verify', '--deep', '--strict', app], { stdio: 'inherit' });
+      execFileSync('codesign', ['-d', '-r-', app], { stdio: 'inherit' });
     } else {
       console.warn('[Security Warning] Signing with ad-hoc identity (-). On macOS 14/15, Gatekeeper will require security bypass unless signed with Apple Developer ID and notarized.');
       execFileSync('codesign', ['--force', '--deep', '--sign', '-', '--entitlements', path.resolve('scripts/entitlements.mac.plist'), app], { stdio: 'inherit' });
