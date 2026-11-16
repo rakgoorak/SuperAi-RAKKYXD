@@ -6,6 +6,7 @@ import { projectChanges, projectFile, stageFile, unstageFile, discardFile, saveP
 import { listWorktrees, createWorktree, mergeWorktree, removeWorktree } from "./GitWorktrees.js";
 import { readPreviewFile, OutsideProjectError } from './PreviewFiles.js';
 import { workingContext } from './WorkingContext.js';
+import { writeFileSafely, readJsonSafely } from './SafeFile.js';
 import { branchChoices, selectBranch } from './BranchSelection.js';
 import { listProjectFiles } from './ProjectFiles.js';
 import http from "node:http";
@@ -178,8 +179,8 @@ export class StudioServer {
       return { ...r, view, resume: (view === "chat" && this.chats.conversationId(r.id)) || r.resume };
     });
     try {
-      fs.mkdirSync(path.dirname(this.sessionsFile), { recursive: true });
-      fs.writeFileSync(this.sessionsFile, JSON.stringify({ savedAt: Date.now(), sessions }));
+      // Crash-safe (a power cut used to leave this file empty, and every open session was lost).
+      writeFileSafely(this.sessionsFile, JSON.stringify({ savedAt: Date.now(), sessions }), { backup: true });
     } catch {
       // the list is saved again on the next change
     }
@@ -189,7 +190,9 @@ export class StudioServer {
   private loadSessions() {
     this.sessionsLoaded = true;
     try {
-      const saved = JSON.parse(fs.readFileSync(this.sessionsFile, "utf8"));
+      // Falls back to the previous copy if the computer turned off while the list was being saved.
+      const { value: saved, recovered } = readJsonSafely(this.sessionsFile) as { value?: { sessions?: any[] }; recovered: boolean };
+      if (recovered) console.warn("[StudioServer] the session list was damaged; restored the previous copy");
       for (const entry of Array.isArray(saved?.sessions) ? saved.sessions : []) {
         if (typeof entry?.id !== "string" || !entry.options || typeof entry.options !== "object") continue;
         this.terminalManager.addDormant({
@@ -1470,8 +1473,7 @@ export class StudioServer {
   /** Save the open tabs so the next start reopens them on the same conversations. */
   public saveRestore(): number {
     const sessions = this.terminalManager.snapshot();
-    fs.mkdirSync(path.dirname(this.restoreFile), { recursive: true });
-    fs.writeFileSync(this.restoreFile, JSON.stringify({ savedAt: Date.now(), sessions }));
+    writeFileSafely(this.restoreFile, JSON.stringify({ savedAt: Date.now(), sessions }));
     return sessions.length;
   }
 
