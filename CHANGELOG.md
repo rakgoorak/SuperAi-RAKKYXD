@@ -6,6 +6,29 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.2.1] - 2026-11-16
+
+### Added
+- macOS first-run setup in the Allow window: "Open System Settings" for each
+  permission, each row turns green by itself once allowed, and Screen Recording
+  offers "Reopen SuperAi".
+- macOS "Reset" (Allow window and Settings > AI control) for a permission whose
+  switch shows on but no longer counts, as happens after an update.
+- The side browser plays videos (mp4, webm, mov) and opens a file outside the
+  project after you click "Open this file".
+
+### Changed
+- Computer use is faster: screenshots take about 220 ms instead of 590 ms on
+  Windows and go to the AI as JPEG (about 4x smaller); the first command no
+  longer waits for the input helper to start.
+- The AI cursor is drawn in full (click ring, shadow, label) and glides smoothly.
+
+### Fixed
+- Open sessions and chat history survive a power cut: a save interrupted by
+  the computer turning off no longer leaves an empty list behind.
+- macOS: clicking the Dock was taken for SuperAi and refused; typing on a
+  slower Mac could paste the old clipboard instead of the text.
+
 ## [1.2.0] - 2026-11-16
 
 ### Added
