@@ -12,7 +12,7 @@
 // While the AI acts, a small always-on-top bar says so and has a Stop button. Windows sends real
 // input through user32 (a long-lived PowerShell helper); macOS posts CoreGraphics events through a
 // long-lived JavaScript-for-Automation helper. Only the main screen is used.
-import { app, BrowserWindow, clipboard, desktopCapturer, screen, shell, systemPreferences } from "electron";
+import { app, BrowserWindow, clipboard, desktopCapturer, globalShortcut, screen, shell, systemPreferences } from "electron";
 import { execFile, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import fs from "node:fs";
@@ -31,7 +31,9 @@ const BAR_IDLE = 20_000;
 // answered "ok [data]" or "error message".
 const HELPER = String.raw`
 $ErrorActionPreference = 'Stop'
-Add-Type -TypeDefinition @'
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, WindowsBase
+$refs = [AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { @('UIAutomationClient', 'UIAutomationTypes', 'WindowsBase') -contains $_.GetName().Name } | ForEach-Object { $_.Location }
+Add-Type -ReferencedAssemblies $refs -TypeDefinition @'
 using System; using System.Text; using System.Runtime.InteropServices;
 public static class SuperAiInput {
   [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
@@ -79,6 +81,60 @@ public static class SuperAiInput {
   // Click-through windows (the status bar's glow) are skipped by WindowFromPoint.
   public static string At(int x, int y) { POINT p; p.X = x; p.Y = y; IntPtr h = WindowFromPoint(p); return Owner(h == IntPtr.Zero ? h : GetAncestor(h, 2)); }
   public static string Front() { return Owner(GetForegroundWindow()); }
+  // Is the keyboard focus in a password field? (The AI never types passwords.)
+  public static string Secret() {
+    try { var f = System.Windows.Automation.AutomationElement.FocusedElement; return f != null && f.Current.IsPassword ? "1" : "0"; } catch { return "0"; }
+  }
+  [DllImport("user32.dll")] static extern bool ScreenToClient(IntPtr h, ref POINT p);
+  [DllImport("user32.dll")] static extern bool PostMessageW(IntPtr h, uint m, IntPtr w, IntPtr l);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassNameW(IntPtr h, StringBuilder s, int n);
+  // Windows that ignore clicks posted to them (Chromium, UWP, WPF, games): those need the real mouse.
+  static readonly string[] NoPost = { "Chrome_", "Windows.UI.Core.CoreWindow", "ApplicationFrame", "HwndWrapper", "Intermediate D3D", "UnityWndClass", "SDL_app", "GLFW", "Qt5", "Qt6", "MozillaWindowClass" };
+  // Runs an accessibility action on its own thread: Invoke can block while the app shows a modal dialog.
+  static void Run(Action a) { var t = new System.Threading.Thread(() => { try { a(); } catch {} }); t.IsBackground = true; t.Start(); t.Join(1500); }
+  // A left click as an accessibility action on the element at the point (or a parent of it), in the
+  // app that owns the window there. "mouse" = a text field (it needs real focus), null = no action.
+  static string Uia(int x, int y, uint pid) {
+    System.Windows.Automation.AutomationElement el;
+    try { el = System.Windows.Automation.AutomationElement.FromPoint(new System.Windows.Point(x, y)); } catch { return null; }
+    if (el == null) return null;
+    try { if ((uint)el.Current.ProcessId != pid) return null; } catch { return null; }
+    for (int i = 0; el != null && i < 4; i++) {
+      var ct = el.Current.ControlType;
+      if (ct == System.Windows.Automation.ControlType.Edit || ct == System.Windows.Automation.ControlType.Document) return "mouse";
+      if (ct == System.Windows.Automation.ControlType.Window) return null;
+      object p;
+      if (el.TryGetCurrentPattern(System.Windows.Automation.InvokePattern.Pattern, out p)) { var q = (System.Windows.Automation.InvokePattern)p; Run(() => q.Invoke()); return "invoke"; }
+      if (el.TryGetCurrentPattern(System.Windows.Automation.TogglePattern.Pattern, out p)) { var q = (System.Windows.Automation.TogglePattern)p; Run(() => q.Toggle()); return "toggle"; }
+      if (el.TryGetCurrentPattern(System.Windows.Automation.SelectionItemPattern.Pattern, out p)) { var q = (System.Windows.Automation.SelectionItemPattern)p; Run(() => q.Select()); return "select"; }
+      if (el.TryGetCurrentPattern(System.Windows.Automation.ExpandCollapsePattern.Pattern, out p)) {
+        var q = (System.Windows.Automation.ExpandCollapsePattern)p;
+        Run(() => { if (q.Current.ExpandCollapseState == System.Windows.Automation.ExpandCollapseState.Collapsed) q.Expand(); else q.Collapse(); });
+        return "expand";
+      }
+      try { el = System.Windows.Automation.TreeWalker.ControlViewWalker.GetParent(el); } catch { return null; }
+    }
+    return null;
+  }
+  // Clicks without moving the user's mouse: an accessibility action for a plain left click, else
+  // mouse messages posted to the window under the point. "mouse" = this window needs the real mouse.
+  public static string Quiet(int x, int y, int button, int clicks) {
+    POINT p; p.X = x; p.Y = y;
+    IntPtr h = WindowFromPoint(p);
+    if (h == IntPtr.Zero) return "mouse";
+    uint pid; GetWindowThreadProcessId(GetAncestor(h, 2), out pid);
+    if (button == 0 && clicks == 1) { string a = Uia(x, y, pid); if (a != null) return a; }
+    StringBuilder s = new StringBuilder(256); GetClassNameW(h, s, 256);
+    string cls = s.ToString();
+    foreach (string n in NoPost) if (cls.StartsWith(n)) return "mouse";
+    ScreenToClient(h, ref p);
+    IntPtr l = (IntPtr)((p.Y << 16) | (p.X & 0xFFFF));
+    uint down = button == 1 ? 0x204u : button == 2 ? 0x207u : 0x201u;
+    IntPtr keys = (IntPtr)(button == 1 ? 2 : button == 2 ? 0x10 : 1);
+    PostMessageW(h, 0x200, IntPtr.Zero, l);
+    for (int i = 0; i < clicks; i++) { PostMessageW(h, i == 1 ? down + 2 : down, keys, l); PostMessageW(h, down + 1, IntPtr.Zero, l); }
+    return "posted";
+  }
   // Types any Unicode text; newline = Enter, tab = Tab. One character (a surrogate pair stays
   // together) per SendInput with a short pause: a single burst of many events is sometimes dropped.
   public static void Text(string s) {
@@ -123,6 +179,8 @@ while ($true) {
       'text' { [SuperAiInput]::Text([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p[1]))) }
       'at' { $out = Describe ([SuperAiInput]::At([int]$p[1], [int]$p[2])) }
       'front' { $out = Describe ([SuperAiInput]::Front()) }
+      'secret' { $out = [SuperAiInput]::Secret() }
+      'quiet' { $out = [SuperAiInput]::Quiet([int]$p[1], [int]$p[2], [int]$p[3], [int]$p[4]) }
       'apps' { $out = (Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | ForEach-Object { $d = ''; if ($_.ProcessName -eq 'ApplicationFrameHost') { $d = $_.MainWindowTitle } else { try { $d = $_.MainModule.FileVersionInfo.FileDescription } catch {} }; if ($d) { $d } else { $_.ProcessName } } | Sort-Object -Unique) -join $tab }
     }
     [Console]::Out.WriteLine(('ok ' + $out).Trim())
@@ -301,9 +359,18 @@ const CLICK_ONLY = new Set(["windowsterminal", "terminal", "wt", "cmd", "windows
 const VIEW_BUNDLES = /(google\.chrome|microsoft\.edgemac|mozilla\.firefox|apple\.safari|brave\.browser|thebrowsercompany|operasoftware|vivaldi|chromium)/i;
 const CLICK_BUNDLES = /(apple\.terminal|googlecode\.iterm2|microsoft\.vscode|dev\.warp|todesktop|jetbrains|apple\.dt\.xcode|wezterm|alacritty|kovidgoyal\.kitty|dev\.zed|ghostty|windsurf)/i;
 const RANK = { read: 0, click: 1, full: 2 };
+// Password managers, wallets and banking apps hold passwords or money: the AI may only look at them.
+const SENSITIVE = new Set(["1password", "bitwarden", "keepass", "keepassxc", "lastpass", "dashlane", "enpass", "nordpass", "protonpass", "roboform", "keeper",
+  "keychainaccess", "passwords", "credentialmanager", "exodus", "ledgerlive", "trezorsuite", "electrum", "atomicwallet", "metamask", "trustwallet", "coinbase", "binance", "bitkub"]);
+const SENSITIVE_BUNDLES = /(1password|agilebits|bitwarden|keepassxc|lastpass|dashlane|apple\.keychainaccess|apple\.passwords|exodus|ledger|trezor)/i;
+function isSensitive(names, bundle = "") {
+  const keys = names.map(norm).filter(Boolean);
+  return SENSITIVE_BUNDLES.test(bundle) || keys.some((k) => SENSITIVE.has(k) || /bank|wallet|password/.test(k));
+}
 /** "read" (look only), "click" (left-click and scroll) or "full". */
 function appTier(names, bundle = "") {
   const keys = names.map(norm).filter(Boolean);
+  if (isSensitive(names, bundle)) return "read";
   if (VIEW_BUNDLES.test(bundle) || keys.some((k) => VIEW_ONLY.has(k))) return "read";
   if (CLICK_BUNDLES.test(bundle) || keys.some((k) => CLICK_ONLY.has(k))) return "click";
   return "full";
@@ -344,7 +411,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   const denied = new Map();
   let queue = Promise.resolve();
 
-  const state = () => ({ enabled, platform: process.platform, os: osAccess(false), allowed: [...grants.entries()].filter(([, g]) => g.chat || g.until > Date.now()).map(([id, g]) => ({ chatId: id, chatName: g.name, scope: g.chat ? "chat" : "task", apps: [...g.apps.values()].map((a) => a.name) })) });
+  const state = () => ({ enabled, stopKey: stopKey?.[1] || "", platform: process.platform, os: osAccess(false), allowed: [...grants.entries()].filter(([, g]) => g.chat || g.until > Date.now()).map(([id, g]) => ({ chatId: id, chatName: g.name, scope: g.chat ? "chat" : "task", apps: [...g.apps.values()].map((a) => a.name) })) });
   const changed = () => onChange?.(state());
 
   const revoke = () => { grants.clear(); denied.clear(); prompt?.answer("deny"); changed(); return state(); };
@@ -373,7 +440,79 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   const PULSE = 2600; // ms; every strip on every screen breathes in step
   const barSize = { width: 460, height: 64 };
   const overlays = () => [...ui.values()].flatMap(({ bar, glows }) => [bar, ...glows]).filter((w) => w && !w.isDestroyed());
-  const hideBar = () => { for (const w of overlays()) w.hide(); };
+  // Stop from anywhere: while the AI has control, this key combination turns it off at once
+  // (like the Stop button), even when the bar is covered or the AI is mid-action.
+  // The first combination no other app holds (another app, e.g. a launcher, may own one already).
+  const STOP_KEYS = process.platform === "darwin"
+    ? [["Command+Shift+Escape", "⌘⇧Esc"], ["Control+Option+Escape", "⌃⌥Esc"], ["Command+Option+Shift+S", "⌘⌥⇧S"]]
+    : [["Control+Alt+Escape", "Ctrl+Alt+Esc"], ["Control+Alt+End", "Ctrl+Alt+End"], ["Control+Shift+Alt+S", "Ctrl+Shift+Alt+S"]];
+  let stopKey; // [accelerator, label] while held
+  const stopNow = () => { setEnabled(false); onStop?.(); };
+  const holdStopKey = (on) => {
+    if (on === !!stopKey) return;
+    if (!on) { try { globalShortcut.unregister(stopKey[0]); } catch {} stopKey = undefined; return; }
+    for (const key of STOP_KEYS) { try { if (globalShortcut.register(key[0], stopNow)) { stopKey = key; return; } } catch {} }
+  };
+  const hideBar = () => {
+    holdStopKey(false); for (const w of overlays()) w.hide(); if (aiCursor && !aiCursor.isDestroyed()) aiCursor.hide(); };
+  // The AI's own pointer: an arrow with an "AI" tag that glides to where the AI acts, so the user
+  // sees it while keeping the real mouse. Click-through, just off the point it shows.
+  let aiCursor;
+  const cursorHtml = () => `<!doctype html><meta charset="utf-8"><style>
+      html, body { margin: 0; background: transparent; overflow: hidden; }
+      .c { position: relative; width: 260px; height: 44px; filter: drop-shadow(0 3px 6px rgba(0,0,0,.45)); }
+      .c svg { position: absolute; left: 0; top: 0; }
+      .tag { position: absolute; left: 18px; top: 20px; padding: 2px 8px; border-radius: 99px; font: 700 11px "Segoe UI", system-ui, sans-serif; color: #05110b;
+        background: linear-gradient(135deg, #3ddc84, #38bdf8); white-space: nowrap; max-width: 230px; overflow: hidden; text-overflow: ellipsis; }
+      #say:not(:empty)::before { content: " · "; }
+      /* Thinking: the words shimmer and three dots bounce, like the AI is working on its next step. */
+      .tag.think #say { background: linear-gradient(90deg, #05110b 0 35%, #f2fff8 50%, #05110b 65% 100%); background-size: 250% 100%;
+        -webkit-background-clip: text; background-clip: text; color: transparent; animation: shine 1.6s linear infinite; }
+      @keyframes shine { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+      .dots { display: none; } .tag.think .dots { display: inline-flex; gap: 2px; margin-left: 4px; vertical-align: middle; }
+      .dots i { width: 3px; height: 3px; border-radius: 50%; background: #05110b; animation: hop 1s ease-in-out infinite; }
+      .dots i:nth-child(2) { animation-delay: .15s; } .dots i:nth-child(3) { animation-delay: .3s; }
+      @keyframes hop { 50% { transform: translateY(-3px); opacity: .5; } }
+      .ring { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; border: 2px solid #3ddc84; opacity: 0; }
+      .ring.go { animation: ring .5s ease-out; } @keyframes ring { from { opacity: 1; transform: scale(.4); } to { opacity: 0; transform: scale(1.8); } }
+    </style><div class="c"><span class="ring" id="ring"></span>
+      <svg width="22" height="26" viewBox="0 0 22 26"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3ddc84"/><stop offset="1" stop-color="#38bdf8"/></linearGradient></defs>
+        <path d="M1.5 1.5 L1.5 21 L7 16 L10.5 24 L14 22.5 L10.5 15 L18 15 Z" fill="url(#g)" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <span class="tag" id="tag"><b>AI</b><span id="say"></span><span class="dots"><i></i><i></i><i></i></span></span></div>
+    <script>window.pulse = () => { const r = document.getElementById('ring'); r.classList.remove('go'); void r.offsetWidth; r.classList.add('go'); };
+      window.say = (text, thinking) => { document.getElementById('say').textContent = text || ''; document.getElementById('tag').classList.toggle('think', !!thinking); };</script>`;
+  function cursorWindow() {
+    if (aiCursor && !aiCursor.isDestroyed()) return aiCursor;
+    aiCursor = overlayWindow({ x: 0, y: 0, width: 260, height: 44 }, { movable: false });
+    aiCursor.setIgnoreMouseEvents(true);
+    aiCursor.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(cursorHtml()));
+    return aiCursor;
+  }
+  let saying = ["", false];
+  /** What the label next to the AI cursor says: the action, or "thinking" between actions. */
+  function cursorSay(text, thinking = false) {
+    saying = [text, thinking];
+    if (!aiCursor || aiCursor.isDestroyed()) return;
+    const run = () => aiCursor.webContents.executeJavaScript(`window.say && window.say(${JSON.stringify(text)}, ${thinking})`).catch(() => {});
+    if (aiCursor.webContents.isLoading()) aiCursor.webContents.once("did-finish-load", run); else run();
+  }
+  /** Glides the AI cursor to a screen point (pixels on Windows, points on macOS). */
+  async function pointAt(sx, sy) {
+    try {
+      const p = process.platform === "win32" && screen.screenToDipPoint ? screen.screenToDipPoint({ x: sx, y: sy }) : { x: sx, y: sy };
+      const w = cursorWindow();
+      const to = { x: Math.round(p.x) + 1, y: Math.round(p.y) + 1 };
+      const from = w.isVisible() ? w.getBounds() : { x: to.x - 90, y: to.y - 60 };
+      w.showInactive(); w.setAlwaysOnTop(true, "screen-saver"); w.moveTop();
+      for (let i = 1; i <= 8; i++) {
+        const t = 1 - Math.pow(1 - i / 8, 3);
+        w.setPosition(Math.round(from.x + (to.x - from.x) * t), Math.round(from.y + (to.y - from.y) * t));
+        await wait(14);
+      }
+      w.webContents.executeJavaScript("window.pulse && window.pulse()").catch(() => {});
+      cursorSay(...saying);
+    } catch {}
+  }
   const dropOverlays = () => { for (const w of overlays()) w.destroy(); ui.clear(); };
   // Screens plugged in, removed or rearranged: build the overlays again on the next action.
   for (const event of ["display-added", "display-removed", "display-metrics-changed"]) screen.on(event, () => {
@@ -408,7 +547,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       .stop i { width: 9px; height: 9px; border-radius: 2px; background: #fff; }
     </style></head><body><div class="pill"><span class="orb"></span>
       <div class="text"><span class="title">${escapeHtml(tr("AI กำลังควบคุมคอมพิวเตอร์"))}</span><span class="sub" id="sub"></span></div>
-      <a class="stop" href="superai-stop:"><i></i>${escapeHtml(tr("หยุด"))}</a></div>
+      <a class="stop" href="superai-stop:"><i></i>${escapeHtml(tr("หยุด"))} <small id="key"></small></a></div>
       <script>window.setStatus = (action, who, here) => { const s = document.getElementById('sub'); s.textContent = ''; const b = document.createElement('b'); b.textContent = action; s.append(b); if (who) s.append(' · ' + who); document.body.classList.toggle('idle', !here); };</script>
     </body></html>`;
   const glowHtml = (to) => `<!doctype html><meta charset="utf-8"><style>
@@ -431,7 +570,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     const bar = overlayWindow({ ...barSize, x: Math.round(a.x + (a.width - barSize.width) / 2), y: a.y + 6 }, { movable: true });
     bar.webContents.on("will-navigate", (event, url) => {
       event.preventDefault();
-      if (url.startsWith("superai-stop:")) { setEnabled(false); onStop?.(); }
+      if (url.startsWith("superai-stop:")) stopNow();
     });
     bar.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(barHtml()));
     // Each strip fades from the screen edge inwards; "to" is the direction of the fade. Every strip
@@ -456,13 +595,14 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   };
   /** Shows (or refreshes) the bar and the glow on every screen; they go away after a while without computer_ calls. */
   const showBar = (tool, caller) => {
+    holdStopKey(true);
     const list = displays(), active = display();
     for (const d of list) {
       let set = ui.get(d.id);
       if (!set || [set.bar, ...set.glows].some((w) => w.isDestroyed())) { if (set) for (const w of [set.bar, ...set.glows]) if (!w.isDestroyed()) w.destroy(); set = makeOverlays(d); ui.set(d.id, set); }
       const who = [caller?.chatName ? tr`แชต "${caller.chatName}"` : "", list.length > 1 ? tr`จอ ${list.findIndex((x) => x.id === active.id) + 1}` : ""].filter(Boolean).join(" · ");
       // The screen the AI works on shows the bar fully lit; the others show it calmer.
-      const status = `window.setStatus && window.setStatus(${JSON.stringify(toolLabel(tool))}, ${JSON.stringify(who)}, ${d.id === active.id})`;
+      const status = `window.setStatus && window.setStatus(${JSON.stringify(toolLabel(tool))}, ${JSON.stringify(who)}, ${d.id === active.id}); document.getElementById('key').textContent = ${JSON.stringify(stopKey?.[1] || "")};`;
       const { bar } = set;
       const apply = () => bar.webContents.executeJavaScript(status).catch(() => {});
       if (bar.webContents.isLoading()) bar.webContents.once("did-finish-load", apply); else apply();
@@ -489,7 +629,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
 
   // ------------------------------------------------------------------------------------------
   // The Allow / Deny window.
-  const TIER_TEXT = () => ({ full: tr("ควบคุมได้เต็มที่"), click: tr("คลิกและเลื่อนได้เท่านั้น"), read: tr("ดูได้อย่างเดียว") });
+  const TIER_TEXT = () => ({ full: tr("ควบคุมได้เต็มที่"), click: tr("คลิกและเลื่อนได้เท่านั้น"), read: tr("ดูได้อย่างเดียว"), secret: tr("ข้อมูลสำคัญ · ดูได้อย่างเดียว") });
   function ask(caller, apps, reason) {
     return new Promise((resolve) => {
       const access = osAccess(false);
@@ -521,12 +661,12 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
         .app i{flex:none;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-style:normal;font-weight:700;background:rgba(56,189,248,.15);color:#9be7ff}
         .app b{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         .tier{flex:none;font-size:11px;padding:2px 9px;border-radius:99px;background:rgba(61,220,132,.14);color:#9ff0c4}
-        .tier.click{background:rgba(245,165,36,.14);color:#f6cf8a} .tier.read{background:rgba(56,189,248,.14);color:#9be7ff}
+        .tier.click{background:rgba(245,165,36,.14);color:#f6cf8a} .tier.read{background:rgba(56,189,248,.14);color:#9be7ff} .tier.secret{background:rgba(229,72,77,.16);color:#ffb4b9}
         .why{color:#8fa79c;font-size:12px}
       </style></head><body><div class="wrap">
         <h1><span class="icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#05110b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="19" height="13" rx="2"/><path d="M8 20.5h8M12 16.5v4"/><path d="M10 7.5l4.5 3-2 .5-1 2z" fill="#05110b"/></svg></span>${escapeHtml(tr("อนุญาตให้ AI ใช้แอปเหล่านี้?"))}</h1>
         <p>${escapeHtml(tr`${who} ต้องการดูหน้าจอ และใช้เมาส์กับคีย์บอร์ดในแอปต่อไปนี้`)}</p>
-        <div class="apps">${apps.map((a) => `<div class="app"><i>${escapeHtml([...a.name.trim()][0]?.toUpperCase() || "?")}</i><b>${escapeHtml(a.name)}</b><span class="tier ${a.tier}">${escapeHtml(TIER_TEXT()[a.tier])}</span></div>`).join("")}</div>
+        <div class="apps">${apps.map((a) => `<div class="app"><i>${escapeHtml([...a.name.trim()][0]?.toUpperCase() || "?")}</i><b>${escapeHtml(a.name)}</b><span class="tier ${a.sensitive ? "secret" : a.tier}">${escapeHtml(TIER_TEXT()[a.sensitive ? "secret" : a.tier])}</span></div>`).join("")}</div>
         ${reason ? `<p class="why">${escapeHtml(tr`เหตุผล: ${reason}`)}</p>` : ""}
         <div class="warn">${escapeHtml(tr("AI เห็นทั้งหน้าจอ แต่คลิกและพิมพ์ได้เฉพาะในแอปที่อนุญาต อนุญาตเฉพาะแชตที่คุณไว้ใจ และกด \"หยุด\" ที่แถบด้านบนของจอเพื่อยกเลิกได้ทุกเมื่อ"))}</div>
         ${osRows}
@@ -589,7 +729,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   async function openApps() {
     try { return (await send("apps")).split("\t").filter(Boolean); } catch { return []; }
   }
-  const tierNote = (tier) => tier === "read" ? "view only: no clicks or typing; use the browser_ tools for web pages" : tier === "click" ? "left-click and scroll only, no typing" : "full control";
+  const tierNote = (tier, sensitive) => sensitive ? "view only: it holds passwords or money, so the user does those steps" : tier === "read" ? "view only: no clicks or typing; use the browser_ tools for web pages" : tier === "click" ? "left-click and scroll only, no typing" : "full control";
   async function requestAccess(caller, args) {
     const id = caller.chatId || "";
     const list = Array.isArray(args.apps) ? args.apps : typeof args.apps === "string" ? [args.apps] : [];
@@ -601,7 +741,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     for (const name of names) {
       const key = norm(name);
       if (!key || (self && ownName(name)) || grant?.apps.has(key) || fresh.some((f) => f.key === key)) continue;
-      fresh.push({ key, name, tier: appTier([name]) });
+      fresh.push({ key, name, tier: appTier([name]), sensitive: isSensitive([name]) });
     }
     if (fresh.length) {
       if ((denied.get(id) || 0) > Date.now()) throw new Error(DENIED);
@@ -614,10 +754,10 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       grant = grantFor(caller);
       if (!grant) grants.set(id, grant = answer === "chat" ? { chat: true, name: caller.chatName, apps: new Map() } : { until: Date.now() + TASK_IDLE, name: caller.chatName, apps: new Map() });
       else if (answer === "chat") grant.chat = true;
-      for (const f of fresh) grant.apps.set(f.key, { name: f.name, tier: f.tier });
+      for (const f of fresh) grant.apps.set(f.key, { name: f.name, tier: f.tier, sensitive: f.sensitive });
       changed();
     }
-    const allowed = grant ? [...grant.apps.values()].map((a) => `${a.name} (${tierNote(a.tier)})`).join(", ") : "none";
+    const allowed = grant ? [...grant.apps.values()].map((a) => `${a.name} (${tierNote(a.tier, a.sensitive)})`).join(", ") : "none";
     const open = await openApps();
     return { text: `Allowed apps for this chat: ${allowed}.${self ? " SuperAi itself cannot be controlled by the AI." : ""}${open.length ? ` Open apps: ${open.join(", ")}.` : ""} Take a computer_screenshot to start.` };
   }
@@ -633,7 +773,9 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     if (!hit) throw new Error(`${label} is not among the apps the user allowed for this chat (${[...g.apps.values()].map((a) => a.name).join(", ")}). If you need it, call computer_request_access with ["${label}"].`);
     const actual = appTier(appNames(app), app.bundle);
     const tier = RANK[actual] < RANK[hit[1].tier] ? actual : hit[1].tier;
-    if (RANK[tier] < RANK[need]) throw new Error(tier === "read"
+    if (RANK[tier] < RANK[need]) throw new Error(hit[1].sensitive || isSensitive(appNames(app), app.bundle)
+      ? `${label} holds passwords or money, so the AI may only look at it. Ask the user to do this step themselves.`
+      : tier === "read"
       ? `${label} is a web browser, allowed for viewing only: clicks and typing in it are blocked. Use the browser_ tools for web pages.`
       : `${label} is a terminal or code editor, allowed for left-click and scroll only: typing, keys, right-click and drag are blocked there.`);
   }
@@ -688,7 +830,14 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   async function capture(d = display()) {
     requireOs("screen");
     const width = Math.round(d.size.width * d.scaleFactor), height = Math.round(d.size.height * d.scaleFactor);
-    const sources = await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width, height } });
+    // Windows ignores content protection for transparent windows: hide the bar, the glow and the AI
+    // cursor for the moment of the capture, so the AI sees only the user's screen.
+    const hidden = process.platform === "win32" ? [...overlays(), aiCursor].filter((w) => w && !w.isDestroyed() && w.isVisible()) : [];
+    for (const w of hidden) w.hide();
+    if (hidden.length) await wait(80);
+    let sources;
+    try { sources = await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width, height } }); }
+    finally { for (const w of hidden) if (!w.isDestroyed()) w.showInactive(); }
     // display_id is empty on some systems with one screen: fall back to the only source then.
     const source = sources.find((s) => String(s.display_id) === String(d.id)) || (sources.length === 1 ? sources[0] : undefined);
     if (!source || source.thumbnail.isEmpty()) throw new Error(process.platform === "darwin"
@@ -737,11 +886,30 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   async function moveTo(sx, sy) {
     if (process.platform === "darwin") await send(`mouse 5 ${sx} ${sy} 0 0`); else await send(`move ${sx} ${sy}`);
   }
-  async function click(x, y, button, clicks) {
+  async function click(x, y, button, clicks, force) {
     const [sx, sy] = toScreen(x, y);
-    return aside([[sx, sy]], async () => { permit(await appAt(sx, sy), button === "left" ? "click" : "full", current); await clickAt(sx, sy, button, clicks); });
+    await pointAt(sx, sy);
+    return aside([[sx, sy]], async () => { permit(await appAt(sx, sy), button === "left" ? "click" : "full", current); return clickAt(sx, sy, button, clicks, force); });
   }
-  async function clickAt(sx, sy, button, clicks) {
+  /** Windows: an accessibility action or a click posted to the window, so the user keeps the mouse.
+   *  Text fields, windows that ignore posted clicks, macOS, or mouse=true: the real mouse, put back after. */
+  async function clickAt(sx, sy, button, clicks, force) {
+    if (!force && process.platform === "win32") {
+      const how = await send(`quiet ${sx} ${sy} ${button === "right" ? 1 : button === "middle" ? 2 : 0} ${clicks}`).catch(() => "mouse");
+      if (how && how !== "mouse") return how;
+    }
+    await withMouse(() => mouseClick(sx, sy, button, clicks));
+    return "mouse";
+  }
+  /** Uses the real mouse, then puts it back where the user had it. */
+  async function withMouse(action) {
+    const saved = await send("pos").catch(() => "");
+    try { return await action(); } finally {
+      const [x, y] = saved.split(" ").map(Number);
+      if (saved && Number.isFinite(x) && Number.isFinite(y)) await moveTo(x, y).catch(() => {});
+    }
+  }
+  async function mouseClick(sx, sy, button, clicks) {
     if (process.platform === "darwin") {
       const [b, down, up] = MAC_BUTTON[button] || MAC_BUTTON.left;
       await moveTo(sx, sy);
@@ -756,7 +924,9 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     const [fx, fy] = toScreen(args.fromX, args.fromY), [tx, ty] = toScreen(args.toX, args.toY);
     return aside([[fx, fy], [tx, ty]], async () => {
       permit(await appAt(fx, fy), "full", current); permit(await appAt(tx, ty), "full", current);
-      await dragBetween(fx, fy, tx, ty);
+      await pointAt(fx, fy);
+      await withMouse(() => dragBetween(fx, fy, tx, ty));
+      await pointAt(tx, ty);
     });
   }
   async function dragBetween(fx, fy, tx, ty) {
@@ -845,15 +1015,20 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     if (!["up", "down", "left", "right"].includes(direction)) throw new Error("direction must be up, down, left or right");
     const [sx, sy] = x !== undefined && y !== undefined ? toScreen(x, y) : (await send("pos")).split(" ").map(Number);
     await aside([[sx, sy]], async () => permit(await appAt(sx, sy), "click", current));
-    await moveTo(sx, sy);
-    if (process.platform === "darwin") {
-      const dy = direction === "up" ? steps : direction === "down" ? -steps : 0, dx = direction === "left" ? steps : direction === "right" ? -steps : 0;
-      await send(`scroll ${dy} ${dx}`);
-      return;
-    }
-    const horizontal = direction === "left" || direction === "right";
-    const sign = direction === "up" || direction === "right" ? 1 : -1;
-    await send(`wheel ${sign * 120 * steps} ${horizontal ? "h" : "v"}`);
+    await pointAt(sx, sy);
+    // The wheel goes to the window under the mouse: borrow it for a moment.
+    await withMouse(async () => {
+      await moveTo(sx, sy);
+      if (process.platform === "darwin") {
+        const dy = direction === "up" ? steps : direction === "down" ? -steps : 0, dx = direction === "left" ? steps : direction === "right" ? -steps : 0;
+        await send(`scroll ${dy} ${dx}`);
+        return;
+      }
+      const horizontal = direction === "left" || direction === "right";
+      const sign = direction === "up" || direction === "right" ? 1 : -1;
+      await send(`wheel ${sign * 120 * steps} ${horizontal ? "h" : "v"}`);
+      await wait(60);
+    });
   }
 
   // ------------------------------------------------------------------------------------------
@@ -880,7 +1055,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     });
   }
   const UI_ACTIONS = { Click: "click", SetValue: "set_value", Select: "select", Toggle: "toggle", Expand: "expand", Collapse: "collapse", ScrollTo: "scroll_to" };
-  const UI_STATES = ["focused", "selected", "checked", "disabled", "expanded", "collapsed"];
+  const UI_STATES = ["focused", "selected", "checked", "disabled", "expanded", "collapsed", "secure"];
   /** One line per element: "e12 button "Save" = value (focused) [click]", indented by nesting. */
   function terse(tree) {
     const lines = [];
@@ -892,7 +1067,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
         if (lines.length >= UI_LINES) more++;
         else {
           const value = n.value === undefined || n.value === null || n.value === "" ? "" : ` = "${String(n.value).replace(/\s+/g, " ").slice(0, 120)}"`;
-          const states = (n.states || []).filter((s) => UI_STATES.includes(s));
+          const states = (n.states || []).filter((s) => UI_STATES.includes(s)).map((s) => (s === "secure" ? "password" : s));
           const acts = [...new Set((n.available_actions || []).map((a) => UI_ACTIONS[a]).filter(Boolean))];
           lines.push(`${"  ".repeat(depth)}${n.ref_id.split(":").pop()} ${n.role || "element"}${n.name ? ` "${String(n.name).slice(0, 100)}"` : ""}${value}${states.length ? ` (${states.join(", ")})` : ""}${acts.length ? ` [${acts.join(", ")}]` : ""}`);
         }
@@ -918,7 +1093,9 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     const scope = args.window ? ["--window-id", String(args.window)] : ["--app", target.raw];
     const rootRef = args.root && last?.app.pid === target.pid ? (String(args.root).startsWith("@") ? String(args.root) : `@${last.id}:${args.root}`) : "";
     const data = await agentDesktop(["snapshot", ...scope, "-i", "--compact", ...(rootRef ? ["--root", rootRef] : [])]);
-    last = { id: data.snapshot_id, app: target, scope };
+    const nodes = new Map();
+    (function index(n) { if (!n) return; if (n.ref_id) nodes.set(n.ref_id.split(":").pop(), n); for (const c of n.children || []) index(c); })(data.tree);
+    last = { id: data.snapshot_id, app: target, scope, nodes };
     const lines = terse(data.tree);
     return { text: `${target.name}${data.tree?.name ? ` · window "${data.tree.name}"` : ""} · ${lines.length} elements. Act on one with computer_ui_action ref=<e…>; refs are valid until the next computer_ui_snapshot.\n${lines.join("\n")}` };
   }
@@ -937,6 +1114,9 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     if (!commands[action]) throw new Error(`action must be one of: ${Object.keys(commands).join(", ")}`);
     if (action === "select" && !text) throw new Error("select needs text: the option to choose");
     permit(last.app, ["set_value", "type", "clear", "right_click"].includes(action) ? "full" : "click", current);
+    const node = last.nodes?.get(raw.split(":").pop());
+    if (["set_value", "type"].includes(action) && node && /password|protected|secure/i.test([node.role, node.role_description, node.subrole, ...(node.states || [])].join(" ")))
+      throw new Error("That is a password field. The AI does not type passwords: ask the user to type it themselves.");
     await agentDesktop(commands[action], ["set_value", "type"].includes(action) ? text : undefined);
     await wait(250);
     const after = await uiSnapshot({ app: last.app.raw, window: last.scope[0] === "--window-id" ? last.scope[1] : undefined });
@@ -952,10 +1132,20 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     if (tool === "computer_wait") { await wait(Math.min(10, Math.max(0, Number(args.seconds) || 1)) * 1000); return screenshot(); }
     requireOs("input");
     if (tool === "computer_cursor") return cursor();
-    if (tool === "computer_click") { await click(args.x, args.y, String(args.button || "left"), args.double ? 2 : Math.max(1, Math.min(3, Number(args.clicks) || 1))); await pause(); return screenshot(); }
-    if (tool === "computer_move") { const [sx, sy] = toScreen(args.x, args.y); await moveTo(sx, sy); return { text: "Moved" }; }
+    if (tool === "computer_click") {
+      const how = await click(args.x, args.y, String(args.button || "left"), args.double ? 2 : Math.max(1, Math.min(3, Number(args.clicks) || 1)), args.mouse === true);
+      await pause();
+      const shot = await screenshot();
+      const note = how === "mouse" ? "Clicked with the mouse (put back where the user had it)."
+        : how === "posted" ? "Clicked by sending the click to the window; the user's mouse did not move. If nothing changed, click again with mouse: true."
+        : `Clicked through accessibility (${how}); the user's mouse did not move.`;
+      return { ...shot, text: `${note} ${shot.text}` };
+    }
+    if (tool === "computer_move") { const [sx, sy] = toScreen(args.x, args.y); await pointAt(sx, sy); return { text: "The AI cursor points there now (the user's mouse did not move)." }; }
     if (tool === "computer_drag") { await drag(args); await pause(); return screenshot(); }
     if (tool === "computer_type" || tool === "computer_key") permit(await frontApp(), "full", current);
+    if (tool === "computer_type" && process.platform === "win32" && (await send("secret").catch(() => "0")) === "1")
+      throw new Error("The keyboard focus is in a password field. The AI does not type passwords: ask the user to type it themselves.");
     if (tool === "computer_type") { await typeText(String(args.text ?? "")); await pause(); return screenshot(); }
     if (tool === "computer_key") { await pressKeys(String(args.key || "")); await pause(); return screenshot(); }
     if (tool === "computer_scroll") { await scroll(args.x, args.y, String(args.direction || "down"), args.amount); await pause(); return screenshot(); }
@@ -973,7 +1163,8 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       authorize(caller);
       if (tool === "computer_screenshot") choose(given);
       showBar(tool, caller);
-      return act(tool, given);
+      cursorSay(toolLabel(tool));
+      try { return await act(tool, given); } finally { cursorSay(tr("กำลังคิด…"), true); }
     });
     queue = next.catch(() => {});
     return next;
@@ -981,6 +1172,6 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
 
   return {
     run, state, setEnabled, revoke, openOsSettings,
-    dispose: () => { windowsInput.kill(); macInput.kill(); prompt?.answer("deny"); for (const w of overlays()) w.destroy(); },
+    dispose: () => { windowsInput.kill(); macInput.kill(); prompt?.answer("deny"); for (const w of overlays()) w.destroy(); if (aiCursor && !aiCursor.isDestroyed()) aiCursor.destroy(); },
   };
 }

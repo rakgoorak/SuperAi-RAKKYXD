@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { chromium, type BrowserContext, type Page } from "playwright-core";
-import { SNAPSHOT, SELECT_ALL, describe, findScript, focusScript, hasTextScript, scrollScript, selectScript, type PageSnapshot } from "./BrowserPage.js";
+import { tr } from "./i18n.js";
+import { SNAPSHOT, SELECT_ALL, aiCursorScript, aiThinkingScript, describe, findScript, focusScript, hasTextScript, scrollScript, selectScript, type PageSnapshot } from "./BrowserPage.js";
 import type { BrowserToolResult } from "./BrowserTools.js";
 
 /**
@@ -109,6 +110,12 @@ const keyName = (combo: string) => combo.split("+").map((part) => {
 }).join("+");
 
 export async function runExternal(kind: ExternalKind, tool: string, args: Record<string, any>): Promise<BrowserToolResult> {
+  try { return await runTool(kind, tool, args); } finally {
+    // Between actions the AI cursor says the AI is thinking about its next step.
+    if (["browser_click", "browser_type", "browser_press", "browser_select"].includes(tool)) await active.get(kind)?.evaluate(aiThinkingScript(tr("กำลังคิด…"))).catch(() => {});
+  }
+}
+async function runTool(kind: ExternalKind, tool: string, args: Record<string, any>): Promise<BrowserToolResult> {
   if (tool === "browser_open") {
     const url = String(args.url || "");
     if (!/^https?:\/\//i.test(url) && !/^localhost(:\d+)?(\/|$)/i.test(url)) throw new Error("Use an http(s) address");
@@ -147,6 +154,8 @@ export async function runExternal(kind: ExternalKind, tool: string, args: Record
   if (tool === "browser_click" || tool === "browser_type") {
     const target = await p.evaluate(findScript(args.ref, args.text)) as { x: number; y: number } | null;
     if (!target) throw new Error(args.ref ? `No element with ref ${args.ref}. Take a new browser_snapshot; refs change when the page changes.` : `No clickable element shows "${args.text}".`);
+    // The AI's own cursor glides there first, so the user sees where it acts.
+    if (await p.evaluate(aiCursorScript(target.x, target.y, tool === "browser_click" ? tr("คลิก") : tr("พิมพ์ข้อความ"))).catch(() => false)) await wait(330);
     if (tool === "browser_click") {
       await p.mouse.click(target.x, target.y);
       await wait(250);
