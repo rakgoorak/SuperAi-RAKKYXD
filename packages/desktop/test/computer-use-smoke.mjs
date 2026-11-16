@@ -19,7 +19,11 @@ let desktop, mcp;
 const guard = watchdog(120000, steps, () => closeApp(desktop, steps));
 try {
   steps.step('launch app');
-  desktop = await electron.launch({ executablePath: require('electron'), args: [path.resolve('packages/desktop/test/browser-tools-main.mjs')], env: { SUPERAI_LANG: 'th', ...process.env, SUPERAI_DATA_DIR: data, SUPERAI_COMPUTER_ALLOW_SELF: '1' }, timeout: 60000 });
+  // Stands in for macOS Accessibility / Screen Recording (all granted unless a step says otherwise).
+  const osFile = path.join(data, 'os-access.json');
+  const setOs = (value) => fs.writeFile(osFile, JSON.stringify(value));
+  await setOs({});
+  desktop = await electron.launch({ executablePath: require('electron'), args: [path.resolve('packages/desktop/test/browser-tools-main.mjs')], env: { SUPERAI_LANG: 'th', ...process.env, SUPERAI_DATA_DIR: data, SUPERAI_COMPUTER_ALLOW_SELF: '1', SUPERAI_TEST_MODE: '1', SUPERAI_TEST_OS_ACCESS: osFile }, timeout: 60000 });
   const page = await desktop.firstWindow();
   watchPage(page, steps);
   await page.waitForSelector('.app-shell');
@@ -56,6 +60,31 @@ try {
     }
     throw new Error('The Allow / Deny window did not appear');
   };
+  steps.step('Mac first-run setup: rows turn green as System Settings grants access');
+  await setOs({ accessibility: 'denied', screen: 'denied' });
+  const setupCall = call('computer_request_access', { apps: ['Notepad'] });
+  const setupWindow = await permissionWindow();
+  const rowState = (kind) => setupWindow.evaluate((k) => document.getElementById('os-' + k)?.className, kind);
+  assert.equal(await rowState('accessibility'), 'os', 'the missing permission is listed');
+  assert.equal(await rowState('screen'), 'os');
+  await setupWindow.screenshot({ path: path.join(output, 'mac-setup-missing.png') });
+  await setupWindow.evaluate(() => { location.href = 'superai-perm:os-accessibility'; });
+  await setupWindow.evaluate(() => { location.href = 'superai-perm:os-screen'; });
+  await setupWindow.waitForFunction(() => document.getElementById('os-accessibility').className === 'os opened', null, { timeout: 4000 });
+  await setupWindow.waitForFunction(() => document.getElementById('os-screen').className === 'os restart', null, { timeout: 4000 });
+  assert.equal(await setupWindow.evaluate(() => getComputedStyle(document.querySelector('#os-screen .reopen')).display) !== 'none', true, 'Screen Recording offers to reopen SuperAi');
+  assert.equal(await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'SuperAi permission')?.isAlwaysOnTop()), false, 'System Settings can come in front');
+  await setOs({ accessibility: 'granted', screen: 'denied' });
+  await setupWindow.waitForFunction(() => document.getElementById('os-accessibility').className === 'os granted', null, { timeout: 4000 });
+  await setOs({});
+  await setupWindow.waitForFunction(() => document.getElementById('os-screen').className === 'os granted', null, { timeout: 4000 });
+  await desktop.evaluate(async ({ BrowserWindow }) => { for (let i = 0; i < 30; i++) { if (BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'SuperAi permission')?.isAlwaysOnTop()) return; await new Promise((r) => setTimeout(r, 100)); } throw new Error('the question did not come back on top'); });
+  await setupWindow.waitForTimeout(400);
+  await setupWindow.screenshot({ path: path.join(output, 'mac-setup-granted.png') });
+  await setupWindow.evaluate(() => { location.href = 'superai-perm:deny'; }).catch(() => {});
+  await setupCall;
+  await page.evaluate(() => window.superai.computer('revoke'));
+
   steps.step('Deny refuses, and is not asked again right away');
   const noAsk = await call('computer_screenshot');
   assert.equal(noAsk.isError, true, 'nothing works before computer_request_access');
