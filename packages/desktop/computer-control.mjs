@@ -487,12 +487,15 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     holdStopKey(false); for (const w of overlays()) w.hide(); if (aiCursor && !aiCursor.isDestroyed()) aiCursor.hide(); };
   // The AI's own pointer: an arrow with an "AI" tag that glides to where the AI acts, so the user
   // sees it while keeping the real mouse. Click-through, just off the point it shows.
+  // The window leaves CURSOR_PAD of room around the arrow tip, so the click ring and the shadow
+  // are never cut off at the window's edge (they were: the tip sat in the window's corner).
   let aiCursor;
+  const CURSOR_PAD = 22, CURSOR_W = 300, CURSOR_H = 84;
   const cursorHtml = () => `<!doctype html><meta charset="utf-8"><style>
       html, body { margin: 0; background: transparent; overflow: hidden; }
-      .c { position: relative; width: 260px; height: 44px; filter: drop-shadow(0 3px 6px rgba(0,0,0,.45)); }
-      .c svg { position: absolute; left: 0; top: 0; }
-      .tag { position: absolute; left: 18px; top: 20px; padding: 2px 8px; border-radius: 99px; font: 700 11px "Segoe UI", system-ui, sans-serif; color: #05110b;
+      .c { position: absolute; left: ${CURSOR_PAD}px; top: ${CURSOR_PAD}px; width: ${CURSOR_W - CURSOR_PAD}px; height: ${CURSOR_H - CURSOR_PAD}px; }
+      .c svg { position: absolute; left: 0; top: 0; overflow: visible; filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+      .tag { position: absolute; left: 18px; top: 22px; box-shadow: 0 2px 6px rgba(0,0,0,.4); padding: 2px 8px; border-radius: 99px; font: 700 11px "Segoe UI", system-ui, sans-serif; color: #05110b;
         background: linear-gradient(135deg, #3ddc84, #38bdf8); white-space: nowrap; max-width: 230px; overflow: hidden; text-overflow: ellipsis; }
       #say:not(:empty)::before { content: " · "; }
       /* Thinking: the words shimmer and three dots bounce, like the AI is working on its next step. */
@@ -503,7 +506,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       .dots i { width: 3px; height: 3px; border-radius: 50%; background: #05110b; animation: hop 1s ease-in-out infinite; }
       .dots i:nth-child(2) { animation-delay: .15s; } .dots i:nth-child(3) { animation-delay: .3s; }
       @keyframes hop { 50% { transform: translateY(-3px); opacity: .5; } }
-      .ring { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; border: 2px solid #3ddc84; opacity: 0; }
+      .ring { position: absolute; left: -10px; top: -10px; width: 20px; height: 20px; box-sizing: border-box; border-radius: 50%; border: 2px solid #3ddc84; opacity: 0; }
       .ring.go { animation: ring .5s ease-out; } @keyframes ring { from { opacity: 1; transform: scale(.4); } to { opacity: 0; transform: scale(1.8); } }
     </style><div class="c"><span class="ring" id="ring"></span>
       <svg width="22" height="26" viewBox="0 0 22 26"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3ddc84"/><stop offset="1" stop-color="#38bdf8"/></linearGradient></defs>
@@ -513,7 +516,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       window.say = (text, thinking) => { document.getElementById('say').textContent = text || ''; document.getElementById('tag').classList.toggle('think', !!thinking); };</script>`;
   function cursorWindow() {
     if (aiCursor && !aiCursor.isDestroyed()) return aiCursor;
-    aiCursor = overlayWindow({ x: 0, y: 0, width: 260, height: 44 }, { movable: false });
+    aiCursor = overlayWindow({ x: 0, y: 0, width: CURSOR_W, height: CURSOR_H }, { movable: false });
     aiCursor.setIgnoreMouseEvents(true);
     aiCursor.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(cursorHtml()));
     return aiCursor;
@@ -531,13 +534,18 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     try {
       const p = process.platform === "win32" && screen.screenToDipPoint ? screen.screenToDipPoint({ x: sx, y: sy }) : { x: sx, y: sy };
       const w = cursorWindow();
-      const to = { x: Math.round(p.x) + 1, y: Math.round(p.y) + 1 };
+      // Window position = the tip (just off the point, so the real target stays visible) minus the padding.
+      const to = { x: Math.round(p.x) + 1 - CURSOR_PAD, y: Math.round(p.y) + 1 - CURSOR_PAD };
       const from = w.isVisible() ? w.getBounds() : { x: to.x - 90, y: to.y - 60 };
       w.showInactive(); w.setAlwaysOnTop(true, "screen-saver"); w.moveTop();
-      for (let i = 1; i <= 8; i++) {
-        const t = 1 - Math.pow(1 - i / 8, 3);
+      // A smooth glide at about 60 fps; longer moves take a little longer (140-340 ms), easing out.
+      const distance = Math.hypot(to.x - from.x, to.y - from.y);
+      const duration = Math.min(340, Math.max(140, distance * 0.45)), start = Date.now();
+      for (;;) {
+        const k = Math.min(1, (Date.now() - start) / duration), t = 1 - Math.pow(1 - k, 3);
         w.setPosition(Math.round(from.x + (to.x - from.x) * t), Math.round(from.y + (to.y - from.y) * t));
-        await wait(14);
+        if (k >= 1) break;
+        await wait(16);
       }
       w.webContents.executeJavaScript("window.pulse && window.pulse()").catch(() => {});
       cursorSay(...saying);

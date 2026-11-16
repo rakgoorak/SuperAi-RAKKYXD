@@ -144,7 +144,7 @@ try {
   // Coordinates map to the right screen: the AI cursor goes to the point on each one, and the
   // user's own mouse stays where it was.
   const mouseNow = () => desktop.evaluate(({ screen }) => screen.getCursorScreenPoint());
-  const aiCursorAt = () => desktop.evaluate(({ BrowserWindow }) => { const c = BrowserWindow.getAllWindows().find((x) => { const b = x.getBounds(); return b.width === 260 && b.height === 44; }); return c && c.isVisible() ? c.getBounds() : null; });
+  const aiCursorAt = () => desktop.evaluate(({ BrowserWindow }) => { const c = BrowserWindow.getAllWindows().find((x) => { const b = x.getBounds(); return b.width === 300 && b.height === 84; }); if (!c || !c.isVisible()) return null; const b = c.getBounds(); return { ...b, x: b.x + 22, y: b.y + 22 }; });
   for (let n = screens; n >= 1; n--) {
     const shotN = await call('computer_screenshot', { display: n });
     const [, sw] = /Screen (\d+)x/.exec(shotN.content[0].text).map(Number);
@@ -155,6 +155,14 @@ try {
     assert.ok(at && Math.abs(at.x - (d.x + 120 * k)) <= 3 && Math.abs(at.y - (d.y + 90 * k)) <= 3, `screen ${n}: the AI cursor should point at 120,90: ${JSON.stringify({ at, d, sw })}`);
     assert.deepEqual(await mouseNow(), before, "computer_move leaves the user's mouse alone");
   }
+  // How the AI cursor looks (arrow, label, click ring): nothing may be cut off at the window's edge.
+  await new Promise((r) => setTimeout(r, 120));
+  const cursorImage = await desktop.evaluate(async ({ BrowserWindow }) => {
+    const c = BrowserWindow.getAllWindows().find((x) => { const b = x.getBounds(); return b.width === 300 && b.height === 84; });
+    await c.webContents.executeJavaScript("window.say('คลิก', false); window.pulse(); new Promise((r) => setTimeout(r, 90))");
+    return (await c.webContents.capturePage()).toPNG().toString('base64');
+  });
+  await fs.writeFile(path.join(output, 'ai-cursor.png'), Buffer.from(cursorImage, 'base64'));
   steps.step('no second window once allowed; zoom and cursor work');
   const zoomed = await call('computer_zoom', { x: 0, y: 0, width: 200, height: 120 });
   assert.ok(!zoomed.isError, zoomed.content?.[0]?.text);
