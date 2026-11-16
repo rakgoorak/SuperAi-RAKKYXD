@@ -195,6 +195,8 @@ ipcMain.handle("computer:action", async (e, action, value) => {
   if (action === "revoke") return computer.revoke();
   // macOS: open System Settings at Accessibility or Screen Recording (and ask the OS first).
   if (action === "os-settings") { computer.openOsSettings(String(value)); return computer.state(); }
+  // macOS: the switch shows "on" but this build is not counted (usually after an update): forget it and ask again.
+  if (action === "os-reset") return computer.resetOsAccess(String(value));
   throw new Error(tr("คำสั่งไม่ถูกต้อง"));
 });
 ipcMain.handle("usage:action", async (e, action, value) => {

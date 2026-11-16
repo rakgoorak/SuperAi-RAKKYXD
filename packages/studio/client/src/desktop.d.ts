@@ -15,6 +15,8 @@ export interface ComputerState {
   enabled: boolean;
   platform?: string;
   os?: { accessibility: string; screen: string };
+  /** Set by "os-reset" when macOS refused to reset SuperAi's entry (the user removes it with − instead). */
+  resetFailed?: boolean;
   /** Chats the user allowed in the Allow / Deny window: for the whole chat, or for the current task. */
   allowed?: { chatId: string; chatName?: string; scope: "chat" | "task"; apps?: string[] }[];
 }
@@ -67,7 +69,7 @@ declare global {
       /** Anonymous usage count: `available` is false in dev builds, `enabled` is the user's choice. */
       usage?: (action: "state" | "set", value?: boolean) => Promise<{ available: boolean; enabled: boolean }>;
       /** "Let the AI control this computer": off unless the user turns it on; each chat is then asked once in an Allow / Deny window. */
-      computer?: (action: "state" | "set" | "revoke" | "os-settings", value?: boolean | "accessibility" | "screen") => Promise<ComputerState>;
+      computer?: (action: "state" | "set" | "revoke" | "os-settings" | "os-reset", value?: boolean | "accessibility" | "screen") => Promise<ComputerState>;
       onComputer?: (callback: (state: ComputerState) => void) => () => void;
       /** OS notification + taskbar flash; clicking it focuses the window and reports `target` via onNotifyOpen. */
       notify?: (notice: { tag: string; title: string; body: string; target: unknown }) => Promise<void>;

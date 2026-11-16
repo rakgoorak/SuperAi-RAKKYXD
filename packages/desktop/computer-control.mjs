@@ -361,6 +361,24 @@ const MAC_SETTINGS = {
   accessibility: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
   screen: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
 };
+// macOS remembers these permissions by the app's code signature. A build signed ad hoc gets a new
+// signature with every update, so the switch can show "on" while macOS no longer counts it. Resetting
+// SuperAi's own entry (no admin password needed) lets the user turn it on again for this build.
+const TCC_SERVICE = { accessibility: "Accessibility", screen: "ScreenCapture" };
+function bundleId() {
+  try {
+    const plist = fs.readFileSync(path.resolve(path.dirname(process.execPath), "..", "Info.plist"), "utf8");
+    const m = /<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/.exec(plist);
+    if (m) return m[1];
+  } catch {}
+  return "com.rakgoorak.superai";
+}
+export function resetOsAccess(kind) {
+  if (!TCC_SERVICE[kind]) return Promise.resolve(false);
+  if (TEST_OS_ACCESS) return Promise.resolve(!process.env.SUPERAI_TEST_TCC_FAIL);
+  if (process.platform !== "darwin") return Promise.resolve(false);
+  return new Promise((resolve) => execFile("/usr/bin/tccutil", ["reset", TCC_SERVICE[kind], bundleId()], { timeout: 10000 }, (error) => resolve(!error)));
+}
 export function openOsSettings(kind) {
   if (TEST_OS_ACCESS && MAC_SETTINGS[kind]) return true;
   if (process.platform !== "darwin" || !MAC_SETTINGS[kind]) return false;
@@ -673,8 +691,11 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
         ${missing.map((kind) => `<div class="os" id="os-${kind}"><span class="dot"></span><span class="what">${escapeHtml(kind === "accessibility"
           ? tr("Accessibility (ใช้เมาส์และคีย์บอร์ด)") : tr("Screen Recording (ดูหน้าจอ)"))}</span><span class="state">${escapeHtml(tr("ยังไม่อนุญาต"))}</span>
           <a class="btn ghost open" href="superai-perm:os-${kind}">${escapeHtml(tr("เปิด System Settings"))}</a>
-          ${kind === "screen" ? `<a class="btn ghost reopen" href="superai-perm:relaunch">${escapeHtml(tr("เปิด SuperAi ใหม่"))}</a>` : ""}</div>`).join("")}
-        <span class="note" id="reopen-note">${escapeHtml(tr("เปิดสวิตช์ Screen Recording แล้ว กด \"เปิด SuperAi ใหม่\" ให้มีผล แล้วสั่งงานเดิมอีกครั้ง"))}</span></div>` : "";
+          ${kind === "screen" ? `<a class="btn ghost reopen" href="superai-perm:relaunch">${escapeHtml(tr("เปิด SuperAi ใหม่"))}</a>` : ""}
+          <a class="btn ghost reset" href="superai-perm:reset-${kind}" title="${escapeHtml(tr("ลบสิทธิ์เดิมของ SuperAi แล้วขอใหม่"))}">${escapeHtml(tr("รีเซ็ต"))}</a></div>`).join("")}
+        <span class="hint">${escapeHtml(tr("สวิตช์เปิดอยู่แล้วแต่ยังเป็นสีแดง (มักเกิดหลังอัปเดต)? กด \"รีเซ็ต\" แล้วเปิดสวิตช์ใหม่อีกครั้ง"))}</span>
+        <span class="note" id="reopen-note">${escapeHtml(tr("เปิดสวิตช์ Screen Recording แล้ว กด \"เปิด SuperAi ใหม่\" ให้มีผล แล้วสั่งงานเดิมอีกครั้ง"))}</span>
+        <span class="fail" id="reset-fail">${escapeHtml(tr("รีเซ็ตเองไม่ได้: ใน System Settings เลือก SuperAi แล้วกดปุ่ม − เพื่อลบ จากนั้นกด \"เปิด System Settings\" ที่นี่อีกครั้ง"))}</span></div>` : "";
       const html = `<!doctype html><html><head><meta charset="utf-8"><title>SuperAi permission</title><style>
         @property --a{syntax:'<angle>';initial-value:0deg;inherits:false}
         *{box-sizing:border-box} html,body{height:100%} body{margin:0;font:13px "Segoe UI",system-ui,-apple-system,sans-serif;background:transparent;color:#e8ece9;user-select:none;overflow:hidden}
@@ -690,7 +711,8 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
         .setup{display:flex;flex-direction:column;gap:6px;font-size:12px} .setup b{color:#e8ece9} .steps{color:#8fa79c}
         .os{display:flex;align-items:center;gap:8px;background:rgba(229,72,77,.1);border:1px solid rgba(229,72,77,.4);border-radius:10px;padding:7px 10px;color:#f8c9cd;transition:background .3s,border-color .3s}
         .os .what{flex:1} .os .state{color:#ffb4b9} .dot{flex:none;width:8px;height:8px;border-radius:50%;background:#e5484d}
-        .os .reopen,.note{display:none} .note{color:#f6cf8a}
+        .os .reopen,.note,.fail{display:none} .note{color:#f6cf8a} .hint{color:#8fa79c;font-size:11px}
+        .os .reset{color:#8fa79c} .setup.failed .fail{display:block;color:#ffb4b9} .setup.failed .hint{display:none}
         .os.opened{background:rgba(245,165,36,.08);border-color:rgba(245,165,36,.4);color:#f3dcb3} .os.opened .dot{background:#f5a524;animation:blink 1s infinite} .os.opened .state{color:#f6cf8a}
         .os.restart .reopen{display:inline-block} .os.restart .open{display:none} .setup.restart .note{display:block}
         .os.granted{background:rgba(61,220,132,.08);border-color:rgba(61,220,132,.4);color:#c9f7dd} .os.granted .dot{background:#3ddc84} .os.granted .state{color:#9ff0c4} .os.granted .btn{display:none}
@@ -723,10 +745,11 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
           const OS_TEXT = ${JSON.stringify({ opened: tr("รอคุณเปิดสวิตช์…"), restart: tr("เปิด SuperAi ใหม่ให้มีผล"), granted: tr("อนุญาตแล้ว") })};
           window.setOs = (kind, state) => { const row = document.getElementById('os-' + kind); if (!row) return;
             row.className = 'os ' + state; row.querySelector('.state').textContent = OS_TEXT[state] || row.querySelector('.state').textContent;
-            document.querySelector('.setup').classList.toggle('restart', !!document.querySelector('.os.restart')); };</script>
+            document.querySelector('.setup').classList.toggle('restart', !!document.querySelector('.os.restart')); };
+          window.resetFailed = (failed) => document.querySelector('.setup').classList.toggle('failed', failed);</script>
       </body></html>`;
       const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-      const width = 480, height = 262 + Math.min(apps.length, 5) * 44 + (missing.length ? 62 + missing.length * 44 : 0) + (reason ? 26 : 0);
+      const width = missing.length ? 560 : 480, height = 262 + Math.min(apps.length, 5) * 44 + (missing.length ? 120 + missing.length * 44 : 0) + (reason ? 26 : 0);
       const win = new BrowserWindow({ width, height, x: Math.round(workArea.x + (workArea.width - width) / 2), y: Math.round(workArea.y + (workArea.height - height) / 3),
         frame: false, resizable: false, minimizable: false, maximizable: false, fullscreenable: false, alwaysOnTop: true, skipTaskbar: false, show: false,
         title: tr("SuperAi ขออนุญาต"), transparent: true, hasShadow: true, webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } });
@@ -759,6 +782,18 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       win.webContents.on("will-navigate", (event, url) => {
         event.preventDefault();
         const answer = url.replace(/^superai-perm:/, "");
+        if (answer.startsWith("reset-")) {
+          // Forget SuperAi's stale entry, then ask again: macOS adds this build to the list, switch off.
+          const kind = answer.slice(6);
+          void resetOsAccess(kind).then((ok) => {
+            if (win.isDestroyed()) return;
+            win.webContents.executeJavaScript(`resetFailed(${!ok})`).catch(() => {});
+            if (!ok) return;
+            delete shown[kind];
+            if (openOsSettings(kind)) { opened.add(kind); win.setAlwaysOnTop(false); }
+          });
+          return;
+        }
         if (answer.startsWith("os-")) {
           const kind = answer.slice(3);
           if (!openOsSettings(kind)) return;
@@ -859,10 +894,10 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     const access = osAccess(false);
     if (kind === "input" && access.accessibility !== "granted") {
       osAccess(true);
-      throw new Error("macOS has not allowed SuperAi to use the mouse and keyboard. Ask the user to allow SuperAi in System Settings > Privacy & Security > Accessibility (a window to do so was opened), then try again.");
+      throw new Error("macOS has not allowed SuperAi to use the mouse and keyboard. Ask the user to allow SuperAi in System Settings > Privacy & Security > Accessibility (a window to do so was opened), then try again. If the switch already shows on (common after an update), they press Reset in SuperAi Settings > AI control and turn it on again.");
     }
     if (kind === "screen" && (access.screen === "denied" || access.screen === "restricted"))
-      throw new Error("macOS has not allowed SuperAi to see the screen. Ask the user to allow SuperAi in System Settings > Privacy & Security > Screen Recording and restart SuperAi, then try again.");
+      throw new Error("macOS has not allowed SuperAi to see the screen. Ask the user to allow SuperAi in System Settings > Privacy & Security > Screen Recording and restart SuperAi, then try again. If the switch already shows on (common after an update), they press Reset in SuperAi Settings > AI control, turn it on again and restart SuperAi.");
   }
 
   // ------------------------------------------------------------------------------------------
@@ -1279,6 +1314,8 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
 
   return {
     run, state, setEnabled, revoke, openOsSettings,
+    /** Settings > AI control "Reset": forget SuperAi's stale macOS entry and ask again. */
+    resetOsAccess: async (kind) => { const ok = await resetOsAccess(kind); if (ok) openOsSettings(kind); return { ...state(), resetFailed: !ok }; },
     dispose: () => { windowsInput.kill(); macInput.kill(); prompt?.answer("deny"); for (const w of overlays()) w.destroy(); if (aiCursor && !aiCursor.isDestroyed()) aiCursor.destroy(); },
   };
 }

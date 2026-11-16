@@ -22,7 +22,7 @@ export function ComputerUsePanel({ onError }: { onError: (message: string) => vo
     return () => { window.removeEventListener('focus', refresh); off?.(); };
   }, [native, onError]);
   if (!native?.computer) return <p className="muted">{tr("ใช้ได้เฉพาะแอป Desktop")}</p>;
-  const call = (action: 'set' | 'revoke' | 'os-settings', value?: boolean | 'accessibility' | 'screen') =>
+  const call = (action: 'set' | 'revoke' | 'os-settings' | 'os-reset', value?: boolean | 'accessibility' | 'screen') =>
     native.computer!(action, value).then(setState).catch((error) => onError((error as Error).message));
   const mac = state?.platform === 'darwin';
   const allowed = state?.allowed || [];
@@ -31,6 +31,7 @@ export function ComputerUsePanel({ onError }: { onError: (message: string) => vo
     return <div>
       <span>{label}: <b className={granted ? 'granted' : 'missing'}>{granted ? tr("อนุญาตแล้ว") : tr("ยังไม่อนุญาต")}</b></span>
       {!granted && <button type="button" className="text-button" onClick={() => void call('os-settings', kind)}>{tr("เปิด System Settings")}</button>}
+      {!granted && <button type="button" className="text-button" title={tr("ลบสิทธิ์เดิมของ SuperAi แล้วขอใหม่")} onClick={() => void call('os-reset', kind)}>{tr("รีเซ็ต")}</button>}
     </div>;
   };
   return <div className="computer-use-panel">
@@ -46,6 +47,9 @@ export function ComputerUsePanel({ onError }: { onError: (message: string) => vo
       <p className="muted">{tr("macOS ต้องอนุญาต SuperAi ใน System Settings > Privacy & Security")}</p>
       {osRow('accessibility', tr("Accessibility (เมาส์และคีย์บอร์ด)"))}
       {osRow('screen', tr("Screen Recording (ดูหน้าจอ)"))}
+      <p className="muted">{state?.resetFailed
+        ? tr("รีเซ็ตเองไม่ได้: ใน System Settings เลือก SuperAi แล้วกดปุ่ม − เพื่อลบ จากนั้นกด \"เปิด System Settings\" ที่นี่อีกครั้ง")
+        : tr("สวิตช์เปิดอยู่แล้วแต่ยังเป็นสีแดง (มักเกิดหลังอัปเดต)? กด \"รีเซ็ต\" แล้วเปิดสวิตช์ใหม่อีกครั้ง")}</p>
     </div>}
     {allowed.length > 0 && <div className="computer-use-allowed">
       <span>{tr("แชตที่อนุญาตแล้ว")}</span>

@@ -75,6 +75,19 @@ try {
   await setupWindow.waitForFunction(() => document.getElementById('os-screen').className === 'os restart', null, { timeout: 4000 });
   assert.equal(await setupWindow.evaluate(() => getComputedStyle(document.querySelector('#os-screen .reopen')).display) !== 'none', true, 'Screen Recording offers to reopen SuperAi');
   assert.equal(await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'SuperAi permission')?.isAlwaysOnTop()), false, 'System Settings can come in front');
+  await setupWindow.screenshot({ path: path.join(output, 'mac-setup-waiting.png') });
+  // The switch shows on but this build is not counted (an update changed the signature): Reset.
+  await desktop.evaluate(() => { process.env.SUPERAI_TEST_TCC_FAIL = '1'; });
+  await setupWindow.evaluate(() => { location.href = 'superai-perm:reset-accessibility'; });
+  await setupWindow.waitForFunction(() => document.querySelector('.setup').classList.contains('failed'), null, { timeout: 4000 });
+  assert.notEqual(await setupWindow.evaluate(() => getComputedStyle(document.getElementById('reset-fail')).display), 'none', 'a failed reset says how to remove SuperAi by hand');
+  await setupWindow.screenshot({ path: path.join(output, 'mac-setup-reset-failed.png') });
+  await desktop.evaluate(() => { delete process.env.SUPERAI_TEST_TCC_FAIL; });
+  await setupWindow.evaluate(() => { location.href = 'superai-perm:reset-accessibility'; });
+  await setupWindow.waitForFunction(() => !document.querySelector('.setup').classList.contains('failed'), null, { timeout: 4000 });
+  await setupWindow.waitForFunction(() => document.getElementById('os-accessibility').className === 'os opened', null, { timeout: 4000 });
+  const panelReset = await page.evaluate(() => window.superai.computer('os-reset', 'screen'));
+  assert.equal(panelReset.resetFailed, false, 'Settings > AI control can reset too');
   await setOs({ accessibility: 'granted', screen: 'denied' });
   await setupWindow.waitForFunction(() => document.getElementById('os-accessibility').className === 'os granted', null, { timeout: 4000 });
   await setOs({});
