@@ -6,6 +6,25 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.2.0] - 2026-11-16
+
+### Added
+- The AI has its own pointer with a label saying what it is doing ("Click",
+  "Thinking…"), on screen during computer use and inside pages in Browser use.
+- A stop key: while the AI controls the computer, Ctrl+Alt+Esc (⌘⇧Esc on macOS)
+  stops it at once from anywhere, like the Stop button. If another app holds
+  that key, a fallback is used and shown on the Stop button.
+
+### Changed
+- On Windows, computer-use clicks usually no longer take your mouse: buttons
+  are pressed through accessibility, and when the real mouse is needed it is
+  put back where you had it.
+- Password managers, crypto wallets and banking apps are view-only for the AI.
+
+### Security
+- The AI never types into a password field; it asks you to type it yourself.
+- Screenshots sent to the AI leave out SuperAi's own bar, glow and pointer.
+
 ## [1.1.0] - 2026-11-16
 
 ### Added
