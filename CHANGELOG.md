@@ -6,6 +6,30 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.2.4] - 2026-11-17
+
+### Added
+- Full Markdown in chat answers: headings, nested and task lists, tables, code
+  coloured by language, math (KaTeX) and Mermaid diagrams.
+- Click a file path in an answer to open its folder; `file.ts:42` opens that
+  line in Preview.
+- The app asks before counting the computer as a user. Nothing is sent and no
+  ID exists until the user allows it; saying no deletes the ID.
+
+### Changed
+- The message box starts as one line and grows with text and images, like
+  Claude Desktop. Expand and Stop left the + menu.
+- The AI answers in the language the user writes in, instead of always Thai
+  (Agent team, multi-AI answers and summaries, question cards).
+- Dates and times follow the app language; speak-to-type uses the multilingual
+  model outside the Thai app.
+- Release notes, README screenshots and the download guide come in English
+  first, with Thai versions alongside.
+
+### Fixed
+- The Microsoft Store build no longer sends the usage count, as its privacy
+  policy says.
+
 ## [1.2.3] - 2026-11-17
 
 ### Added
