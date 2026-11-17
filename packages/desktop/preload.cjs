@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('superai', {
   isDesktop: true, platform: process.platform,
   pickFolder: () => ipcRenderer.invoke('app:folder'),
   openExternal: url => ipcRenderer.invoke('app:external', url),
+  revealFile: file => ipcRenderer.invoke('app:reveal', file),
   macPermissions: {
     status: () => ipcRenderer.invoke('mac-permissions:status'),
     request: permission => ipcRenderer.invoke('mac-permissions:request', permission),

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowDown, ArrowUp, Search, X, Bookmark, Trash2 } from 'lucide-react';
 import { post, type Session } from '../api';
@@ -6,10 +6,12 @@ import { messageContexts, saveMessageContexts } from '../conversationContext';
 import { prepareMessage } from '../recovery';
 import '../conversation-interactions.css';
 import { tr } from '../i18n';
+import { ImageEndpointContext } from './MarkdownImage';
+import { openExternalLink, openPreviewLink } from '../previewLinks';
 
 interface Message { id: string; kind: string; text?: string; }
 interface Chapter { id: string; label: string; }
-interface MenuState { x: number; y: number; id: string; selection: string; plain: string; code?: string; }
+interface MenuState { x: number; y: number; id: string; selection: string; plain: string; code?: string; /** A link or media under the pointer. */ url?: string; file?: string; }
 type Highlights = { set(name: string, value: unknown): void; delete(name: string): void };
 const highlights = () => (CSS as typeof CSS & { highlights?: Highlights }).highlights;
 const HighlightClass = () => (window as typeof window & { Highlight?: new (...ranges: Range[]) => unknown }).Highlight;
@@ -184,6 +186,18 @@ export function ConversationInteractions({ sessionId, active, messages, revision
     try { await navigator.clipboard.writeText(text); setProblem(''); closeMenu(); }
     catch { setProblem(tr("คัดลอกไม่ได้ กรุณาลองอีกครั้งหรือกด Ctrl+C")); }
   };
+  const endpoint = useContext(ImageEndpointContext);
+  /** Show a linked file in Explorer / Finder: the server resolves it against the session's folder. */
+  const showInFolder = async (file: string) => {
+    try {
+      if (!endpoint || !window.superai?.revealFile) throw new Error(tr("เปิดโฟลเดอร์ได้เฉพาะแอป Desktop"));
+      const response = await fetch(`${endpoint}/locate?path=${encodeURIComponent(file)}`, { cache: 'no-store' });
+      const found = await response.json().catch(() => ({}));
+      if (!response.ok || typeof found.path !== 'string') throw new Error(found.error || tr("ไม่พบไฟล์นี้แล้ว"));
+      await window.superai.revealFile(found.path);
+      closeMenu();
+    } catch (error) { setProblem((error as Error).message); }
+  };
   const attach = (target: MenuState) => {
     try {
       const text = target.selection || target.plain || messages.find(item => item.id === target.id)?.text || '';
@@ -233,7 +247,9 @@ export function ConversationInteractions({ sessionId, active, messages, revision
     const selected = window.getSelection();
     const text = selection?.id === body.dataset.messageBody && selected?.toString() ? selected.toString() : '';
     const pre = (event.target as HTMLElement).closest('pre');
-    setMenu({ id: body.dataset.messageBody!, x: event.clientX, y: event.clientY, selection: text, plain: bodyText(body), ...(pre ? { code: pre.querySelector('code')?.textContent || pre.textContent || '' } : {}) });
+    const linked = (event.target as HTMLElement).closest<HTMLElement>('[data-link-url], [data-link-file]');
+    const target = linked ? { ...(linked.dataset.linkUrl ? { url: linked.dataset.linkUrl } : {}), ...(linked.dataset.linkFile ? { file: linked.dataset.linkFile } : {}) } : {};
+    setMenu({ id: body.dataset.messageBody!, x: event.clientX, y: event.clientY, selection: text, plain: bodyText(body), ...(pre ? { code: pre.querySelector('code')?.textContent || pre.textContent || '' } : {}), ...target });
     setSelection(null);
   }}>
     <style>{`::highlight(${matchName}){background:#806c28;color:#fff}::highlight(${activeName}){background:#edaa42;color:#171715}`}</style>
@@ -260,6 +276,18 @@ export function ConversationInteractions({ sessionId, active, messages, revision
       }
       if (event.key === 'Tab') setMenu(null);
     }}>
+      {menu.url && <>
+        <button role="menuitem" onClick={() => { openPreviewLink(menu.url!); closeMenu(); }}>{tr("เปิดใน Browser ภายในแอป")}</button>
+        <button role="menuitem" onClick={() => { openExternalLink(menu.url!); closeMenu(); }}>{tr("เปิดในเบราว์เซอร์ภายนอก")}</button>
+        <button role="menuitem" onClick={() => void copy(menu.url!)}>{tr("คัดลอกลิงก์")}</button>
+        <hr />
+      </>}
+      {menu.file && <>
+        <button role="menuitem" onClick={() => { openPreviewLink(menu.file!); closeMenu(); }}>{tr("เปิดใน Preview")}</button>
+        {window.superai?.revealFile && <button role="menuitem" onClick={() => void showInFolder(menu.file!)}>{window.superai.platform === 'darwin' ? tr("แสดงใน Finder") : tr("เปิดในโฟลเดอร์")}</button>}
+        <button role="menuitem" onClick={() => void copy(menu.file!)}>{tr("คัดลอกที่อยู่ไฟล์")}</button>
+        <hr />
+      </>}
       {menu.selection ? <button role="menuitem" onClick={() => void copy(menu.selection)}>Copy <kbd>Ctrl+C</kbd></button> : menu.code !== undefined && <button role="menuitem" onClick={() => void copy(menu.code!)}>Copy code</button>}
       <button role="menuitem" onClick={() => void copy(menu.plain)}>Copy message</button>
       <button role="menuitem" onClick={() => void copy(message?.text || '')}>Copy message as Markdown</button>
