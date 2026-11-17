@@ -76,3 +76,9 @@ dialog.message-image-preview[open] { display: grid; place-items: center; }
 #root .markdown .hljs-deletion { color: #e08a8a; }
 #root .markdown .hljs-emphasis { font-style: italic; }
 #root .markdown .hljs-strong { font-weight: 600; }
+
+/* Math and diagrams */
+#root .markdown .katex { font-size: 1.08em; }
+#root .markdown .katex-display { margin: 10px 0 14px; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+#root .markdown .md-mermaid { display: flex; justify-content: center; padding: 16px; overflow-x: auto; }
+#root .markdown .md-mermaid svg { max-width: 100%; height: auto; }

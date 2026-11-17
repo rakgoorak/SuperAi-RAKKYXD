@@ -1,8 +1,11 @@
-import { memo, useContext, useRef, useState, type ReactNode } from "react";
+import { memo, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
+import "katex/dist/katex.min.css";
 import { toString as hastText } from "hast-util-to-string";
 import type { Element, ElementContent } from "hast";
 import { Sparkles, Copy, Check } from "lucide-react";
@@ -100,22 +103,27 @@ function link(label: ReactNode, href: string): ReactNode {
   }
 }
 
-/** Does inline code look like a file or folder path the AI wants the user to find? */
+/** Does inline code look like a file or folder path the AI wants the user to find? (`src/app.ts:42` too) */
 export function looksLikeFilePath(text: string): boolean {
-  const value = text.trim();
+  const value = text.trim().replace(/:\d+(?::\d+)?$/, '');
   if (!value || value.length > 400 || /[\n<>"|?*]/.test(value.replace(/^[a-z]:/i, ''))) return false;
   if (/^[a-z]:[\\/]/i.test(value)) return true;
   if (/^\/(?:Users|home|tmp|var|opt|mnt|Volumes|private)\/\S+$/.test(value)) return true;
   return /^\.{0,2}[\\/]?[\w.@-]+(?:[\\/][\w.@ -]+)+\.\w{1,8}$/.test(value) && !/\s/.test(value) && !/^\w+:\/\//.test(value);
 }
 
-/** `D:\Test\site.zip` in an answer: one click opens its folder; right-click offers Preview and Copy path. */
+/**
+ * `D:\Test\site.zip` in an answer: one click opens its folder; `src/app.ts:42` opens the file at
+ * that line in Preview. Right-click offers Preview, Show in folder and Copy path.
+ */
 function FilePathCode({ path }: { path: string }) {
   const endpoint = useContext(ImageEndpointContext);
   const [problem, setProblem] = useState('');
+  let file = path, line: number | undefined;
+  try { const target = parsePreviewTarget(path); if (target.kind === 'file') { file = target.path; line = target.line; } } catch { /* keep as typed */ }
   const open = async () => {
-    if (!window.superai?.revealFile) return openPreviewLink(path);
-    try { setProblem(''); await revealLinkedFile(endpoint, path); }
+    if (line || !window.superai?.revealFile) return openPreviewLink(path);
+    try { setProblem(''); await revealLinkedFile(endpoint, file); }
     catch (error) { setProblem((error as Error).message); setTimeout(() => setProblem(''), 4000); }
   };
   return <>
@@ -123,8 +131,8 @@ function FilePathCode({ path }: { path: string }) {
       className="md-path"
       role="button"
       tabIndex={0}
-      data-link-file={path}
-      title={window.superai?.platform === 'darwin' ? tr("คลิกเพื่อแสดงใน Finder (คลิกขวาดูตัวเลือกเพิ่ม)") : tr("คลิกเพื่อเปิดโฟลเดอร์ (คลิกขวาดูตัวเลือกเพิ่ม)")}
+      data-link-file={file}
+      title={line ? tr("คลิกเพื่อเปิดไฟล์ที่บรรทัดนี้ใน Preview (คลิกขวาดูตัวเลือกเพิ่ม)") : window.superai?.platform === 'darwin' ? tr("คลิกเพื่อแสดงใน Finder (คลิกขวาดูตัวเลือกเพิ่ม)") : tr("คลิกเพื่อเปิดโฟลเดอร์ (คลิกขวาดูตัวเลือกเพิ่ม)")}
       onClick={() => void open()}
       onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void open(); } }}
     >{path}</code>
@@ -132,9 +140,43 @@ function FilePathCode({ path }: { path: string }) {
   </>;
 }
 
+type Mermaid = typeof import('mermaid').default;
+let mermaidLoader: Promise<Mermaid> | undefined;
+/** Mermaid is large: load it only when an answer has a diagram, then keep it. Works offline. */
+function loadMermaid() {
+  mermaidLoader ??= import('mermaid').then(({ default: mermaid }) => {
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark', fontFamily: 'inherit' });
+    return mermaid;
+  });
+  return mermaidLoader;
+}
+
+/** The diagram's SVG, or '' while loading, while the answer is still streaming in, or when the code is not valid. */
+function useMermaidSvg(code: string, enabled: boolean) {
+  const id = `md-mermaid-${useId().replace(/[^\w-]/g, '')}`;
+  const [svg, setSvg] = useState('');
+  useEffect(() => {
+    if (!enabled || !code.trim()) return;
+    let live = true;
+    // Wait for streaming to settle before drawing.
+    const timer = setTimeout(async () => {
+      try {
+        const mermaid = await loadMermaid();
+        if (!live || !(await mermaid.parse(code, { suppressErrors: true }))) return;
+        const { svg: drawn } = await mermaid.render(id, code);
+        if (live) setSvg(drawn);
+      } catch { /* keep showing the code */ }
+    }, 300);
+    return () => { live = false; clearTimeout(timer); };
+  }, [code, enabled, id]);
+  return enabled ? svg : '';
+}
+
 function CodeBlock({ code, language, children }: { code: string; language: string; children: ReactNode }) {
   const [copied, setCopied] = useState(false);
   const lang = (language || "").toLowerCase().trim();
+  const diagram = useMermaidSvg(code, lang === 'mermaid');
+  const [showCode, setShowCode] = useState(false);
   const isArtifact =
     ['html', 'svg', 'xml', 'mermaid', 'jsx', 'tsx', 'react'].includes(lang) ||
     (!lang && /^\s*<(!DOCTYPE|html|svg|div|main)/i.test(code));
@@ -159,6 +201,11 @@ function CodeBlock({ code, language, children }: { code: string; language: strin
       <div className="md-code-header">
         <span className="md-code-lang">{lang ? lang.toUpperCase() : 'CODE'}</span>
         <div className="md-code-actions">
+          {diagram && (
+            <button type="button" className="md-copy-btn" onClick={() => setShowCode(!showCode)}>
+              <span>{showCode ? tr("ดูแผนภาพ") : tr("ดูโค้ด")}</span>
+            </button>
+          )}
           {isArtifact && (
             <button
               type="button"
@@ -176,7 +223,9 @@ function CodeBlock({ code, language, children }: { code: string; language: strin
           </button>
         </div>
       </div>
-      <pre tabIndex={0}>{children}</pre>
+      {diagram && !showCode
+        ? <div className="md-mermaid" role="img" aria-label={tr("แผนภาพ")} dangerouslySetInnerHTML={{ __html: diagram }} />
+        : <pre tabIndex={0}>{children}</pre>}
     </div>
   );
 }
@@ -201,6 +250,18 @@ function ArtifactCard({ title, language, content }: { title: string; language: s
 }
 
 /**
+ * Models write math as \( x \) and \[ x \]; remark-math reads $$ x $$. Single $ stays plain text
+ * so prices ("$5 and $10") never turn into math. Inline code is left alone.
+ */
+function mathDelimiters(line: string): string {
+  if (/^\s*\\[[\]]\s*$/.test(line)) return line.replace(/\\[[\]]/, '$$$$');
+  return line.split(/(`+[^`]*`+)/).map((part, index) => index % 2 ? part : part
+    .replace(/^(\s*)\\\[(.+)\\\]\s*$/, (_, space: string, body: string) => `${space}$$\n${body.trim()}\n$$`)
+    .replace(/\\\[(.+?)\\\]/g, (_, body: string) => `$$${body.trim()}$$`)
+    .replace(/\\\((.+?)\\\)/g, (_, body: string) => `$$${body.trim()}$$`)).join('');
+}
+
+/**
  * AI answers are written loosely: keep them reading as the AI meant.
  * - quote lines separated by blank lines stay one quote card
  * - link targets with spaces (`[clip](D:/my clips/a.mp4)`) still link
@@ -222,6 +283,7 @@ export function prepareMarkdown(text: string): string {
     lines[i] = lines[i]
       .replace(/^(\s*)•\s+/, '$1- ')
       .replace(/\]\(([^()<>\n]*?\s[^()<>\n]*?)\)/g, (whole, dest: string) => /\s+"[^"]*"$/.test(dest) ? whole : `](<${dest.trim()}>)`);
+    lines[i] = mathDelimiters(lines[i]);
   }
   for (let i = 1; i < lines.length - 1; i++) {
     if (lines[i].trim() || !quote.test(lines[i - 1])) continue;
@@ -263,8 +325,8 @@ const components: Components = {
   },
 };
 
-const remarkPlugins = [remarkGfm, remarkBreaks];
-const rehypePlugins = [[rehypeHighlight, { detect: false }]] as never;
+const remarkPlugins = [remarkGfm, remarkBreaks, [remarkMath, { singleDollarTextMath: false }]] as never;
+const rehypePlugins = [[rehypeKatex, { throwOnError: false, strict: false }], [rehypeHighlight, { detect: false }]] as never;
 // Every link goes through parsePreviewTarget, which allows only http(s) and local files.
 const keepUrl = (url: string) => url;
 
