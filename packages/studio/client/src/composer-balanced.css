@@ -13,7 +13,8 @@
   display:block; width:100%; field-sizing:content; height:auto; min-height:52px; max-height:min(220px,30vh);
   padding:14px 4px; border:0; background:transparent; resize:none; font-size:14px; line-height:24px;
 }
-#root .work-canvas.code-mode .composer-area.composer-balanced:not(.compact-code) .composer-box textarea { min-height:110px; }
+/* "Expand" only lets a long draft grow taller; an empty or short box stays one line, like Claude. */
+#root .work-canvas.code-mode .composer-area.composer-balanced:not(.compact-code) .composer-box textarea { max-height:min(520px,60vh); }
 #root .work-canvas .composer-area.composer-balanced .composer-box:has(.composer-leading) .composer-bottom {
   position:relative; inset:auto; pointer-events:auto; grid-column:3; grid-row:2; display:flex; justify-content:flex-end; align-self:end; padding:10px 9px 10px 5px; gap:3px; min-height:0; margin:0;
 }

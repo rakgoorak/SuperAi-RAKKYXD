@@ -203,6 +203,18 @@ graph LR
   await page.getByRole('dialog', { name: 'ดูรูป saved.png', exact: true }).getByRole('group', { name: 'ซูมรูปภาพ', exact: true }).waitFor();
   check(true, 'sent attachments share the same zoom viewer');
   await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const messageBox = page.locator('.composer-box textarea');
+  const boxHeight = async () => { await page.waitForTimeout(120); return messageBox.evaluate(el => el.getBoundingClientRect().height); };
+  const oneLine = await boxHeight();
+  check(oneLine < 60, 'the message box starts as one line: ' + oneLine);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('superai:prepare-message', { detail: { text: 'แก้ข้อความนี้' } })));
+  check(Math.abs(await boxHeight() - oneLine) < 2, 'editing or retrying a short message keeps the box one line');
+  await messageBox.fill(['บรรทัด 1', 'บรรทัด 2', 'บรรทัด 3'].join('\n'));
+  const threeLines = await boxHeight();
+  check(threeLines > oneLine + 30, 'the box grows with the text: ' + threeLines);
+  await messageBox.fill('');
+  check(Math.abs(await boxHeight() - oneLine) < 2, 'the box shrinks back to one line once cleared or sent');
   const modes = page.getByRole('navigation', { name: 'โหมดทำงาน' });
   for (const mode of ['Agent', 'Chat']) {
     await modes.getByRole('button', { name: mode, exact: true }).click();

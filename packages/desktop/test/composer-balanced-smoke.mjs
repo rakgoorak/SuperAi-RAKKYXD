@@ -85,9 +85,9 @@ try {
   await panel.getByRole('button').filter({ hasText: 'App.tsx' }).waitFor();
   check(await panel.isVisible() && await panel.getByText('กฎโปรเจกต์: กฎโปรเจกต์ที่บันทึกไว้').isVisible(), 'plus opens the retained project rules and pin controls');
   await panel.getByRole('button', { name: 'ปิดบริบทและการทำงาน', exact: true }).click();
-  await plus.click(); await page.getByRole('menuitem', { name: 'ขยายช่องพิมพ์', exact: true }).click();
-  check(await composer.evaluate(element => element.getBoundingClientRect().height) >= 110, 'larger writing area remains available from plus');
-  await plus.click(); await page.getByRole('menuitem', { name: 'ย่อช่องพิมพ์', exact: true }).click();
+  await plus.click();
+  check(await page.getByRole('menuitem', { name: 'ขยายช่องพิมพ์' }).count() === 0 && await page.getByRole('menuitem', { name: 'หยุดงานปัจจุบัน' }).count() === 0, 'plus menu has no expand or stop items');
+  await page.keyboard.press('Escape');
   await composer.fill('draft stays while changing the model');
   await footer.getByLabel('Effort ในแชท Codex · gpt-6.1-sol').selectOption('high');
   await footer.getByLabel('สิทธิ์ของ Codex · gpt-6.1-sol ในข้อความถัดไป').selectOption('read');
