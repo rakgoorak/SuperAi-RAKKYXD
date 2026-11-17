@@ -33,6 +33,15 @@ export function setServerLocale(value: unknown, save = true): boolean {
   return true;
 }
 
+const LANGUAGE_NAME: Record<Locale, string> = { th: "Thai", en: "English", ja: "Japanese", zh: "Simplified Chinese" };
+/** The language the app is shown in, by its English name, for prompts that tell an AI what to write. */
+export const appLanguage = () => LANGUAGE_NAME[locale];
+/**
+ * For prompts written for an AI: answer in the language the person wrote in, so a Thai request
+ * still gets Thai and an English one gets English; the app's language decides when it is unclear.
+ */
+export const replyLanguageRule = () => `Reply in the same language the user writes in (if unclear, use ${appLanguage()}).`;
+
 /** tr('ข้อความ') or tr`เปิด ${name} ไม่สำเร็จ`; a template's values are {0}, {1}, … in the translation. */
 export function tr(source: TemplateStringsArray | string, ...values: unknown[]): string {
   const key = typeof source === "string" ? source : source.reduce((out, part, index) => out + part + (index < source.length - 1 ? `{${index}}` : ""), "");

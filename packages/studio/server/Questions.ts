@@ -1,4 +1,4 @@
-import { tr } from './i18n.js';
+import { replyLanguageRule, tr } from './i18n.js';
 /**
  * Multiple-choice questions an AI asks the user, Claude-style. Used by Agent/Chat runs (before
  * planning) and by every CLI chat: the AI writes a ```superai-questions block, the app shows it
@@ -82,6 +82,7 @@ export function questionRules(): string {
     "ตัดสินใจเองว่าต้องถามผู้ใช้ก่อนหรือไม่: ถ้าคำขอชัดเจนหรือเป็นงานเล็ก ให้ลงมือทำเลยโดยไม่ต้องถาม ถ้าเป็นงานที่ต้องแก้หลายส่วนและยังมีเรื่องที่ผู้ใช้ต้องตัดสินใจ (เป้าหมาย ขอบเขต วิธีทำ) ซึ่งเดาผิดแล้วต้องทำใหม่ ให้ถามทั้งหมดในครั้งเดียวก่อนแก้ไฟล์หรือรันคำสั่ง แล้วหยุดรอคำตอบ",
     `เวลาถาม ให้เขียนคำถามเป็นบล็อกโค้ดภาษา ${QUESTION_FENCE} ที่มี JSON อยู่ข้างใน ไว้ท้ายข้อความ แล้วจบข้อความทันที โปรแกรมจะแสดงเป็นตัวเลือกให้ผู้ใช้กด`,
     ASK_RULES,
+    `เขียนคำถามและตัวเลือกตามกฎนี้: ${replyLanguageRule()}`,
   ].join("\n");
 }
 

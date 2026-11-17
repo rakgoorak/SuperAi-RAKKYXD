@@ -11,7 +11,7 @@ import { cliLaunch, cliEnv } from "./CliCatalog.js";
 import { modelEffortArgs } from "./Providers.js";
 import { cliAuth, isAuthFailure } from "./CliAuth.js";
 import { createCliRunStream, type TokenUsage } from './CliRunStream.js';
-import { tr } from './i18n.js';
+import { replyLanguageRule, tr } from './i18n.js';
 
 // Windows limits a command line to 32,767 characters; agy only takes the prompt as an argument.
 const INLINE_PROMPT_LIMIT = 24000;
@@ -72,7 +72,7 @@ export function promptArguments(
       inputFile,
       ...attachments.flatMap((file) => ["--file", file]),
       "--",
-      "อ่านคำขอและบริบททั้งหมดจากไฟล์แนบ แล้วตอบเป็นภาษาไทย",
+      `อ่านคำขอและบริบททั้งหมดจากไฟล์แนบ ${replyLanguageRule()}`,
     ];
   }
   throw new Error(tr("CLI นี้รองรับเฉพาะ terminal กรุณาใช้โหมดโค้ด"));

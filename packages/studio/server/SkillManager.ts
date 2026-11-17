@@ -3,7 +3,7 @@ import path from "node:path";
 import { CliProvider } from "./CliProvider.js";
 import { LocalProvider, extractJson } from "./AgentRunManager.js";
 import { Seat, validateSeat } from "./Providers.js";
-import { tr } from './i18n.js';
+import { appLanguage, tr } from './i18n.js';
 
 /**
  * Agent Skills (folders with a SKILL.md) from fixed official sources and skills.sh.
@@ -339,7 +339,7 @@ ${this.projectSummary(root)}
 skill ที่มีให้เลือก (source/name: คำอธิบาย):
 ${options.map((s) => `${s.source}/${s.name}: ${s.description}`).join("\n")}
 
-ตอบเป็น JSON อย่างเดียว: [{"source":"anthropic","name":"ชื่อ","reason":"เหตุผลภาษาไทยสั้นๆ"}]`;
+ตอบเป็น JSON อย่างเดียว: [{"source":"anthropic","name":"ชื่อ","reason":"เหตุผลสั้นๆ เป็นภาษา ${appLanguage()}"}]`;
     const provider = seat.provider.startsWith("cli:")
       ? new CliProvider(seat.provider, root, signal, false, seat.model, false, [], seat.effort, undefined, undefined, seat.accountId || 'system')
       : new LocalProvider(seat.provider, signal);

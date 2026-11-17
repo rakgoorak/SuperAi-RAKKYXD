@@ -21,7 +21,7 @@ import { contextualPrompt, contextForAgent, type ProjectContext } from './Projec
 import type { ResponseStyle } from './ResponseStyle.js';
 import type { TokenUsage } from './CliRunStream.js';
 import { ASK_RULES, extractJson, parseQuestions, type ClarifyAnswer, type ClarifyQuestion } from "./Questions.js";
-import { tr } from './i18n.js';
+import { replyLanguageRule, tr } from './i18n.js';
 export { extractJson, parseQuestions };
 export type { ClarifyAnswer, ClarifyQuestion };
 
@@ -380,7 +380,7 @@ export class AgentRunManager {
       return response;
     };
     const loop = new AgentLoop(
-      { id: randomUUID(), name: seat.name, role: "assistant", systemPrompt: "ตอบเป็นภาษาไทย บอกตามจริงเมื่อไม่มีเครื่องมือเข้าถึงไฟล์", maxSteps: 15 },
+      { id: randomUUID(), name: seat.name, role: "assistant", systemPrompt: `${replyLanguageRule()} บอกตามจริงเมื่อไม่มีเครื่องมือเข้าถึงไฟล์`, maxSteps: 15 },
       provider,
       opts.tools ? createDefaultTools() : [],
     );
@@ -472,7 +472,7 @@ export class AgentRunManager {
         note(screener.name, tr("ตรวจว่าคำถามชัดพอหรือยัง"));
         let reply = "";
         try {
-          reply = await this.ask(screener, `คุณคือผู้ช่วยตรวจคำถามก่อนส่งให้ AI หลายตัวตอบ\n${question}\n\nถ้าคำถามชัดพอจะตอบได้ดีแล้ว ให้ตอบ {"questions":[]} เท่านั้น\nถ้ายังกำกวม ให้ถามผู้ใช้กลับเป็นภาษาไทยแบบมีตัวเลือก\n${ASK_RULES}\nตอบเป็น JSON อย่างเดียว ไม่ต้องมีคำอธิบายอื่น`, cwd, controller.signal, {
+          reply = await this.ask(screener, `คุณคือผู้ช่วยตรวจคำถามก่อนส่งให้ AI หลายตัวตอบ\n${question}\n\nถ้าคำถามชัดพอจะตอบได้ดีแล้ว ให้ตอบ {"questions":[]} เท่านั้น\nถ้ายังกำกวม ให้ถามผู้ใช้กลับแบบมีตัวเลือก (${replyLanguageRule()})\n${ASK_RULES}\nตอบเป็น JSON อย่างเดียว ไม่ต้องมีคำอธิบายอื่น`, cwd, controller.signal, {
             tools: false, readTools: true, attachments, projectContext: run.projectContext, responseStyle: run.responseStyle, run, stage: tr("ตรวจคำถาม"), onChunk: () => {},
           });
         } catch (err: any) {
@@ -493,7 +493,7 @@ export class AgentRunManager {
           try {
             const selected = answer.seat.provider.startsWith("cli:") ? skillPrompt(basePrompt, cwd, answer.seat.provider.slice(4), undefined, undefined, accounts.environment(answer.seat.provider.slice(4), answer.seat.accountId || "system")) : basePrompt;
             const fullQuestion = `${history ? `บทสนทนาก่อนหน้า:\n${history}\n\n` : ""}${selected}`;
-            const text = await this.ask(answer.seat, `ตอบเป็นภาษาไทย ให้เหตุผลประกอบ\n\n${fullQuestion}`, cwd, controller.signal, {
+            const text = await this.ask(answer.seat, `${replyLanguageRule()} ให้เหตุผลประกอบ\n\n${fullQuestion}`, cwd, controller.signal, {
               tools: false, readTools: true, attachments, projectContext: run.projectContext, responseStyle: run.responseStyle, run, stage: tr("ตอบคำถาม"),
               onChunk: (t) => {
                 if (!controller.signal.aborted) {
@@ -530,7 +530,7 @@ export class AgentRunManager {
       const instructions = style === "best"
         ? "คัดเฉพาะความเห็นที่ถูกต้องและมีประโยชน์ที่สุด ตัดส่วนที่ผิด ซ้ำ หรืออ่อนออก และบอกสั้นๆ ว่าตัดอะไรออกเพราะอะไร"
         : "รวมความเห็นที่มีประโยชน์จากทุกตัวเข้าด้วยกันให้ครบ";
-      const summaryPrompt = `คุณคือผู้สรุปความเห็นจาก AI หลายตัวให้ผู้ใช้ ตอบเป็นภาษาไทย
+      const summaryPrompt = `คุณคือผู้สรุปความเห็นจาก AI หลายตัวให้ผู้ใช้ ${replyLanguageRule()}
 คำถามของผู้ใช้:
 ${prompt}${run.clarify ? `\n\n${describeAnswers(run.clarify)}` : ""}
 
@@ -539,7 +539,7 @@ ${answers}
 
 ${instructions}
 ระบุชื่อ AI ทุกครั้งที่อ้างความเห็น (เช่น "${answered[0].seat.name} แนะนำว่า…") ห้ามแต่งความเห็นที่ไม่มีในคำตอบ
-จัดรูปแบบเป็นหัวข้อ:
+จัดรูปแบบเป็นหัวข้อ (แปลชื่อหัวข้อเป็นภาษาเดียวกับคำตอบ):
 ## สรุปคำตอบ
 ## ใครเสนออะไร
 ## จุดที่เห็นตรงกัน / ต่างกัน
@@ -586,10 +586,11 @@ ${instructions}
           (allowTools ? "Sub-agent แก้ไฟล์และรันคำสั่งได้" : "Sub-agent อ่านไฟล์ได้อย่างเดียว ห้ามสั่งให้แก้ไฟล์ ให้เสนอโค้ดหรือขั้นตอนแทน") +
           `\nแบ่งงานเป็น 1-${MAX_TASKS} งาน งานที่ไม่มี dependsOn จะทำพร้อมกัน ดังนั้นงานที่ทำพร้อมกันห้ามแก้ไฟล์เดียวกัน\n` +
           "ถ้างานต้องใช้ผลของงานอื่นให้ใส่ id ของงานนั้นใน dependsOn เลือก Sub-agent ให้เหมาะกับงาน\n" +
+          `${replyLanguageRule()} ใช้ภาษานี้กับ note และ title\n` +
           "ตอบเป็น JSON อย่างเดียว ไม่ต้องมีคำอธิบายอื่น:\n" +
-          "{\"note\":\"แนวทางโดยย่อ (ภาษาไทย)\",\"tasks\":[{\"id\":\"t1\",\"title\":\"ชื่องาน\",\"assignee\":1,\"instructions\":\"คำสั่งละเอียด\",\"dependsOn\":[]}]}";
+          "{\"note\":\"แนวทางโดยย่อ\",\"tasks\":[{\"id\":\"t1\",\"title\":\"ชื่องาน\",\"assignee\":1,\"instructions\":\"คำสั่งละเอียด\",\"dependsOn\":[]}]}";
         if (mayAsk) {
-          text += `\n\nก่อนวางแผน ตรวจคำขอและไฟล์ในโปรเจกต์ก่อน ถ้าเป้าหมายยังกำกวมจนแผนอาจผิดทาง ให้ถามผู้ใช้กลับเป็นภาษาไทยแทนการส่งแผน\n${ASK_RULES}`;
+          text += `\n\nก่อนวางแผน ตรวจคำขอและไฟล์ในโปรเจกต์ก่อน ถ้าเป้าหมายยังกำกวมจนแผนอาจผิดทาง ให้ถามผู้ใช้กลับแทนการส่งแผน (${replyLanguageRule()})\n${ASK_RULES}`;
         }
         return text;
       };
@@ -639,7 +640,7 @@ ${instructions}
             t.status = "running";
             note(seat.name, tr`เริ่ม “${t.title}”`);
             const context = t.dependsOn.map((d) => `[ผลจาก ${resultOf(d).title} โดย ${subagents[resultOf(d).assignee].name}]\n${resultOf(d).output}`).join("\n\n");
-            const taskPrompt = `คุณคือ ${seat.name} Sub-agent ในทีม ทำงานในโฟลเดอร์โปรเจกต์ของผู้ใช้ ตอบเป็นภาษาไทย
+            const taskPrompt = `คุณคือ ${seat.name} Sub-agent ในทีม ทำงานในโฟลเดอร์โปรเจกต์ของผู้ใช้ ${replyLanguageRule()}
 เป้าหมายรวมของผู้ใช้: ${goal}
 ${plan.note ? `แนวทางจาก Main: ${plan.note}\n` : ""}${context ? `\n${context}\n` : ""}
 งานของคุณ (${t.title}):
@@ -676,7 +677,7 @@ ${allowTools ? "แก้ไฟล์/รันคำสั่งได้เท
 ผลงานของแต่ละ Sub-agent:
 ${report}
 
-ตอบเป็นภาษาไทย สรุปเฉพาะสิ่งที่เกิดขึ้นจริง: ใครทำอะไร ไฟล์ที่เปลี่ยน ผลทดสอบ งานที่ล้มเหลวหรือยังไม่ได้ทำ และขั้นตอนถัดไปที่แนะนำ ห้ามอ้างว่าสำเร็จถ้ามีงานไม่สำเร็จ`, cwd, signal, {
+${replyLanguageRule()} สรุปเฉพาะสิ่งที่เกิดขึ้นจริง: ใครทำอะไร ไฟล์ที่เปลี่ยน ผลทดสอบ งานที่ล้มเหลวหรือยังไม่ได้ทำ และขั้นตอนถัดไปที่แนะนำ ห้ามอ้างว่าสำเร็จถ้ามีงานไม่สำเร็จ`, cwd, signal, {
           tools: false, readTools: true, attachments: [], projectContext: run.projectContext, responseStyle: run.responseStyle, run, stage: tr("สรุปงาน"),
           onChunk: (c) => { if (!signal.aborted) run.output += c; },
         });
