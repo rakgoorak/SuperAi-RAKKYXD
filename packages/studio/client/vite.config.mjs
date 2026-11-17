@@ -1,5 +1,18 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { ARTIFACT_REACT_RUNTIME_ID, bundleArtifactReactRuntime } from './scripts/artifact-react-runtime.mjs';
+
+/** Serves the React runtime for artifact previews; see scripts/artifact-react-runtime.mjs. */
+function artifactReactRuntime() {
+  return {
+    name: 'artifact-react-runtime',
+    resolveId: source => (source === ARTIFACT_REACT_RUNTIME_ID ? '\0' + ARTIFACT_REACT_RUNTIME_ID : null),
+    async load(resolved) {
+      if (resolved !== '\0' + ARTIFACT_REACT_RUNTIME_ID) return null;
+      return `export default ${JSON.stringify(await bundleArtifactReactRuntime())};`;
+    },
+  };
+}
 
 /**
  * `@xterm/xterm`'s ESM build (`lib/xterm.mjs`) contains an unused inline enum inside
@@ -24,7 +37,7 @@ function fixXtermRollupBug() {
 }
 
 export default defineConfig({
-  plugins: [fixXtermRollupBug(), react()],
+  plugins: [fixXtermRollupBug(), artifactReactRuntime(), react()],
   define: {
     'process.env': '{}',
   },

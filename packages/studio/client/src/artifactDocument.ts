@@ -1,7 +1,7 @@
 /// <reference path="./raw-assets.d.ts" />
 import { transform } from 'sucrase';
-import reactRuntime from '../../../../node_modules/react/umd/react.production.min.js?raw';
-import domRuntime from '../../../../node_modules/react-dom/umd/react-dom.production.min.js?raw';
+// React 19 ships no UMD build; vite.config.ts bundles one that sets window.React and window.ReactDOM.
+import reactRuntime from 'virtual:artifact-react-runtime';
 import { getLocale, tr } from './i18n';
 
 export const visualArtifact = (language: string) => ['html', 'svg', 'mermaid', 'jsx', 'tsx', 'react'].includes(language.toLowerCase());
@@ -35,7 +35,7 @@ export function artifactDocument(language: string, content: string, token: strin
   if (['jsx', 'tsx', 'react'].includes(lang)) {
     // CommonJS conversion keeps imports explicit: only the supplied React runtime is available.
     const compiled = transform(content, { transforms: ['typescript', 'jsx', 'imports'], jsxRuntime: 'classic', production: true, filePath: 'Artifact.tsx' }).code;
-    return base + `<div id="artifact-root"></div>${script(reactRuntime)}${script(domRuntime)}${script(`try {
+    return base + `<div id="artifact-root"></div>${script(reactRuntime)}${script(`try {
       const exports={};const module={exports};
       const require=name=>{if(name==='react')return React;if(name==='react-dom'||name==='react-dom/client')return ReactDOM;throw new Error(${js(tr("ยังไม่รองรับแพ็กเกจ {0} ใน Artifact นี้ ใช้ React หรือ HTML ที่มีทุกส่วนในไฟล์เดียว"))}.replace('{0}',name));};
       const {useState,useEffect,useRef,useMemo,useCallback,useReducer,useContext,createContext,Fragment}=React;

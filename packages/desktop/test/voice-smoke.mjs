@@ -72,8 +72,10 @@ try {
   const mic = page.getByRole("button", { name: /กดค้างเพื่ออัดเสียง/ });
   await mic.click();
   const confirm = page.getByRole("dialog", { name: "ดาวน์โหลดโมเดลแปลงเสียง" });
-  if (await confirm.isVisible().catch(() => false)) await confirm.getByRole("button", { name: "ดาวน์โหลด" }).click();
   const stop = page.getByRole("button", { name: /กำลังฟัง/ });
+  // The first-use download prompt renders after the click; wait for it or for recording to start.
+  await confirm.or(stop).first().waitFor({ timeout: 30000 });
+  if (await confirm.isVisible().catch(() => false)) await confirm.getByRole("button", { name: "ดาวน์โหลด" }).click();
   await stop.waitFor({ timeout: 300000 });
   await page.waitForTimeout(5500);
   await stop.click();

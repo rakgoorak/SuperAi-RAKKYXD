@@ -20,7 +20,7 @@ export function ArtifactPreview({ title, language, content, onClose }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const expandButton = useRef<HTMLButtonElement>(null);
   const wasExpanded = useRef(false);
-  const copyTimer = useRef<ReturnType<typeof setTimeout>>();
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const doc = useMemo(() => {
     const token = crypto.randomUUID();
     try { return { token, html: visual ? artifactDocument(lang, content, token) : '', error: '' }; }

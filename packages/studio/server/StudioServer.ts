@@ -141,6 +141,8 @@ export class StudioServer {
       next();
     });
     this.app.use(express.json({limit:'1mb'}));
+    // Express 5 leaves req.body undefined when a request has no body; routes expect {} as in Express 4.
+    this.app.use((req, _res, next) => { if (req.body === undefined) req.body = {}; next(); });
     this.app.use((req, res, next) => {
       if (
         req.body?.openCodeModel !== undefined &&
@@ -1353,7 +1355,7 @@ export class StudioServer {
         `[StudioServer] Serving static client dist from: ${clientDist}`,
       );
       this.app.use(express.static(clientDist));
-      this.app.get("*", (_req: Request, res: Response) => {
+      this.app.get("/{*splat}", (_req: Request, res: Response) => {
         res.sendFile(path.join(clientDist, "index.html"));
       });
     } else {

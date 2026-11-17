@@ -9,7 +9,7 @@ import { cliAuth } from '../server/CliAuth.js';
 // Invoke the actual Express route without opening a socket; the desktop API is local.
 async function request(server: StudioServer, route: string, params: Record<string, string>, body: unknown = {}, method = 'post') {
   const app = (server as any).app;
-  const layer = app._router.stack.find((s: any) => s.route?.path === route && s.route.methods[method]);
+  const layer = app.router.stack.find((s: any) => s.route?.path === route && s.route.methods[method]);
   assert.ok(layer, route);
   let status = 200, value: any;
   const response: any = { status(code: number) { status = code; return this; }, json(data: unknown) { value = data; return this; } };

@@ -64,8 +64,8 @@ export function ResponseActions({
   const trigger = useRef<HTMLButtonElement>(null);
   const handoffMenu = useRef<HTMLDivElement>(null);
   const handoffTrigger = useRef<HTMLButtonElement>(null);
-  const copiedTimer = useRef<ReturnType<typeof setTimeout>>();
-  const handoffTimer = useRef<ReturnType<typeof setTimeout>>();
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const handoffTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     return () => {
