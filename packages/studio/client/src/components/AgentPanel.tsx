@@ -133,7 +133,7 @@ export function AgentRunView({ run, onFixTools }: { run: Run; onFixTools: () => 
               <ul className="mission-task-list">{mine.slice(0, 4).map(task => <li key={task.id}><span className={"task-signal state-" + task.status} /><span>{task.title}</span><small>{STEP[task.status]}</small></li>)}</ul>
               {mine.length > 4 && <small>{tr("อีก")} {mine.length - 4} {tr("งานในรายละเอียด")}</small>}
               {current && <p className="agent-doing">{tr("กำลังทำ:")} {current.title}</p>}
-              <button className="secondary inspect-agent" aria-expanded={selected === index} onClick={event => { trigger.current = event.currentTarget; setSelected(index); }}>{tr("ดูรายละเอียด")} {member.name}</button>
+              <button className="secondary inspect-agent" aria-expanded={selected === index} onClick={event => { trigger.current = event.currentTarget; setSelected(index); }}>{tr`ดูรายละเอียด ${member.name}`}</button>
             </article>;
           })}
         </div>

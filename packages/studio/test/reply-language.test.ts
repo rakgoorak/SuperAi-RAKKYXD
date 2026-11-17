@@ -19,6 +19,8 @@ test('the AI answers in the language the user writes in, falling back to the app
     assert.match(questionRules(), /same language the user writes in/);
     setServerLocale('ja', false);
     assert.match(replyLanguageRule(), /Japanese/);
+    assert.match(replyLanguageRule('ควรใช้ฐานข้อมูลอะไร'), /Reply in Thai/);
+    assert.match(replyLanguageRule('Which database?'), /not Thai/);
   } finally { setServerLocale(before, false); }
 });
 
@@ -39,7 +41,7 @@ test('asking several AIs never forces Thai answers', async t => {
     assert.equal(prompts.length, 2);
     for (const prompt of prompts) {
       assert.doesNotMatch(prompt, /ภาษาไทย/);
-      assert.match(prompt, /same language the user writes in \(if unclear, use English\)/);
+      assert.match(prompt, /same language as the user's message, which is not Thai/);
     }
   } finally {
     setServerLocale(before, false);
