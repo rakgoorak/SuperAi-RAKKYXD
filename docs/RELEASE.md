@@ -1,3 +1,27 @@
+# SuperAi & RAKKYXD v1.2.4
+
+- **Answers look like Claude and Codex:** full Markdown in chat, including headings, nested and task lists, tables, and code coloured by language. Math (`\( \)`, `$$ $$`) is typeset, and `mermaid` code blocks are drawn as diagrams.
+- **Click a file path to open it:** a path such as `D:\Projects\site.zip` opens its folder (Finder on Mac), and `src/app.ts:42` opens that line in Preview.
+- **Message box like Claude Desktop:** starts as one line, grows with your text and images, and shrinks back after sending. Expand and Stop are no longer in the + menu; the send button still turns into Stop while the AI works.
+- **For people outside Thailand:**
+  - The AI answers in the language you write in. Before, Agent team and multi-AI answers were always in Thai.
+  - Dates and times follow the app language.
+  - Speak-to-type uses the multilingual model by default when the app is not in Thai.
+  - Release notes come in English and Thai.
+
+## ภาษาไทย
+
+- **คำตอบแสดงผลแบบ Claude และ Codex:** แชทรองรับ Markdown เต็มรูปแบบ ทั้งหัวข้อ, list ซ้อนและ task list, ตาราง และโค้ดที่มีสีตามภาษา สูตรคณิต (`\( \)`, `$$ $$`) แสดงเป็นสมการ และบล็อก `mermaid` วาดเป็นแผนภาพ
+- **กดที่อยู่ไฟล์เพื่อเปิด:** ที่อยู่อย่าง `D:\Projects\site.zip` กดแล้วเปิดโฟลเดอร์ (Mac เปิด Finder) และ `src/app.ts:42` เปิดบรรทัดนั้นใน Preview
+- **ช่องพิมพ์แบบ Claude Desktop:** เริ่มเป็นบรรทัดเดียว ขยายตามข้อความและรูป แล้วย่อกลับหลังส่ง เอา "ขยายช่องพิมพ์" และ "หยุดงานปัจจุบัน" ออกจากเมนู + แล้ว ระหว่างที่ AI ทำงาน ปุ่มส่งยังเปลี่ยนเป็นปุ่มหยุดเหมือนเดิม
+- **สำหรับผู้ใช้ต่างประเทศ:**
+  - AI ตอบตามภาษาที่ผู้ใช้พิมพ์ (เดิมทีม Agent และถามหลาย AI ตอบเป็นไทยเสมอ)
+  - วันที่และเวลาแสดงตามภาษาของโปรแกรม
+  - พิมพ์ด้วยเสียงใช้โมเดลหลายภาษาเป็นค่าเริ่มต้น เมื่อโปรแกรมไม่ได้ตั้งเป็นภาษาไทย
+  - บันทึกอัปเดตมีทั้งภาษาอังกฤษและไทย
+
+---
+
 # SuperAi & RAKKYXD v1.2.3
 
 - **อัปเดตข้ามไปเวอร์ชันล่าสุดได้เลย:** ถ้าไม่ได้อัปมาหลายเวอร์ชัน กดอัปเดตครั้งเดียวก็ได้เวอร์ชันล่าสุด ไม่ต้องอัปทีละเวอร์ชัน (มีผลตั้งแต่การอัปเดตครั้งถัดจากนี้)

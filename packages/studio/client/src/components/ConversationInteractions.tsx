@@ -6,7 +6,7 @@ import { messageContexts, saveMessageContexts } from '../conversationContext';
 import { prepareMessage } from '../recovery';
 import '../conversation-interactions.css';
 import { tr } from '../i18n';
-import { ImageEndpointContext } from './MarkdownImage';
+import { ImageEndpointContext, revealLinkedFile } from './MarkdownImage';
 import { openExternalLink, openPreviewLink } from '../previewLinks';
 
 interface Message { id: string; kind: string; text?: string; }
@@ -187,14 +187,9 @@ export function ConversationInteractions({ sessionId, active, messages, revision
     catch { setProblem(tr("คัดลอกไม่ได้ กรุณาลองอีกครั้งหรือกด Ctrl+C")); }
   };
   const endpoint = useContext(ImageEndpointContext);
-  /** Show a linked file in Explorer / Finder: the server resolves it against the session's folder. */
   const showInFolder = async (file: string) => {
     try {
-      if (!endpoint || !window.superai?.revealFile) throw new Error(tr("เปิดโฟลเดอร์ได้เฉพาะแอป Desktop"));
-      const response = await fetch(`${endpoint}/locate?path=${encodeURIComponent(file)}`, { cache: 'no-store' });
-      const found = await response.json().catch(() => ({}));
-      if (!response.ok || typeof found.path !== 'string') throw new Error(found.error || tr("ไม่พบไฟล์นี้แล้ว"));
-      await window.superai.revealFile(found.path);
+      await revealLinkedFile(endpoint, file);
       closeMenu();
     } catch (error) { setProblem((error as Error).message); }
   };
@@ -249,7 +244,7 @@ export function ConversationInteractions({ sessionId, active, messages, revision
     const pre = (event.target as HTMLElement).closest('pre');
     const linked = (event.target as HTMLElement).closest<HTMLElement>('[data-link-url], [data-link-file]');
     const target = linked ? { ...(linked.dataset.linkUrl ? { url: linked.dataset.linkUrl } : {}), ...(linked.dataset.linkFile ? { file: linked.dataset.linkFile } : {}) } : {};
-    setMenu({ id: body.dataset.messageBody!, x: event.clientX, y: event.clientY, selection: text, plain: bodyText(body), ...(pre ? { code: pre.querySelector('code')?.textContent || pre.textContent || '' } : {}), ...target });
+    setMenu({ id: body.dataset.messageBody!, x: event.clientX, y: event.clientY, selection: text, plain: bodyText(body), ...(pre ? { code: (pre.querySelector('code')?.textContent || pre.textContent || '').replace(/\n$/, '') } : {}), ...target });
     setSelection(null);
   }}>
     <style>{`::highlight(${matchName}){background:#806c28;color:#fff}::highlight(${activeName}){background:#edaa42;color:#171715}`}</style>

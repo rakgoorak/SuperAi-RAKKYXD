@@ -1,8 +1,17 @@
-import { memo, useRef, useState, type ReactNode } from "react";
+import { memo, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import rehypeHighlight from "rehype-highlight";
+import "katex/dist/katex.min.css";
+import { toString as hastText } from "hast-util-to-string";
+import type { Element, ElementContent } from "hast";
 import { Sparkles, Copy, Check } from "lucide-react";
 import { openPreviewLink, openArtifact, parsePreviewTarget, openExternalLink, type PreviewTarget } from '../previewLinks';
 import { ThinkingAccordion } from './ThinkingAccordion';
-import { MarkdownMedia, IMAGE_FILE, VIDEO_FILE } from './MarkdownImage';
+import { MarkdownMedia, IMAGE_FILE, VIDEO_FILE, ImageEndpointContext, revealLinkedFile } from './MarkdownImage';
 import { tr } from '../i18n';
 
 /** Marks a link (or media) so the chat's right-click menu can offer Show in folder / Open in browser. */
@@ -10,32 +19,47 @@ export function linkData(target: PreviewTarget) {
   return target.kind === 'web' ? { 'data-link-url': target.url } : target.kind === 'file' ? { 'data-link-file': target.path } : {};
 }
 
-const MARKDOWN_LINK = /!?\[([^\]\n]+)\]\((?:<([^>\n]+)>|([^)\n]+))\)/g;
 const mediaKind = (file: string) => IMAGE_FILE.test(file) ? 'image' as const : VIDEO_FILE.test(file) ? 'video' as const : null;
 
-/** Local images and videos linked in a line, shown in full under it instead of splitting the sentence. */
-function mediaBlocks(text: string, key: string): ReactNode[] {
+/** Links and images inside a block (not inside nested paragraphs or lists when `shallow`). */
+function linkTargets(node: Element | undefined, shallow: boolean): { href: string; label: string }[] {
+  const found: { href: string; label: string }[] = [];
+  const walk = (children: ElementContent[]) => {
+    for (const child of children) {
+      if (child.type !== 'element') continue;
+      if (shallow && ['p', 'ul', 'ol', 'blockquote'].includes(child.tagName)) continue;
+      if (child.tagName === 'a' && typeof child.properties.href === 'string') found.push({ href: child.properties.href, label: hastText(child) });
+      else if (child.tagName === 'img' && typeof child.properties.src === 'string') found.push({ href: child.properties.src, label: String(child.properties.alt || '') });
+      else walk(child.children);
+    }
+  };
+  if (node) walk(node.children);
+  return found;
+}
+
+/** Local images and videos linked in a paragraph, shown in full under it instead of splitting the sentence. */
+function mediaBlocks(node: Element | undefined, shallow = false): ReactNode[] {
   const seen = new Set<string>();
   const out: ReactNode[] = [];
-  for (const match of text.matchAll(MARKDOWN_LINK)) {
+  for (const { href, label } of linkTargets(node, shallow)) {
     try {
-      const target = parsePreviewTarget(match[2] || match[3]);
+      const target = parsePreviewTarget(href);
       const kind = target.kind === 'file' ? mediaKind(target.path) : null;
       if (target.kind !== 'file' || !kind || seen.has(target.path)) continue;
       seen.add(target.path);
-      out.push(<MarkdownMedia key={`${key}-media-${target.path}`} path={target.path} label={match[1]} kind={kind} />);
+      out.push(<MarkdownMedia key={`media-${target.path}`} path={target.path} label={label} kind={kind} />);
     } catch { /* not a file link */ }
   }
   return out;
 }
 
 /** "> " lines: one quote block, with a Copy button for text meant to be pasted elsewhere (a post, a message). */
-function QuoteBlock({ lines }: { lines: string[] }) {
+function QuoteBlock({ children }: { children: ReactNode }) {
   const [copied, setCopied] = useState(false);
   const body = useRef<HTMLDivElement>(null);
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText((body.current?.innerText || lines.join('\n')).trim());
+      await navigator.clipboard.writeText((body.current?.innerText || '').trim());
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch { /* clipboard refused */ }
@@ -45,26 +69,23 @@ function QuoteBlock({ lines }: { lines: string[] }) {
       {copied ? <Check size={12} style={{ color: 'var(--running, #91bf9f)' }} /> : <Copy size={12} />}
       <span>{copied ? tr("คัดลอกแล้ว") : tr("คัดลอก")}</span>
     </button>
-    <div ref={body}><Markdown text={lines.join('\n')} /></div>
+    <div ref={body} className="markdown">{children}</div>
   </blockquote>;
 }
 
-function link(label: string, href: string, key: string): ReactNode {
+function link(label: ReactNode, href: string): ReactNode {
   try {
     const target = parsePreviewTarget(href);
-    const anchor = (
+    // Images and videos are shown under their paragraph (see mediaBlocks); the link stays in the text.
+    return (
       <a
-        key={key}
         className="md-link"
         href={target.kind === 'web' ? target.url : '#preview-file'}
         title={tr`คลิกเพื่อเปิดใน Preview (Ctrl+Click เพื่อเปิดในเบราว์เซอร์): ${href}`}
         onClick={(event) => {
           event.preventDefault();
-          if (event.ctrlKey || event.metaKey) {
-            openExternalLink(href);
-          } else {
-            openPreviewLink(href);
-          }
+          if (event.ctrlKey || event.metaKey) openExternalLink(href);
+          else openPreviewLink(href);
         }}
         onAuxClick={(event) => {
           if (event.button === 1) {
@@ -77,20 +98,85 @@ function link(label: string, href: string, key: string): ReactNode {
         {label}
       </a>
     );
-    // Images and videos are shown under their paragraph (see mediaBlocks); the link stays in the text.
-    return anchor;
   } catch {
-    return (
-      <span key={key} title={tr("ลิงก์ชนิดนี้ไม่รองรับ")}>
-        {label}
-      </span>
-    );
+    return <span title={tr("ลิงก์ชนิดนี้ไม่รองรับ")}>{label}</span>;
   }
 }
 
-function CodeBlock({ code, language }: { code: string; language: string }) {
+/** Does inline code look like a file or folder path the AI wants the user to find? (`src/app.ts:42` too) */
+export function looksLikeFilePath(text: string): boolean {
+  const value = text.trim().replace(/:\d+(?::\d+)?$/, '');
+  if (!value || value.length > 400 || /[\n<>"|?*]/.test(value.replace(/^[a-z]:/i, ''))) return false;
+  if (/^[a-z]:[\\/]/i.test(value)) return true;
+  if (/^\/(?:Users|home|tmp|var|opt|mnt|Volumes|private)\/\S+$/.test(value)) return true;
+  return /^\.{0,2}[\\/]?[\w.@-]+(?:[\\/][\w.@ -]+)+\.\w{1,8}$/.test(value) && !/\s/.test(value) && !/^\w+:\/\//.test(value);
+}
+
+/**
+ * `D:\Test\site.zip` in an answer: one click opens its folder; `src/app.ts:42` opens the file at
+ * that line in Preview. Right-click offers Preview, Show in folder and Copy path.
+ */
+function FilePathCode({ path }: { path: string }) {
+  const endpoint = useContext(ImageEndpointContext);
+  const [problem, setProblem] = useState('');
+  let file = path, line: number | undefined;
+  try { const target = parsePreviewTarget(path); if (target.kind === 'file') { file = target.path; line = target.line; } } catch { /* keep as typed */ }
+  const open = async () => {
+    if (line || !window.superai?.revealFile) return openPreviewLink(path);
+    try { setProblem(''); await revealLinkedFile(endpoint, file); }
+    catch (error) { setProblem((error as Error).message); setTimeout(() => setProblem(''), 4000); }
+  };
+  return <>
+    <code
+      className="md-path"
+      role="button"
+      tabIndex={0}
+      data-link-file={file}
+      title={line ? tr("คลิกเพื่อเปิดไฟล์ที่บรรทัดนี้ใน Preview (คลิกขวาดูตัวเลือกเพิ่ม)") : window.superai?.platform === 'darwin' ? tr("คลิกเพื่อแสดงใน Finder (คลิกขวาดูตัวเลือกเพิ่ม)") : tr("คลิกเพื่อเปิดโฟลเดอร์ (คลิกขวาดูตัวเลือกเพิ่ม)")}
+      onClick={() => void open()}
+      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void open(); } }}
+    >{path}</code>
+    {problem && <span className="md-path-problem" role="status">{problem}</span>}
+  </>;
+}
+
+type Mermaid = typeof import('mermaid').default;
+let mermaidLoader: Promise<Mermaid> | undefined;
+/** Mermaid is large: load it only when an answer has a diagram, then keep it. Works offline. */
+function loadMermaid() {
+  mermaidLoader ??= import('mermaid').then(({ default: mermaid }) => {
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark', fontFamily: 'inherit' });
+    return mermaid;
+  });
+  return mermaidLoader;
+}
+
+/** The diagram's SVG, or '' while loading, while the answer is still streaming in, or when the code is not valid. */
+function useMermaidSvg(code: string, enabled: boolean) {
+  const id = `md-mermaid-${useId().replace(/[^\w-]/g, '')}`;
+  const [svg, setSvg] = useState('');
+  useEffect(() => {
+    if (!enabled || !code.trim()) return;
+    let live = true;
+    // Wait for streaming to settle before drawing.
+    const timer = setTimeout(async () => {
+      try {
+        const mermaid = await loadMermaid();
+        if (!live || !(await mermaid.parse(code, { suppressErrors: true }))) return;
+        const { svg: drawn } = await mermaid.render(id, code);
+        if (live) setSvg(drawn);
+      } catch { /* keep showing the code */ }
+    }, 300);
+    return () => { live = false; clearTimeout(timer); };
+  }, [code, enabled, id]);
+  return enabled ? svg : '';
+}
+
+function CodeBlock({ code, language, children }: { code: string; language: string; children: ReactNode }) {
   const [copied, setCopied] = useState(false);
   const lang = (language || "").toLowerCase().trim();
+  const diagram = useMermaidSvg(code, lang === 'mermaid');
+  const [showCode, setShowCode] = useState(false);
   const isArtifact =
     ['html', 'svg', 'xml', 'mermaid', 'jsx', 'tsx', 'react'].includes(lang) ||
     (!lang && /^\s*<(!DOCTYPE|html|svg|div|main)/i.test(code));
@@ -101,7 +187,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // fallback
+      // clipboard refused
     }
   };
 
@@ -115,6 +201,11 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
       <div className="md-code-header">
         <span className="md-code-lang">{lang ? lang.toUpperCase() : 'CODE'}</span>
         <div className="md-code-actions">
+          {diagram && (
+            <button type="button" className="md-copy-btn" onClick={() => setShowCode(!showCode)}>
+              <span>{showCode ? tr("ดูแผนภาพ") : tr("ดูโค้ด")}</span>
+            </button>
+          )}
           {isArtifact && (
             <button
               type="button"
@@ -126,43 +217,16 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
               <span>{tr("เปิดใน Canvas")}</span>
             </button>
           )}
-          <button
-            type="button"
-            className="md-copy-btn"
-            title={tr("คัดลอกโค้ด")}
-            onClick={copy}
-          >
-            {copied ? (
-              <Check size={12} style={{ color: 'var(--running, #91bf9f)' }} />
-            ) : (
-              <Copy size={12} />
-            )}
+          <button type="button" className="md-copy-btn" title={tr("คัดลอกโค้ด")} onClick={copy}>
+            {copied ? <Check size={12} style={{ color: 'var(--running, #91bf9f)' }} /> : <Copy size={12} />}
             <span>{copied ? tr("คัดลอกแล้ว") : tr("คัดลอก")}</span>
           </button>
         </div>
       </div>
-      <pre tabIndex={0}>
-        <code>{code}</code>
-      </pre>
+      {diagram && !showCode
+        ? <div className="md-mermaid" role="img" aria-label={tr("แผนภาพ")} dangerouslySetInnerHTML={{ __html: diagram }} />
+        : <pre tabIndex={0}>{children}</pre>}
     </div>
-  );
-}
-
-/** Minimal, safe Markdown for AI answers: headings, lists, tables, code blocks, bold, inline code and links. No HTML. */
-function inline(text: string, key: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*|`[^`]+`|!?\[[^\]\n]+\]\((?:<[^>\n]+>|[^)\n]+)\)|(?:https?:\/\/|www\.)[^\s<>]+)/g).map((part, i) =>
-    /^!?\[[^\]\n]+\]\((?:<[^>\n]+>|[^)\n]+)\)$/.test(part) ? (
-      link(part.slice(part.startsWith('!') ? 2 : 1, part.indexOf("](")), part.slice(part.indexOf("](") + 2, -1), `${key}-${i}`)
-    ) : /^(?:https?:\/\/|www\.)/i.test(part) ? (() => {
-      const href = part.replace(/[.,;!?\u3002\uff0c\uff1b\uff01\uff1f]+$/, '');
-      return <span key={`${key}-${i}`}>{link(href, href, `${key}-${i}-url`)}{part.slice(href.length)}</span>;
-    })() : part.startsWith("**") && part.endsWith("**") && part.length > 4 ? (
-      <strong key={`${key}-${i}`}>{inline(part.slice(2, -2), `${key}-${i}-bold`)}</strong>
-    ) : part.startsWith("`") && part.endsWith("`") && part.length > 2 ? (
-      <code key={`${key}-${i}`}>{part.slice(1, -1)}</code>
-    ) : (
-      part
-    ),
   );
 }
 
@@ -185,6 +249,88 @@ function ArtifactCard({ title, language, content }: { title: string; language: s
   );
 }
 
+/**
+ * Models write math as \( x \) and \[ x \]; remark-math reads $$ x $$. Single $ stays plain text
+ * so prices ("$5 and $10") never turn into math. Inline code is left alone.
+ */
+function mathDelimiters(line: string): string {
+  if (/^\s*\\[[\]]\s*$/.test(line)) return line.replace(/\\[[\]]/, '$$$$');
+  return line.split(/(`+[^`]*`+)/).map((part, index) => index % 2 ? part : part
+    .replace(/^(\s*)\\\[(.+)\\\]\s*$/, (_, space: string, body: string) => `${space}$$\n${body.trim()}\n$$`)
+    .replace(/\\\[(.+?)\\\]/g, (_, body: string) => `$$${body.trim()}$$`)
+    .replace(/\\\((.+?)\\\)/g, (_, body: string) => `$$${body.trim()}$$`)).join('');
+}
+
+/**
+ * AI answers are written loosely: keep them reading as the AI meant.
+ * - quote lines separated by blank lines stay one quote card
+ * - link targets with spaces (`[clip](D:/my clips/a.mp4)`) still link
+ * - "•" bullets are a list
+ * Fenced code is left untouched.
+ */
+export function prepareMarkdown(text: string): string {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const quote = /^\s*>/;
+  let fence = '';
+  for (let i = 0; i < lines.length; i++) {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(lines[i]);
+    if (marker) {
+      if (!fence) fence = marker[1];
+      else if (marker[1][0] === fence[0] && marker[1].length >= fence.length) fence = '';
+      continue;
+    }
+    if (fence) continue;
+    lines[i] = lines[i]
+      .replace(/^(\s*)•\s+/, '$1- ')
+      .replace(/\]\(([^()<>\n]*?\s[^()<>\n]*?)\)/g, (whole, dest: string) => /\s+"[^"]*"$/.test(dest) ? whole : `](<${dest.trim()}>)`);
+    lines[i] = mathDelimiters(lines[i]);
+  }
+  for (let i = 1; i < lines.length - 1; i++) {
+    if (lines[i].trim() || !quote.test(lines[i - 1])) continue;
+    let next = i;
+    while (next < lines.length && !lines[next].trim()) next++;
+    if (next < lines.length && quote.test(lines[next])) for (let j = i; j < next; j++) lines[j] = '>';
+  }
+  return lines.join("\n");
+}
+
+const languageOf = (node: Element | undefined) => {
+  const classes = node?.properties.className;
+  const found = (Array.isArray(classes) ? classes : []).map(String).find((name) => name.startsWith('language-'));
+  return found ? found.slice('language-'.length) : '';
+};
+
+const components: Components = {
+  a: ({ href, children }) => <>{href ? link(children, href) : children}</>,
+  img: ({ src, alt }) => <>{typeof src === 'string' && src ? link(alt || src, src) : alt}</>,
+  p: ({ node, children }) => <><p>{children}</p>{mediaBlocks(node)}</>,
+  li: ({ node, children, className }) => <li className={className}>{children}{mediaBlocks(node, true)}</li>,
+  blockquote: ({ children }) => <QuoteBlock>{children}</QuoteBlock>,
+  h1: ({ children }) => <h1 className="md-h1">{children}</h1>,
+  h2: ({ children }) => <h2 className="md-h2">{children}</h2>,
+  h3: ({ children }) => <h3 className="md-h3">{children}</h3>,
+  h4: ({ children }) => <h4 className="md-h4">{children}</h4>,
+  h5: ({ children }) => <h5 className="md-h5">{children}</h5>,
+  h6: ({ children }) => <h6 className="md-h6">{children}</h6>,
+  table: ({ children }) => <div className="md-table-wrap"><table>{children}</table></div>,
+  pre: ({ node, children }) => {
+    const code = node?.children.find((child): child is Element => child.type === 'element' && child.tagName === 'code');
+    return <CodeBlock code={code ? hastText(code).replace(/\n$/, '') : ''} language={languageOf(code)}>{children}</CodeBlock>;
+  },
+  code: ({ node, className, children }) => {
+    const text = node ? hastText(node) : '';
+    // Fenced code always ends with a newline; inline code never does.
+    if (!text.endsWith('\n') && looksLikeFilePath(text)) return <FilePathCode path={text.trim()} />;
+    return <code className={className}>{children}</code>;
+  },
+};
+
+const remarkPlugins = [remarkGfm, remarkBreaks, [remarkMath, { singleDollarTextMath: false }]] as never;
+const rehypePlugins = [[rehypeKatex, { throwOnError: false, strict: false }], [rehypeHighlight, { detect: false }]] as never;
+// Every link goes through parsePreviewTarget, which allows only http(s) and local files.
+const keepUrl = (url: string) => url;
+
+/** Safe Markdown for AI answers (GitHub flavour, no raw HTML) with the app's own links, media, quotes and code blocks. */
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
   const thinkingBlocks: string[] = [];
   const artifactBlocks: { title: string; language: string; content: string }[] = [];
@@ -193,114 +339,31 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
   const thinkingRegex = /<(?:thinking|thought|think)>([\s\S]*?)<\/(?:thinking|thought|think)>/gi;
   let match;
   while ((match = thinkingRegex.exec(text)) !== null) {
-    if (match[1]?.trim()) {
-      thinkingBlocks.push(match[1].trim());
-    }
+    if (match[1]?.trim()) thinkingBlocks.push(match[1].trim());
   }
-
-  if (thinkingBlocks.length > 0) {
-    remainingText = text.replace(thinkingRegex, '').trim();
-  }
+  if (thinkingBlocks.length > 0) remainingText = text.replace(thinkingRegex, '').trim();
 
   const artifactRegex = /<(?:antArtifact|artifact)([\s\S]*?)>([\s\S]*?)<\/(?:antArtifact|artifact)>/gi;
   let artMatch;
   while ((artMatch = artifactRegex.exec(remainingText)) !== null) {
     const attrs = artMatch[1] || '';
-    const content = artMatch[2] || '';
     const titleMatch = attrs.match(/title="([^"]+)"/i);
     const typeMatch = attrs.match(/(?:type|language)="([^"]+)"/i);
     artifactBlocks.push({
       title: titleMatch ? titleMatch[1] : 'Canvas Artifact',
       language: typeMatch ? typeMatch[1] : 'html',
-      content: content.trim(),
+      content: (artMatch[2] || '').trim(),
     });
   }
+  if (artifactBlocks.length > 0) remainingText = remainingText.replace(artifactRegex, '').trim();
 
-  if (artifactBlocks.length > 0) {
-    remainingText = remainingText.replace(artifactRegex, '').trim();
-  }
-
-  const out: ReactNode[] = [];
-  thinkingBlocks.forEach((thought, idx) => {
-    out.push(<ThinkingAccordion key={`thought-${idx}`} thought={thought} />);
-  });
-
-  artifactBlocks.forEach((art, idx) => {
-    out.push(<ArtifactCard key={`art-${idx}`} title={art.title} language={art.language} content={art.content} />);
-  });
-
-  const lines = remainingText.replace(/\r\n/g, "\n").split("\n");
-  let list: { ordered: boolean; items: string[] } | null = null;
-  const flush = () => {
-    if (!list) return;
-    const items = list.items.map((item, i) => <li key={i}>{inline(item, `li${out.length}-${i}`)}{mediaBlocks(item, `li${out.length}-${i}`)}</li>);
-    out.push(list.ordered ? <ol key={out.length}>{items}</ol> : <ul key={out.length}>{items}</ul>);
-    list = null;
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.startsWith("```")) {
-      flush();
-      const match = line.match(/^```(\w+)?/);
-      const language = match?.[1] || "";
-      const code: string[] = [];
-      for (i++; i < lines.length && !lines[i].startsWith("```"); i++) code.push(lines[i]);
-      out.push(<CodeBlock key={out.length} code={code.join("\n")} language={language} />);
-      continue;
-    }
-    const quote = /^\s*>\s?/;
-    if (quote.test(line)) {
-      flush();
-      // Lines starting with ">" form one block, also across blank lines between them.
-      const body: string[] = [];
-      for (; i < lines.length; i++) {
-        if (quote.test(lines[i])) { body.push(lines[i].replace(quote, '')); continue; }
-        let next = i;
-        while (next < lines.length && !lines[next].trim()) next++;
-        if (next > i && next < lines.length && quote.test(lines[next])) { body.push(''); i = next - 1; continue; }
-        break;
-      }
-      i--;
-      out.push(<QuoteBlock key={out.length} lines={body} />);
-      continue;
-    }
-    const row = /^\s*\|.*\|\s*$/;
-    if (row.test(line) && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i + 1] || "") && lines[i + 1].includes("-")) {
-      flush();
-      const cells = (text: string) => text.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
-      const head = cells(line);
-      const body: string[][] = [];
-      const at = i;
-      for (i += 2; i < lines.length && row.test(lines[i]); i++) body.push(cells(lines[i]));
-      i--;
-      out.push(
-        <table key={out.length}>
-          <thead><tr>{head.map((c, j) => <th key={j}>{inline(c, `th${at}-${j}`)}</th>)}</tr></thead>
-          <tbody>{body.map((r, k) => <tr key={k}>{r.map((c, j) => <td key={j}>{inline(c, `td${at}-${k}-${j}`)}</td>)}</tr>)}</tbody>
-        </table>,
-      );
-      continue;
-    }
-    const heading = /^(#{1,4})\s+(.*)$/.exec(line);
-    const bullet = /^\s*[-*•]\s+(.*)$/.exec(line);
-    const numbered = /^\s*\d+[.)]\s+(.*)$/.exec(line);
-    if (heading) {
-      flush();
-      out.push(<h4 key={out.length} className={`md-h${heading[1].length}`}>{inline(heading[2], `h${i}`)}</h4>);
-    } else if (bullet || numbered) {
-      const ordered = !!numbered;
-      if (list && list.ordered !== ordered) flush();
-      if (!list) list = { ordered, items: [] };
-      list.items.push((bullet || numbered)![1]);
-    } else if (!line.trim()) {
-      flush();
-    } else {
-      flush();
-      out.push(<p key={out.length}>{inline(line, `p${i}`)}</p>);
-      out.push(...mediaBlocks(line, `p${i}`));
-    }
-  }
-  flush();
-  return <div className="markdown">{out}</div>;
+  return (
+    <div className="markdown">
+      {thinkingBlocks.map((thought, idx) => <ThinkingAccordion key={`thought-${idx}`} thought={thought} />)}
+      {artifactBlocks.map((art, idx) => <ArtifactCard key={`art-${idx}`} title={art.title} language={art.language} content={art.content} />)}
+      <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components} urlTransform={keepUrl}>
+        {prepareMarkdown(remainingText)}
+      </ReactMarkdown>
+    </div>
+  );
 });

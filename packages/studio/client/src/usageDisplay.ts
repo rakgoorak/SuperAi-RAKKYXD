@@ -1,4 +1,4 @@
-import { tr } from './i18n';
+import { tr, dateLocale } from './i18n';
 export interface UsageWindow {
   label: string; group?: string; remainingPercent: number | null;
   resetsAt?: string; resetsText?: string; note?: string;
@@ -16,7 +16,7 @@ export function usageResetLabel(w: UsageWindow, now = Date.now(), zone = Intl.Da
   if (w.resetsAt && Number.isFinite(Date.parse(w.resetsAt))) {
     const at = new Date(w.resetsAt);
     if (at.getTime() <= now) return tr("รีเซ็ตแล้ว");
-    const parts = new Intl.DateTimeFormat('th-TH', {
+    const parts = new Intl.DateTimeFormat(dateLocale(), {
       timeZone: zone, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
     }).formatToParts(at);
     const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(p => p.type === type)?.value || '';

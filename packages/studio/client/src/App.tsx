@@ -6,7 +6,7 @@ import { RunActions } from "./components/RunActions";
 import { SlashMenu, type SlashMenuHandle } from "./components/SlashMenu";
 import { MentionMenu, type MentionMenuHandle } from "./components/MentionMenu";
 import { CommandPalette } from "./components/CommandPalette";
-import { useTranslation } from "./i18n";
+import { useTranslation, dateLocale } from "./i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Folder,
@@ -627,6 +627,8 @@ export function App() {
     if (activeWsRef.current === previous.wsId) setRuns(current => [...current.filter(run => run.id !== created.id), created]);
   });
   /** `queue` (Ctrl+Enter): a chat that is still answering takes the message after its current turn. */
+  // Like Claude: the box grows with what is typed and shrinks back to one line once it is sent or cleared.
+  useEffect(() => { if (!draft) setComposerExpanded(false); }, [draft]);
   const send = async (queue = false) => {
     if (sending.current) return;
     sending.current = true;
@@ -1373,7 +1375,7 @@ export function App() {
                   <span className="count-badge">
                     {mode === "code"
                       ? `${visible.length} session`
-                      : `${conversation.length} ${t("canvas.tasks_unit", "งาน")}`}
+                      : `${conversation.length} ${t(conversation.length === 1 ? "canvas.tasks_unit_one" : "canvas.tasks_unit", "งาน")}`}
                   </span>
                   {mode === "code" && hiddenInWorkspace.length > 0 && (
                     <div className="hidden-sessions-bar" role="group" aria-label={tr("session ที่ซ่อนอยู่")}>
@@ -1500,7 +1502,7 @@ export function App() {
                           <span className="message-author">
                             {tr("คุณ")}{" "}
                             <time>
-                              {new Date(run.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}
+                              {new Date(run.createdAt).toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit" })}
                             </time>
                           </span>
                           <p>{renderTextWithLinks(run.prompt)}</p>
@@ -1697,8 +1699,6 @@ export function App() {
                 <div className={`composer-box ${chatTarget ? "has-session-controls" : ""}`}>
                   <div className="composer-leading"><AttachMenu onFiles={attachToComposer} disabled={busy || (!workspace && mode !== "code")} actions={[
                     { label: tr("บริบทและไฟล์ปักหมุด"), selected: composerPanelOpen, onSelect: () => setComposerPanelOpen(value => !value) },
-                    ...(mode === 'code' && running.length || activeRun ? [{ label: tr("หยุดงานปัจจุบัน"), onSelect: interrupt }] : []),
-                    ...(mode === 'code' ? [{ label: composerExpanded ? tr("ย่อช่องพิมพ์") : tr("ขยายช่องพิมพ์"), selected: composerExpanded, onSelect: () => { setComposerExpanded(value => !value); requestAnimationFrame(() => composer.current?.focus()); } }] : []),
                     ...(nextPrompt ? [{ label: tr("ใช้ข้อความแนะนำ (Tab)"), onSelect: () => { setDraft(nextPrompt); requestAnimationFrame(() => composer.current?.focus()); } }] : []),
                   ]} /></div>
                   <div className="composer-attachments-row">
@@ -1710,7 +1710,7 @@ export function App() {
                     <MentionMenu ref={mentionMenu} draft={draft} workspaceId={workspace?.id} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
                     <textarea
                       ref={composer}
-                      rows={mode === "code" && !composerExpanded ? 1 : 3}
+                      rows={mode === "code" ? 1 : 3}
                       aria-label={tr("คำสั่ง")}
                       placeholder={mode === 'code' ? target === 'all' ? t("composer.placeholder_all", 'ส่งข้อความถึงทุกห้อง…') : t("composer.placeholder_code", 'พิมพ์ข้อความ…') : mode === 'agent' ? t("composer.placeholder_agent", 'บอกสิ่งที่ต้องการให้ทีมทำ…') : t("composer.placeholder_chat", 'ถาม AI ที่เลือก…')}
                       title={nextPrompt ? tr("มีข้อความแนะนำ: กด Tab เพื่อใช้ หรือเปิดเมนู + เพื่อดูตัวเลือก") : t("composer.shortcut_hint", 'Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่')}

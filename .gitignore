@@ -37,8 +37,8 @@ docs/superpowers/
 # so only the Markdown files the site, the README or the release workflow use are kept.
 docs/*.md
 !docs/RELEASE.md
+!docs/DOWNLOADS_TH.md
 !docs/DOWNLOADS.md
-!docs/DOWNLOADS_EN.md
 !docs/MULTI_ACCOUNT.md
 !docs/MAC-SIGNING.md
 # Design and product context written for AI tools.

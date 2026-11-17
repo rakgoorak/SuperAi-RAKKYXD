@@ -5,7 +5,7 @@ import { HEADLESS } from '../providers';
 import { chatHistoryEntries, recentConversations, runHistoryEntries, type HistoryEntry, type HistoryMessage } from '../historyEntries';
 import { providerIdentity } from '../providerIdentity';
 import { ProviderBadge } from './ProviderBadge';
-import { tr } from '../i18n';
+import { tr, dateLocale } from '../i18n';
 export type { HistoryEntry } from '../historyEntries';
 
 export function HistoryPanel({ workspaces, sessions, onSelect }: { workspaces: Workspace[]; sessions: Session[]; onSelect: (entry: HistoryEntry) => void }) {
@@ -52,7 +52,7 @@ export function HistoryPanel({ workspaces, sessions, onSelect }: { workspaces: W
     <div className="history-results">{matches.slice(0, 100).map(entry => {
       const start = needle ? Math.max(0, entry.snippet.toLowerCase().indexOf(needle) - 60) : 0;
       return <button key={`${entry.wsId}:${entry.sessionId || ''}:${entry.id}`} onClick={() => onSelect(entry)}>
-        <small>{workspaces.find(ws => ws.id === entry.wsId)?.name} · {modeLabels[entry.mode]} · {new Date(entry.at).toLocaleString('th-TH')}</small>
+        <small>{workspaces.find(ws => ws.id === entry.wsId)?.name} · {modeLabels[entry.mode]} · {new Date(entry.at).toLocaleString(dateLocale())}</small>
         <strong>{needle ? entry.text : entry.title || entry.text}</strong>
         <span className="history-providers">{entry.providers.map(id => <ProviderBadge key={id} provider={id} />)}</span>
         <span>{entry.snippet.slice(start, start + 180) || entry.text}</span>

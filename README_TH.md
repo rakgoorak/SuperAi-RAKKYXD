@@ -26,7 +26,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/product-tour.gif" width="960" alt="ภาพสาธิตหน้า workspace, ทีม Agent และ Multi-AI Chat ของ SuperAi">
+  <img src="docs/images/th/product-tour.gif" width="960" alt="ภาพสาธิตหน้า workspace, ทีม Agent และ Multi-AI Chat ของ SuperAi">
 </p>
 
 ## โปรแกรมนี้คืออะไร
@@ -44,12 +44,12 @@ SuperAi &amp; RAKKYXD เป็นโปรแกรม Desktop โอเพน�
 | **Chat** | เปรียบเทียบคำตอบจาก AI หลายตัว | ส่งพรอมป์ให้ Main Agent ได้ 1–5 ตัว ดูคำตอบพร้อมชื่อผู้ตอบ และขอให้สรุปรวมได้ |
 
 <p align="center">
-  <img src="docs/images/agent.png" width="49%" alt="โหมด Agent แสดง Main Agent และความคืบหน้าของ Sub-agents">
-  <img src="docs/images/chat.png" width="49%" alt="โหมด Multi-AI Chat พร้อมระบุผู้ตอบแต่ละโมเดล">
+  <img src="docs/images/th/agent.png" width="49%" alt="โหมด Agent แสดง Main Agent และความคืบหน้าของ Sub-agents">
+  <img src="docs/images/th/chat.png" width="49%" alt="โหมด Multi-AI Chat พร้อมระบุผู้ตอบแต่ละโมเดล">
 </p>
 
 <p align="center">
-  <img src="docs/images/usage.png" width="760" alt="หน้าข้อมูลการใช้งานและโควตาของผู้ให้บริการใน workspace">
+  <img src="docs/images/th/usage.png" width="760" alt="หน้าข้อมูลการใช้งานและโควตาของผู้ให้บริการใน workspace">
 </p>
 
 ## เครื่องมือที่อยู่ใกล้บทสนทนา

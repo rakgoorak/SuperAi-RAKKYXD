@@ -83,6 +83,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     // Canvas & Empty States
     'canvas.workspace_room': 'ห้องทำงาน',
     'canvas.tasks_unit': 'งาน',
+    'canvas.tasks_unit_one': 'งาน',
     'canvas.running_unit': 'กำลังทำงาน',
     'canvas.agent_empty_title': 'บอกเป้าหมาย แล้วให้ทีมแบ่งงานกันทำ',
     'canvas.agent_empty_desc': 'พิมพ์เป้าหมายและเกณฑ์ตรวจรับด้านล่าง Main จะแจกงานให้ Sub-agent และคุณจะเห็นว่าแต่ละตัวกำลังทำอะไร',
@@ -219,6 +220,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     // Canvas & Empty States
     'canvas.workspace_room': 'Workspace',
     'canvas.tasks_unit': 'runs',
+    'canvas.tasks_unit_one': 'run',
     'canvas.running_unit': 'running',
     'canvas.agent_empty_title': 'Describe your goal and let the AI Team divide & conquer',
     'canvas.agent_empty_desc': 'Enter your objective below. The Main planner delegates tasks to Sub-agents while you track live progress.',
@@ -355,6 +357,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     // Canvas & Empty States
     'canvas.workspace_room': 'ワークスペース',
     'canvas.tasks_unit': '件',
+    'canvas.tasks_unit_one': '件',
     'canvas.running_unit': '実行中',
     'canvas.agent_empty_title': '目標を伝えて、AIチームにタスクを分担させましょう',
     'canvas.agent_empty_desc': '下に目標を入力すると、MainがSub-agentに作業を割り振り、進行状況をリアルタイム表示します。',
@@ -491,6 +494,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     // Canvas & Empty States
     'canvas.workspace_room': '工作室',
     'canvas.tasks_unit': '项任务',
+    'canvas.tasks_unit_one': '项任务',
     'canvas.running_unit': '正在运行',
     'canvas.agent_empty_title': '输入目标，让 AI 团队自动拆解并协作完成',
     'canvas.agent_empty_desc': '在下方输入需求，主智能体 (Main) 会分配任务给子智能体 (Sub-agents) 并实时展示进度。',
@@ -614,6 +618,12 @@ void tellServer();
 
 export function getLocale(): Locale {
   return currentLocale;
+}
+
+const DATE_LOCALE: Record<Locale, string> = { th: 'th-TH', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' };
+/** For toLocale*String and Intl.DateTimeFormat: dates and times in the window's language. */
+export function dateLocale(): string {
+  return DATE_LOCALE[currentLocale];
 }
 
 /**
