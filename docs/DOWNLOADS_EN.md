@@ -16,7 +16,7 @@ Run `SuperAi-RAKKYXD-Setup.exe` and follow the wizard: choose an install folder 
 
 ## macOS
 
-Open the `.dmg` and drag **SuperAi & RAKKYXD** into **Applications**. macOS 11 or newer is supported by the bundled Electron runtime. This build uses ad-hoc signing (no Apple Developer ID / notarization yet). If macOS Sonoma/Sequoia reports that the app is damaged or cannot be opened by Gatekeeper, run:
+Open the `.dmg` and drag **SuperAi & RAKKYXD** into **Applications**. macOS 13 or newer is supported by the bundled Electron runtime. This build uses ad-hoc signing (no Apple Developer ID / notarization yet). If macOS Sonoma/Sequoia reports that the app is damaged or cannot be opened by Gatekeeper, run:
 
 ```bash
 xattr -cr /Applications/SuperAi-RAKKYXD.app

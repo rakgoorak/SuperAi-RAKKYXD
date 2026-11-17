@@ -12,7 +12,7 @@
 // While the AI acts, a small always-on-top bar says so and has a Stop button. Windows sends real
 // input through user32 (a long-lived PowerShell helper); macOS posts CoreGraphics events through a
 // long-lived JavaScript-for-Automation helper. Only the main screen is used.
-import { app, BrowserWindow, clipboard, desktopCapturer, globalShortcut, screen, shell, systemPreferences } from "electron";
+import { app, BrowserWindow, clipboard, ClipboardItem, desktopCapturer, globalShortcut, screen, shell, systemPreferences } from "electron";
 import { execFile, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import fs from "node:fs";
@@ -1108,18 +1108,26 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     return { text: `The mouse is at x=${x} y=${y} of the latest screenshot.` };
   }
 
+  async function clipboardPng() {
+    try {
+      const item = (await clipboard.read()).find((i) => i.types.includes("image/png"));
+      return item ? await item.getType("image/png") : null;
+    } catch { return null; }
+  }
+
   async function typeText(text) {
     if (process.platform === "darwin") {
       // Any language: paste through the clipboard, then put back what the user had there.
       // The target app reads the clipboard after it handles ⌘V, which can take a few hundred ms on a busy
       // or older Mac: restoring too soon made it paste the user's old clipboard instead (seen on macOS 12 Intel).
-      const saved = { text: clipboard.readText(), image: clipboard.readImage() };
+      // Electron 44+: clipboard reads/writes are async; an image is kept as its PNG Blob.
+      const saved = { text: await clipboard.readText().catch(() => ""), image: await clipboardPng() };
       let last = "";
       try {
         for (const [i, part] of String(text).split("\n").entries()) {
           if (i) await pressKeys("enter");
           if (!part) continue;
-          clipboard.writeText(part);
+          await clipboard.writeText(part);
           last = part;
           await wait(40); // let the pasteboard settle before the keystroke
           await pressKeys("cmd+v");
@@ -1128,7 +1136,10 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       } finally {
         await wait(500);
         // Put back what the user had, unless they copied something new meanwhile.
-        if (!last || clipboard.readText() === last) { if (!saved.image.isEmpty()) clipboard.writeImage(saved.image); else clipboard.writeText(saved.text); }
+        if (!last || (await clipboard.readText().catch(() => "")) === last) {
+          if (saved.image) await clipboard.write([new ClipboardItem({ "image/png": saved.image })]);
+          else await clipboard.writeText(saved.text);
+        }
       }
       return;
     }

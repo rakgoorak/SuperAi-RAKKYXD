@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog, clipboard, nativeImage, nativeTheme, Notification, Tray, Menu } from "electron";
+import { app, BrowserWindow, ipcMain, shell, dialog, clipboard, ClipboardItem, nativeImage, nativeTheme, Notification, Tray, Menu } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { readFileSync } from "node:fs";
@@ -110,7 +110,8 @@ ipcMain.handle("clipboard:stage-image", async (e, filePath) => {
   if (img.isEmpty()) {
     throw new Error(tr("ไม่สามารถอ่านข้อมูลรูปภาพได้"));
   }
-  clipboard.writeImage(img);
+  // Electron 44+: the clipboard is async and takes W3C-style ClipboardItems.
+  await clipboard.write([new ClipboardItem({ "image/png": new Blob([img.toPNG()], { type: "image/png" }) })]);
   return { success: true };
 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -369,9 +370,7 @@ else {
       window.webContents.on("will-navigate", (event, url) => {
         if (new URL(url).origin !== appUrl) event.preventDefault();
       });
-      window.webContents.on("console-message", (_event, _level, message) =>
-        log(message),
-      );
+      window.webContents.on("console-message", ({ message }) => log(message));
       window.webContents.on("before-input-event", (event, input) => {
         if (input.key === "F12") {
           window.webContents.toggleDevTools();
