@@ -38,3 +38,10 @@ dialog.message-image-preview[open] { display: grid; place-items: center; }
 #root .markdown-media-outside > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 12px; }
 #root .markdown-media-outside small { overflow: hidden; color: var(--dim); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
 #root .markdown-media-outside button { flex: none; }
+/* "> " lines: one card, Copy in the corner. */
+#root .md-quote { position: relative; margin: 10px 0 14px; padding: 12px 14px 4px; border: 1px solid var(--border); border-left: 3px solid var(--accent, #d9a080); border-radius: 10px; background: var(--surface); }
+#root .md-quote .markdown p { margin: 0 0 8px; }
+#root .md-quote-copy { position: absolute; top: 8px; right: 8px; background: var(--surface); }
+#root .md-quote > div { padding-right: 76px; }
+#root .markdown-media-failed { display: block; margin: 4px 0 12px; color: var(--dim); font-size: 11px; }
+#root .markdown > .markdown-image { display: flex; }

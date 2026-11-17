@@ -33,7 +33,15 @@ try {
 
 [คลิปตัวอย่าง](output/clip.webm)
 
-[คลิปนอกโปรเจกต์](D:/elsewhere/demo.webm)`;
+เสร็จแล้วครับ — [คลิปนอกโปรเจกต์](D:/elsewhere/demo.webm) (40.5 วินาที, 2.9 MB)
+
+**Facebook เพจ**
+
+> ก่อนส่งใบขอซื้อ ลองดูขั้นตอนครับ
+>
+> ดูเพิ่มที่ [เว็บไซต์](https://example.com/demo)
+>
+> #ERP #ใบขอซื้อ`;
   const items = [{ id: 'u', kind: 'user', text: 'แสดงรูปภาพ', attachments: ['saved.png'], at: Date.now() }, { id: 'a', kind: 'assistant', text: answer, at: Date.now() }];
   await page.routeWebSocket('**/ws/chat/images', socket => socket.send(JSON.stringify({ type: 'snapshot', chat: { items, running: false } })));
   const video = await fs.readFile(new URL('./fixtures/clip.webm', import.meta.url));
@@ -41,11 +49,12 @@ try {
   await page.route('**/api/**', async route => {
     const pathname = new URL(route.request().url()).pathname;
     if (pathname === '/api/preview-file/allow') { allowed.push(route.request().postDataJSON().path); return route.fulfill({ json: { ok: true } }); }
+    if (pathname.endsWith('/preview-file/locate')) return route.fulfill({ json: { path: 'D:\\elsewhere\\demo.webm' } });
     if (pathname.endsWith('/preview-file')) {
       const requested = new URL(route.request().url()).searchParams.get('path');
       const head = route.request().method() === 'HEAD';
       if (requested === 'missing.png') return route.fulfill({ status: 404, json: { error: 'missing' } });
-      if (requested === 'D:/elsewhere/demo.webm' && !allowed.includes('D:\elsewhere\demo.webm')) return head ? route.fulfill({ status: 403 }) : route.fulfill({ status: 403, json: { outside: true, file: 'D:\elsewhere\demo.webm' } });
+      if (requested === 'D:/elsewhere/demo.webm' && !allowed.includes('D:\\elsewhere\\demo.webm')) return head ? route.fulfill({ status: 403 }) : route.fulfill({ status: 403, json: { outside: true, file: 'D:\\elsewhere\\demo.webm' } });
       if (requested.endsWith('.webm')) return route.fulfill({ contentType: 'video/webm', body: video });
       return route.fulfill({ contentType: 'image/png', body: await fs.readFile('docs/images/workspace.png') });
     }
@@ -73,14 +82,26 @@ try {
   await clip.waitFor();
   await page.waitForFunction(() => document.querySelector('video.markdown-video-player')?.readyState >= 1);
   check(await clip.evaluate(el => el.tagName === 'VIDEO' && el.controls), 'a video link in the answer plays inline with controls');
-  const outside = page.getByRole('group', { name: 'ไฟล์นี้อยู่นอกโปรเจกต์', exact: true });
-  await outside.waitFor();
-  check(await page.getByLabel('คลิปนอกโปรเจกต์', { exact: true }).count() === 0, 'a video outside the project waits for consent');
-  await outside.getByRole('button', { name: 'แสดงวิดีโอนี้', exact: true }).click();
   const shown = page.getByLabel('คลิปนอกโปรเจกต์', { exact: true });
   await shown.waitFor();
-  await page.waitForFunction(() => [...document.querySelectorAll('video.markdown-video-player')].every(v => v.readyState >= 1));
-  check(allowed.length === 1 && await outside.count() === 0, 'one click allows that file and plays it in the chat');
+  await page.waitForFunction(() => [...document.querySelectorAll('video.markdown-video-player')].length === 2 && [...document.querySelectorAll('video.markdown-video-player')].every(v => v.readyState >= 1));
+  check(allowed.length === 1, 'a video outside the project plays without a button (allowed once, automatically)');
+  check(await page.locator('p', { hasText: 'เสร็จแล้วครับ' }).evaluate(p => p.textContent.includes('(40.5 วินาที, 2.9 MB)') && !p.querySelector('video')), 'the sentence around a video link stays whole; the video sits under it');
+  const quote = page.locator('blockquote.md-quote');
+  check(await quote.count() === 1 && !(await quote.innerText()).includes('>'), 'lines starting with ">" form one quote block without the ">" marks');
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await quote.getByRole('button', { name: 'คัดลอก' }).click();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  check(copied.startsWith('ก่อนส่งใบขอซื้อ') && copied.includes('#ERP #ใบขอซื้อ') && !copied.includes('คัดลอก') && !copied.includes('>'), 'Copy on the quote copies just its text: ' + JSON.stringify(copied.slice(0, 40)));
+  await quote.getByRole('link', { name: 'เว็บไซต์' }).click({ button: 'right' });
+  const menu = page.getByRole('menu', { name: 'ตัวเลือกข้อความ' });
+  check(await menu.getByRole('menuitem', { name: 'เปิดใน Browser ภายในแอป' }).isVisible() && await menu.getByRole('menuitem', { name: 'เปิดในเบราว์เซอร์ภายนอก' }).isVisible() && await menu.getByRole('menuitem', { name: 'คัดลอกลิงก์' }).isVisible(), 'right-click on a web link offers the built-in and external browser');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => { window.__revealed = []; window.superai = { ...(window.superai || {}), platform: 'win32', openExternal: async () => {}, browser: async () => ({ tabs: [], activeId: '' }), onBrowser: () => () => {}, revealFile: async file => { window.__revealed.push(file); } }; });
+  await shown.click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: 'เปิดในโฟลเดอร์' }).click();
+  await page.waitForFunction(() => window.__revealed.length === 1);
+  check(await page.evaluate(() => window.__revealed[0]) === 'D:\\elsewhere\\demo.webm', 'right-click on a video shows the file in its folder');
   await page.screenshot({ path: path.join(output, 'inline-images.png'), fullPage: true });
   await inline.click();
   const viewer = page.getByRole('dialog', { name: 'ดูรูป ดูภาพตัวอย่าง', exact: true });

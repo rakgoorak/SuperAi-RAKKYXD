@@ -4,7 +4,7 @@ import { SelfHealingManager } from './SelfHealingManager.js';
 import { CrossReviewManager } from './CrossReviewManager.js';
 import { projectChanges, projectFile, stageFile, unstageFile, discardFile, saveProjectFile } from "./ProjectChanges.js";
 import { listWorktrees, createWorktree, mergeWorktree, removeWorktree } from "./GitWorktrees.js";
-import { readPreviewFile, OutsideProjectError } from './PreviewFiles.js';
+import { readPreviewFile, resolvePreviewPath, OutsideProjectError } from './PreviewFiles.js';
 import { workingContext } from './WorkingContext.js';
 import { writeFileSafely, readJsonSafely } from './SafeFile.js';
 import { branchChoices, selectBranch } from './BranchSelection.js';
@@ -592,6 +592,20 @@ export class StudioServer {
         res.json({ ok: true });
       } catch { res.status(404).json({ error: tr("ไม่พบไฟล์นี้แล้ว ตรวจที่อยู่ไฟล์หรือให้ AI สร้างไฟล์ใหม่") }); }
     });
+    // Where a linked file is on disk, for "Show in folder" (the desktop app selects it in Explorer / Finder).
+    // Outside the project too: it only reports the path; reading the file still needs consent.
+    const locateFile = (folder: (req: Request) => string | undefined) => async (req: Request, res: Response) => {
+      const root = folder(req);
+      if (!root) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์หรือ session สำหรับเปิดไฟล์นี้") });
+      try { res.json({ path: (await resolvePreviewPath(root, String(req.query.path || ''), allowedOutside)).target }); }
+      catch (error) {
+        if (error instanceof OutsideProjectError) return res.json({ path: error.file });
+        const missing = (error as NodeJS.ErrnoException).code === 'ENOENT';
+        res.status(missing ? 404 : 400).json({ error: missing ? tr("ไม่พบไฟล์นี้แล้ว ตรวจที่อยู่ไฟล์หรือให้ AI สร้างไฟล์ใหม่") : (error as Error).message });
+      }
+    };
+    this.app.get('/api/workspaces/:wsId/preview-file/locate', locateFile(req => this.workspaceRegistry.getWorkspace(String(req.params.wsId))?.rootPath));
+    this.app.get('/api/terminals/:id/preview-file/locate', locateFile(req => this.terminalManager.getSession(String(req.params.id))?.cwd));
     this.app.get('/api/workspaces/:wsId/preview-file', previewFile(req => this.workspaceRegistry.getWorkspace(String(req.params.wsId))?.rootPath));
     this.app.get('/api/terminals/:id/preview-file', previewFile(req => this.terminalManager.getSession(String(req.params.id))?.cwd));
     

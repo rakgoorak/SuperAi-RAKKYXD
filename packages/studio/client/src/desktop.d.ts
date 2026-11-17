@@ -56,6 +56,8 @@ declare global {
       platform: string;
       pickFolder: () => Promise<string | null>;
       openExternal: (url: string) => Promise<void>;
+      /** Show a file (absolute path) selected in Explorer / Finder. */
+      revealFile?: (file: string) => Promise<void>;
       macPermissions?: {
         status: () => Promise<MacPermissionStatus>;
         request: (permission: "microphone" | "camera" | "screen" | "accessibility") => Promise<{ granted: boolean; status: MacPermissionStatus }>;

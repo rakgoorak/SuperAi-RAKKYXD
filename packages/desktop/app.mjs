@@ -91,6 +91,14 @@ ipcMain.handle("app:external", async (e, url) => {
   trusted(e);
   await shell.openExternal(normalizeBrowserUrl(url));
 });
+// Right-click "Show in folder" on a file linked in the chat. Only selects an existing file in
+// Explorer / Finder; nothing is opened or run.
+ipcMain.handle("app:reveal", async (e, file) => {
+  trusted(e);
+  if (typeof file !== "string" || !path.isAbsolute(file) || /[\u0000-\u001f]/.test(file)) throw new Error(tr("ที่อยู่ไฟล์ไม่ถูกต้อง"));
+  await fs.stat(file).catch(() => { throw new Error(tr("ไม่พบไฟล์นี้แล้ว")); });
+  shell.showItemInFolder(path.normalize(file));
+});
 // Settings > macOS privacy: status of each permission, the system Allow prompt where macOS has one,
 // and the matching System Settings pane where it does not.
 const macPrivacySections = {

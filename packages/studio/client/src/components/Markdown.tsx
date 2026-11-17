@@ -1,9 +1,53 @@
-import { memo, useState, type ReactNode } from "react";
+import { memo, useRef, useState, type ReactNode } from "react";
 import { Sparkles, Copy, Check } from "lucide-react";
-import { openPreviewLink, openArtifact, parsePreviewTarget, openExternalLink } from '../previewLinks';
+import { openPreviewLink, openArtifact, parsePreviewTarget, openExternalLink, type PreviewTarget } from '../previewLinks';
 import { ThinkingAccordion } from './ThinkingAccordion';
 import { MarkdownMedia, IMAGE_FILE, VIDEO_FILE } from './MarkdownImage';
 import { tr } from '../i18n';
+
+/** Marks a link (or media) so the chat's right-click menu can offer Show in folder / Open in browser. */
+export function linkData(target: PreviewTarget) {
+  return target.kind === 'web' ? { 'data-link-url': target.url } : target.kind === 'file' ? { 'data-link-file': target.path } : {};
+}
+
+const MARKDOWN_LINK = /!?\[([^\]\n]+)\]\((?:<([^>\n]+)>|([^)\n]+))\)/g;
+const mediaKind = (file: string) => IMAGE_FILE.test(file) ? 'image' as const : VIDEO_FILE.test(file) ? 'video' as const : null;
+
+/** Local images and videos linked in a line, shown in full under it instead of splitting the sentence. */
+function mediaBlocks(text: string, key: string): ReactNode[] {
+  const seen = new Set<string>();
+  const out: ReactNode[] = [];
+  for (const match of text.matchAll(MARKDOWN_LINK)) {
+    try {
+      const target = parsePreviewTarget(match[2] || match[3]);
+      const kind = target.kind === 'file' ? mediaKind(target.path) : null;
+      if (target.kind !== 'file' || !kind || seen.has(target.path)) continue;
+      seen.add(target.path);
+      out.push(<MarkdownMedia key={`${key}-media-${target.path}`} path={target.path} label={match[1]} kind={kind} />);
+    } catch { /* not a file link */ }
+  }
+  return out;
+}
+
+/** "> " lines: one quote block, with a Copy button for text meant to be pasted elsewhere (a post, a message). */
+function QuoteBlock({ lines }: { lines: string[] }) {
+  const [copied, setCopied] = useState(false);
+  const body = useRef<HTMLDivElement>(null);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText((body.current?.innerText || lines.join('\n')).trim());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard refused */ }
+  };
+  return <blockquote className="md-quote">
+    <button type="button" className="md-copy-btn md-quote-copy" title={tr("คัดลอกข้อความนี้")} onClick={() => void copy()}>
+      {copied ? <Check size={12} style={{ color: 'var(--running, #91bf9f)' }} /> : <Copy size={12} />}
+      <span>{copied ? tr("คัดลอกแล้ว") : tr("คัดลอก")}</span>
+    </button>
+    <div ref={body}><Markdown text={lines.join('\n')} /></div>
+  </blockquote>;
+}
 
 function link(label: string, href: string, key: string): ReactNode {
   try {
@@ -28,13 +72,13 @@ function link(label: string, href: string, key: string): ReactNode {
             openExternalLink(href);
           }
         }}
+        {...linkData(target)}
       >
         {label}
       </a>
     );
-    const media = target.kind === 'file' ? (IMAGE_FILE.test(target.path) ? 'image' : VIDEO_FILE.test(target.path) ? 'video' : null) : null;
-    return target.kind === 'file' && media
-      ? <MarkdownMedia key={`${key}-${target.path}`} path={target.path} label={label} fallback={anchor} kind={media} /> : anchor;
+    // Images and videos are shown under their paragraph (see mediaBlocks); the link stays in the text.
+    return anchor;
   } catch {
     return (
       <span key={key} title={tr("ลิงก์ชนิดนี้ไม่รองรับ")}>
@@ -189,7 +233,7 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
   let list: { ordered: boolean; items: string[] } | null = null;
   const flush = () => {
     if (!list) return;
-    const items = list.items.map((item, i) => <li key={i}>{inline(item, `li${out.length}-${i}`)}</li>);
+    const items = list.items.map((item, i) => <li key={i}>{inline(item, `li${out.length}-${i}`)}{mediaBlocks(item, `li${out.length}-${i}`)}</li>);
     out.push(list.ordered ? <ol key={out.length}>{items}</ol> : <ul key={out.length}>{items}</ul>);
     list = null;
   };
@@ -203,6 +247,22 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
       const code: string[] = [];
       for (i++; i < lines.length && !lines[i].startsWith("```"); i++) code.push(lines[i]);
       out.push(<CodeBlock key={out.length} code={code.join("\n")} language={language} />);
+      continue;
+    }
+    const quote = /^\s*>\s?/;
+    if (quote.test(line)) {
+      flush();
+      // Lines starting with ">" form one block, also across blank lines between them.
+      const body: string[] = [];
+      for (; i < lines.length; i++) {
+        if (quote.test(lines[i])) { body.push(lines[i].replace(quote, '')); continue; }
+        let next = i;
+        while (next < lines.length && !lines[next].trim()) next++;
+        if (next > i && next < lines.length && quote.test(lines[next])) { body.push(''); i = next - 1; continue; }
+        break;
+      }
+      i--;
+      out.push(<QuoteBlock key={out.length} lines={body} />);
       continue;
     }
     const row = /^\s*\|.*\|\s*$/;
@@ -238,6 +298,7 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
     } else {
       flush();
       out.push(<p key={out.length}>{inline(line, `p${i}`)}</p>);
+      out.push(...mediaBlocks(line, `p${i}`));
     }
   }
   flush();

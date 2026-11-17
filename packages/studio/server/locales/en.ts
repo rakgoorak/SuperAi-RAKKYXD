@@ -458,6 +458,7 @@ const text: Record<string, string> = {
   "สถานะโปรเจกต์โปรดไม่ถูกต้อง": "Invalid favorite status",
   "ไม่อนุญาตการเรียกจากหน้าเว็บภายนอก": "Calls from outside web pages are not allowed",
   "เลือกโฟลเดอร์โปรเจกต์": "Choose the project folder",
+  "ไม่พบไฟล์นี้แล้ว": "This file no longer exists",
   "สิทธิ์นี้ใช้ได้บน macOS เท่านั้น": "This permission is only available on macOS",
   "คำขอสิทธิ์ไม่ถูกต้อง": "Invalid permission request",
   "ไม่พบหมวดสิทธิ์ macOS นี้": "This macOS permission section was not found",

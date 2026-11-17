@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useState } from 'react';
 import { ImageViewer } from './ImageViewer';
 import { tr } from '../i18n';
 
@@ -7,58 +7,46 @@ export const ImageEndpointContext = createContext<string | undefined>(undefined)
 export const IMAGE_FILE = /\.(png|jpe?g|gif|webp|avif)$/i;
 export const VIDEO_FILE = /\.(mp4|m4v|webm|mov|ogv)$/i;
 
-type Problem = '' | 'outside' | 'failed';
+/** Asks the server to serve a media file outside the project (same consent call as Preview's button). */
+async function allowOutside(file: string) {
+  const response = await fetch('/api/preview-file/allow', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: file }) });
+  return response.ok;
+}
 
 /**
- * A local image or video the AI linked, shown right in the chat. The original link stays as the
- * caption (it opens the file in Preview). A file outside the project needs one click first,
- * the same "open this file" consent as the Preview panel.
+ * A local image or video the AI linked, shown in full under its paragraph. The link itself stays
+ * in the sentence. A file outside the project (often a clip the AI just made in another folder)
+ * is shown too: only images and videos linked in the answer are opened this way, and only
+ * displayed inside the app.
  */
-export function MarkdownMedia({ path, label, fallback, kind }: { path: string; label: string; fallback: ReactNode; kind: 'image' | 'video' }) {
+export function MarkdownMedia({ path, label, kind }: { path: string; label: string; kind: 'image' | 'video' }) {
   const endpoint = useContext(ImageEndpointContext);
   const [open, setOpen] = useState(false);
-  const [problem, setProblem] = useState<Problem>('');
-  const [outsideFile, setOutsideFile] = useState('');
+  const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [busy, setBusy] = useState(false);
-  if (!endpoint) return fallback;
+  if (!endpoint) return null;
   const src = `${endpoint}?path=${encodeURIComponent(path)}${attempt ? `&r=${attempt}` : ''}`;
+  const data = { 'data-link-file': path };
 
-  // The media element only says "error"; ask the server why (outside the project, or missing).
-  const explain = async () => {
+  // The media element only says "error": ask why, and allow a file outside the project once.
+  const recover = async () => {
+    if (attempt) return setFailed(true);
     try {
-      const response = await fetch(src, { method: 'HEAD', cache: 'no-store' });
-      if (response.status !== 403) return setProblem('failed');
-      const detail = await fetch(src, { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
-      if (detail?.outside && typeof detail.file === 'string') { setOutsideFile(detail.file); setProblem('outside'); }
-      else setProblem('failed');
-    } catch { setProblem('failed'); }
-  };
-  const allow = async () => {
-    setBusy(true);
-    try {
-      const response = await fetch('/api/preview-file/allow', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: outsideFile }) });
-      if (!response.ok) throw new Error();
-      setProblem('');
-      setAttempt(n => n + 1);
-    } catch { setProblem('failed'); }
-    finally { setBusy(false); }
+      const response = await fetch(src, { cache: 'no-store' });
+      const detail = response.status === 403 ? await response.json().catch(() => ({})) : null;
+      if (detail?.outside && typeof detail.file === 'string' && await allowOutside(detail.file)) return setAttempt(1);
+    } catch { /* fall through */ }
+    setFailed(true);
   };
 
-  const note = problem === 'failed'
-    ? (kind === 'video' ? tr("เล่นวิดีโอในแชทไม่ได้ · เปิดใน Preview") : tr("เปิดรูปในแชทไม่ได้ · เปิดใน Preview"))
-    : tr("เปิดใน Preview");
-  return <span className={`markdown-image${kind === 'video' ? ' markdown-video' : ''}`}>
-    <span className="markdown-image-caption">{fallback}<small>{note}</small></span>
-    {problem === 'outside' && <span className="markdown-media-outside" role="group" aria-label={tr("ไฟล์นี้อยู่นอกโปรเจกต์")}>
-      <span><strong>{tr("ไฟล์นี้อยู่นอกโปรเจกต์")}</strong><small title={outsideFile}>{outsideFile}</small></span>
-      <button type="button" className="primary" disabled={busy} onClick={() => void allow()}>{kind === 'video' ? tr("แสดงวิดีโอนี้") : tr("แสดงรูปนี้")}</button>
-    </span>}
-    {!problem && kind === 'image' && <button type="button" className="markdown-image-open" aria-label={tr`ขยายรูป ${label}`} title={tr("กดดูรูปและซูม")}
-      onClick={() => setOpen(true)}><img key={src} src={src} alt={label} loading="lazy" decoding="async" onError={() => void explain()} /></button>}
-    {!problem && kind === 'video' && <video key={src} className="markdown-video-player" src={src} controls preload="metadata" playsInline
-      aria-label={label} onError={() => void explain()} />}
+  if (failed) return <span className="markdown-media-failed" {...data}>
+    {kind === 'video' ? tr("เล่นวิดีโอในแชทไม่ได้ · เปิดใน Preview") : tr("เปิดรูปในแชทไม่ได้ · เปิดใน Preview")}
+  </span>;
+  return <span className={`markdown-image${kind === 'video' ? ' markdown-video' : ''}`} {...data}>
+    {kind === 'image'
+      ? <button type="button" className="markdown-image-open" aria-label={tr`ขยายรูป ${label}`} title={tr("กดดูรูปและซูม")}
+        onClick={() => setOpen(true)}><img key={src} src={src} alt={label} loading="lazy" decoding="async" onError={() => void recover()} /></button>
+      : <video key={src} className="markdown-video-player" src={src} controls preload="metadata" playsInline aria-label={label} onError={() => void recover()} />}
     {open && <ImageViewer image={{ src, name: label }} onClose={() => setOpen(false)} />}
   </span>;
 }
-
