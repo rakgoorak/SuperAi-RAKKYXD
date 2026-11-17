@@ -251,7 +251,9 @@ let usage;
 const usagePing = () => usage ||= new UsagePing({
   dir: app.getPath("userData"),
   version: app.getVersion(),
-  active: app.isPackaged && !process.env.SUPERAI_TEST_MODE,
+  // SUPERAI_TEST_USAGE=1 lets smoke tests show the first-launch question.
+  // Never in the Microsoft Store build: its privacy policy (PRIVACY-STORE.md) promises no usage analytics.
+  active: (app.isPackaged && !storeManaged && !process.env.SUPERAI_TEST_MODE) || process.env.SUPERAI_TEST_USAGE === "1",
 });
 // "Let the AI control this computer" (Settings > AI control): read and switched by the window only.
 ipcMain.handle("computer:action", async (e, action, value) => {

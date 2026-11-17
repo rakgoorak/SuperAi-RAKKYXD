@@ -82,7 +82,7 @@ declare global {
       update: (action: "state" | "check" | "download" | "apply" | "force" | "cancel" | "install") => Promise<UpdateState>;
       onUpdate: (callback: (state: UpdateState) => void) => () => void;
       /** Anonymous usage count: `available` is false in dev builds, `enabled` is the user's choice. */
-      usage?: (action: "state" | "set", value?: boolean) => Promise<{ available: boolean; enabled: boolean }>;
+      usage?: (action: "state" | "set", value?: boolean) => Promise<{ available: boolean; enabled: boolean; asked?: boolean }>;
       /** "Let the AI control this computer": off unless the user turns it on; each chat is then asked once in an Allow / Deny window. */
       computer?: (action: "state" | "set" | "revoke" | "os-settings" | "os-reset", value?: boolean | "accessibility" | "screen") => Promise<ComputerState>;
       onComputer?: (callback: (state: ComputerState) => void) => () => void;

@@ -2142,6 +2142,8 @@ img.small-brand { width: 18px; height: auto; background: none; border-radius: 0;
 .update-gate progress { width: 100%; height: 8px; accent-color: var(--accent); }
 @keyframes update-in { from { opacity: 0; transform: translateY(8px); } }
 @media (prefers-reduced-motion: reduce) { .update-toast { animation: none; } }
+/* First-launch usage-count question: bottom-left, so it never covers an update card. */
+.update-toast.usage-consent { right: auto; left: 20px; z-index: 89; }
 
 /* Model field: free typing plus the full list of the provider's models */
 .model-combo { position: relative; display: flex; min-width: 0; }

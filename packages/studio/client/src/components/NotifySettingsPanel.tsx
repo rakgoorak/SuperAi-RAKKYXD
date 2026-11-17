@@ -7,7 +7,7 @@ export function NotifySettingsPanel() {
   const [settings, setSettings] = useState(loadNotifySettings);
   const [nextPrompt, setNextPrompt] = useState(loadNextPromptSettings);
   // Anonymous usage count lives in the desktop shell; absent in the browser UI and older shells.
-  const [usage, setUsage] = useState<{ available: boolean; enabled: boolean } | null>(null);
+  const [usage, setUsage] = useState<{ available: boolean; enabled: boolean; asked?: boolean } | null>(null);
   useEffect(() => { void window.superai?.usage?.("state").then(setUsage).catch(() => {}); }, []);
   const set = (key: keyof NotifySettings, value: boolean) => {
     const next = { ...settings, [key]: value };
@@ -45,7 +45,7 @@ export function NotifySettingsPanel() {
           <div className="settings-section-title">
             <h3>{tr("นับจำนวนผู้ใช้แบบไม่ระบุตัวตน")}</h3>
           </div>
-          <p className="muted">{tr("ช่วยให้หน้าดาวน์โหลดแสดงจำนวนคนที่ใช้ SuperAi อยู่จริง แอปส่งแค่รหัสสุ่มของเครื่องนี้ เวอร์ชันแอป และระบบปฏิบัติการ ไม่ส่งชื่อ บัญชี โปรเจกต์ หรือบทสนทนา")}</p>
+          <p className="muted">{tr("ช่วยให้หน้าดาวน์โหลดแสดงจำนวนคนที่ใช้ SuperAi อยู่จริง แอปส่งแค่รหัสสุ่มของเครื่องนี้ เวอร์ชันแอป และระบบปฏิบัติการ ไม่ส่งชื่อ บัญชี โปรเจกต์ หรือบทสนทนา")} {tr("ปิดไว้จนกว่าคุณจะอนุญาต และเมื่อปิด รหัสสุ่มจะถูกลบ")}</p>
           <label className="settings-toggle">
             <input type="checkbox" checked={usage.enabled} onChange={e => void window.superai?.usage?.("set", e.target.checked).then(setUsage).catch(() => {})} />
             {tr("ร่วมนับเครื่องนี้เป็นผู้ใช้งาน")}
