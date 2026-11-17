@@ -62,9 +62,13 @@ jobs:
       - run: npm run test:team
         timeout-minutes: 3
 
-      # macOS Developer ID signing. Store the .p12 as base64 in
-      # APPLE_CERTIFICATE_BASE64, its password in APPLE_CERTIFICATE_PASSWORD,
-      # and the identity in APPLE_SIGNING_IDENTITY.
+      # macOS signing with the same certificate for every release, so macOS keeps the
+      # Accessibility / Screen Recording permissions across updates (they are tied to the
+      # signature; an ad-hoc signature changes with every build). Store the .p12 as base64 in
+      # APPLE_CERTIFICATE_BASE64 and its password in APPLE_CERTIFICATE_PASSWORD. Works with an
+      # Apple Developer ID or a free self-signed code-signing certificate (trusted below, on the
+      # runner only). The app is signed by the certificate's SHA-1, so APPLE_SIGNING_IDENTITY
+      # is optional.
       - name: Import Apple signing certificate
         if: runner.os == 'macOS' && env.HAS_APPLE_CERT == 'true'
         env:
@@ -73,17 +77,37 @@ jobs:
         run: |
           CERT_PATH="$RUNNER_TEMP/apple-signing.p12"
           KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
-          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          # Secrets piped or pasted on Windows can end in a line break: drop line breaks (and
+          # spaces in the base64) before using them.
+          printf '%s' "$APPLE_CERTIFICATE_BASE64" | tr -d '\r\n \t' | base64 --decode > "$CERT_PATH"
+          CERT_PASSWORD=$(printf '%s' "$APPLE_CERTIFICATE_PASSWORD" | tr -d '\r\n')
+          # The .p12 must use 3DES and a SHA-1 MAC (macOS `security import` cannot read RC2 or AES
+          # and calls it a wrong passphrase); see docs/MAC-SIGNING.md. Fail with a clear message
+          # when the password does not open it.
+          export CERT_PASSWORD
+          openssl pkcs12 -in "$CERT_PATH" -passin env:CERT_PASSWORD -noout 2>/dev/null \
+            || { echo "::error::APPLE_CERTIFICATE_PASSWORD does not open APPLE_CERTIFICATE_BASE64 (or the .p12 is not 3DES / SHA-1)"; exit 1; }
           security create-keychain -p actions "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p actions "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security list-keychain -d user -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions "$KEYCHAIN_PATH"
+          security find-certificate -p "$KEYCHAIN_PATH" > "$RUNNER_TEMP/signing-cert.pem"
+          if [ "$(openssl x509 -in "$RUNNER_TEMP/signing-cert.pem" -noout -subject)" = "subject=$(openssl x509 -in "$RUNNER_TEMP/signing-cert.pem" -noout -issuer | sed 's/^issuer=//')" ]; then
+            echo "Self-signed certificate: trusting it for code signing on this runner"
+            sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/signing-cert.pem"
+            # Apple notarizes only Developer ID apps: there is no ticket to check for this one.
+            echo "MAC_SELF_SIGNED=true" >> "$GITHUB_ENV"
+          fi
+          SIGN_ID=$(openssl x509 -in "$RUNNER_TEMP/signing-cert.pem" -noout -fingerprint -sha1 | sed 's/.*=//; s/://g')
+          echo "Signing identity (SHA-1): $SIGN_ID"
+          security find-identity -p codesigning "$KEYCHAIN_PATH"
+          echo "MAC_SIGN_ID=$SIGN_ID" >> "$GITHUB_ENV"
 
       - name: Package release
         env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_SIGNING_IDENTITY: ${{ env.MAC_SIGN_ID || secrets.APPLE_SIGNING_IDENTITY }}
         run: npm run package:release
 
       # The app's own executable is signed before the ZIP and the installer are made from it.
@@ -194,8 +218,14 @@ jobs:
         run: |
           APP=$(find release -maxdepth 2 -name '*.app' -type d | head -1)
           codesign --verify --deep --strict --verbose=2 "$APP"
-          DMG=$(find release-assets -maxdepth 1 -name '*.dmg' | head -1)
-          xcrun stapler validate "$DMG"
+          # What macOS ties the user's permissions to: must name the certificate, not a build hash.
+          codesign -d -r- "$APP"
+          if [ "$MAC_SELF_SIGNED" = "true" ]; then
+            echo "Self-signed: not notarized (Apple notarizes Developer ID apps only); skipping the stapler check"
+          else
+            DMG=$(find release-assets -maxdepth 1 -name '*.dmg' | head -1)
+            xcrun stapler validate "$DMG"
+          fi
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
