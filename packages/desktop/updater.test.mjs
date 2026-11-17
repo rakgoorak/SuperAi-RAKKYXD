@@ -215,3 +215,31 @@ test("losing the connection keeps an update an earlier check found", async () =>
   online = false;
   assert.equal((await u.check()).status, "available");
 });
+
+test("a downloaded update is replaced when a newer release came out, so skipped versions install in one step", async () => {
+  const osName = process.platform === "win32" ? "windows" : "macos";
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "superai-stale-"));
+  let latest = "1.2.1", online = true;
+  const u = new Updater({ currentVersion: "1.2.0", packaged: true, http: async () => {
+    if (!online) throw new Error("offline");
+    return release(latest, [{ name: `S-v${latest}-${osName}-${process.arch}.zip`, size: 1, browser_download_url: "https://github.com/a.zip" }]);
+  } });
+  await u.check();
+  const work = path.join(dir, "staged-1.2.1");
+  await fs.mkdir(work);
+  u.set({ status: "ready", source: path.join(work, "app"), work }); // as download() leaves it
+  // Same release still newest: the staged download is kept.
+  assert.equal((await u.check()).status, "ready");
+  online = false;
+  assert.equal((await u.check()).status, "ready", "offline keeps the staged download");
+  online = true;
+  // v1.2.2 is out: the staged v1.2.1 is dropped and v1.2.2 is offered instead.
+  latest = "1.2.2";
+  const s = await u.check();
+  assert.equal(s.status, "available");
+  assert.equal(s.latestVersion, "1.2.2");
+  assert.equal(s.work, undefined);
+  assert.match(s.asset.name, /v1\.2\.2/);
+  await assert.rejects(fs.stat(work), "the stale download is deleted");
+  await fs.rm(dir, { recursive: true, force: true });
+});

@@ -122,6 +122,9 @@ let applying = null;
 function applyUpdate() {
   applying ??= (async () => {
     try {
+      // Look again first: a newer release may have come out since the last check or download,
+      // and the user should land on the newest version in one step, not one version at a time.
+      if (["available", "ready", "error", "idle", "latest"].includes(updater.state.status)) await updater.check();
       if (updater.state.status === "available" || (updater.state.status === "error" && updater.state.asset)) await updater.download();
       while (["downloading", "extracting", "checking"].includes(updater.state.status)) await sleep(400);
       if (!["ready", "waiting"].includes(updater.state.status)) return updater.state;
