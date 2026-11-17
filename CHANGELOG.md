@@ -6,6 +6,21 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.2.3] - 2026-11-17
+
+### Added
+- Videos linked in an answer (mp4, webm, mov) play right in the chat. An image
+  or video outside the project shows a "Show this image/video" button.
+- macOS: Settings > macOS permissions lists the microphone, camera, screen
+  recording, Accessibility and Full Disk Access, with the Allow prompt or the
+  matching System Settings pane for each. Ported from Patiphan Wilaiphit's
+  earlier work.
+
+### Changed
+- Updates go straight to the newest version. A user several versions behind
+  no longer installs them one at a time.
+- Electron 45, React 19, Express 5 and transformers.js 4 (voice dictation).
+
 ## [1.2.2] - 2026-11-17
 
 ### Changed
