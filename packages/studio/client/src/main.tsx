@@ -22,4 +22,5 @@ import "./toast.css";
 import "./comparison-arena.css";
 import "./conversation-hub.css";
 import "./minimal-interface.css";
+import "./mac-permissions.css";
 import "./composer-balanced.css";

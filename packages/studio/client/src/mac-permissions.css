@@ -1,0 +1,26 @@
+#root .mac-permissions-panel { min-width: 0; }
+#root .mac-permissions-title { margin-top: 0; }
+#root .mac-permissions-title h3 { font-size: 15px; }
+#root .mac-permissions-intro { max-width: 690px; margin: 0 0 16px; }
+#root .mac-permission-list { border-top: 1px solid var(--border); }
+#root .mac-permission-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 13px 2px; border-bottom: 1px solid var(--border); }
+#root .mac-permission-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: var(--dim); background: var(--surface); }
+#root .mac-permission-main { min-width: 0; }
+#root .mac-permission-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+#root .mac-permission-heading strong { color: var(--text); font-size: 12px; font-weight: 500; }
+#root .mac-permission-status { color: var(--dim); font-size: 10px; }
+#root .mac-permission-status::before { display: inline-block; width: 6px; height: 6px; margin: 0 6px 1px 0; border-radius: 50%; background: currentColor; content: ""; }
+#root .mac-permission-status.granted, #root .mac-permission-granted { color: var(--green); }
+#root .mac-permission-status.pending { color: #d7bd8a; }
+#root .mac-permission-status.manual { color: var(--dim); }
+#root .mac-permission-main p { margin: 4px 0 0; color: var(--dim); font-size: 11px; line-height: 1.65; }
+#root .mac-permission-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+#root .mac-permission-actions .secondary.compact { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+#root .mac-permission-granted { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; white-space: nowrap; }
+#root .mac-permissions-message { margin: 12px 0 0; color: var(--green); font-size: 11px; line-height: 1.7; }
+#root .mac-permissions-error { margin: 12px 0 0; }
+#root .mac-permissions-note { margin: 14px 0 0; font-size: 10px; line-height: 1.7; }
+@media (max-width: 760px) {
+  #root .mac-permission-row { grid-template-columns: 30px minmax(0, 1fr); gap: 8px 10px; }
+  #root .mac-permission-actions { grid-column: 2; justify-content: flex-start; }
+}

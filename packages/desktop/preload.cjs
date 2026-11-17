@@ -4,6 +4,11 @@ contextBridge.exposeInMainWorld('superai', {
   isDesktop: true, platform: process.platform,
   pickFolder: () => ipcRenderer.invoke('app:folder'),
   openExternal: url => ipcRenderer.invoke('app:external', url),
+  macPermissions: {
+    status: () => ipcRenderer.invoke('mac-permissions:status'),
+    request: permission => ipcRenderer.invoke('mac-permissions:request', permission),
+    openSettings: permission => ipcRenderer.invoke('mac-permissions:open-settings', permission),
+  },
   browser: (action, payload) => ipcRenderer.invoke('browser:action', action, payload),
   forgetSession: service => ipcRenderer.invoke('credentials:forget', service),
   onBrowser: callback => listen('browser:state', callback),

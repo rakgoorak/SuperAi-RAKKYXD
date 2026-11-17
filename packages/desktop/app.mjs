@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog, clipboard, ClipboardItem, nativeImage, nativeTheme, Notification, Tray, Menu } from "electron";
+import { app, BrowserWindow, ipcMain, shell, dialog, clipboard, ClipboardItem, nativeImage, nativeTheme, Notification, Tray, Menu, systemPreferences, desktopCapturer } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { readFileSync } from "node:fs";
@@ -90,6 +90,62 @@ ipcMain.handle("app:folder", async (e) => {
 ipcMain.handle("app:external", async (e, url) => {
   trusted(e);
   await shell.openExternal(normalizeBrowserUrl(url));
+});
+// Settings > macOS privacy: status of each permission, the system Allow prompt where macOS has one,
+// and the matching System Settings pane where it does not.
+const macPrivacySections = {
+  microphone: "Privacy_Microphone",
+  camera: "Privacy_Camera",
+  screen: "Privacy_ScreenCapture",
+  accessibility: "Privacy_Accessibility",
+  fullDiskAccess: "Privacy_AllFiles",
+};
+function macPermissionStatus() {
+  return {
+    microphone: systemPreferences.getMediaAccessStatus("microphone"),
+    camera: systemPreferences.getMediaAccessStatus("camera"),
+    screen: systemPreferences.getMediaAccessStatus("screen"),
+    accessibility: systemPreferences.isTrustedAccessibilityClient(false),
+  };
+}
+function macOnly() {
+  if (process.platform !== "darwin") throw new Error(tr("สิทธิ์นี้ใช้ได้บน macOS เท่านั้น"));
+}
+ipcMain.handle("mac-permissions:status", (e) => {
+  trusted(e);
+  macOnly();
+  return macPermissionStatus();
+});
+ipcMain.handle("mac-permissions:request", async (e, permission) => {
+  trusted(e);
+  macOnly();
+  if (permission === "microphone" || permission === "camera") {
+    const granted = await systemPreferences.askForMediaAccess(permission);
+    return { granted, status: macPermissionStatus() };
+  }
+  if (permission === "screen") {
+    if (systemPreferences.getMediaAccessStatus("screen") !== "granted") {
+      // Electron has no askForMediaAccess('screen'). Request a screen source only after the user
+      // presses the explicit button; macOS owns the consent prompt and the final decision.
+      let timeout;
+      const captureRequest = desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 0, height: 0 } }).catch(() => []);
+      await Promise.race([captureRequest, new Promise((resolve) => { timeout = setTimeout(resolve, 1500); })]);
+      clearTimeout(timeout);
+    }
+    const status = macPermissionStatus();
+    return { granted: status.screen === "granted", status };
+  }
+  if (permission === "accessibility") {
+    const granted = systemPreferences.isTrustedAccessibilityClient(true);
+    return { granted, status: macPermissionStatus() };
+  }
+  throw new Error(tr("คำขอสิทธิ์ไม่ถูกต้อง"));
+});
+ipcMain.handle("mac-permissions:open-settings", async (e, permission) => {
+  trusted(e);
+  macOnly();
+  if (!Object.hasOwn(macPrivacySections, permission)) throw new Error(tr("ไม่พบหมวดสิทธิ์ macOS นี้"));
+  await shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${macPrivacySections[permission]}`);
 });
 ipcMain.handle("clipboard:stage-image", async (e, filePath) => {
   trusted(e);

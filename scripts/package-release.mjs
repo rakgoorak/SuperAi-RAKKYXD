@@ -92,7 +92,10 @@ if (platform === 'windows') {
       name, executableName: name, platform: 'darwin', arch,
       electronVersion: require('electron/package.json').version, appVersion: version, prune: false, asar: false,
       appBundleId: 'com.rakgoorak.superai', icon: icns,
-      extendInfo: { NSMicrophoneUsageDescription: 'โหมดเสียงของ SuperAi ใช้ไมโครโฟนเพื่อแปลงเสียงพูดเป็นข้อความบนเครื่องของคุณ' },
+      extendInfo: {
+        NSMicrophoneUsageDescription: 'โหมดเสียงของ SuperAi ใช้ไมโครโฟนเพื่อแปลงเสียงพูดเป็นข้อความบนเครื่องของคุณ',
+        NSCameraUsageDescription: 'อนุญาตให้ SuperAi ใช้กล้องเมื่อคุณเริ่มใช้ฟีเจอร์ที่ต้องการภาพหรือวิดีโอจากกล้อง',
+      },
       darwinDarkModeSupport: true,
     });
     const app = path.join(destination, `${name}.app`);

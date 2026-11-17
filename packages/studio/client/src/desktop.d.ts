@@ -20,6 +20,14 @@ export interface ComputerState {
   /** Chats the user allowed in the Allow / Deny window: for the whole chat, or for the current task. */
   allowed?: { chatId: string; chatName?: string; scope: "chat" | "task"; apps?: string[] }[];
 }
+export type MacPermissionLevel = "not-determined" | "granted" | "denied" | "restricted" | "unknown";
+export type MacPermissionPane = "microphone" | "camera" | "screen" | "accessibility" | "fullDiskAccess";
+export interface MacPermissionStatus {
+  microphone: MacPermissionLevel;
+  camera: MacPermissionLevel;
+  screen: MacPermissionLevel;
+  accessibility: boolean;
+}
 export interface UpdateState {
   status: "idle" | "checking" | "latest" | "none" | "available" | "unsupported" | "downloading" | "extracting" | "ready" | "waiting" | "installing" | "error";
   currentVersion: string;
@@ -48,6 +56,11 @@ declare global {
       platform: string;
       pickFolder: () => Promise<string | null>;
       openExternal: (url: string) => Promise<void>;
+      macPermissions?: {
+        status: () => Promise<MacPermissionStatus>;
+        request: (permission: "microphone" | "camera" | "screen" | "accessibility") => Promise<{ granted: boolean; status: MacPermissionStatus }>;
+        openSettings: (permission: MacPermissionPane) => Promise<void>;
+      };
       browser: (
         action: string,
         payload?: Record<string, unknown>,
