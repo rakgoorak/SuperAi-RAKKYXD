@@ -199,7 +199,7 @@ function UserMessageItem({
   onProblem: (msg: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const copyTimer = useRef<ReturnType<typeof setTimeout>>();
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     return () => {

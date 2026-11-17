@@ -47,9 +47,9 @@ export function ComparisonArena({ run }: { run: Run }) {
   const [handoffIndex, setHandoffIndex] = useState<number | null>(null);
   const [copiedSummary, setCopiedSummary] = useState(false);
 
-  const copiedTimer = useRef<ReturnType<typeof setTimeout>>();
-  const handoffTimer = useRef<ReturnType<typeof setTimeout>>();
-  const summaryCopyTimer = useRef<ReturnType<typeof setTimeout>>();
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const handoffTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const summaryCopyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     return () => {

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
+import { ARTIFACT_REACT_RUNTIME_ID, bundleArtifactReactRuntime } from '../../studio/client/scripts/artifact-react-runtime.mjs';
 
 const output = path.resolve('output/artifact-rendering');
 await fs.mkdir(output, { recursive: true });
@@ -14,7 +15,11 @@ import '../../packages/studio/client/src/index.css';
 import '../../packages/studio/client/src/minimal-workspace.css';
 function Fixture(){const [request,setRequest]=useState();window.show=target=>setRequest({id:crypto.randomUUID(),workspaceId:'fixture',target});return <PreviewPanel embedded request={request} workspaceId="fixture" suspended={false} onClose={()=>{}} onError={console.error}/>;}
 createRoot(document.getElementById('root')).render(<Fixture/>);`);
-await build({ entryPoints: [path.join(output, 'fixture.tsx')], outdir: output, bundle: true, format: 'esm', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"development"' }, loader: { '.woff': 'file', '.woff2': 'file' }, plugins: [{ name: 'raw-assets', setup(plugin) {
+// The artifact iframe gets the same React runtime the app ships (virtual:artifact-react-runtime in vite.config.mjs).
+await build({ entryPoints: [path.join(output, 'fixture.tsx')], outdir: output, bundle: true, format: 'esm', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"development"' }, loader: { '.woff': 'file', '.woff2': 'file' }, plugins: [{ name: 'artifact-react-runtime', setup(plugin) {
+  plugin.onResolve({ filter: new RegExp(`^${ARTIFACT_REACT_RUNTIME_ID}$`) }, () => ({ path: ARTIFACT_REACT_RUNTIME_ID, namespace: 'artifact-runtime' }));
+  plugin.onLoad({ filter: /.*/, namespace: 'artifact-runtime' }, async () => ({ contents: await bundleArtifactReactRuntime(), loader: 'text' }));
+} }, { name: 'raw-assets', setup(plugin) {
   plugin.onResolve({ filter: /\?raw$/ }, args => ({ path: path.resolve(args.resolveDir, args.path.slice(0, -4)), namespace: 'raw' }));
   plugin.onLoad({ filter: /.*/, namespace: 'raw' }, async args => ({ contents: await fs.readFile(args.path, 'utf8'), loader: 'text' }));
 } }] });
@@ -117,7 +122,7 @@ try {
   await show('mermaid', 'INVALID'); await page.getByRole('alert').waitFor();
   check((await page.getByRole('alert').innerText()).includes('Parse error'), 'Mermaid parser errors are surfaced without printing source as a fake preview');
   registryFailure = true;
-  await show('mermaid', 'graph TD;A-->B;', 'Offline'); await page.getByRole('alert').waitFor();
+  await show('mermaid', 'graph TD;A-->B;', 'Offline'); await page.getByRole('alert').filter({ hasText: 'เชื่อมต่อเพื่อโหลด Mermaid' }).waitFor();
   check(await page.getByRole('button', { name: 'ลองใหม่', exact: true }).isVisible(), 'unavailable Mermaid renderer shows retry and source actions');
   registryFailure = false;
   await page.getByRole('button', { name: 'ลองใหม่', exact: true }).click(); await iframe().locator('svg').waitFor(); await ready();

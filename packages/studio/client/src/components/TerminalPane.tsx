@@ -107,7 +107,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   const attachRef = useRef<((files: File[], source: 'paste' | 'drop') => Promise<void>) | null>(null);
   const [notice, setNotice] = useState<AttachNotice | null>(null);
   const [dragging, setDragging] = useState(false);
-  const noticeTimer = useRef<number>();
+  const noticeTimer = useRef<number | undefined>(undefined);
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
   // Reading mode: the buffer as plain text so Thai reads like normal text. The CLI keeps running.
