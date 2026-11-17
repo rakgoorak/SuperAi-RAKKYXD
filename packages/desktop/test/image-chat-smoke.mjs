@@ -29,14 +29,24 @@ try {
     localStorage.setItem('superai-preview', 'false');
   });
   const imagePath = 'D:/AgentBuild/output/example image.png';
-  const answer = `[ดูภาพตัวอย่าง](/D:/AgentBuild/output/example%20image.png)\n\n![ภาพ Markdown](docs/image.png)\n\n[รูปที่หาย](missing.png)\n\n[อ่านเอกสาร](docs/readme.txt)`;
+  const answer = `[ดูภาพตัวอย่าง](/D:/AgentBuild/output/example%20image.png)\n\n![ภาพ Markdown](docs/image.png)\n\n[รูปที่หาย](missing.png)\n\n[อ่านเอกสาร](docs/readme.txt)
+
+[คลิปตัวอย่าง](output/clip.webm)
+
+[คลิปนอกโปรเจกต์](D:/elsewhere/demo.webm)`;
   const items = [{ id: 'u', kind: 'user', text: 'แสดงรูปภาพ', attachments: ['saved.png'], at: Date.now() }, { id: 'a', kind: 'assistant', text: answer, at: Date.now() }];
   await page.routeWebSocket('**/ws/chat/images', socket => socket.send(JSON.stringify({ type: 'snapshot', chat: { items, running: false } })));
+  const video = await fs.readFile(new URL('./fixtures/clip.webm', import.meta.url));
+  const allowed = [];
   await page.route('**/api/**', async route => {
     const pathname = new URL(route.request().url()).pathname;
+    if (pathname === '/api/preview-file/allow') { allowed.push(route.request().postDataJSON().path); return route.fulfill({ json: { ok: true } }); }
     if (pathname.endsWith('/preview-file')) {
       const requested = new URL(route.request().url()).searchParams.get('path');
+      const head = route.request().method() === 'HEAD';
       if (requested === 'missing.png') return route.fulfill({ status: 404, json: { error: 'missing' } });
+      if (requested === 'D:/elsewhere/demo.webm' && !allowed.includes('D:\elsewhere\demo.webm')) return head ? route.fulfill({ status: 403 }) : route.fulfill({ status: 403, json: { outside: true, file: 'D:\elsewhere\demo.webm' } });
+      if (requested.endsWith('.webm')) return route.fulfill({ contentType: 'video/webm', body: video });
       return route.fulfill({ contentType: 'image/png', body: await fs.readFile('docs/images/workspace.png') });
     }
     let json = [];
@@ -59,7 +69,19 @@ try {
   check(await inline.locator('img').getAttribute('src') === '/api/terminals/images/preview-file?path=' + encodeURIComponent(imagePath), 'answer image loads inline through its originating session');
   check(await page.getByRole('button', { name: 'ขยายรูป ภาพ Markdown', exact: true }).isVisible(), 'standard Markdown image syntax displays a thumbnail');
   check(await page.getByRole('link', { name: 'รูปที่หาย', exact: true }).isVisible() && await page.getByRole('button', { name: 'ขยายรูป รูปที่หาย', exact: true }).count() === 0, 'missing image keeps a Preview fallback link');
-  await page.screenshot({ path: path.join(output, 'inline-images.png') });
+  const clip = page.getByLabel('คลิปตัวอย่าง', { exact: true });
+  await clip.waitFor();
+  await page.waitForFunction(() => document.querySelector('video.markdown-video-player')?.readyState >= 1);
+  check(await clip.evaluate(el => el.tagName === 'VIDEO' && el.controls), 'a video link in the answer plays inline with controls');
+  const outside = page.getByRole('group', { name: 'ไฟล์นี้อยู่นอกโปรเจกต์', exact: true });
+  await outside.waitFor();
+  check(await page.getByLabel('คลิปนอกโปรเจกต์', { exact: true }).count() === 0, 'a video outside the project waits for consent');
+  await outside.getByRole('button', { name: 'แสดงวิดีโอนี้', exact: true }).click();
+  const shown = page.getByLabel('คลิปนอกโปรเจกต์', { exact: true });
+  await shown.waitFor();
+  await page.waitForFunction(() => [...document.querySelectorAll('video.markdown-video-player')].every(v => v.readyState >= 1));
+  check(allowed.length === 1 && await outside.count() === 0, 'one click allows that file and plays it in the chat');
+  await page.screenshot({ path: path.join(output, 'inline-images.png'), fullPage: true });
   await inline.click();
   const viewer = page.getByRole('dialog', { name: 'ดูรูป ดูภาพตัวอย่าง', exact: true });
   const zoom = viewer.getByLabel('ระดับการซูม', { exact: true });

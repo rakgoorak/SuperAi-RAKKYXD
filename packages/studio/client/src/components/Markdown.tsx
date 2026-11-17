@@ -2,7 +2,7 @@ import { memo, useState, type ReactNode } from "react";
 import { Sparkles, Copy, Check } from "lucide-react";
 import { openPreviewLink, openArtifact, parsePreviewTarget, openExternalLink } from '../previewLinks';
 import { ThinkingAccordion } from './ThinkingAccordion';
-import { MarkdownImage } from './MarkdownImage';
+import { MarkdownMedia, IMAGE_FILE, VIDEO_FILE } from './MarkdownImage';
 import { tr } from '../i18n';
 
 function link(label: string, href: string, key: string): ReactNode {
@@ -32,8 +32,9 @@ function link(label: string, href: string, key: string): ReactNode {
         {label}
       </a>
     );
-    return target.kind === 'file' && /\.(png|jpe?g|gif|webp|avif)$/i.test(target.path)
-      ? <MarkdownImage key={`${key}-${target.path}`} path={target.path} label={label} fallback={anchor} /> : anchor;
+    const media = target.kind === 'file' ? (IMAGE_FILE.test(target.path) ? 'image' : VIDEO_FILE.test(target.path) ? 'video' : null) : null;
+    return target.kind === 'file' && media
+      ? <MarkdownMedia key={`${key}-${target.path}`} path={target.path} label={label} fallback={anchor} kind={media} /> : anchor;
   } catch {
     return (
       <span key={key} title={tr("ลิงก์ชนิดนี้ไม่รองรับ")}>
