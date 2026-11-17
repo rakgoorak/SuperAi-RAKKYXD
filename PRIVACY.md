@@ -34,7 +34,7 @@ It is sent every 10 minutes while the app is open, to a Cloudflare Worker
 Cloudflare reports for the request, and when the ID was first and last seen. It does not store IP
 addresses, and nothing else is collected: no prompts, files, project names, accounts or keys.
 
-Turn it off any time in **Settings → Notifications**, under "นับจำนวนผู้ใช้แบบไม่ระบุตัวตน" (anonymous usage count; the setting is not translated yet). Development builds
+Turn it off any time in **Settings → Notifications**, under **Count users anonymously** ("นับจำนวนผู้ใช้แบบไม่ระบุตัวตน" in the Thai app). Development builds
 never send it.
 
 ## Updates and downloads
