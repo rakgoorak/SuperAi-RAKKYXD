@@ -114,7 +114,10 @@ export class Updater {
   }
 
   async check() {
-    if (["downloading", "extracting", "ready", "waiting", "installing"].includes(this.state.status)) return this.state;
+    if (["downloading", "extracting", "waiting", "installing"].includes(this.state.status)) return this.state;
+    // A downloaded update ("ready") is checked again: when an even newer release came out since,
+    // it replaces the staged one, so a user who skipped versions goes straight to the latest.
+    const staged = this.state.status === "ready" ? { source: this.state.source, work: this.state.work, latestVersion: this.state.latestVersion } : null;
     this.set({ status: "checking", error: "" });
     try {
       // The list (not /releases/latest) so a hard update is still enforced after a later soft one.
@@ -137,6 +140,11 @@ export class Updater {
       // Hard update: some release newer than this one says so in its notes.
       // Store builds never get a hard-update gate: the Store may not have published the version yet.
       const mandatory = newer && !this.storeManaged && releases.some((r) => compareVersions(r.tag_name, this.currentVersion) > 0 && updateKind(r.body) === "hard");
+      if (staged && compareVersions(latest, staged.latestVersion) === 0) return this.set({ status: "ready", mandatory, checkedAt: Date.now() });
+      if (staged) {
+        await fsp.rm(staged.work, { recursive: true, force: true }).catch(() => {});
+        this.state = { ...this.state, source: undefined, work: undefined };
+      }
       return this.set({
         status: newer ? (asset || this.storeManaged ? "available" : "unsupported") : "latest",
         latestVersion: latest,
@@ -148,6 +156,8 @@ export class Updater {
         error: newer && !asset && !this.storeManaged ? tr("release นี้ยังไม่มีไฟล์สำหรับเครื่องนี้") : "",
       });
     } catch (err) {
+      // Offline: keep the downloaded update; it is still newer than this version.
+      if (staged) return this.set({ status: "ready", error: "" });
       // A dropped connection must not hide an update an earlier check already found.
       const known = (this.state.asset || this.storeManaged) && compareVersions(this.state.latestVersion || "0", this.currentVersion) > 0;
       return this.set({ status: known ? "available" : "error", error: known ? "" : err.message || String(err) });
