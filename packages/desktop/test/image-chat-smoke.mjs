@@ -41,7 +41,19 @@ try {
 >
 > ดูเพิ่มที่ [เว็บไซต์](https://example.com/demo)
 >
-> #ERP #ใบขอซื้อ`;
+> #ERP #ใบขอซื้อ
+
+## หัวข้อใหญ่
+### หัวข้อรอง
+ทำไฟล์ ZIP แล้ว: \`D:\\Test\\siteprompt-website.zip\` (27.7 MB) *ตัวเอียง* ~~ขีดฆ่า~~
+
+- ข้อแรก
+  - ข้อย่อย
+- [x] เสร็จแล้ว
+
+\`\`\`ts
+const answer: number = 42; // comment
+\`\`\``;
   const items = [{ id: 'u', kind: 'user', text: 'แสดงรูปภาพ', attachments: ['saved.png'], at: Date.now() }, { id: 'a', kind: 'assistant', text: answer, at: Date.now() }];
   await page.routeWebSocket('**/ws/chat/images', socket => socket.send(JSON.stringify({ type: 'snapshot', chat: { items, running: false } })));
   const video = await fs.readFile(new URL('./fixtures/clip.webm', import.meta.url));
@@ -49,7 +61,10 @@ try {
   await page.route('**/api/**', async route => {
     const pathname = new URL(route.request().url()).pathname;
     if (pathname === '/api/preview-file/allow') { allowed.push(route.request().postDataJSON().path); return route.fulfill({ json: { ok: true } }); }
-    if (pathname.endsWith('/preview-file/locate')) return route.fulfill({ json: { path: 'D:\\elsewhere\\demo.webm' } });
+    if (pathname.endsWith('/preview-file/locate')) {
+      const asked = new URL(route.request().url()).searchParams.get('path');
+      return route.fulfill({ json: { path: asked.includes('siteprompt') ? asked : 'D:\\elsewhere\\demo.webm' } });
+    }
     if (pathname.endsWith('/preview-file')) {
       const requested = new URL(route.request().url()).searchParams.get('path');
       const head = route.request().method() === 'HEAD';
@@ -102,6 +117,18 @@ try {
   await menu.getByRole('menuitem', { name: 'เปิดในโฟลเดอร์' }).click();
   await page.waitForFunction(() => window.__revealed.length === 1);
   check(await page.evaluate(() => window.__revealed[0]) === 'D:\\elsewhere\\demo.webm', 'right-click on a video shows the file in its folder');
+  const answerBox = page.locator('.chat-assistant').last();
+  check(await answerBox.locator('h2', { hasText: 'หัวข้อใหญ่' }).count() === 1 && await answerBox.locator('h3', { hasText: 'หัวข้อรอง' }).count() === 1, 'headings render at their own level');
+  check(await answerBox.locator('em', { hasText: 'ตัวเอียง' }).count() === 1 && await answerBox.locator('del', { hasText: 'ขีดฆ่า' }).count() === 1, 'italic and strikethrough render');
+  check(await answerBox.locator('ul ul li', { hasText: 'ข้อย่อย' }).count() === 1 && await answerBox.locator('li.task-list-item input[type=checkbox]').isChecked(), 'nested lists and task lists render');
+  check(await answerBox.locator('.md-code-block .hljs-keyword').count() > 0 && await answerBox.locator('.md-code-block .hljs-comment').count() === 1, 'code blocks are syntax highlighted');
+  check(await answerBox.locator('.md-code-block code').evaluate(el => !el.classList.contains('md-path')), 'code blocks are not treated as file paths');
+  const zipPath = answerBox.locator('code.md-path', { hasText: 'siteprompt-website.zip' });
+  await zipPath.click();
+  await page.waitForFunction(() => window.__revealed.length === 2);
+  check(await page.evaluate(() => window.__revealed[1]) === 'D:\\Test\\siteprompt-website.zip', 'clicking a file path in the answer opens its folder');
+  await answerBox.locator('.md-code-block').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(output, 'markdown-blocks.png') });
   await page.screenshot({ path: path.join(output, 'inline-images.png'), fullPage: true });
   await inline.click();
   const viewer = page.getByRole('dialog', { name: 'ดูรูป ดูภาพตัวอย่าง', exact: true });

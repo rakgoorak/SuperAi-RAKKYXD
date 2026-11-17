@@ -7,6 +7,15 @@ export const ImageEndpointContext = createContext<string | undefined>(undefined)
 export const IMAGE_FILE = /\.(png|jpe?g|gif|webp|avif)$/i;
 export const VIDEO_FILE = /\.(mp4|m4v|webm|mov|ogv)$/i;
 
+/** Show a file the AI mentioned in Explorer / Finder: the server resolves it against the session's folder. */
+export async function revealLinkedFile(endpoint: string | undefined, file: string) {
+  if (!endpoint || !window.superai?.revealFile) throw new Error(tr("เปิดโฟลเดอร์ได้เฉพาะแอป Desktop"));
+  const response = await fetch(`${endpoint}/locate?path=${encodeURIComponent(file)}`, { cache: 'no-store' });
+  const found = await response.json().catch(() => ({}));
+  if (!response.ok || typeof found.path !== 'string') throw new Error(found.error || tr("ไม่พบไฟล์นี้แล้ว"));
+  await window.superai.revealFile(found.path);
+}
+
 /** Asks the server to serve a media file outside the project (same consent call as Preview's button). */
 async function allowOutside(file: string) {
   const response = await fetch('/api/preview-file/allow', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: file }) });

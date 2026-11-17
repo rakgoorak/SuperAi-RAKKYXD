@@ -123,10 +123,10 @@ try {
   const menu = page.getByRole('menu', { name: 'ตัวเลือกข้อความ' });
   await menu.getByRole('menuitem', { name: 'Copy Ctrl+C', exact: true }).click();
   check(await page.evaluate(() => window.copies.at(-1)) === 'test test พร้อมใช้งาน', 'Copy copies only the selected text');
-  await body.locator('h4').click({ button: 'right' });
+  await body.locator('h1').click({ button: 'right' });
   await menu.getByRole('menuitem', { name: 'Copy message as Markdown', exact: true }).click();
   check(await page.evaluate(() => window.copies.at(-1)) === answer + '\n\nnew test', 'Copy Markdown preserves the exact source');
-  await body.locator('h4').click({ button: 'right' });
+  await body.locator('h1').click({ button: 'right' });
   await menu.getByRole('menuitem', { name: 'Copy message', exact: true }).click();
   const plain = await page.evaluate(() => window.copies.at(-1));
   check(plain.includes('test test พร้อมใช้งาน') && !plain.includes('**') && !plain.includes('คัดลอก') && !plain.includes('BASH'), 'Copy message excludes Markdown markers and code toolbar labels: ' + JSON.stringify(plain));
@@ -135,7 +135,7 @@ try {
   await menu.getByRole('menuitem', { name: 'Copy code', exact: true }).click();
   check(await page.evaluate(() => window.copies.at(-1)) === 'npm test', 'code context menu copies only the code block');
   await page.evaluate(() => { window.failCopy = true; });
-  await body.locator('h4').click({ button: 'right' });
+  await body.locator('h1').click({ button: 'right' });
   await menu.getByRole('menuitem', { name: 'Copy message', exact: true }).click();
   await pane.getByRole('alert').filter({ hasText: 'คัดลอกไม่ได้' }).waitFor();
   check(true, 'clipboard failures remain visible and recoverable');
@@ -159,7 +159,7 @@ try {
   await page.waitForFunction(() => !document.querySelector('.message-context-chip'));
   check(sends.length === 1 && sends[0].text.includes('test test พร้อมใช้งาน') && sends[0].text.includes('explain this'), 'sending includes attached context and clears the chip after success');
 
-  await body.locator('h4').click({ button: 'right' });
+  await body.locator('h1').click({ button: 'right' });
   await menu.getByRole('menuitem', { name: 'Pin as chapter', exact: true }).click();
   await pane.getByRole('button', { name: 'หมุดบทสนทนา', exact: true }).click();
   check(await pane.getByLabel('รายการหมุด').isVisible(), 'pinned messages appear as chapter jump links');
@@ -171,7 +171,7 @@ try {
   check(await pane.getByRole('button', { name: 'หมุดบทสนทนา', exact: true }).count() === 0, 'chapters can be removed');
   await selectParagraph(); await rightClickSelection();
   await page.setViewportSize({ width: 760, height: 650 });
-  await body.locator('h4').click({ button: 'right' });
+  await body.locator('h1').click({ button: 'right' });
   const bounds = await menu.boundingBox();
   check(bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= 760 && bounds.y + bounds.height <= 650, 'context menu stays inside a small viewport');
   check(await menu.getByRole('menuitem').evaluateAll(buttons => buttons.every(button => {
@@ -184,7 +184,7 @@ try {
   await page.keyboard.press('Escape');
   check(await menu.count() === 0, 'Escape closes the context menu');
   await page.setViewportSize({ width: 1440, height: 900 });
-  await body.locator('h4').click({ button: 'right' });
+  await body.locator('h1').click({ button: 'right' });
   await menu.getByRole('menuitem', { name: /Fork from here/ }).click();
   await page.locator('[data-session-id="fork-1"].focused').waitFor();
   check(forks.length === 1 && forks[0].messageId === 'a1' && !forks[0].selection && sends.length === 1, 'Fork creates and selects a separate session without sending a prompt');

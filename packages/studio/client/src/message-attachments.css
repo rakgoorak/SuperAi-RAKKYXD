@@ -45,3 +45,34 @@ dialog.message-image-preview[open] { display: grid; place-items: center; }
 #root .md-quote > div { padding-right: 76px; }
 #root .markdown-media-failed { display: block; margin: 4px 0 12px; color: var(--dim); font-size: 11px; }
 #root .markdown > .markdown-image { display: flex; }
+
+/* Markdown: GitHub flavour extras */
+#root .markdown :is(ul, ol) :is(ul, ol) { margin: 2px 0 4px; }
+#root .markdown li > p { margin: 0 0 4px; }
+#root .markdown ul { list-style: disc; }
+#root .markdown ol { list-style: decimal; }
+#root .markdown ul ul { list-style: circle; }
+#root .markdown ul ul ul { list-style: square; }
+#root .markdown li::marker { color: var(--dim, #8a8984); }
+#root .markdown li.task-list-item { list-style: none; }
+#root .markdown li.task-list-item input { margin: 0 7px 0 -20px; vertical-align: -1px; accent-color: var(--accent, #d9a080); }
+#root .markdown hr { height: 1px; margin: 16px 0; border: 0; background: var(--border, #33332f); }
+#root .markdown del { color: var(--dim, #8a8984); }
+#root .markdown .md-table-wrap { max-width: 100%; overflow-x: auto; margin: 8px 0 14px; }
+#root .markdown .md-table-wrap table { display: table; margin: 0; }
+#root .markdown .md-path { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+#root .markdown .md-path:hover, #root .markdown .md-path:focus-visible { text-decoration-style: solid; outline: none; filter: brightness(1.15); }
+#root .markdown .md-path-problem { margin-left: 6px; color: var(--dim, #8a8984); font-size: 11px; }
+
+/* Code colours (highlight.js classes) */
+#root .markdown .hljs-comment, #root .markdown .hljs-quote { color: #7d7b74; font-style: italic; }
+#root .markdown :is(.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag) { color: #d98e73; }
+#root .markdown :is(.hljs-string, .hljs-regexp, .hljs-addition, .hljs-template-tag) { color: #a8c38a; }
+#root .markdown :is(.hljs-number, .hljs-symbol, .hljs-bullet) { color: #d8b673; }
+#root .markdown :is(.hljs-title, .hljs-section) { color: #8fb8de; }
+#root .markdown :is(.hljs-title.class_, .hljs-type, .hljs-built_in) { color: #c9a3dc; }
+#root .markdown :is(.hljs-attr, .hljs-attribute, .hljs-property, .hljs-name, .hljs-selector-class, .hljs-selector-id) { color: #e0b48a; }
+#root .markdown :is(.hljs-meta, .hljs-link) { color: #8fb8de; }
+#root .markdown .hljs-deletion { color: #e08a8a; }
+#root .markdown .hljs-emphasis { font-style: italic; }
+#root .markdown .hljs-strong { font-weight: 600; }

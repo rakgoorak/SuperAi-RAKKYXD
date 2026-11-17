@@ -1935,8 +1935,8 @@ input[type="checkbox"] {
 /* Markdown answers */
 .markdown { font-size: 13px; line-height: 1.85; color: #e5e4e0; overflow-wrap: anywhere; }
 .markdown p { margin: 0 0 6px; }
-.markdown h4 { margin: 12px 0 4px; font-size: 13px; font-weight: 600; color: #e9f3fa; }
-.markdown h4.md-h1, .markdown h4.md-h2 { font-size: 14px; }
+.markdown :is(h1, h2, h3, h4, h5, h6) { margin: 12px 0 4px; font-size: 13px; font-weight: 600; line-height: 1.4; color: #e9f3fa; }
+.markdown :is(h1, h2) { font-size: 14px; }
 .markdown ul, .markdown ol { margin: 0 0 8px; padding-left: 20px; }
 .markdown code { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; background: #141310; padding: 1px 5px; border-radius: 4px; }
 .markdown pre { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; background: #11100d; padding: 10px; border-radius: 6px; overflow-x: auto; white-space: pre; margin: 6px 0 10px; }
@@ -2192,8 +2192,11 @@ img.small-brand { width: 18px; height: auto; background: none; border-radius: 0;
 .chat-assistant { position: relative; padding-left: 2px; }
 .chat-assistant .markdown { font-size: 14.5px; line-height: 1.78; color: #e4e2dd; }
 .chat-assistant .markdown p { margin: 0 0 12px; }
-.chat-assistant .markdown h4 { font-size: 16px; font-weight: 600; color: #f3f2ee; margin: 18px 0 8px; }
-.chat-assistant .markdown h4.md-h1, .chat-assistant .markdown h4.md-h2 { font-size: 17.5px; }
+.chat-assistant .markdown :is(h1, h2, h3, h4, h5, h6) { font-size: 15px; font-weight: 600; color: #f3f2ee; margin: 18px 0 8px; }
+.chat-assistant .markdown h1 { font-size: 20px; margin-top: 22px; }
+.chat-assistant .markdown h2 { font-size: 18px; margin-top: 20px; }
+.chat-assistant .markdown h3 { font-size: 16px; }
+.chat-assistant .markdown :is(h1, h2, h3, h4, h5, h6):first-child { margin-top: 0; }
 .chat-assistant .markdown ul, .chat-assistant .markdown ol { margin: 0 0 12px; padding-left: 22px; }
 .chat-assistant .markdown li { margin: 3px 0; }
 .chat-assistant .markdown code { font-size: 12.5px; background: #242421; color: #e8b082; padding: 2px 5px; border-radius: 4px; border: 1px solid #33332f; }
