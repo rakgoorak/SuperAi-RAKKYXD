@@ -20,7 +20,7 @@ import {
   formatSessionLabel,
   getQuickAgentTargets,
 } from '../handoffUtils';
-import { tr } from '../i18n';
+import { tr, dateLocale } from '../i18n';
 
 export interface ResponseActionsProps {
   text?: string;
@@ -337,7 +337,7 @@ export function ResponseActions({
           <time
             className="response-time"
             dateTime={new Date(at).toISOString()}
-            title={new Date(at).toLocaleString('th-TH')}
+            title={new Date(at).toLocaleString(dateLocale())}
           >
             {timeLabel(at, now)}
           </time>

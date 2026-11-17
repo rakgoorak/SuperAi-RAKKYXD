@@ -6,7 +6,7 @@ import { RunActions } from "./components/RunActions";
 import { SlashMenu, type SlashMenuHandle } from "./components/SlashMenu";
 import { MentionMenu, type MentionMenuHandle } from "./components/MentionMenu";
 import { CommandPalette } from "./components/CommandPalette";
-import { useTranslation } from "./i18n";
+import { useTranslation, dateLocale } from "./i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Folder,
@@ -1375,7 +1375,7 @@ export function App() {
                   <span className="count-badge">
                     {mode === "code"
                       ? `${visible.length} session`
-                      : `${conversation.length} ${t("canvas.tasks_unit", "งาน")}`}
+                      : `${conversation.length} ${t(conversation.length === 1 ? "canvas.tasks_unit_one" : "canvas.tasks_unit", "งาน")}`}
                   </span>
                   {mode === "code" && hiddenInWorkspace.length > 0 && (
                     <div className="hidden-sessions-bar" role="group" aria-label={tr("session ที่ซ่อนอยู่")}>
@@ -1502,7 +1502,7 @@ export function App() {
                           <span className="message-author">
                             {tr("คุณ")}{" "}
                             <time>
-                              {new Date(run.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}
+                              {new Date(run.createdAt).toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit" })}
                             </time>
                           </span>
                           <p>{renderTextWithLinks(run.prompt)}</p>

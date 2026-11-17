@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, Download, ExternalLink, LoaderCircle, RefreshCw, RotateCw, X } from "lucide-react";
 import type { UpdateState } from "../desktop";
 import { Markdown } from "./Markdown";
-import { t } from "../i18n";
+import { t, getLocale } from "../i18n";
+import { notesInLanguage } from "../releaseNotes";
 import { tr } from '../i18n';
 
 /** Live update state from the desktop shell; null in the browser UI (no updater there). */
@@ -89,7 +90,7 @@ export function UpdatePanel({ state, onError }: { state: UpdateState | null; onE
       {state.notes && s === "available" && (
         <details className="update-notes" open>
           <summary>{tr("มีอะไรใหม่ใน v")}{state.latestVersion}</summary>
-          <Markdown text={state.notes} />
+          <Markdown text={notesInLanguage(state.notes, getLocale())} />
         </details>
       )}
       <div className="update-actions">
@@ -132,7 +133,7 @@ export function UpdatePanel({ state, onError }: { state: UpdateState | null; onE
       {state.notes && pending(s) && (
         <details className="update-notes" open>
           <summary>{tr("มีอะไรใหม่ใน v")}{state.latestVersion}</summary>
-          <Markdown text={state.notes} />
+          <Markdown text={notesInLanguage(state.notes, getLocale())} />
         </details>
       )}
       <div className="update-actions">

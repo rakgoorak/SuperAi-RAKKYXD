@@ -24,7 +24,7 @@ import { loadNextPromptSettings, predictNextPrompt, publishChatRunning, publishN
 import '../chat-idle.css';
 import '../chat-permission.css';
 import '../chat-task-progress.css';
-import { tr } from '../i18n';
+import { tr, dateLocale } from '../i18n';
 
 // Mirrors server/CliChat.ts.
 type ToolKind = 'command' | 'read' | 'edit' | 'search' | 'web' | 'plan' | 'other';
@@ -251,7 +251,7 @@ function UserMessageItem({
             <time
               className="chat-user-time"
               dateTime={new Date(block.at).toISOString()}
-              title={new Date(block.at).toLocaleString('th-TH')}
+              title={new Date(block.at).toLocaleString(dateLocale())}
             >
               {timeLabel(block.at, now)}
             </time>

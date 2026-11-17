@@ -279,7 +279,8 @@ jobs:
 
       # docs/RELEASE.md keeps every version; a release shows only the newest section.
       # Apps up to v1.0.38 read the hard-update marker from the whole notes, so old
-      # sections must stay out.
+      # sections must stay out. Each section is English, then "## ภาษาไทย" and the same notes in
+      # Thai; the app shows the part in its own language (packages/studio/client/src/releaseNotes.ts).
       - name: Latest release notes only
         shell: bash
         run: |

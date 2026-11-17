@@ -1,4 +1,5 @@
 import { SPEECH_MODELS, type SpeechModelId } from "./models";
+import { getLocale } from "../i18n";
 
 // Settings for speak-to-type (the composer mic).
 export interface VoiceSettings {
@@ -8,7 +9,11 @@ export interface VoiceSettings {
 }
 
 const KEY = "superai-voice-settings";
-export const defaultVoiceSettings: VoiceSettings = { model: "thai", language: "th", microphone: "" };
+// Thai app: the Thai-tuned model; other languages: the multilingual model, listening for that language.
+const locale = getLocale();
+export const defaultVoiceSettings: VoiceSettings = locale === "th"
+  ? { model: "thai", language: "th", microphone: "" }
+  : { model: "small", language: locale === "en" ? "en" : "auto", microphone: "" };
 
 export function loadVoiceSettings(): VoiceSettings {
   try {
