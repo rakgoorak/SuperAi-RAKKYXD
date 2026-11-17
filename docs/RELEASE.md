@@ -8,6 +8,7 @@
   - Dates and times follow the app language.
   - Speak-to-type uses the multilingual model by default when the app is not in Thai.
   - Release notes come in English and Thai.
+- **Usage count asks first:** the app now asks before counting your computer as a user. Nothing is sent and no ID exists until you allow it; saying no, or turning it off later, deletes the ID. Installs that already counted are asked once too. The Microsoft Store build never counts.
 
 ## ภาษาไทย
 
@@ -19,6 +20,7 @@
   - วันที่และเวลาแสดงตามภาษาของโปรแกรม
   - พิมพ์ด้วยเสียงใช้โมเดลหลายภาษาเป็นค่าเริ่มต้น เมื่อโปรแกรมไม่ได้ตั้งเป็นภาษาไทย
   - บันทึกอัปเดตมีทั้งภาษาอังกฤษและไทย
+- **นับจำนวนผู้ใช้ต้องขออนุญาตก่อน:** แอปจะถามก่อนนับเครื่องเป็นผู้ใช้ ถ้ายังไม่อนุญาตจะไม่ส่งอะไรและไม่มีรหัสสุ่ม ตอบไม่อนุญาตหรือปิดทีหลังจะลบรหัสทิ้ง เครื่องที่เคยนับอยู่แล้วจะถูกถามหนึ่งครั้ง และเวอร์ชัน Microsoft Store ไม่นับเลย
 
 ---
 

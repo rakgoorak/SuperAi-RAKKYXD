@@ -87,6 +87,7 @@ import { CliInstaller } from "./components/CliInstaller";
 import { LaunchPresets, type LaunchSeat } from "./components/LaunchPresets";
 import { VoiceSettingsPanel } from "./components/VoiceSettingsPanel";
 import { NotifySettingsPanel } from "./components/NotifySettingsPanel";
+import { UsageConsent } from "./components/UsageConsent";
 import { ComputerUsePanel } from "./components/ComputerUsePanel";
 import { MacPermissionsPanel } from "./components/MacPermissionsPanel";
 import { ApiKeysPanel } from "./components/ApiKeysPanel";
@@ -2365,6 +2366,7 @@ export function App() {
         onClose={() => setInteractiveTourOpen(false)}
       />
       <UpdatePrompt state={update} onError={showError} onDetails={() => setDialog("update")} />
+      <UsageConsent hidden={!!dialog || interactiveTourOpen} />
     </div>
   );
 }

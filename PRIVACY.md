@@ -21,11 +21,12 @@ only ever sent to the provider it belongs to.
 
 ## What the app sends to us
 
-Only an anonymous usage count, so the website can show how many people use the app:
+Only an anonymous usage count, so the website can show how many people use the app, and only if
+you allow it. On first launch the app asks; until you answer "Allow", nothing is sent and no ID exists.
 
 | Sent | Example |
 | :--- | :--- |
-| A random ID created on first launch | `0b1e…` (not linked to you, your account or your computer's name) |
+| A random ID, created when you allow the count | `0b1e…` (not linked to you, your account or your computer's name) |
 | App version | `1.2.3` |
 | Operating system | `win32`, `darwin` |
 
@@ -34,8 +35,9 @@ It is sent every 10 minutes while the app is open, to a Cloudflare Worker
 Cloudflare reports for the request, and when the ID was first and last seen. It does not store IP
 addresses, and nothing else is collected: no prompts, files, project names, accounts or keys.
 
-Turn it off any time in **Settings → Notifications**, under "นับจำนวนผู้ใช้แบบไม่ระบุตัวตน" (anonymous usage count; the setting is not translated yet). Development builds
-never send it.
+Change your answer any time in **Settings → Notifications**, under **Count users anonymously**
+("นับจำนวนผู้ใช้แบบไม่ระบุตัวตน" in the Thai app). Turning it off deletes the ID on your computer.
+Installs from before this question are asked once too. Development builds never send it.
 
 ## Updates and downloads
 

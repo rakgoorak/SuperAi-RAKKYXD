@@ -25,14 +25,14 @@ export function renderManifest(identity, version, arch) {
   <Properties>
     <DisplayName>${xml(identity.displayName)}</DisplayName>
     <PublisherDisplayName>${xml(identity.publisherDisplayName)}</PublisherDisplayName>
-    <Description>AI coding workspace with Thai language support</Description>
+    <Description>One workspace for the AI coding tools you already use</Description>
     <Logo>Assets\\StoreLogo.png</Logo>
   </Properties>
-  <Resources><Resource Language="th-TH" /><Resource Language="en-US" /></Resources>
+  <Resources><Resource Language="en-US" /><Resource Language="th-TH" /></Resources>
   <Dependencies><TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" /></Dependencies>
   <Applications>
     <Application Id="${xml(identity.applicationId)}" Executable="SuperAi-RAKKYXD.exe" EntryPoint="Windows.FullTrustApplication">
-      <uap:VisualElements DisplayName="${xml(identity.displayName)}" Description="AI coding workspace with Thai language support"
+      <uap:VisualElements DisplayName="${xml(identity.displayName)}" Description="One workspace for the AI coding tools you already use"
         Square150x150Logo="Assets\\Square150x150Logo.png" Square44x44Logo="Assets\\Square44x44Logo.png" BackgroundColor="transparent" />
     </Application>
   </Applications>
