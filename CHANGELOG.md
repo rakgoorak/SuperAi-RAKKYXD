@@ -6,6 +6,15 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.2.2] - 2026-11-17
+
+### Changed
+- macOS: every release is signed with the same certificate, so Accessibility
+  and Screen Recording permissions stay granted after an update. This update
+  changes the signature once: allow both again (or press Reset in
+  Settings > AI control) after installing it.
+- Minor dependency updates (playwright-core, ws, autoprefixer, postcss).
+
 ## [1.2.1] - 2026-11-16
 
 ### Added
