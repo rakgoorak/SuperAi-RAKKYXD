@@ -71,8 +71,8 @@ SuperAi &amp; RAKKYXD เป็นโปรแกรม Desktop โอเพน�
 | แพลตฟอร์ม | ดาวน์โหลด |
 | :--- | :--- |
 | Windows 10 / 11 (64-bit) | [ตัวติดตั้ง Windows](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-Setup.exe) |
-| macOS 11+ · Apple Silicon | [DMG สำหรับ Apple Silicon](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.dmg) |
-| macOS 11+ · Intel | [DMG สำหรับ Intel](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.dmg) |
+| macOS 13+ · Apple Silicon | [DMG สำหรับ Apple Silicon](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.dmg) |
+| macOS 13+ · Intel | [DMG สำหรับ Intel](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.dmg) |
 
 ดาวน์โหลดได้โดยไม่ต้องล็อกอิน GitHub ส่วนไฟล์ ZIP แบบ Portable และ SHA-256 อยู่ในหน้า [Release ล่าสุด](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest)
 
@@ -97,7 +97,7 @@ SuperAi &amp; RAKKYXD เป็นโปรแกรม Desktop โอเพน�
 
 ## Build จาก Source
 
-ต้องใช้ Node.js 22+, Git, Windows 10/11 หรือ macOS 11 ขึ้นไป
+ต้องใช้ Node.js 22+, Git, Windows 10/11 หรือ macOS 13 ขึ้นไป
 
     git clone https://github.com/rakgoorak/SuperAi-RAKKYXD.git
     cd SuperAi-RAKKYXD

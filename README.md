@@ -71,8 +71,8 @@ Choose the latest installer for your computer:
 | Platform | Download |
 | :--- | :--- |
 | Windows 10 / 11 (64-bit) | [Windows installer](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-Setup.exe) |
-| macOS 11+ · Apple Silicon | [Apple Silicon DMG](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.dmg) |
-| macOS 11+ · Intel | [Intel DMG](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.dmg) |
+| macOS 13+ · Apple Silicon | [Apple Silicon DMG](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-arm64.dmg) |
+| macOS 13+ · Intel | [Intel DMG](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest/download/SuperAi-RAKKYXD-macos-x64.dmg) |
 
 Downloads do not require a GitHub account. Portable ZIP files and SHA-256 checksums are listed on the [latest release page](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest).
 
@@ -97,7 +97,7 @@ Read the full [Privacy Policy](PRIVACY.md), [Security Policy](SECURITY.md) and [
 
 ## Build from source
 
-Requirements: Node.js 22+, Git, Windows 10/11 or macOS 11+.
+Requirements: Node.js 22+, Git, Windows 10/11 or macOS 13+.
 
     git clone https://github.com/rakgoorak/SuperAi-RAKKYXD.git
     cd SuperAi-RAKKYXD

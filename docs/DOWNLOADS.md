@@ -17,7 +17,7 @@
 
 ## macOS
 
-เปิดไฟล์ `.dmg` แล้วลาก **SuperAi & RAKKYXD** ไปที่โฟลเดอร์ **Applications** (ลากไอคอนจาก Applications ไปไว้ที่ Dock ได้ถ้าต้องการเปิดเร็วๆ) รองรับ macOS 11 ขึ้นไปตาม Electron runtime ที่ใช้ สำหรับรุ่นที่ลงลายเซ็นแบบ ad-hoc (ยังไม่ผูกกับ Apple Developer ID / Notarization) หาก macOS Sonoma/Sequoia แจ้งเตือนว่า *"แอปพลิเคชันเสียหาย"* หรือเปิดไม่ได้เนื่องจาก Gatekeeper ให้เปิด Terminal แล้วรันคำสั่ง:
+เปิดไฟล์ `.dmg` แล้วลาก **SuperAi & RAKKYXD** ไปที่โฟลเดอร์ **Applications** (ลากไอคอนจาก Applications ไปไว้ที่ Dock ได้ถ้าต้องการเปิดเร็วๆ) รองรับ macOS 13 ขึ้นไปตาม Electron runtime ที่ใช้ สำหรับรุ่นที่ลงลายเซ็นแบบ ad-hoc (ยังไม่ผูกกับ Apple Developer ID / Notarization) หาก macOS Sonoma/Sequoia แจ้งเตือนว่า *"แอปพลิเคชันเสียหาย"* หรือเปิดไม่ได้เนื่องจาก Gatekeeper ให้เปิด Terminal แล้วรันคำสั่ง:
 ```bash
 xattr -cr /Applications/SuperAi-RAKKYXD.app
 ```
