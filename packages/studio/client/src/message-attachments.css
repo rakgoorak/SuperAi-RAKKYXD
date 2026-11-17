@@ -33,3 +33,8 @@ dialog.message-image-preview[open] { display: grid; place-items: center; }
 #root .markdown-image-open { display: block; width: 100%; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: zoom-in; }
 #root .markdown-image-open img { display: block; width: 100%; max-height: 420px; object-fit: contain; }
 @media (max-width: 600px) { .message-attachments .message-image-thumb { width: 140px; } .message-image-thumb img, .message-image-missing { height: 105px; } dialog.message-image-preview { padding-right: 12px; padding-left: 12px; } .message-image-preview header { left: 12px; right: 12px; } }
+#root .markdown-video-player { display: block; width: 100%; max-height: 420px; border: 1px solid var(--border); border-radius: 10px; background: #000; }
+#root .markdown-media-outside { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 10px; background: var(--surface); }
+#root .markdown-media-outside > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 12px; }
+#root .markdown-media-outside small { overflow: hidden; color: var(--dim); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+#root .markdown-media-outside button { flex: none; }
