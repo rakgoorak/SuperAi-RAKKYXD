@@ -8,6 +8,6 @@ export function responseStyle(value: unknown): ResponseStyle {
   return value as ResponseStyle;
 }
 export function styleGuidance(style: ResponseStyle = 'normal'): string {
-  return style === 'concise' ? 'รูปแบบคำตอบ: ตอบสั้นและตรงประเด็น เก็บข้อเท็จจริงสำคัญและข้อจำกัดที่จำเป็น ไม่ลดความถูกต้องเพื่อให้สั้น'
-    : style === 'explanatory' ? 'รูปแบบคำตอบ: อธิบายเป็นลำดับด้วยภาษาที่เข้าใจง่าย ยกตัวอย่างเมื่อช่วยให้เข้าใจ และระบุข้อจำกัดที่สำคัญ' : '';
+  return style === 'concise' ? 'Answer style: short and to the point. Keep the key facts and necessary caveats; never trade accuracy for brevity.'
+    : style === 'explanatory' ? 'Answer style: explain step by step in plain language, give examples where they help, and note important limits.' : '';
 }

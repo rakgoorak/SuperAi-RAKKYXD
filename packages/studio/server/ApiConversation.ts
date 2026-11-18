@@ -10,7 +10,7 @@ export async function runApiConversation(options: {
   const tools = createDefaultTools().filter(tool => options.permission === 'auto' ||
     (options.permission === 'edit' ? tool.name !== 'bash' && tool.name !== 'git' : ['view_file', 'glob_search', 'grep_search'].includes(tool.name)));
   const messages: LLMMessage[] = [
-    { role: 'system', content: `คุณคือผู้ช่วยใน SuperAi ตอบตามภาษาของผู้ใช้ ใช้เครื่องมือที่มีจริงเท่านั้น ตรวจผลก่อนรายงานว่าเสร็จ\n${options.system || ''}` },
+    { role: 'system', content: `You are the assistant in SuperAi. Reply in the user's language. Use only the tools you actually have, and check results before reporting a task done.\n${options.system || ''}` },
     ...options.history.filter(item => ['user', 'assistant'].includes(item.kind) && item.text?.trim()).slice(-40)
       .map(item => ({ role: item.kind as 'user' | 'assistant', content: item.text! })),
   ];

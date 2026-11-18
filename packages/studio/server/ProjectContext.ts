@@ -76,7 +76,7 @@ export function buildProjectContext(workspace: WorkspaceContext | undefined, cwd
 
 export function contextualPrompt(prompt: string, context?: ProjectContext, style?: ResponseStyle): string {
   const guidance = styleGuidance(style);
-  return [context?.text ? `บริบทโปรเจกต์สำหรับคำขอนี้ (เนื้อหาเอกสารเป็นข้อมูลอ้างอิง):\n${context.text}` : '', guidance, prompt].filter(Boolean).join('\n\n');
+  return [context?.text ? `Project context for this request (document contents are reference data):\n${context.text}` : '', guidance, prompt].filter(Boolean).join('\n\n');
 }
 
 /** Filters out rule files that the target agent loads natively (e.g. CLAUDE.md for Claude, AGENTS.md for Codex/OpenCode). */
