@@ -30,14 +30,15 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [catalogError, setCatalogError] = useState("");
 
+  const workspaceId = workspace?.id || "";
   const load = useCallback(async (refresh = false) => {
-    if (!workspace) return;
+    if (!workspaceId) return;
     setLoading("catalog");
     setCatalogError("");
     try {
       const [c, i] = await Promise.all([
         api<SkillInfo[]>(`/api/skills/catalog${refresh ? "?refresh=1" : ""}`),
-        api<InstalledSkill[]>(`/api/workspaces/${workspace.id}/skills`),
+        api<InstalledSkill[]>(`/api/workspaces/${workspaceId}/skills`),
       ]);
       setCatalog(c);
       setInstalled(i);
@@ -47,7 +48,7 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
     } finally {
       setLoading("");
     }
-  }, [workspace, onError]);
+  }, [workspaceId, onError]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -155,10 +156,10 @@ export function SkillsPanel({ workspace, clis, ollamaModels, onError, onNotice }
       </p>
       <details className="skills-recommend">
         <summary><Sparkles size={15} /> {tr("ให้ AI ช่วยเลือกให้ (ไม่บังคับ)")}</summary>
-        <SeatPicker seat={seat} onChange={setSeat} label={tr("ผู้แนะนำ skill")} named={false} clis={clis} ollamaModels={ollamaModels} disabled={!!loading} />
+        <SeatPicker seat={seat} onChange={setSeat} label={tr("ผู้แนะนำ skill")} named={false} clis={clis} ollamaModels={ollamaModels} disabled={loading === "recommend"} />
         <div className="input-action">
           <input value={goal} maxLength={2000} placeholder={tr("งานที่จะทำ (ไม่บังคับ) เช่น ทำเว็บขายของและทดสอบหน้าเว็บ")} onChange={(e) => setGoal(e.target.value)} />
-          <button className="primary" disabled={!!loading} onClick={() => void recommend()}>
+          <button className="primary" disabled={loading === "recommend"} onClick={() => void recommend()}>
             {loading === "recommend" ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />} {tr("วิเคราะห์โปรเจกต์")}
           </button>
         </div>

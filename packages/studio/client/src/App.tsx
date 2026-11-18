@@ -358,8 +358,9 @@ export function App() {
       api<Session[]>("/api/terminals"),
     ]);
     if (seq !== refreshSeq.current) return;
-    setWorkspaces(w);
-    setSessions(namedSessions(s));
+    const named = namedSessions(s);
+    setWorkspaces((prev) => (JSON.stringify(prev) === JSON.stringify(w) ? prev : w));
+    setSessions((prev) => (JSON.stringify(prev) === JSON.stringify(named) ? prev : named));
     setConnected(true);
     setActiveWs((current) =>
       w.some((x) => x.id === current) ? current : w[0]?.id || "",

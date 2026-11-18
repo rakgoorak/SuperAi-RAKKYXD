@@ -144,6 +144,8 @@
 #root .skill-card h3, #root .skill-result strong { font-size: 14px; font-weight: 500; }
 #root .skill-tags span { background: transparent; border: 0; padding-left: 0; }
 #root .skills-recommend { background: transparent; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding-inline: 0; }
+#root .skills-recommend:not([open]) > :not(summary) { display: none !important; }
+#root .skills-panel { padding-top: 4px; }
 #root .skill-tabs, #root .history-filters { background: transparent; border: 0; }
 #root .skill-tabs button, #root .skills-categories button { background: transparent; border-color: transparent; border-radius: 6px; }
 #root .skill-tabs button.active, #root .skills-categories button.active { background: var(--raised); color: var(--text); }
