@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Maximize2, Pencil, Plus, X } from 'lucide-react';
-import { TerminalPane } from './TerminalPane';
+// The terminal (xterm) loads only when a terminal is shown, keeping it out of the startup bundle.
+const TerminalPane = lazy(() => import('./TerminalPane').then((module) => ({ default: module.TerminalPane })));
 import { SessionEnded } from './SessionEnded';
 import type { Session } from '../api';
 import { paneView, type PaneView } from '../paneView';
@@ -207,9 +208,9 @@ export function SessionCanvas({ sessions, workspaceId, selected, layout, zoomed,
               </div>
             </div>}
             {(s.status === 'exited' || s.status === 'error') && paneView(s) !== 'chat' && <SessionEnded key={`${s.id}-${s.createdAt}`} session={{ ...s, name: names[s.id] || s.name }} onRestart={restart} onClose={close} />}
-            <TerminalPane key={`${s.id}-${s.createdAt}`} tab={{ id: s.id, sessionId: s.id, authOnly: s.authOnly, name: names[s.id] || s.name, type: s.agentType, status: s.status === 'stopping' ? 'exited' : s.status, view: paneView(s) }}
+            <Suspense fallback={null}><TerminalPane key={`${s.id}-${s.createdAt}`} tab={{ id: s.id, sessionId: s.id, authOnly: s.authOnly, name: names[s.id] || s.name, type: s.agentType, status: s.status === 'stopping' ? 'exited' : s.status, view: paneView(s) }}
               visible={active && cellVisible} focused={active && cellVisible && s.id === selected} showHeader={false}
-              onFocus={() => select(s.id)} onClose={() => close(s.id)} onExit={refresh} registerSender={() => {}} onSwitchView={view => switchView(s.id, view)} />
+              onFocus={() => select(s.id)} onClose={() => close(s.id)} onExit={refresh} registerSender={() => {}} onSwitchView={view => switchView(s.id, view)} /></Suspense>
           </div>;
         })}
       </div>

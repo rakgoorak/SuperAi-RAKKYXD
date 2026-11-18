@@ -1,7 +1,4 @@
 import { useState, useEffect } from 'react';
-import en from './locales/en';
-import ja from './locales/ja';
-import zh from './locales/zh';
 
 export type Locale = 'th' | 'en' | 'ja' | 'zh';
 
@@ -648,8 +645,18 @@ export function t(key: string, fallback?: string): string {
   return fallback || key;
 }
 
-/** Translations keyed by the Thai text itself; Thai needs none. */
-const TEXT: Record<Locale, Record<string, string> | null> = { th: null, en, ja, zh };
+/**
+ * Translations keyed by the Thai text itself; Thai needs none. Only the window's language is
+ * loaded (main.tsx waits for it before the app starts), so the others stay out of the startup bundle.
+ */
+const TEXT: Partial<Record<Locale, Record<string, string>>> = {};
+const LOAD: Record<Exclude<Locale, 'th'>, () => Promise<{ default: Record<string, string> }>> = {
+  en: () => import('./locales/en'), ja: () => import('./locales/ja'), zh: () => import('./locales/zh'),
+};
+export async function loadLocaleText(locale: Locale = currentLocale): Promise<void> {
+  if (locale === 'th' || TEXT[locale]) return;
+  TEXT[locale] = (await LOAD[locale]()).default;
+}
 
 /**
  * Interface text written in Thai where it is used: tr('ข้อความ') or tr`${name} ขออนุญาต`.
@@ -660,7 +667,7 @@ export function tr(source: TemplateStringsArray | string, ...values: unknown[]):
   const key = typeof source === 'string'
     ? source
     : source.reduce((out, part, index) => out + part + (index < source.length - 1 ? `{${index}}` : ''), '');
-  const text = TEXT[currentLocale]?.[key] || (currentLocale !== 'th' && en[key]) || key;
+  const text = TEXT[currentLocale]?.[key] || (currentLocale !== 'th' && TEXT.en?.[key]) || key;
   return typeof source === 'string' ? text : text.replace(/\{(\d+)\}/g, (_, index) => String(values[Number(index)] ?? ''));
 }
 
