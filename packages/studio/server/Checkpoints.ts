@@ -25,7 +25,12 @@ function snapshotTree(cwd: string): { tree: string; root: string } {
   try {
     const temp = path.join(dir, 'index');
     // Starting from the real index, git only re-reads files that changed: fast on big projects.
-    if (fs.existsSync(index)) fs.copyFileSync(index, temp);
+    // Preserve the original index timestamps so Git's racy-git check still catches same-second edits.
+    if (fs.existsSync(index)) {
+      const st = fs.statSync(index);
+      fs.copyFileSync(index, temp);
+      fs.utimesSync(temp, st.atime, st.mtime);
+    }
     // Bytes as they are on disk: no line-ending conversion, so a rewind gives back exactly the same file.
     run(root, ['-c', 'core.autocrlf=false', '-c', 'core.safecrlf=false', 'add', '-A', '--', '.'], { GIT_INDEX_FILE: temp });
     return { tree: run(root, ['write-tree'], { GIT_INDEX_FILE: temp }), root };
