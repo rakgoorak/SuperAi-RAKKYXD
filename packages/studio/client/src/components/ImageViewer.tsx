@@ -102,7 +102,6 @@ export function ImageViewer({ image, onClose }: { image: ViewerImage; onClose: (
           if (event.pointerType !== 'mouse' || event.button !== 0) return;
           const area = event.currentTarget;
           drag.current = { x: event.clientX, y: event.clientY, left: area.scrollLeft, top: area.scrollTop, moved: false };
-          area.setPointerCapture(event.pointerId);
         }}
         onPointerMove={event => {
           if (!drag.current) return;
@@ -117,6 +116,7 @@ export function ImageViewer({ image, onClose }: { image: ViewerImage; onClose: (
         <div className="image-viewer-canvas"><img src={image.src} alt={image.name} draggable={false}
           style={size.width ? { width: size.width * scale, height: size.height * scale } : undefined}
           onLoad={event => setSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
+          onClick={event => event.stopPropagation()}
           onContextMenu={event => {
             event.preventDefault();
             event.stopPropagation();

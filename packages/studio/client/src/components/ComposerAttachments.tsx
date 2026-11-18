@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FileText, ImagePlus, Paperclip, Plus, X } from 'lucide-react';
 import { ACCEPT_ATTACHMENTS, isPdf, isSupportedAttachment, pdfPageCount, unsupportedAttachmentMessage } from '../attachments';
 import { tr } from '../i18n';
+import { ImageViewer } from './ImageViewer';
 
 export interface ComposerAttachment {
   id: string;
@@ -58,27 +59,51 @@ export function useComposerAttachments(onError: (message: string) => void, scope
   return { items, add, remove, clear };
 }
 
-export const AttachmentCards: React.FC<{ items: ComposerAttachment[]; onRemove: (id: string) => void; disabled?: boolean }> = ({ items, onRemove, disabled }) =>
-  items.length ? (
-    <ul className="attachment-cards" aria-label={tr("ไฟล์แนบ")}>
-      {items.map((item) => (
-        <li key={item.id} className={`attachment-card ${item.kind}`} title={item.file.name}>
-          {item.thumb ? (
-            <img src={item.thumb} alt={item.file.name} />
-          ) : (
-            <div className="attachment-pdf">
-              <FileText size={26} />
-              <span className="attachment-name">{item.file.name}</span>
-              <span className="attachment-meta">PDF{item.pages ? tr` · ${item.pages} หน้า` : ''}</span>
-            </div>
-          )}
-          <button className="attachment-remove" onClick={() => onRemove(item.id)} disabled={disabled} aria-label={tr`เอา ${item.file.name} ออก`} title={tr("เอาออก")}>
-            <X size={12} />
-          </button>
-        </li>
-      ))}
-    </ul>
-  ) : null;
+export const AttachmentCards: React.FC<{ items: ComposerAttachment[]; onRemove: (id: string) => void; disabled?: boolean }> = ({ items, onRemove, disabled }) => {
+  const [selected, setSelected] = useState<{ src: string; name: string } | null>(null);
+  if (!items.length) return null;
+  return (
+    <>
+      <ul className="attachment-cards" aria-label={tr("ไฟล์แนบ")}>
+        {items.map((item) => (
+          <li key={item.id} className={`attachment-card ${item.kind}`} title={item.file.name}>
+            {item.thumb ? (
+              <button
+                type="button"
+                className="attachment-thumb-btn"
+                onClick={() => setSelected({ src: item.thumb!, name: item.file.name })}
+                aria-label={tr`ดูรูป ${item.file.name}`}
+                title={tr("กดดูรูปและซูม")}
+              >
+                <img src={item.thumb} alt={item.file.name} />
+              </button>
+            ) : (
+              <div className="attachment-pdf">
+                <FileText size={26} />
+                <span className="attachment-name">{item.file.name}</span>
+                <span className="attachment-meta">PDF{item.pages ? tr` · ${item.pages} หน้า` : ''}</span>
+              </div>
+            )}
+            <button
+              type="button"
+              className="attachment-remove"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove(item.id);
+              }}
+              disabled={disabled}
+              aria-label={tr`เอา ${item.file.name} ออก`}
+              title={tr("เอาออก")}
+            >
+              <X size={12} />
+            </button>
+          </li>
+        ))}
+      </ul>
+      {selected && <ImageViewer image={selected} onClose={() => setSelected(null)} />}
+    </>
+  );
+};
 
 /** "+" menu at the left of the composer; Ctrl+U opens the same file picker. */
 export const AttachMenu: React.FC<{ onFiles: (files: File[]) => void; disabled?: boolean; actions?: { label: string; selected?: boolean; onSelect: () => void }[] }> = ({ onFiles, disabled, actions = [] }) => {

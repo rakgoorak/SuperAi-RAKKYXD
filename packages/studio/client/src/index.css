@@ -1840,12 +1840,17 @@ input[type="checkbox"] {
 .attach-popover button { display: flex; align-items: center; }
 .attach-popover kbd { margin-left: auto; padding-left: 16px; color: var(--dim); font: inherit; font-size: 11px; }
 .attachment-cards { list-style: none; margin: 0; padding: 10px 12px 0; display: flex; gap: 8px; overflow-x: auto; }
-.attachment-card { position: relative; flex: 0 0 auto; width: 120px; height: 120px; border-radius: 10px; overflow: hidden; background: var(--raised); border: 1px solid var(--border); }
+.attachment-card { position: relative; flex: 0 0 auto; width: 120px; height: 120px; border-radius: 10px; overflow: hidden; background: var(--raised); border: 1px solid var(--border); transition: border-color 0.15s ease; }
+.attachment-card:hover { border-color: var(--accent); }
+.attachment-thumb-btn { width: 100%; height: 100%; padding: 0; margin: 0; border: 0; background: transparent; cursor: zoom-in; display: block; outline: none; }
+.attachment-thumb-btn img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity 0.15s ease, transform 0.15s ease; }
+.attachment-thumb-btn:hover img { opacity: 0.92; transform: scale(1.03); }
+.attachment-thumb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .attachment-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .attachment-pdf { height: 100%; padding: 12px 10px 10px; display: flex; flex-direction: column; gap: 6px; color: var(--accent); }
 .attachment-name { color: #e1e8ee; font-size: 11px; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; word-break: break-word; }
 .attachment-meta { margin-top: auto; color: var(--dim); font-size: 10px; }
-.attachment-remove { position: absolute; top: 5px; right: 5px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: rgba(16, 20, 24, 0.8); color: #e1e8ee; border: 1px solid var(--border); }
+.attachment-remove { position: absolute; top: 5px; right: 5px; z-index: 2; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: rgba(16, 20, 24, 0.85); color: #e1e8ee; border: 1px solid var(--border); cursor: pointer; transition: background 0.15s ease, color 0.15s ease; }
 .attachment-remove:hover { background: #4a2c2e; color: #f4a6a6; }
 .composer-drop-overlay {
   position: fixed; inset: 0; z-index: 60; pointer-events: none;

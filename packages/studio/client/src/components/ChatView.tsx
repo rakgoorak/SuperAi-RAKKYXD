@@ -351,6 +351,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   const [offline, setOffline] = useState(false);
   const [now, setNow] = useState(Date.now());
   const scroller = useRef<HTMLDivElement>(null);
+  const columnRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const [awayFromLatest, setAwayFromLatest] = useState(false);
   const [newOutput, setNewOutput] = useState(false);
@@ -377,6 +378,12 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
     return () => window.removeEventListener('superai:jump-message', jump);
   }, [sessionId]);
   const restored = useRef(false);
+  useEffect(() => {
+    restored.current = false;
+    stick.current = true;
+    setAwayFromLatest(false);
+    setNewOutput(false);
+  }, [sessionId]);
   const [pending, setPending] = useState(false);
   const [problem, setProblem] = useState('');
   const [search, setSearch] = useState('');
@@ -491,13 +498,70 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
       restored.current = true;
       try {
         const saved = localStorage.getItem(`superai-scroll:${sessionId}`);
-        if (saved !== null) { el.scrollTop = Number(saved) || 0; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; return; }
+        if (saved !== null) {
+          el.scrollTop = Number(saved) || 0;
+          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+          setAwayFromLatest(el.scrollHeight - el.scrollTop - el.clientHeight > 80);
+          return;
+        }
       } catch {}
     }
-    if (stick.current && !search.trim()) el.scrollTop = el.scrollHeight;
-    else if (changed && !search.trim()) setNewOutput(true);
-    setAwayFromLatest(el.scrollHeight - el.scrollTop - el.clientHeight > 80);
-  }, [items, running, activity?.quiet]);
+    if (stick.current && !search.trim()) {
+      el.scrollTop = el.scrollHeight;
+      setAwayFromLatest(false);
+      setNewOutput(false);
+    } else if (changed && !search.trim()) {
+      setNewOutput(true);
+      setAwayFromLatest(el.scrollHeight - el.scrollTop - el.clientHeight > 80);
+    }
+  }, [items, running, activity?.quiet, search]);
+
+  // Keep scroll position or pinned to bottom when switching back to this session.
+  useLayoutEffect(() => {
+    if (!active) return;
+    const el = scroller.current;
+    if (!el) return;
+    const restore = () => {
+      if (!el.clientHeight) return;
+      if (jumpToSaved()) return;
+      if (stick.current && !search.trim()) {
+        el.scrollTop = el.scrollHeight;
+        setAwayFromLatest(false);
+        setNewOutput(false);
+      } else {
+        try {
+          const saved = localStorage.getItem(`superai-scroll:${sessionId}`);
+          if (saved !== null) {
+            el.scrollTop = Number(saved) || 0;
+            stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+          }
+        } catch {}
+        setAwayFromLatest(el.scrollHeight - el.scrollTop - el.clientHeight > 80);
+      }
+    };
+    restore();
+    const raf = requestAnimationFrame(restore);
+    return () => cancelAnimationFrame(raf);
+  }, [active, sessionId, search]);
+
+  // When images load or rendered content resizes, keep pinned if user was at the bottom.
+  useEffect(() => {
+    const col = columnRef.current;
+    const el = scroller.current;
+    if (!col || !el) return;
+    const observer = new ResizeObserver(() => {
+      if (!el.clientHeight) return;
+      if (stick.current && !search.trim()) {
+        el.scrollTop = el.scrollHeight;
+        setAwayFromLatest(false);
+        setNewOutput(false);
+      } else {
+        setAwayFromLatest(el.scrollHeight - el.scrollTop - el.clientHeight > 80);
+      }
+    });
+    observer.observe(col);
+    return () => observer.disconnect();
+  }, [search]);
 
   const started = activity?.startedAt ?? [...items].reverse().find((i) => i.kind === 'user')?.at ?? now;
   const seconds = Math.max(0, Math.round((now - started) / 1000));
@@ -527,12 +591,18 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
       </div>}
       <div className="chat-scroll" ref={scroller} onScroll={(e) => {
         const el = e.currentTarget;
-        try { if (!search.trim()) localStorage.setItem(`superai-scroll:${sessionId}`, String(el.scrollTop)); } catch {}
+        if (!el.clientHeight) return;
         stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
         const away = el.scrollHeight - el.scrollTop - el.clientHeight > 80;
         setAwayFromLatest(away); if (!away) setNewOutput(false);
+        try {
+          if (!search.trim()) {
+            if (stick.current) localStorage.removeItem(`superai-scroll:${sessionId}`);
+            else localStorage.setItem(`superai-scroll:${sessionId}`, String(el.scrollTop));
+          }
+        } catch {}
       }}>
-        <OffscreenRoot.Provider value={scroller}><div className="chat-column">
+        <OffscreenRoot.Provider value={scroller}><div className="chat-column" ref={columnRef}>
           {!items.length && (
             <div className="chat-empty">
               <strong>{tr("คุยกับ")} {name}</strong>
@@ -623,7 +693,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
           {offline && <div className="chat-notice">{tr("ขาดการเชื่อมต่อ กำลังเชื่อมต่อใหม่…")}</div>}
         </div></OffscreenRoot.Provider>
       </div>
-      {awayFromLatest && !search.trim() && <button type="button" className="conversation-latest" aria-label={tr("กลับข้อความล่าสุด")} onClick={() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; stick.current = true; setAwayFromLatest(false); setNewOutput(false); }}><ArrowDown size={14} />{newOutput ? tr("มีข้อความใหม่ · กลับล่าสุด") : tr("กลับข้อความล่าสุด")}</button>}
+      {awayFromLatest && !search.trim() && <button type="button" className="conversation-latest" aria-label={tr("กลับข้อความล่าสุด")} onClick={() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; stick.current = true; setAwayFromLatest(false); setNewOutput(false); try { localStorage.removeItem(`superai-scroll:${sessionId}`); } catch {} }}><ArrowDown size={14} />{newOutput ? tr("มีข้อความใหม่ · กลับล่าสุด") : tr("กลับข้อความล่าสุด")}</button>}
     </div></ConversationInteractions></ImageEndpointContext.Provider>
   );
 }
