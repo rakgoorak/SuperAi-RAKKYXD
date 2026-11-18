@@ -48,6 +48,7 @@ try {
     localStorage.removeItem('superai-hidden-sessions');
   });
 
+  const workspaces = [{ id: 'ws-1', name: 'AgentBuild', rootPath: output, threads: [] }];
   const sessions = [
     { id: 'sess-1', name: 'Antigravity CLI · gemini-3.1-flash-high', agentType: 'antigravity', wsId: 'ws-1', cwd: output, status: 'running', view: 'terminal', createdAt: 1000 },
     { id: 'sess-2', name: 'Codex · gpt-5.3-codex', agentType: 'codex', wsId: 'ws-1', cwd: output, status: 'running', view: 'terminal', createdAt: 2000 },
@@ -58,10 +59,33 @@ try {
     const url = new URL(route.request().url());
     const pathname = url.pathname;
     if (pathname === '/api/workspaces') {
-      return route.fulfill({ json: [{ id: 'ws-1', name: 'AgentBuild', rootPath: output, threads: [] }] });
+      return route.fulfill({ json: workspaces });
+    }
+    if (pathname === '/api/workspaces/quick-chat') {
+      let general = workspaces.find(w => w.id === 'general');
+      if (!general) {
+        general = { id: 'general', name: 'แชตทั่วไป', rootPath: path.join(output, 'general-chat'), threads: [] };
+        workspaces.push(general);
+      }
+      return route.fulfill({ json: general });
     }
     if (pathname === '/api/terminals') {
       return route.fulfill({ json: sessions });
+    }
+    if (pathname === '/api/terminals/spawn') {
+      const body = JSON.parse(route.request().postData() || '{}');
+      const created = {
+        id: `sess-${sessions.length + 1}`,
+        name: body.name || 'New Session',
+        agentType: body.agentType || 'antigravity',
+        wsId: body.wsId || 'ws-1',
+        cwd: output,
+        status: 'running',
+        view: 'terminal',
+        createdAt: Date.now(),
+      };
+      sessions.push(created);
+      return route.fulfill({ json: created });
     }
     if (pathname.endsWith('/chat')) {
       return route.fulfill({ json: { messages: [], running: false } });
@@ -144,6 +168,20 @@ try {
   const sidebarSession2 = page.locator('.sidebar-session', { hasText: 'Codex' });
   await sidebarSession2.click();
   check((await visibleCells.count()) === 3, 'Clicking hidden session in left sidebar restores it to the canvas');
+
+  // 7. Opening a new session switches selection to the newly created session (does not jump back to the first session)
+  await page.getByRole('button', { name: 'เปิด session ใหม่', exact: true }).click();
+  await page.getByRole('button', { name: 'เปิด 1 session', exact: true }).click();
+  await page.locator('#session-sess-4.focused').waitFor({ state: 'visible' });
+  const activeSidebar = page.locator('.sidebar-session.active');
+  check(((await activeSidebar.textContent()) || '').includes('Claude Code'), 'Newly opened session becomes the active selected session instead of reverting to the first session');
+
+  // 8. Opening a new session without selecting a project folder (general chat workspace)
+  await page.getByRole('button', { name: 'เปิด session ใหม่', exact: true }).click();
+  await page.getByLabel('โฟลเดอร์ทำงาน', { exact: true }).selectOption('');
+  await page.getByRole('button', { name: 'เปิด 1 session', exact: true }).click();
+  await page.locator('#session-sess-5.focused').waitFor({ state: 'visible' });
+  check(sessions.at(-1)?.wsId === 'general', 'Opening a session without selecting a folder spawns into general-chat workspace');
 
   check(errors.length === 0, 'Zero page/renderer errors during session hide/restore flow');
   console.log(`\nALL ${checks} CHECKS PASSED!`);

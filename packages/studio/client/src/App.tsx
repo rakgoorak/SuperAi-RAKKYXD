@@ -213,6 +213,7 @@ export function App() {
     requestAnimationFrame(() => composer.current?.focus());
   };
   const [launchType, setLaunchType] = useState("claude-code");
+  const [sessionWs, setSessionWs] = useState("");
   const [count, setCount] = useState(1);
   const launchTotal = launchPlan?.reduce((n, seat) => n + seat.count, 0) || count;
   const [projectName, setProjectName] = useState("");
@@ -245,6 +246,8 @@ export function App() {
     initial("superai-opencode-model", "auto"),
   );
   const workspace = workspaces.find((w) => w.id === activeWs);
+  const isGeneralChatWorkspace = (ws?: Workspace | null) =>
+    Boolean(ws && (ws.id === "general" || ws.name === "แชตทั่วไป" || /[\\/]general-chat$/i.test(ws.rootPath)));
   const [pinnedPickerOpen, setPinnedPickerOpen] = useState(false);
   const [pinnedSearch, setPinnedSearch] = useState("");
   const [projectFileList, setProjectFileList] = useState<string[]>([]);
@@ -347,11 +350,14 @@ export function App() {
   const showError = useCallback((text: string) => {
     setError(text);
   }, []);
+  const refreshSeq = useRef(0);
   const refresh = useCallback(async () => {
+    const seq = ++refreshSeq.current;
     const [w, s] = await Promise.all([
       api<Workspace[]>("/api/workspaces"),
       api<Session[]>("/api/terminals"),
     ]);
+    if (seq !== refreshSeq.current) return;
     setWorkspaces(w);
     setSessions(namedSessions(s));
     setConnected(true);
@@ -473,8 +479,10 @@ export function App() {
     const session = sessionsRef.current.find(s => s.id === target.id);
     if (!session) return;
     if (session.wsId) setActiveWs(session.wsId);
+    setHiddenSessions(current => current.filter(id => id !== session.id));
     setMode("code");
     setSelected(session.id);
+    setTarget("active");
   }), []);
   useEffect(() => saveVoiceSettings(voiceSettings), [voiceSettings]);
   // First launch: walk new users through Node, Git, CLI, project and login.
@@ -536,15 +544,17 @@ export function App() {
   useEffect(() => {
     localStorage.setItem("superai-opencode-model", openCodeModel);
   }, [openCodeModel]);
-  const openSession = (type?: string) => {
+  const openSession = (type?: string, targetWsId?: string) => {
     if (type) setLaunchType(type);
+    const preferredWs = targetWsId !== undefined ? targetWsId : activeWs;
+    const wsObj = workspaces.find((w) => w.id === preferredWs);
+    setSessionWs(wsObj && !isGeneralChatWorkspace(wsObj) ? wsObj.id : "");
     setCount(1);
     setLaunchPlan(null);
     setDialog("session");
   };
   const spawn = () =>
     task(async () => {
-      if (!workspace) throw new Error(tr("กรุณาสร้างโปรเจกต์ก่อน"));
       const plan = launchPlan || [{ type: launchType, count }];
       if (plan.some(seat => seat.type === "opencode") && openCodeModel === "auto" && !(launchPlan ? loadDefaults().opencode?.model : sessionSeat.model)) throw new Error(tr("กำลังตรวจรุ่น OpenCode กรุณารอ หรือเลือกรุ่นเอง"));
       const totals = new Map<string, number>();
@@ -555,22 +565,36 @@ export function App() {
         const capacity = cli.maxSessions - sessions.filter(s => s.agentType === type && ["running", "stopping", "error"].includes(s.status)).length;
         if (amount > capacity) throw new Error(tr`${cli.name} เปิดเพิ่มได้อีก ${Math.max(0, capacity)} session`);
       }
+      const targetWorkspace = (sessionWs ? workspaces.find(w => w.id === sessionWs) : undefined)
+        || await post<Workspace>("/api/workspaces/quick-chat");
+      setWorkspaces(current => current.some(item => item.id === targetWorkspace.id) ? current : [...current, targetWorkspace]);
+      setActiveWs(targetWorkspace.id);
       const remaining = plan.flatMap(seat => Array.from({ length: seat.count }, () => seat.type));
       let opened = 0;
+      let lastOpenedId = "";
       try {
         for (const type of [...remaining]) {
           const cli = sessionProviders.find(c => c.id === type)!;
             const chosen = !launchPlan && type === launchType ? sessionSeat : seatFor(type, "");
             const supportsModel = HEADLESS.includes(type) || isApiProvider(type);
             const session = await post<Session>("/api/terminals/spawn", {
-              agentType: type, wsId: workspace.id,
+              agentType: type, wsId: targetWorkspace.id,
               name: [cli.name, supportsModel && chosen.model].filter(Boolean).join(" · "),
               openCodeModel: type === "opencode" && !chosen.model && openCodeModel !== "auto" ? openCodeModel : undefined,
               ...(supportsModel ? { model: chosen.model, effort: chosen.effort, accountId: chosen.accountId } : {}),
               trustFolder: trustFolders,
             });
             if (session.status === "error") throw new Error(tr`เปิด ${cli.name} ไม่สำเร็จ กรุณาตรวจการติดตั้ง CLI`);
-            setSelected(session.id);
+            const created = namedSessions([session])[0];
+            if (supportsModel && (chosen.model || chosen.effort)) setChatPrefs(created.id, { model: chosen.model, effort: chosen.effort });
+            lastOpenedId = created.id;
+            refreshSeq.current++;
+            setSessions(current => current.some(item => item.id === created.id) ? current : [...current, created]);
+            setHiddenSessions(current => current.filter(id => id !== created.id));
+            newConversationWorkspace.current = null;
+            setSelected(created.id);
+            setTarget("active");
+            setZoomed(false);
             remaining.shift(); opened++;
         }
         setMode("code");
@@ -586,8 +610,13 @@ export function App() {
           setConnected(false);
           setError(tr("อ่านสถานะล่าสุดไม่ได้ กำลังลองเชื่อมต่อใหม่ · session ที่เปิดสำเร็จยังทำงานอยู่"));
         });
+        if (lastOpenedId) {
+          setSelected(lastOpenedId);
+          setTarget("active");
+        }
       }
       setNotice(tr`เปิดแล้ว ${launchTotal} session`);
+      requestAnimationFrame(() => composer.current?.focus());
     });
   const closeSession = (id: string) =>
     task(async () => {
@@ -615,7 +644,9 @@ export function App() {
     const opened = (event: Event) => {
       const id = (event as CustomEvent<string>).detail;
       setMode("code"); setDialog(null);
-      void refresh().then(() => setSelected(id), (e) => showError((e as Error).message));
+      setHiddenSessions(current => current.filter(item => item !== id));
+      newConversationWorkspace.current = null;
+      void refresh().then(() => { setSelected(id); setTarget("active"); }, (e) => showError((e as Error).message));
     };
     window.addEventListener("superai:login-session", opened);
     return () => window.removeEventListener("superai:login-session", opened);
@@ -687,10 +718,12 @@ export function App() {
         await post(`/api/terminals/${session.id}/chat`, { text: draft.trim() || tr("ดูไฟล์แนบนี้"),
           model: chosen.model, effort: chosen.effort, permission: "read", responseStyle: styleToSend(answerStyle), attachments: files.map(file => file.path) });
         setChatPrefs(session.id, { responseStyle: answerStyle });
-        const created = session;
+        const created = namedSessions([session])[0];
+        refreshSeq.current++;
         setWorkspaces(current => current.some(item => item.id === ws.id) ? current : [...current, ws]);
         setSessions(current => current.some(item => item.id === created.id) ? current : [...current, created]);
         setHiddenSessions(current => current.filter(id => id !== created.id));
+        newConversationWorkspace.current = null;
         setActiveWs(ws.id); setSelected(created.id); setTarget("active");
         setDraft(""); attachments.clear(); pendingQuick.current = undefined; starterDraftScopes.current.delete(ws.id);
         saveQuickConversationState(starterDraftScopes.current);
@@ -802,6 +835,7 @@ export function App() {
       if (detail.sessionId) {
         const session = sessions.find((s) => s.id === detail.sessionId);
         if (session?.wsId) setActiveWs(session.wsId);
+        setHiddenSessions(current => current.filter(id => id !== detail.sessionId));
         setSelected(detail.sessionId);
         setTarget("active");
         setDraftFor(composerDraftKey(session?.wsId || activeWs, targetMode, detail.sessionId, "active"), detail.text);
@@ -819,6 +853,7 @@ export function App() {
       if (detail.sessionId) {
         const session = sessions.find(s => s.id === detail.sessionId);
         if (session?.wsId) setActiveWs(session.wsId);
+        setHiddenSessions(current => current.filter(id => id !== detail.sessionId));
         setMode("code"); setSelected(detail.sessionId); setTarget("active");
         setDraftFor(composerDraftKey(session?.wsId || activeWs, "code", detail.sessionId, "active"), current => detail.append ? [current, detail.text].filter(Boolean).join('\n\n') : detail.text);
       } else {
@@ -838,12 +873,15 @@ export function App() {
       const { session, sourceId, side } = (event as CustomEvent<{ session: Session; sourceId: string; side: boolean }>).detail;
       const sourcePrefs = chatPrefs(sourceId);
       setChatPrefs(session.id, { model: sourcePrefs.model, effort: sourcePrefs.effort, permission: sourcePrefs.permission, responseStyle: sourcePrefs.responseStyle });
-      setSessions(current => current.some(item => item.id === session.id) ? current : [...current, session]);
-      if (session.wsId) setActiveWs(session.wsId);
+      const created = namedSessions([session])[0];
+      refreshSeq.current++;
+      setSessions(current => current.some(item => item.id === created.id) ? current : [...current, created]);
+      if (created.wsId) setActiveWs(created.wsId);
       setHiddenSessions(current => side
-        ? [...new Set([...current, ...sessions.filter(item => item.wsId === session.wsId && item.id !== sourceId && item.id !== session.id).map(item => item.id)])].filter(id => id !== sourceId && id !== session.id)
-        : current.filter(id => id !== session.id));
-      setSelected(session.id); setTarget('active'); setMode('code'); setZoomed(false);
+        ? [...new Set([...current, ...sessions.filter(item => item.wsId === created.wsId && item.id !== sourceId && item.id !== created.id).map(item => item.id)])].filter(id => id !== sourceId && id !== created.id)
+        : current.filter(id => id !== created.id));
+      newConversationWorkspace.current = null;
+      setSelected(created.id); setTarget('active'); setMode('code'); setZoomed(false);
       setLayout(side ? 'split' : 'tabs');
       setNotice(side ? tr("เปิด Side chat แล้ว · บริบทพร้อมสำหรับข้อความถัดไป") : tr("สร้างห้องแยกพร้อมประวัติแล้ว · ห้องเดิมยังอยู่"));
       requestAnimationFrame(() => composer.current?.focus());
@@ -1014,13 +1052,18 @@ export function App() {
       session = await post<Session>("/api/terminals/spawn", { agentType: type, wsId, name: cli.name,
         ...(HEADLESS.includes(type) ? { model: chosen.model, effort: chosen.effort } : {}), trustFolder: trustFolders });
       if (session.status === "error") throw new Error(tr`เปิด ${cli.name} ไม่สำเร็จ ตรวจการติดตั้งและบัญชีแล้วลองอีกครั้ง`);
-      const created = session;
+      const created = namedSessions([session])[0];
+      refreshSeq.current++;
       setSessions(current => current.some(s => s.id === created.id) ? current : [...current, created]);
+      session = created;
     }
+    setHiddenSessions(current => current.filter(id => id !== session.id));
+    newConversationWorkspace.current = null;
     setActiveWs(wsId); setSelected(session.id); setTarget("active"); setMode("code");
     if (text.trim()) setDraftFor(composerDraftKey(wsId, "code", session.id, "active"), current => current.trim() && current !== text ? `${current}\n\n${text}` : text);
     confirmDefaults(); closeSetup();
     await refresh().catch(() => showError(tr("เปิดห้องคุยแล้ว แต่ยังอ่านสถานะล่าสุดไม่ได้ กรุณาตรวจการเชื่อมต่อ")));
+    setSelected(session.id); setTarget("active");
     requestAnimationFrame(() => composer.current?.focus());
   };
 
@@ -1128,7 +1171,6 @@ export function App() {
               className="toolbar-button titlebar-btn secondary compact"
               aria-label={tr("สร้าง session")}
               title={t("nav.terminal_desc", "เปิด Terminal หรือหลายห้อง")}
-              disabled={!workspace}
               onClick={() => openSession()}
             >
               <Terminal size={13} />
@@ -1157,38 +1199,68 @@ export function App() {
       <div className="workspace-shell">
         {sidebar && (
           <aside className="project-sidebar">
+            <div className="sidebar-top">
+              <div className="sidebar-primary-row">
+                <button
+                  type="button"
+                  className="sidebar-new-session-btn"
+                  onClick={() => openSession()}
+                >
+                  <Plus size={14} /> {t("sidebar.new_session", "เปิด session ใหม่")}
+                </button>
+                <button
+                  type="button"
+                  className="icon-button new-project"
+                  aria-label={t("sidebar.add_project", "เพิ่มโปรเจกต์")}
+                  title={t("sidebar.add_project", "เพิ่มโปรเจกต์")}
+                  onClick={() => openProject()}
+                >
+                  <FolderPlus size={15} />
+                </button>
+                <button
+                  type="button"
+                  className="icon-button sidebar-collapse-btn"
+                  title={t("sidebar.hide", "ซ่อนแถบโปรเจกต์")}
+                  onClick={() => setSidebar(false)}
+                >
+                  <PanelLeftClose size={15} />
+                </button>
+              </div>
+              <div className="sidebar-search-row">
+                <label className="project-search">
+                  <Search size={13} />
+                  <input
+                    placeholder={t("sidebar.search_projects", "ค้นหาโปรเจกต์")}
+                    aria-label={t("sidebar.search_projects", "ค้นหาโปรเจกต์")}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="icon-button favorite-filter"
+                  aria-label={t("sidebar.favorites", "โปรเจกต์โปรด")}
+                  title={t("sidebar.favorites", "โปรเจกต์โปรด")}
+                  aria-pressed={favoritesOnly}
+                  onClick={() => setFavoritesOnly((value) => !value)}
+                >
+                  <Star size={13} />
+                </button>
+              </div>
+            </div>
             <div className="sidebar-heading">
               <span>{t("sidebar.heading", "พื้นที่ทำงาน")}</span>
-              <button
-                className="icon-button"
-                title={t("sidebar.hide", "ซ่อนแถบโปรเจกต์")}
-                onClick={() => setSidebar(false)}
-              >
-                <PanelLeftClose size={16} />
-              </button>
             </div>
-            <button className="new-project" onClick={() => openProject()}>
-              <Plus size={16} /> {t("sidebar.add_project", "เพิ่มโปรเจกต์")}{" "}
-            </button>
-            <label className="project-search">
-              <Search size={14} />
-              <input
-                placeholder={t("sidebar.search_projects", "ค้นหาโปรเจกต์")}
-                aria-label={t("sidebar.search_projects", "ค้นหาโปรเจกต์")}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </label>
-            <button type="button" className="text-button favorite-filter" aria-pressed={favoritesOnly} onClick={() => setFavoritesOnly(value => !value)}><Star size={13} />{t("sidebar.favorites", "โปรเจกต์โปรด")}</button>
             <div className="project-list">
               {favoritesOnly && !workspaces.some(item => item.favorite) && <p className="muted" style={{ padding: '8px 14px', fontSize: 12 }}>{t("sidebar.no_favorites", "ยังไม่มีโปรเจกต์โปรด เพิ่มได้จากเมนู … ของโปรเจกต์")}</p>}
               {workspaces
                 .filter((w) =>
                   w.name.toLowerCase().includes(search.toLowerCase()) && (!favoritesOnly || w.favorite === true),
                 )
-                .sort((a, b) => Number(b.favorite === true) - Number(a.favorite === true))
+                .sort((a, b) => Number(isGeneralChatWorkspace(b)) - Number(isGeneralChatWorkspace(a)) || Number(b.favorite === true) - Number(a.favorite === true))
                 .map((ws) => {
                   const entries = sessions.filter((s) => s.wsId === ws.id);
+                  const isGeneral = isGeneralChatWorkspace(ws);
                   return (
                     <div className="project-group" key={ws.id}>
                       <div
@@ -1200,14 +1272,14 @@ export function App() {
                             setActiveWs(ws.id);
                             setMenu("");
                           }}
-                          title={ws.rootPath}
+                          title={isGeneral ? ws.name : ws.rootPath}
                         >
                           {activeWs === ws.id ? (
                             <ChevronDown size={13} />
                           ) : (
                             <ChevronRight size={13} />
                           )}
-                          <Folder size={16} />
+                          {isGeneral ? <MessageSquare size={15} /> : <Folder size={15} />}
                           <span>{ws.name}</span>
                           {ws.favorite && <Star size={12} className="project-favorite-mark" aria-label={tr("โปรเจกต์โปรด")} />}
                           {entries.filter((s) => s.status === "running")
@@ -1253,6 +1325,8 @@ export function App() {
                         <div className="project-sessions">
                           {entries.map((s) => {
                             const isHidden = hiddenSessions.includes(s.id);
+                            const providerLabel = providerIdentity(s.agentType).label;
+                            const duplicateProvider = s.name.toLowerCase().startsWith(providerLabel.toLowerCase()) && paneView(s) !== "terminal";
                             return (
                               <div key={s.id} className={`sidebar-session-row ${isHidden ? "is-hidden" : ""}`}>
                                 <button
@@ -1263,7 +1337,7 @@ export function App() {
                                   }}
                                 >
                                   <ProviderBadge provider={s.agentType} compact />
-                                  <span className="sidebar-session-copy"><span>{s.name}</span><small>{providerIdentity(s.agentType).label}{paneView(s) === "terminal" ? ' · Terminal' : ''}</small></span>
+                                  <span className="sidebar-session-copy"><span>{s.name}</span><small className={duplicateProvider ? "sr-only" : ""}>{providerLabel}{paneView(s) === "terminal" ? ' · Terminal' : ''}</small></span>
                                   {isHidden && <small className="sidebar-hidden-badge">{tr("ซ่อนอยู่")}</small>}
                                   <span
                                     className={`status-dot ${s.status === "running" || paneView(s) === "chat" ? "" : s.status === "error" ? "bad" : "offline"}`}
@@ -1294,12 +1368,6 @@ export function App() {
                               </div>
                             );
                           })}
-                          <button
-                            className="add-session-link"
-                            onClick={() => openSession()}
-                          >
-                            <Plus size={13} /> {t("sidebar.new_session", "เปิด session ใหม่")}
-                          </button>
                         </div>
                       )}
                     </div>
@@ -1311,15 +1379,13 @@ export function App() {
                 </p>
               )}
             </div>
-            <div className="sidebar-bottom"><button onClick={() => setDialog("history")}><Search size={17} /> {t("sidebar.search_history", "ค้นหาประวัติ")}</button>
-              <button onClick={() => setDialog("setup")} title={t("sidebar.getting_started_sub", "ตรวจความพร้อมและตั้งค่าเริ่มต้น")}>
-                <Rocket size={17} />
-                <span>
-                  {t("sidebar.getting_started", "เริ่มต้นใช้งาน")}<small>{t("sidebar.getting_started_sub", "ตรวจ Node, Git, CLI และบัญชี")}</small>
-                </span>
+            <div className="sidebar-bottom">
+              <button onClick={() => setDialog("history")} title={t("sidebar.search_history", "ค้นหาประวัติ")}>
+                <Search size={14} />
+                <span>{t("sidebar.search_history", "ค้นหาประวัติ")}</span>
               </button>
               <button onClick={() => setDialog("skills")} disabled={!workspace} title={t("sidebar.skills_sub", "ให้ AI เสนอ skill ที่จำเป็นต่อโปรเจกต์นี้")}>
-                <Puzzle size={17} />
+                <Puzzle size={14} />
                 <span>{t("sidebar.skills", "Skills")}<small>{t("sidebar.skills_sub", "AI เสนอ คุณกดติดตั้ง")}</small></span>
               </button>
               <button
@@ -1330,22 +1396,28 @@ export function App() {
                 }}
                 title={t("sidebar.mcp_sub", "จัดการ MCP Servers และเครื่องมือภายนอกของ AI แต่ละ Provider")}
               >
-                <Server size={17} />
+                <Server size={14} />
                 <span>{t("sidebar.mcp", "MCP Servers")}<small>{t("sidebar.mcp_sub", "เชื่อมเครื่องมือ AI แต่ละค่าย")}</small></span>
               </button>
-              <button onClick={openSettings}>
-                <Settings size={17} />
+              <button onClick={() => setDialog("setup")} title={t("sidebar.getting_started_sub", "ตรวจความพร้อมและตั้งค่าเริ่มต้น")}>
+                <Rocket size={14} />
+                <span>
+                  {t("sidebar.getting_started", "เริ่มต้นใช้งาน")}<small>{t("sidebar.getting_started_sub", "ตรวจ Node, Git, CLI และบัญชี")}</small>
+                </span>
+              </button>
+              <button onClick={openSettings} title={t("sidebar.settings", "การตั้งค่า")}>
+                <Settings size={14} />
                 <span>{t("sidebar.settings", "การตั้งค่า")}</span>
               </button>
               {update && (
                 <button onClick={() => setDialog("update")} className={update.status === "available" || update.status === "ready" ? "update-ready" : ""}
                   title={update.storeManaged ? tr("ตรวจเวอร์ชันใหม่ แล้วอัปเดตผ่าน Microsoft Store") : tr("ตรวจและติดตั้งเวอร์ชันใหม่จาก GitHub Releases")}>
                   {update.status === "checking" ? (
-                    <LoaderCircle size={17} className="spin" />
+                    <LoaderCircle size={14} className="spin" />
                   ) : update.status === "latest" ? (
-                    <Check size={17} />
+                    <Check size={14} />
                   ) : (
-                    <Download size={17} />
+                    <Download size={14} />
                   )}
                   <span>
                     {update.status === "available"
@@ -2020,7 +2092,7 @@ export function App() {
               </div>
             )}
             {dialog === "history" && <HistoryPanel workspaces={workspaces} sessions={sessions} onSelect={openHistoryEntry} />}
-            {dialog === "changes" && workspace && <ChangesPanel workspaceId={workspace.id} sessions={sessions} onSelectSession={(id) => { setSelected(id); setDialog(null); }} onPreview={() => { setDialog(null); setDockView("browser"); setPreview(true); }} />}
+            {dialog === "changes" && workspace && <ChangesPanel workspaceId={workspace.id} sessions={sessions} onSelectSession={(id) => { unhideSession(id); setDialog(null); }} onPreview={() => { setDialog(null); setDockView("browser"); setPreview(true); }} />}
             {dialog === "session-delete" && deleteSession && <><p className="confirm-description"><strong>{deleteSession.name}</strong><br />{tr("ประวัติแชตใน session นี้จะถูกลบด้วย (หากต้องการพักไว้ชั่วคราว กด “ซ่อนไว้ก่อน” เพื่อเปิดกลับมาใช้ทีหลังได้)")}</p><div className="dialog-footer"><button className="secondary" autoFocus onClick={closeDialog}>{tr("ยกเลิก")}</button><button className="secondary" disabled={busy} onClick={() => { hideSession(deleteSession.id); setDialog(null); }}><EyeOff size={15} /> {tr("ซ่อนไว้ก่อน (ไม่ลบ)")}</button><button className="danger-button" disabled={busy} onClick={() => { closeSession(deleteSession.id); setDialog(null); }}>{tr("ลบ session")}</button></div></>}
             {dialog === "session" && (
               <>
@@ -2094,11 +2166,23 @@ export function App() {
                       )}
                     </select>
                   </label>
-                  <p>
-                    {tr("แต่ละห้องคุยทำงานในโฟลเดอร์")}
-                    <br />
-                    <strong>{workspace?.name}</strong>
-                  </p>
+                  <label>
+                    {tr("โฟลเดอร์ทำงาน")}
+                    <select
+                      aria-label={tr("โฟลเดอร์ทำงาน")}
+                      value={sessionWs}
+                      onChange={(e) => setSessionWs(e.target.value)}
+                    >
+                      <option value="">{tr("คุยทั่วไปโดยไม่เลือกโฟลเดอร์")}</option>
+                      {workspaces
+                        .filter((w) => !isGeneralChatWorkspace(w))
+                        .map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {w.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
                 </div>
                 {launchCli && !launchCli.available && (
                   <p className="inline-error">

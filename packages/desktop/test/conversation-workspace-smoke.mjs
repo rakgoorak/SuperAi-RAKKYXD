@@ -126,7 +126,7 @@ try {
   sockets.get('ui-0').send(JSON.stringify({ type: 'state', running: true }));
   sockets.get('ui-0').send(JSON.stringify({ type: 'activity', activity: { startedAt: Date.now(), outputTokens: 0 } }));
   await pane.locator('.chat-working').waitFor();
-  check((await pane.locator('.chat-working').innerText()).includes('กำลังทำงานกับ'), 'working state identifies the AI instead of showing only elapsed time');
+  check((await pane.locator('.chat-working').innerText()).includes('กำลังทำงาน'), 'working state shows working status alongside elapsed time');
   if (process.argv.includes('--stream-only')) await page.screenshot({ path: path.join(output, 'chat-working.png') });
   const streamStarted = Date.now();
   for (let index = 0; index < 500; index++) {

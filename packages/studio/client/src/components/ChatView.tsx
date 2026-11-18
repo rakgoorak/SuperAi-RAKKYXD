@@ -507,7 +507,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   const workingTool = [...turnItems].reverse().find((item): item is ToolItem => item.kind === 'tool' && item.status === 'running');
   const workingLabel = pendingPermissions.length ? tr("รอคำอนุญาต")
     : activity?.quiet ? tr("รอข้อมูลเพิ่มเติม")
-      : workingTool ? tr`กำลังทำงาน: ${stepLabel(workingTool.title)}` : tr`กำลังทำงานกับ ${name}`;
+      : workingTool ? tr`กำลังทำงาน: ${stepLabel(workingTool.title)}` : tr("กำลังทำงาน");
   const popupPermission = active && pendingPermissions.find(item => !dismissedPermissions.includes(item.id));
   const queueAction = (id: string, action: 'send' | 'remove') => {
     post(`/api/terminals/${sessionId}/chat/queue/${id}/${action}`).catch((error) => setProblem((error as Error).message));

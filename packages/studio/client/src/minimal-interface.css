@@ -18,23 +18,39 @@
 #root .toolbar-actions :is(.toolbar-button, .secondary.compact, .primary.compact):hover { background: var(--raised); color: var(--text); }
 #root .toolbar-actions :is(.toolbar-button.selected, .primary.compact) { background: var(--raised); color: var(--text); }
 #root .toolbar-actions button:disabled { background: transparent; color: var(--dim); opacity: .45; }
-#root .project-sidebar { width: 232px; min-width: 232px; background: #20201e; border-right: 0; }
-#root .sidebar-heading { color: var(--dim); font-size: 11px; font-weight: 400; }
-#root .new-project { min-height: 36px; background: transparent; border: 0; border-radius: 7px; padding: 8px 10px; font-size: 13px; font-weight: 400; color: var(--text-secondary); box-shadow: none; }
-#root .new-project:hover { background: var(--raised); color: var(--text); }
-#root .project-search { background: transparent; border: 0; border-radius: 7px; color: var(--dim); }
-#root .project-search input { background: transparent; border: 0; color: var(--text); font-size: 12px; }
-#root .project-search:focus-within { background: #ffffff05; }
-#root .project-row { background: transparent; border: 0; }
-#root .project-row.active { background: transparent; }
-#root .project-select { font-weight: 500; color: var(--text-secondary); }
-#root .project-sessions { border-left: 0; }
-#root .sidebar-session { color: var(--text-secondary); padding: 8px 10px; border-radius: 7px; }
-#root .sidebar-session.active { background: #333330; color: var(--text); }
-#root .sidebar-session-copy small { font-size: 10px; }
-#root .sidebar-bottom { background: transparent; border-top: 0; padding-top: 12px; }
-#root .sidebar-bottom > button { font-weight: 400; font-size: 12px; color: var(--text-secondary); }
-#root .sidebar-bottom > button:hover { background: var(--raised); }
+#root .project-sidebar { width: 236px; min-width: 236px; background: #1d1d1b; border-right: 1px solid #2b2b27; }
+#root .sidebar-top { display: flex; flex-direction: column; gap: 6px; padding: 10px 10px 4px; }
+#root .sidebar-primary-row { display: flex; align-items: center; gap: 4px; }
+#root .sidebar-new-session-btn { flex: 1; min-width: 0; min-height: 33px; padding: 6px 10px; display: inline-flex; align-items: center; justify-content: flex-start; gap: 7px; border-radius: 8px; background: #2b2a26; border: 1px solid #3f3d36; color: var(--text); font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: none; }
+#root .sidebar-new-session-btn svg { color: var(--accent); flex-shrink: 0; }
+#root .sidebar-new-session-btn:hover { background: #35342e; border-color: #575246; color: #fff; }
+#root .sidebar-primary-row .icon-button, #root .new-project { width: 32px; min-width: 32px; height: 33px; min-height: 33px; margin: 0; padding: 0; border-radius: 8px; background: transparent; border: 1px solid transparent; color: var(--dim); display: inline-grid; place-items: center; box-shadow: none; }
+#root .sidebar-primary-row .icon-button:hover, #root .new-project:hover { background: var(--raised); color: var(--text); }
+#root .sidebar-search-row { display: flex; align-items: center; gap: 4px; padding: 0 4px 0 9px; min-height: 30px; border-radius: 7px; background: #151513; border: 1px solid #292925; }
+#root .sidebar-search-row:focus-within { border-color: var(--control-border); background: #181816; }
+#root .project-search { flex: 1; min-width: 0; margin: 0; padding: 0; background: transparent; border: 0; border-radius: 6px; color: var(--dim); }
+#root .project-search input { background: transparent; border: 0; padding: 4px 0; color: var(--text); font-size: 11.5px; outline: none; }
+#root .sidebar-search-row .favorite-filter { width: 24px; min-width: 24px; height: 24px; min-height: 24px; margin: 0; padding: 0; border-radius: 5px; color: var(--dim); display: inline-grid; place-items: center; }
+#root .sidebar-search-row .favorite-filter[aria-pressed="true"] { color: var(--accent); background: #332e27; }
+#root .sidebar-heading { padding: 8px 14px 4px; color: #8c8b85; font-size: 10.5px; font-weight: 500; letter-spacing: 0.02em; }
+#root .project-list { padding: 2px 8px 8px; }
+#root .project-group { margin-bottom: 3px; }
+#root .project-row { min-height: 32px; height: 32px; background: transparent; border: 0; border-radius: 7px; align-items: center; }
+#root .project-row.active { background: #272723; }
+#root .project-select { padding: 5px 7px; gap: 7px; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+#root .project-row.active .project-select { color: var(--text); }
+#root .project-more { margin: 0 2px 0 0; opacity: 0.55; }
+#root .project-row:hover .project-more, #root .project-more:focus-visible { opacity: 1; }
+#root .project-sessions { margin: 2px 0 6px 14px; padding: 0 0 0 8px; border-left: 1px solid #2e2d29; gap: 2px; }
+#root .sidebar-session { color: var(--text-secondary); min-height: 30px; padding: 5px 8px; border-radius: 6px; font-size: 11.5px; gap: 7px; }
+#root .sidebar-session.active { background: #2f2d27; color: #f2e5d7; box-shadow: inset 2px 0 0 var(--accent); }
+#root .sidebar-session-copy small { font-size: 9.5px; color: #8e8d87; line-height: 1.15; }
+#root .sidebar-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: #181816; border-top: 1px solid #292925; padding: 8px 8px 10px; }
+#root .sidebar-bottom > button { min-height: 29px; padding: 4px 7px; gap: 6px; border-radius: 6px; font-weight: 400; font-size: 11px; color: var(--dim); background: #22221f; border: 1px solid #2d2d28; min-width: 0; overflow: hidden; }
+#root .sidebar-bottom > button > svg { flex-shrink: 0; width: 13px; height: 13px; }
+#root .sidebar-bottom > button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#root .sidebar-bottom > button:hover:not(:disabled) { background: var(--raised); color: var(--text); border-color: #3f3e38; }
+#root .sidebar-bottom > button:nth-child(5):last-child { grid-column: 1 / -1; }
 #root .workspace-welcome { width: 100%; max-width: 780px; padding: 40px 28px; }
 #root .workspace-welcome h2 { font-size: clamp(25px, 2.3vw, 32px); font-weight: 500; letter-spacing: -.02em; line-height: 1.5; }
 #root .workspace-welcome > p { color: var(--dim); font-size: 13px; line-height: 1.8; margin: 12px 0 28px; }
