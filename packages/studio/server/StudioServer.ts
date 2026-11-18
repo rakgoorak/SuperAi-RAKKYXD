@@ -89,9 +89,12 @@ export class StudioServer {
   private browserTarget = "app";
   /** Open tabs saved right before an in-app update, reopened on the next start. */
   private restoreFile: string;
+  private clientDistPath: string = "";
+  private fallbackClientDist: string = "";
 
-  constructor(options?: { port?: number; customWorkspacePath?: string; browser?: BrowserHandler }) {
+  constructor(options?: { port?: number; customWorkspacePath?: string; browser?: BrowserHandler; clientDist?: string }) {
     if (options?.browser) registerBrowserHandler(options.browser);
+    if (options?.clientDist) this.clientDistPath = options.clientDist;
     this.agentRuns = new AgentRunManager(
       options?.customWorkspacePath
         ? path.join(
@@ -1383,21 +1386,40 @@ export class StudioServer {
     // Serve the built UI (packages/studio/client/dist), resolved relative to this
     // file so it works no matter which folder the app is launched from.
     const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-    const clientDist = [
+    this.fallbackClientDist = [
       path.resolve(moduleDir, "../client/dist"),
       path.join(process.cwd(), "packages", "studio", "client", "dist"),
-    ].find((p) => fs.existsSync(path.join(p, "index.html")));
-    if (clientDist) {
+    ].find((p) => fs.existsSync(path.join(p, "index.html"))) || "";
+
+    if (!this.clientDistPath || !fs.existsSync(path.join(this.clientDistPath, "index.html"))) {
+      this.clientDistPath = this.fallbackClientDist;
+    }
+
+    if (this.clientDistPath) {
       console.log(
-        `[StudioServer] Serving static client dist from: ${clientDist}`,
+        `[StudioServer] Serving static client dist from: ${this.clientDistPath}`,
       );
-      this.app.use(express.static(clientDist));
+      this.app.use((req, res, next) => {
+        if (req.path.startsWith("/api") || req.path.startsWith("/ws")) return next();
+        const dist = this.clientDistPath || this.fallbackClientDist;
+        if (!dist) return next();
+        express.static(dist)(req, res, next);
+      });
       this.app.get("/{*splat}", (_req: Request, res: Response) => {
-        res.sendFile(path.join(clientDist, "index.html"));
+        const dist = this.clientDistPath || this.fallbackClientDist;
+        res.sendFile(path.join(dist, "index.html"));
       });
     } else {
       console.warn(`[StudioServer] WARNING: client dist index.html not found!`);
     }
+
+    this.app.get("/api/client-bundle/status", (_req: Request, res: Response) => {
+      res.json({
+        activeSource: this.clientDistPath === this.fallbackClientDist ? "builtin" : "dynamic",
+        activeDist: this.clientDistPath,
+        fallbackDist: this.fallbackClientDist,
+      });
+    });
   }
 
   private setupWebSockets(): void {
@@ -1477,6 +1499,19 @@ export class StudioServer {
 
   public getPort(): number {
     return this.port;
+  }
+
+  public setClientDist(newDist: string): boolean {
+    if (newDist && fs.existsSync(path.join(newDist, "index.html"))) {
+      this.clientDistPath = newDist;
+      console.log(`[StudioServer] Switched active client dist to: ${newDist}`);
+      return true;
+    }
+    return false;
+  }
+
+  public getClientDist(): string {
+    return this.clientDistPath;
   }
 
   public start(): Promise<void> {

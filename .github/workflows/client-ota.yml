@@ -1,0 +1,71 @@
+name: Build & Publish Dynamic Client Assets (OTA)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'packages/studio/client/**'
+      - '.github/workflows/client-ota.yml'
+  workflow_dispatch:
+    inputs:
+      target_tag:
+        description: 'Release tag to attach client bundle to (defaults to latest)'
+        required: false
+        default: 'latest'
+
+concurrency:
+  group: client-ota-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ota:
+    name: Package and Publish Client Web Bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Core and Studio
+        run: |
+          npm --workspace=@superai-rakkyxd/core run build
+          npm --workspace=@superai-rakkyxd/studio run build
+
+      - name: Build Web Client Bundle
+        run: npm --workspace=@superai-rakkyxd/client run build
+
+      - name: Create Client Bundle ZIP & Checksum
+        run: |
+          cd packages/studio/client/dist
+          zip -r ../../../../superai-client-dist.zip .
+          cd ../../../..
+          sha256sum superai-client-dist.zip > superai-client-dist.zip.sha256
+          echo "SHA-256 Checksum:"
+          cat superai-client-dist.zip.sha256
+
+      - name: Publish to Public Releases Repository
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          PUBLIC_REPO: rakgoorak/SuperAi-RAKKYXD-releases
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::RELEASES_TOKEN secret is not configured; skipping upload."
+            exit 0
+          fi
+          TARGET_TAG="${{ github.event.inputs.target_tag || 'latest' }}"
+          if [ "$TARGET_TAG" = "latest" ]; then
+            TARGET_TAG=$(gh release list --repo "$PUBLIC_REPO" --limit 1 --json tagName --jq '.[0].tagName')
+          fi
+          echo "Uploading dynamic client assets to $PUBLIC_REPO at tag $TARGET_TAG..."
+          gh release upload "$TARGET_TAG" superai-client-dist.zip superai-client-dist.zip.sha256 --repo "$PUBLIC_REPO" --clobber
+          echo "Successfully published dynamic client assets."

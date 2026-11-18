@@ -239,6 +239,14 @@ export function App() {
   useEffect(() => {
     try { localStorage.setItem("superai-trust-folders", trustFolders ? "1" : "0"); } catch {}
   }, [trustFolders]);
+
+  useEffect(() => {
+    const desktop = window.superai;
+    if (!desktop?.onClientUpdateReady) return;
+    return desktop.onClientUpdateReady(() => {
+      setNotice(tr("หน้าตาโปรแกรมได้รับการอัปเดตเบื้องหลังแล้ว กด Ctrl+R หรือเปิดใหม่เพื่อเริ่มใช้"));
+    });
+  }, []);
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(loadVoiceSettings);
   const setupShown = useRef(false);
   const [checkingModels, setCheckingModels] = useState(false);

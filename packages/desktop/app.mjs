@@ -10,6 +10,7 @@ import { createComputerControl } from "./computer-control.mjs";
 import { normalizeBrowserUrl } from "./browser-url.mjs";
 import { prepareDesktopPath } from "./platform-env.mjs";
 import { Updater, STORE_URL } from "./updater.mjs";
+import { ClientBundleUpdater } from "./client-updater.mjs";
 import { UsagePing } from "./usage.mjs";
 import { createTrayController } from './tray.mjs';
 import { tr } from './i18n.mjs';
@@ -53,6 +54,11 @@ const updater = new Updater({
   // SUPERAI_UPDATE_TEST lets a dev build exercise the real download/install path.
   packaged: app.isPackaged || process.env.SUPERAI_UPDATE_TEST === "1",
   onState: (state) => window?.webContents.send("update:state", state),
+});
+const clientUpdater = new ClientBundleUpdater({
+  userDataDir: app.getPath("userData"),
+  builtInDist: path.resolve(directory, "../studio/client/dist"),
+  onState: (state) => window?.webContents.send("client-update:state", state),
 });
 const sanitizeLog = (str) => {
   return String(str || "")
@@ -247,6 +253,32 @@ ipcMain.handle("update:action", async (e, action) => {
   if (action === "install") return applyUpdate();
   throw new Error(tr("คำสั่งอัปเดตไม่ถูกต้อง"));
 });
+ipcMain.handle("client-update:action", async (e, action, payload) => {
+  trusted(e);
+  if (action === "state") return clientUpdater.state;
+  if (action === "check") return clientUpdater.check();
+  if (action === "sync") {
+    const res = await clientUpdater.sync();
+    if (res.status === "ready") server?.setClientDist(clientUpdater.getActiveDist());
+    return res;
+  }
+  if (action === "apply-local") {
+    const res = await clientUpdater.applyLocalBundle(payload);
+    if (res.status === "ready") server?.setClientDist(clientUpdater.getActiveDist());
+    return res;
+  }
+  if (action === "reload") {
+    if (window && !window.isDestroyed()) window.webContents.reload();
+    return { reloaded: true };
+  }
+  if (action === "reset") {
+    const res = await clientUpdater.resetToBuiltIn();
+    server?.setClientDist(clientUpdater.getActiveDist());
+    if (window && !window.isDestroyed()) window.webContents.reload();
+    return res;
+  }
+  throw new Error(tr("คำสั่งอัปเดต UI ไม่ถูกต้อง"));
+});
 // Anonymous usage count (see usage.mjs). Only installed builds count, never dev or test runs.
 let usage;
 const usagePing = () => usage ||= new UsagePing({
@@ -375,6 +407,7 @@ else {
           customWorkspacePath: process.env.SUPERAI_DATA_DIR
             ? path.join(process.env.SUPERAI_DATA_DIR, "workspaces.json")
             : undefined,
+          clientDist: clientUpdater.getActiveDist(),
         });
         try {
           await candidate.start();
@@ -482,6 +515,28 @@ else {
       if (updater.packaged && !process.env.SUPERAI_TEST_MODE) {
         setTimeout(() => void checkForUpdate(), 4000);
         setInterval(() => void checkForUpdate(), 30 * 60_000);
+      }
+      async function checkClientBundle() {
+        try {
+          const state = await clientUpdater.check();
+          if (state.status === "available") {
+            const syncState = await clientUpdater.sync();
+            if (syncState.status === "ready") {
+              server?.setClientDist(clientUpdater.getActiveDist());
+              window?.webContents.send("client-update:ready", {
+                installedAt: syncState.bundleInfo?.installedAt,
+                releaseTag: syncState.bundleInfo?.releaseTag,
+              });
+              await log(`Dynamic client bundle updated from ${syncState.bundleInfo?.releaseTag}`);
+            }
+          }
+        } catch (err) {
+          await log(`Client bundle check failed: ${err.message}`);
+        }
+      }
+      if (!process.env.SUPERAI_TEST_MODE) {
+        setTimeout(() => void checkClientBundle(), 6000);
+        setInterval(() => void checkClientBundle(), 60 * 60_000);
       }
     } catch (error) {
       await log(error.stack || error.message);
