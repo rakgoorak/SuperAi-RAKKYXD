@@ -53,7 +53,8 @@
     "test:provider-conversation": "node packages/desktop/test/provider-conversation-smoke.mjs",
     "package:msix": "node scripts/package-msix.mjs",
     "test:msix": "node --test scripts/package-msix.test.mjs",
-    "test:usage-consent": "node packages/desktop/test/usage-consent-smoke.mjs"
+    "test:usage-consent": "node packages/desktop/test/usage-consent-smoke.mjs",
+    "test:hunk-review": "node packages/desktop/test/hunk-review-smoke.mjs"
   },
   "devDependencies": {
     "@electron/packager": "^18.3.6",
