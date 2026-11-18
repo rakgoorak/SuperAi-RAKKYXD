@@ -55,6 +55,7 @@ import { api, post, Workspace, Cli, Session, Run, Seat, togglePinnedFile } from 
 import { MessageContextChips } from './components/MessageContextChips';
 import { contextPrompt, saveMessageContexts } from './conversationContext';
 import { useResponseStyle } from './responseStyle';
+import { loadTokenSaver, styleToSend } from './tokenSaver';
 import { ResponseStyleSelect } from './components/ResponseStyleSelect';
 import { ComposerOptions } from './components/ComposerOptions';
 import { ProjectContextStatus } from './components/ProjectContextStatus';
@@ -670,7 +671,7 @@ export function App() {
         const files: SavedAttachment[] = [];
         for (const item of attachments.items) files.push(await uploadAttachment(`/api/workspaces/${ws.id}/attachments`, item.file));
         await post(`/api/terminals/${session.id}/chat`, { text: draft.trim() || tr("ดูไฟล์แนบนี้"),
-          model: chosen.model, effort: chosen.effort, permission: "read", responseStyle: answerStyle, attachments: files.map(file => file.path) });
+          model: chosen.model, effort: chosen.effort, permission: "read", responseStyle: styleToSend(answerStyle), attachments: files.map(file => file.path) });
         setChatPrefs(session.id, { responseStyle: answerStyle });
         const created = session;
         setWorkspaces(current => current.some(item => item.id === ws.id) ? current : [...current, ws]);
@@ -722,7 +723,7 @@ export function App() {
               model: prefs.model,
               effort: prefs.effort,
               permission: prefs.permission,
-              responseStyle: prefs.responseStyle,
+              responseStyle: styleToSend(prefs.responseStyle),
               includeProjectContext: prefs.includeProjectContext,
               ...(skillId ? { skillId } : {}),
               attachments: saved.map((file) => file.path),
@@ -761,10 +762,10 @@ export function App() {
         let body: Record<string, unknown>;
         if (mode === "agent") {
           if (!agentConfig) throw new Error(tr("กรุณาเลือก Main และ Sub-agent ก่อน"));
-          body = { mode, prompt, attachments: files, allowTools: agentConfig.allowTools ?? allowTools, main: agentConfig.main, subagents: agentConfig.subagents, responseStyle: answerStyle, clarify: agentConfig.clarify };
+          body = { mode, prompt, attachments: files, allowTools: agentConfig.allowTools ?? allowTools, main: agentConfig.main, subagents: agentConfig.subagents, responseStyle: styleToSend(answerStyle), tokenSaver: loadTokenSaver(), clarify: agentConfig.clarify };
         } else {
           if (!chatConfig) throw new Error(tr("กรุณาเลือก AI ที่จะถามก่อน"));
-          body = { mode, prompt, attachments: files, panel: chatConfig.panel, summarizer: chatConfig.summarizer, summaryStyle: chatConfig.style, responseStyle: answerStyle, clarify: chatConfig.clarify };
+          body = { mode, prompt, attachments: files, panel: chatConfig.panel, summarizer: chatConfig.summarizer, summaryStyle: chatConfig.style, responseStyle: styleToSend(answerStyle), tokenSaver: loadTokenSaver(), clarify: chatConfig.clarify };
         }
         if (activeRun && activeRun.wsId === workspace.id) {
           if (queuedRun) throw new Error(tr("มีข้อความรอคิวอยู่แล้ว ยกเลิกข้อความนั้นก่อน หรือรอให้ส่งไป"));

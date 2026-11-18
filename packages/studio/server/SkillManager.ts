@@ -17,6 +17,8 @@ export const SKILL_SOURCES = [
   { id: "vercel-tools", label: "Vercel Tools", repo: "vercel-labs/skills", branch: "main", prefix: "skills/" },
   { id: "cloudflare", label: "Cloudflare Security", repo: "cloudflare/security-audit-skill", branch: "main", prefix: "skills/" },
   { id: "supabase", label: "Supabase", repo: "supabase/agent-skills", branch: "main", prefix: "skills/" },
+  // Addy Osmani (Chrome team), MIT: accessibility, performance, Core Web Vitals, SEO and web best practices.
+  { id: "web-quality", label: "Web Quality (Addy Osmani)", repo: "addyosmani/web-quality-skills", branch: "main", prefix: "skills/" },
 ] as const;
 export const SKILL_TARGETS = [".claude/skills", ".agents/skills"];
 const MARKER = ".superai-skill.json";
@@ -311,7 +313,7 @@ export class SkillManager {
     const lines: string[] = [];
     try {
       const entries = fs.readdirSync(root, { withFileTypes: true }).filter((e) => !e.name.startsWith(".") && e.name !== "node_modules").slice(0, 60);
-      lines.push(`ไฟล์/โฟลเดอร์บนสุด: ${entries.map((e) => (e.isDirectory() ? `${e.name}/` : e.name)).join(", ")}`);
+      lines.push(`Top-level files/folders: ${entries.map((e) => (e.isDirectory() ? `${e.name}/` : e.name)).join(", ")}`);
     } catch {}
     for (const file of ["package.json", "requirements.txt", "pyproject.toml", "Cargo.toml", "go.mod", "pom.xml", "README.md"]) {
       try {
@@ -322,7 +324,7 @@ export class SkillManager {
         } else lines.push(`${file}:\n${text.slice(0, 1500)}`);
       } catch {}
     }
-    return lines.join("\n\n") || "โปรเจกต์ว่าง";
+    return lines.join("\n\n") || "Empty project";
   }
 
   /** Ask the chosen AI which official skills fit this project. Nothing is installed here. */
@@ -331,15 +333,15 @@ export class SkillManager {
     const catalog = await this.catalog();
     const installed = this.installed(root).map((s) => s.name);
     const options = catalog.filter((s) => !installed.includes(s.name));
-    const prompt = `ช่วยเลือก Agent Skills ที่จำเป็นต่อการทำงานในโปรเจกต์นี้ เลือกเฉพาะที่มีประโยชน์จริง 0-5 รายการ
-${goal ? `งานที่ผู้ใช้จะทำ: ${goal.slice(0, 2000)}\n` : ""}
-ข้อมูลโปรเจกต์:
+    const prompt = `Pick the Agent Skills this project needs: only ones that are truly useful, 0-5 of them.
+${goal ? `What the user will work on: ${goal.slice(0, 2000)}\n` : ""}
+Project information:
 ${this.projectSummary(root)}
 
-skill ที่มีให้เลือก (source/name: คำอธิบาย):
+Skills to choose from (source/name: description):
 ${options.map((s) => `${s.source}/${s.name}: ${s.description}`).join("\n")}
 
-ตอบเป็น JSON อย่างเดียว: [{"source":"anthropic","name":"ชื่อ","reason":"เหตุผลสั้นๆ เป็นภาษา ${appLanguage()}"}]`;
+Reply with JSON only: [{"source":"anthropic","name":"name","reason":"short reason in ${appLanguage()}"}]`;
     const provider = seat.provider.startsWith("cli:")
       ? new CliProvider(seat.provider, root, signal, false, seat.model, false, [], seat.effort, undefined, undefined, seat.accountId || 'system')
       : new LocalProvider(seat.provider, signal);
