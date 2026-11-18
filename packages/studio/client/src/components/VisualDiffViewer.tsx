@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlignJustify, Check, Columns2, Copy, FileText, Minus, Plus, RotateCcw } from 'lucide-react';
+import { AlignJustify, Check, Columns2, Copy, FileText, ListChecks, Minus, Plus, RotateCcw, Undo2 } from 'lucide-react';
 import { post } from '../api';
 import {
   computeDiffLines,
   computeSideBySideRows,
+  diffHunks,
   type DiffLine,
   type DiffType,
   type SideBySideRow,
@@ -37,13 +38,23 @@ export function VisualDiffViewer({
   filePath,
   original,
   modified,
-  diffText: _diffText,
+  diffText,
   deleted,
   onActionComplete,
   onError,
 }: VisualDiffViewerProps) {
   const { locale } = useTranslation();
-  const [mode, setMode] = useState<'side-by-side' | 'inline' | 'file'>('side-by-side');
+  const [mode, setMode] = useState<'side-by-side' | 'inline' | 'file' | 'review'>('side-by-side');
+  // Review by section: each hunk of the git diff can be kept (hidden from the list) or undone.
+  const hunks = useMemo(() => diffHunks(diffText || ''), [diffText]);
+  const [kept, setKept] = useState<string[]>([]);
+  const [undoing, setUndoing] = useState(-1);
+  const undoHunk = async (index: number) => {
+    setUndoing(index);
+    try { await post(`/api/workspaces/${workspaceId}/files/revert-hunk`, { filePath, index, hunk: hunks[index] }); onActionComplete?.(); }
+    catch (error) { onError?.((error as Error).message); }
+    finally { setUndoing(-1); }
+  };
   const [copied, setCopied] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -221,6 +232,15 @@ export function VisualDiffViewer({
               <AlignJustify size={13} />
               <span>{tr("บรรทัดรวม")}</span>
             </button>
+            {hunks.length > 0 && !deleted && <button
+              type="button"
+              className={`diff-btn-group-item ${mode === 'review' ? 'active' : ''}`}
+              onClick={() => setMode('review')}
+              title={tr("ดูทีละส่วนที่เปลี่ยน แล้วเลือกเก็บหรือย้อนแต่ละส่วน")}
+            >
+              <ListChecks size={13} />
+              <span>{tr("ตรวจทีละส่วน")}</span>
+            </button>}
             <button
               type="button"
               className={`diff-btn-group-item ${mode === 'file' ? 'active' : ''}`}
@@ -305,7 +325,23 @@ export function VisualDiffViewer({
 
       {/* Diff Viewport */}
       <div className="diff-viewport">
-        {mode === 'file' ? (
+        {mode === 'review' ? (
+          <div className="diff-hunks">
+            {hunks.every((hunk) => kept.includes(hunk)) && <p className="diff-hunks-done">{tr("ตรวจครบทุกส่วนแล้ว")}</p>}
+            {hunks.map((hunk, index) => kept.includes(hunk) ? null : (
+              <section key={`${index}:${hunk.length}`} className="diff-hunk">
+                <header>
+                  <code>{hunk.split('\n')[0]}</code>
+                  <span className="diff-hunk-actions">
+                    <button type="button" className="diff-btn" onClick={() => setKept((all) => [...all, hunk])}><Check size={13} /> {tr("เก็บไว้")}</button>
+                    <button type="button" className="diff-btn-danger" disabled={undoing >= 0} onClick={() => void undoHunk(index)}><Undo2 size={13} /> {undoing === index ? tr("กำลังย้อน…") : tr("ย้อนส่วนนี้")}</button>
+                  </span>
+                </header>
+                <pre>{hunk.split('\n').slice(1).map((line, i) => <span key={i} className={line.startsWith('+') ? 'add' : line.startsWith('-') ? 'del' : ''}>{line || ' '}{'\n'}</span>)}</pre>
+              </section>
+            ))}
+          </div>
+        ) : mode === 'file' ? (
           <div className="diff-raw-file-container" style={{ padding: '14px', overflow: 'auto', height: '100%', boxSizing: 'border-box' }}>
             <pre tabIndex={0} style={{ margin: 0, fontFamily: 'monospace', fontSize: '12px', whiteSpace: 'pre-wrap', color: 'var(--text, #edece9)' }}>
               {modified || (deleted ? tr("ไฟล์นี้ถูกลบแล้ว") : tr("ไฟล์ว่าง"))}

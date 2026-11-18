@@ -253,3 +253,18 @@ export function computeSideBySideRows(diffLines: DiffLine[]): SideBySideRow[] {
 
   return rows;
 }
+
+/** The sections ("hunks") of a unified diff, split the same way as the server's diffHunks. */
+export function diffHunks(diff: string): string[] {
+  const lines = diff.replace(/\r\n/g, '\n').split('\n');
+  const first = lines.findIndex((line) => line.startsWith('@@'));
+  if (first < 0) return [];
+  const hunks: string[] = [];
+  let current: string[] = [];
+  for (const line of lines.slice(first)) {
+    if (line.startsWith('@@') && current.length) { hunks.push(current.join('\n')); current = []; }
+    if (line || current.length) current.push(line);
+  }
+  if (current.length) hunks.push(current.join('\n').replace(/\n+$/, ''));
+  return hunks;
+}

@@ -308,6 +308,7 @@ const text: Record<string, string> = {
   "แสดงได้เฉพาะไฟล์ข้อความไม่เกิน 256 KB": "Only text files up to 256 KB can be shown",
   "ไฟล์ไบนารีไม่รองรับการแสดงข้อความ": "Binary files cannot be shown as text",
   "ข้อมูลไฟล์ไม่ถูกต้อง": "Invalid file data",
+  "ไฟล์เปลี่ยนไปแล้ว กรุณาโหลดใหม่แล้วลองอีกครั้ง": "The file has changed. Reload it and try again.",
   "คำสั่งประจำโปรเจกต์ยาวเกินไป กรุณาย่อก่อนส่ง": "The project instructions are too long. Please shorten them before sending",
   "OpenCode ส่ง effort เป็น --variant ซึ่งแต่ละผู้ให้บริการรองรับต่างกัน": "OpenCode sends effort as --variant, which each provider supports differently",
   "ผู้ช่วย": "Assistant",

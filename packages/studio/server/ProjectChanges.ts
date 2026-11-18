@@ -97,3 +97,39 @@ export async function saveProjectFile(root: string, name: string, content: strin
   await fs.writeFile(target, content, 'utf8');
   return true;
 }
+
+/** The sections ("hunks") of a unified diff: the file header lines, then one block per `@@`. */
+export function diffHunks(diff: string): { header: string; hunks: string[] } {
+  const lines = diff.replace(/\r\n/g, '\n').split('\n');
+  const first = lines.findIndex((line) => line.startsWith('@@'));
+  if (first < 0) return { header: diff, hunks: [] };
+  const hunks: string[] = [];
+  let current: string[] = [];
+  for (const line of lines.slice(first)) {
+    if (line.startsWith('@@') && current.length) { hunks.push(current.join('\n')); current = []; }
+    if (line || current.length) current.push(line);
+  }
+  if (current.length) hunks.push(current.join('\n').replace(/\n+$/, ''));
+  return { header: lines.slice(0, first).join('\n'), hunks };
+}
+
+/**
+ * Undo one section of a file's changes against HEAD (the rest stays). `hunk` is the section's text
+ * as shown; if the file changed since, nothing is touched and the caller refreshes.
+ */
+export async function revertHunk(root: string, name: string, index: number, hunk: string): Promise<boolean> {
+  const { base, target } = await validateProjectTarget(root, name);
+  const diff = await git(base, ['diff', '--no-ext-diff', '--no-textconv', '--no-color', 'HEAD', '--', target]);
+  const { header, hunks } = diffHunks(diff);
+  const norm = (text: string) => text.replace(/\r\n/g, '\n').replace(/\n+$/, '');
+  if (!Number.isInteger(index) || index < 0 || index >= hunks.length || norm(hunks[index]) !== norm(hunk))
+    throw new Error(tr("ไฟล์เปลี่ยนไปแล้ว กรุณาโหลดใหม่แล้วลองอีกครั้ง"));
+  const patchFile = path.join(await fs.mkdtemp(path.join((await import('node:os')).tmpdir(), 'superai-hunk-')), 'undo.patch');
+  try {
+    await fs.writeFile(patchFile, `${header}\n${hunks[index]}\n`);
+    await git(base, ['apply', '-R', '--whitespace=nowarn', patchFile]);
+  } finally {
+    await fs.rm(path.dirname(patchFile), { recursive: true, force: true }).catch(() => {});
+  }
+  return true;
+}
