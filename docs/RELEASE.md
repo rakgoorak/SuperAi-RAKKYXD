@@ -1,3 +1,23 @@
+# SuperAi & RAKKYXD v1.2.6
+
+- **Dynamic Client Assets (OTA):** sync web UI bundles in the background without needing new desktop releases or restarting the application.
+- **Composer image preview:** click on attached images in the message input box to preview them in full size with zoom controls and quick copy/save actions, matching Claude Desktop.
+- **Claude-style image lightbox:** floating dark translucent lightbox with blurred backdrop, larger image view, and click-backdrop-to-close.
+- **Copy and Save image actions:** right-click context menu on images and viewer controls for immediate image copying and saving.
+- **Stable session scrolling:** switching between sessions keeps the conversation pinned to the latest message without unwanted scroll jumps, even after large images load.
+- **Skills dialog fix:** resolved polling reload loop and flickering in the Skills panel.
+
+## ภาษาไทย
+
+- **ระบบ Dynamic Client Assets (OTA):** ซิงค์หน้าตา UI ในเบื้องหลังได้ตลอดเวลาโดยไม่ต้องทำ Release ใหม่ทุกครั้งที่ปรับแก้หน้าเว็บ
+- **กดดูรูปภาพในช่องพิมพ์แชท:** คลิกพรีวิวรูปภาพแนบในช่องพิมพ์แชทได้ทันทีเหมือน Claude Desktop พร้อมซูมและคัดลอกรูป
+- **หน้าต่างพรีวิวรูปภาพสไตล์ Claude:** Lightbox โปร่งแสง พื้นหลังเบลอ สบายตา และคลิกพื้นที่ว่างรอบรูปเพื่อปิดได้
+- **ปุ่มคัดลอกและบันทึกรูปภาพ:** คลิกขวาที่รูปในแชทเพื่อ Copy image หรือ Save image ได้ทันที พร้อมปุ่มบนแถบควบคุม
+- **สลับ Session ลื่นไหล ไม่เลื่อนหลุด:** ตรึงหน้าจอไว้ที่ข้อความล่าสุดเสมอเมื่อสลับ Session หรือเมื่อรูปภาพขนาดใหญ่โหลดเสร็จ
+- **แก้หน้าต่าง Skills กระพริบ:** แก้ไขลูปรีโหลดในหน้าต่าง Skills ให้อ่านและเลือกใช้งานได้อย่างราบรื่น
+
+---
+
 # SuperAi & RAKKYXD v1.2.5
 
 - **Open a session without choosing a folder:** start any AI session in general chat right away, or switch between general chat and project folders directly from the New Session dialog.

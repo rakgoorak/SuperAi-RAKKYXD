@@ -6,6 +6,21 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.2.6] - 2026-11-18
+
+### Added
+- Dynamic Client Assets (OTA): background Web Client Bundle sync via GitHub releases and runtime hot-swap without desktop binary updates.
+- Composer image preview: clicking attached image thumbnails in the chat composer opens full-sized zoomable preview lightbox like Claude Desktop.
+- Copy image and Save image actions via right-click context menu and viewer controls.
+- GitHub Actions workflow for automatic client bundle builds and OTA asset releases (`client-ota.yml`).
+
+### Changed
+- Redesigned image preview lightbox with Claude Desktop aesthetic: floating blurred translucent dark backdrop, larger centered view, and click-backdrop-to-dismiss.
+- Stabilized chat scrolling: ResizeObserver pins chat to bottom as images render, and session switching seamlessly restores latest message position.
+
+### Fixed
+- Fixed Skills panel infinite reload loop caused by 1.8s workspace polling.
+
 ## [1.2.5] - 2026-11-18
 
 ### Added
