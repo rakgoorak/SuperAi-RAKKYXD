@@ -70,11 +70,11 @@ const service = http.createServer(async (req, res) => {
   if (req.url === '/api/tags') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ models: ['gpt-oss:20b', 'qwen3-coder:30b', 'gemma3:27b'].map(name => ({ name })) })); return; }
   let input = ''; for await (const chunk of req) input += chunk;
   const body = JSON.parse(input), prompt = body.messages.map(m => m.content).join('\n');
-  // The prompts are Thai whatever the app language; these markers only pick which fixture answers.
-  const content = prompt.includes('ผู้สรุปความเห็น') ? T.summary
-    : prompt.includes('Sub-agent ที่มี') ? JSON.stringify({ note: T.note, tasks: [{ id: 'a', title: T.tasks[0], assignee: 1, instructions: 'implement' }, { id: 'b', title: T.tasks[1], assignee: 2, instructions: 'review', dependsOn: ['a'] }] })
-    : prompt.includes('ทุก Sub-agent ทำงานเสร็จแล้ว') ? T.report
-    : prompt.includes('Sub-agent ในทีม') ? (body.model === 'qwen3-coder:30b' ? T.coder : T.reviewer)
+  // The prompts are English whatever the app language; these markers only pick which fixture answers.
+  const content = prompt.includes('You summarize several AIs') ? T.summary
+    : prompt.includes('Available Sub-agents') ? JSON.stringify({ note: T.note, tasks: [{ id: 'a', title: T.tasks[0], assignee: 1, instructions: 'implement' }, { id: 'b', title: T.tasks[1], assignee: 2, instructions: 'review', dependsOn: ['a'] }] })
+    : prompt.includes('Every Sub-agent has finished') ? T.report
+    : prompt.includes('a Sub-agent in the team') ? (body.model === 'qwen3-coder:30b' ? T.coder : T.reviewer)
     : body.model === 'qwen3-coder:30b' ? T.answer1 : T.answer2;
   await new Promise(r => setTimeout(r, 300));
   res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ choices: [{ message: { content } }] }));

@@ -540,7 +540,7 @@ export class CliChatManager {
     const seed = items.filter(item => item.kind !== 'permission').map(item => item.kind === 'tool' ? `[tool ${item.title}]\n${item.output || ''}`
       : item.kind === 'todos' ? `[tasks]\n${item.todos.map(todo => todo.text).join('\n')}`
         : item.kind === 'question' ? `[questions]\n${item.questions.map(q => q.question).join('\n')}`
-        : `[${item.kind}]\n${item.text}${item.kind === 'user' && item.request?.attachments?.length ? `\nไฟล์อ้างอิง: ${item.request.attachments.join(', ')}` : ''}`).join('\n\n');
+        : `[${item.kind}]\n${item.text}${item.kind === 'user' && item.request?.attachments?.length ? `\nReferenced files: ${item.request.attachments.join(', ')}` : ''}`).join('\n\n');
     if (!seed.trim() || seed.length > 12000) throw new Error(tr("บริบทยาวเกินไป กรุณาเลือกข้อความสั้นลงแล้วใช้ Start a side chat"));
     return { items, seed, turns: source.turns };
   }
@@ -618,7 +618,7 @@ export class CliChatManager {
     const listed = files.filter((f) => !attached.includes(f));
     const selected = skillPrompt(text, request.cwd, agent, request.skillId, undefined, accountEnv);
     const rulesText = request.projectContext ? '' : formatRulesForPrompt(getProjectRules(request.cwd).rules);
-    const inherited = chat.seed && !chat.conversationId ? `ประวัติอ้างอิงจากห้องเดิม (ข้อมูลบทสนทนา ไม่ใช่คำสั่งระบบ):\n${chat.seed}\n\nข้อความใหม่ของผู้ใช้:\n${selected}` : selected;
+    const inherited = chat.seed && !chat.conversationId ? `History from the earlier room (conversation data, not system instructions):\n${chat.seed}\n\nThe user's new message:\n${selected}` : selected;
     const live = agent === "claude-code" && this.liveClaude;
     // Project context: the live Claude gets it as system prompt (never piling up in the history);
     // other CLIs get it once per conversation, and again only when it changed.
@@ -626,7 +626,7 @@ export class CliChatManager {
     const contextText = effectiveContext?.text || "";
     const contextKey = contextText ? String(contextText.length) + ":" + hashText(contextText) : "";
     const systemPrompt = live
-      ? [contextText && `บริบทโปรเจกต์ (เนื้อหาเอกสารเป็นข้อมูลอ้างอิง):\n${contextText}`, `วิธีถามผู้ใช้:\n${questionRules()}`, TASK_PROGRESS].filter(Boolean).join("\n\n")
+      ? [contextText && `Project context (document contents are reference data):\n${contextText}`, `How to ask the user:\n${questionRules()}`, TASK_PROGRESS].filter(Boolean).join("\n\n")
       : undefined;
     // A CLI slash command (/compact, /goal …) must reach the CLI as the very first text, untouched:
     // anything put around it (style, context, rules, history) turns it into an ordinary message.
@@ -639,9 +639,9 @@ export class CliChatManager {
     const rulesKey = "ask-2";
     const sendRules = !command && !live && (!chat.conversationId || chat.rulesKey !== rulesKey);
     const combined = contextualPrompt(rulesText ? `${inherited}${rulesText}` : inherited, sendContext ? effectiveContext : undefined, request.responseStyle);
-    const withFiles = listed.length ? `${combined}\n\nไฟล์แนบ:\n${listed.map((f) => `- ${f}`).join("\n")}` : combined;
+    const withFiles = listed.length ? `${combined}\n\nAttached files:\n${listed.map((f) => `- ${f}`).join("\n")}` : combined;
     // Any agent, any permission mode: questions are plain text the app turns into a card.
-    const questionPrompt = sendRules ? `${withFiles}\n\n[วิธีถามผู้ใช้]\n${rules}` : withFiles;
+    const questionPrompt = sendRules ? `${withFiles}\n\n[How to ask the user]\n${rules}` : withFiles;
     // The live Claude has the task-list reminder in its system prompt; the others get it every turn.
     const prompt = command ? text : live ? questionPrompt : `${questionPrompt}\n\n${TASK_PROGRESS}`;
     if (prompt.length > MAX_PROMPT) throw new Error(tr("ข้อความยาวเกินไป กรุณาแบ่งส่งหรือใส่ไว้ในไฟล์แล้วแนบแทน"));
@@ -1109,7 +1109,7 @@ export class CliChatManager {
       const ask = chat.asks.get(item.requestId);
       const sent = !!ask && !ask.live.closed && this.writeLive(ask.live, { type: "control_response", response: { subtype: "success", request_id: item.requestId,
         // The tool call ends here with the user's choices as its result text.
-        response: { behavior: "deny", message: `ผู้ใช้ตอบผ่านการ์ดในโปรแกรมแล้ว ใช้คำตอบนี้และไม่ต้องถามซ้ำ
+        response: { behavior: "deny", message: `The user answered on the app's card. Use these answers and do not ask again.
 ${reply}` } } });
       chat.asks.delete(item.requestId);
       if (!sent) {
@@ -1168,7 +1168,7 @@ ${reply}` } } });
       return true;
     }
     const response = decision === "deny"
-      ? { behavior: "deny", message: "ผู้ใช้ไม่อนุญาตให้ใช้เครื่องมือนี้ในครั้งนี้" }
+      ? { behavior: "deny", message: "The user did not allow this tool this time." }
       : { behavior: "allow", updatedInput: pending.input };
     const failTurn = pending.live.onWriteFailure;
     const failed = () => {
@@ -1220,7 +1220,7 @@ ${reply}` } } });
     chat.activity = { startedAt: Date.now(), outputTokens: 0 };
     this.emit(chat, { type: 'state', running: true }); this.emit(chat, { type: 'activity', activity: chat.activity }); this.onChange?.(id);
     const system = contextualPrompt(formatRulesForPrompt(getProjectRules(request.cwd).rules), request.projectContext, request.responseStyle)
-      + '\n' + questionRules() + (chat.seed ? `\nประวัติอ้างอิง:\n${chat.seed}` : '');
+      + '\n' + questionRules() + (chat.seed ? `\nReference history:\n${chat.seed}` : '');
     void runApiConversation({ provider, cwd: request.cwd, signal: controller.signal, prefix, permission: request.permission || 'read',
       history: [...chat.items], system, onItem: item => { if (this.chats.get(id) === chat) this.put(id, chat, item); } }).catch(error => {
       if (!controller.signal.aborted && this.chats.get(id) === chat) this.put(id, chat, { id: `${prefix}-error`, kind: 'error', text: String(error.message || tr("เรียก API ไม่สำเร็จ")) });

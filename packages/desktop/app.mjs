@@ -399,13 +399,11 @@ else {
         autoHideMenuBar: true,
         titleBarStyle: "hidden",
         ...(process.platform === "darwin"
-          ? { trafficLightPosition: { x: 16, y: 19 } }
-          : {}),
-        titleBarOverlay: {
-          color: "#0d1117",
-          symbolColor: "#e2e8f0",
-          height: 38,
-        },
+          // macOS: the system's standard-size buttons, centred in the window's 38px top bar like other
+          // Mac apps (their top is 12px down; the bar's left padding in index.css leaves room for them).
+          // No titleBarOverlay here: a taller system title bar makes macOS draw larger buttons.
+          ? { trafficLightPosition: { x: 14, y: 12 } }
+          : { titleBarOverlay: { color: "#0d1117", symbolColor: "#e2e8f0", height: 38 } }),
         webPreferences: {
           preload: path.join(directory, "preload.cjs"),
           contextIsolation: true,

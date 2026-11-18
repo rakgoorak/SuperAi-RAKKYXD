@@ -2,10 +2,6 @@ import { memo, useContext, useEffect, useId, useRef, useState, type ReactNode } 
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
-import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
-import rehypeHighlight from "rehype-highlight";
-import "katex/dist/katex.min.css";
 import { toString as hastText } from "hast-util-to-string";
 import type { Element, ElementContent } from "hast";
 import { Sparkles, Copy, Check } from "lucide-react";
@@ -325,14 +321,46 @@ const components: Components = {
   },
 };
 
-const remarkPlugins = [remarkGfm, remarkBreaks, [remarkMath, { singleDollarTextMath: false }]] as never;
-const rehypePlugins = [[rehypeKatex, { throwOnError: false, strict: false }], [rehypeHighlight, { detect: false }]] as never;
+// Math (KaTeX and its fonts) and code colours load only once an answer needs them, so they stay out
+// of the bundle the app starts with. Until then the answer shows as plain Markdown.
+const loaded: { math?: [unknown, unknown]; highlight?: unknown } = {};
+const waiting = new Set<() => void>();
+let mathLoading: Promise<void> | undefined, codeLoading: Promise<void> | undefined;
+const ready = () => waiting.forEach((notify) => notify());
+function loadMath() {
+  mathLoading ||= Promise.all([import("remark-math"), import("rehype-katex"), import("katex/dist/katex.min.css")])
+    .then(([math, katex]) => { loaded.math = [math.default, katex.default]; ready(); })
+    .catch(() => { mathLoading = undefined; });
+}
+function loadCode() {
+  codeLoading ||= import("rehype-highlight").then((highlight) => { loaded.highlight = highlight.default; ready(); }).catch(() => { codeLoading = undefined; });
+}
+/** Re-render once a plugin this answer needs has arrived. */
+function useRendererPlugins(needsMath: boolean, needsCode: boolean) {
+  const [, setVersion] = useState(0);
+  useEffect(() => {
+    if ((!needsMath || loaded.math) && (!needsCode || loaded.highlight)) return;
+    const notify = () => setVersion((v) => v + 1);
+    waiting.add(notify);
+    if (needsMath) loadMath();
+    if (needsCode) loadCode();
+    return () => { waiting.delete(notify); };
+  }, [needsMath, needsCode]);
+  const remarkPlugins = [remarkGfm, remarkBreaks, ...(needsMath && loaded.math ? [[loaded.math[0], { singleDollarTextMath: false }]] : [])] as never;
+  const rehypePlugins = [
+    ...(needsMath && loaded.math ? [[loaded.math[1], { throwOnError: false, strict: false }]] : []),
+    ...(needsCode && loaded.highlight ? [[loaded.highlight, { detect: false }]] : []),
+  ] as never;
+  return { remarkPlugins, rehypePlugins };
+}
 // Every link goes through parsePreviewTarget, which allows only http(s) and local files.
 const keepUrl = (url: string) => url;
 
 /** Safe Markdown for AI answers (GitHub flavour, no raw HTML) with the app's own links, media, quotes and code blocks. */
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
   const thinkingBlocks: string[] = [];
+  const prepared = prepareMarkdown(text);
+  const { remarkPlugins, rehypePlugins } = useRendererPlugins(prepared.includes("$$"), /^\s*(```|~~~)/m.test(prepared));
   const artifactBlocks: { title: string; language: string; content: string }[] = [];
   let remainingText = text;
 
