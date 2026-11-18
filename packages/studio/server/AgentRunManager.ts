@@ -158,6 +158,8 @@ export interface ConversationRun {
 export interface ChatRequest {
   projectContext?: ProjectContext;
   responseStyle?: ResponseStyle;
+  /** Token saver: send less earlier history. */
+  tokenSaver?: boolean;
   prompt: string;
   panel: unknown;
   summarizer?: unknown;
@@ -168,6 +170,8 @@ export interface ChatRequest {
 export interface AgentRequest {
   projectContext?: ProjectContext;
   responseStyle?: ResponseStyle;
+  /** Token saver: send less earlier history. */
+  tokenSaver?: boolean;
   prompt: string;
   main: unknown;
   subagents: unknown;
@@ -432,17 +436,18 @@ export class AgentRunManager {
     return run;
   }
 
-  private history(wsId: string, mode: "chat" | "agent") {
+  /** Earlier runs for context; `lean` (token saver) keeps fewer and shorter ones. */
+  private history(wsId: string, mode: "chat" | "agent", lean = false) {
     const runs = this.list(wsId).filter((r) => r.mode === mode && r.status === "completed");
     if (!runs.length) return "";
     return runs
-      .slice(-6)
+      .slice(lean ? -3 : -6)
       .map((r, i, arr) => {
         const isLatest = i === arr.length - 1;
         const answer = (r.output || r.panel?.find((a) => a.status === "completed")?.output || "").trim();
         const compactAnswer = isLatest
-          ? answer.slice(0, 1800)
-          : (answer.length > 350 ? answer.slice(0, 350) + "… [ย่อผลลัพธ์รอบก่อนเพื่อประหยัด Token]" : answer);
+          ? answer.slice(0, lean ? 900 : 1800)
+          : (answer.length > (lean ? 200 : 350) ? answer.slice(0, lean ? 200 : 350) + "… [ย่อผลลัพธ์รอบก่อนเพื่อประหยัด Token]" : answer);
         const prompt = isLatest ? r.prompt : (r.prompt.length > 200 ? r.prompt.slice(0, 200) + "…" : r.prompt);
         return `ผู้ใช้: ${prompt}${r.clarify?.status === "answered" ? `\n${describeAnswers(r.clarify)}` : ""}\nคำตอบ: ${compactAnswer}`;
       })
@@ -458,7 +463,7 @@ export class AgentRunManager {
     const style = body.summaryStyle === "best" ? "best" : "merge";
     const attachments = body.attachments || [];
     const prompt = this.begin(wsId, String(body.prompt || ""), attachments, summarizer ? [...panel, summarizer] : panel);
-    const history = this.history(wsId, "chat");
+    const history = this.history(wsId, "chat", body.tokenSaver === true);
     const clarify = body.clarify === true;
     const run: ConversationRun = {
       id: randomUUID(), wsId, prompt, mode: "chat", status: "running", output: "", createdAt: Date.now(), allowTools: false, attachments, activity: [], projectContext: body.projectContext, responseStyle: body.responseStyle,
@@ -570,7 +575,7 @@ ${replyLanguageRule(prompt)}`;
     const allowTools = body.allowTools === true;
     const attachments = body.attachments || [];
     const prompt = this.begin(wsId, String(body.prompt || ""), attachments, [main, ...subagents]);
-    const history = this.history(wsId, "agent");
+    const history = this.history(wsId, "agent", body.tokenSaver === true);
     const run: ConversationRun = {
       id: randomUUID(), wsId, prompt, mode: "agent", status: "running", output: "", createdAt: Date.now(), allowTools, attachments, activity: [], projectContext: body.projectContext, responseStyle: body.responseStyle,
       main, subagents, stage: "planning", tasks: [],

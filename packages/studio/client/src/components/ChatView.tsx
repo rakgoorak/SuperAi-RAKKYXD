@@ -20,6 +20,7 @@ import { timeLabel, tokenLabel } from '../chatFormat';
 import { taskProgressNote } from '../taskProgress';
 import { createItemBatch } from '../chatStreamBatch';
 import { notifyDone, sessionNotice } from '../completionNotify';
+import { loadTokenSaver } from '../tokenSaver';
 import { loadNextPromptSettings, predictNextPrompt, publishChatRunning, publishNextPrompt } from '../nextPrompt';
 import '../chat-idle.css';
 import '../chat-permission.css';
@@ -350,7 +351,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   useEffect(() => {
     if (!turnsDone || !canSuggest) return;
     if (nextSteps.length) { publishNextPrompt(sessionId, nextSteps[0].label); return; }
-    if (!loadNextPromptSettings().ai) return;
+    if (!loadNextPromptSettings().ai || loadTokenSaver()) return;
     const controller = new AbortController();
     predictNextPrompt(sessionId, controller.signal).then(text => { if (!controller.signal.aborted) publishNextPrompt(sessionId, text); }).catch(() => {});
     return () => controller.abort();
