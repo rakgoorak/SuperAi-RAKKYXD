@@ -470,6 +470,8 @@ const text: Record<string, string> = {
   "คำสั่ง browser ไม่ถูกต้อง": "Invalid browser command",
   "ลืมข้อมูลไม่สำเร็จ กรุณาตรวจคลัง credential ของระบบ": "Could not forget the data. Please check the system's credential store",
   "พอร์ต 3888–3899 ถูกใช้งานทั้งหมด": "Ports 3888–3899 are all in use",
+  "ถาม AI อะไรก็ได้…": "Ask the AI anything…",
+  "Enter ส่งไปที่แชทใหม่ในโปรแกรม · Shift+Enter ขึ้นบรรทัดใหม่ · Esc ปิด": "Enter sends it to a new chat in the app · Shift+Enter new line · Esc closes",
   "เปิด SuperAi & RAKKYXD ไม่สำเร็จ": "Could not open SuperAi & RAKKYXD",
   "{0}\nลอง npm run build แล้วเปิดใหม่": "{0}\nTry npm run build, then open it again",
   "กรุณาระบุ URL": "Please enter a URL",

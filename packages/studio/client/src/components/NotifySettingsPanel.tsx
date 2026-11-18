@@ -6,6 +6,8 @@ import { tr } from '../i18n';
 export function NotifySettingsPanel() {
   const [settings, setSettings] = useState(loadNotifySettings);
   const [nextPrompt, setNextPrompt] = useState(loadNextPromptSettings);
+  const [quickKey, setQuickKey] = useState<string | null>(null);
+  useEffect(() => { void window.superai?.quickAsk?.("state").then(s => setQuickKey(s.key)).catch(() => {}); }, []);
   // Anonymous usage count lives in the desktop shell; absent in the browser UI and older shells.
   const [usage, setUsage] = useState<{ available: boolean; enabled: boolean; asked?: boolean } | null>(null);
   useEffect(() => { void window.superai?.usage?.("state").then(setUsage).catch(() => {}); }, []);
@@ -40,6 +42,15 @@ export function NotifySettingsPanel() {
         <input type="checkbox" checked={nextPrompt.ai} onChange={e => { const next = { ai: e.target.checked }; setNextPrompt(next); saveNextPromptSettings(next); }} />
         {tr("ให้ AI เดาข้อความถัดไปเมื่อคำตอบไม่มีขั้นตอนถัดไป")}
       </label>
+      {quickKey !== null && (
+        <>
+          <div className="settings-section-title">
+            <h3>{tr("ถามด่วนจากที่ไหนก็ได้")}</h3>
+            <button className="text-button" onClick={() => void window.superai?.quickAsk?.("open")}>{tr("เปิดกล่องถามด่วน")}</button>
+          </div>
+          <p className="muted">{quickKey ? tr`กด ${quickKey} ตอนใช้แอปไหนก็ได้ จะมีกล่องเล็กให้พิมพ์ถาม กด Enter แล้วข้อความจะไปเป็นแชทใหม่ในโปรแกรมนี้` : tr("ปุ่มลัดถูกแอปอื่นใช้อยู่ทั้งหมด ยังเปิดกล่องถามด่วนจากปุ่มด้านบนได้")}</p>
+        </>
+      )}
       {usage && (
         <>
           <div className="settings-section-title">
