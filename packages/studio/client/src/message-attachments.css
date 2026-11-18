@@ -6,28 +6,38 @@
 .message-image-name { display: block; width: 100%; padding: 7px 9px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .message-image-missing { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; width: 100%; height: 130px; font-size: 12px; }
 .message-file { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; overflow-wrap: anywhere; font-size: 12px; color: var(--muted); }
-dialog.message-image-preview { --image-preview-top: calc(max(53px, calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 0px))) + 12px); position: fixed; inset: 0; box-sizing: border-box; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: calc(var(--image-preview-top) + 60px) 24px 80px; border: 0; border-radius: 0; background: rgb(0 0 0 / 90%); color: #eeede7; overflow: hidden; -webkit-app-region: no-drag; }
+dialog.message-image-preview { --image-preview-top: calc(max(53px, calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 0px))) + 12px); position: fixed; inset: 0; box-sizing: border-box; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: calc(var(--image-preview-top) + 12px) 24px 48px; border: 0; border-radius: 0; background: rgba(10, 10, 12, 0.72); backdrop-filter: blur(4px); color: #eeede7; overflow: hidden; outline: none; -webkit-app-region: no-drag; }
 dialog.message-image-preview[open] { display: grid; place-items: center; }
 .message-image-preview::backdrop { background: transparent; }
-.message-image-preview header { position: absolute; top: var(--image-preview-top); left: 24px; right: 24px; display: flex; align-items: center; justify-content: flex-start; gap: 16px; }
-.message-image-preview .message-image-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.message-image-preview header button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0; min-height: 44px; padding: 10px 14px; border: 0; border-radius: 8px; color: #181816; background: #eeede7; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; }
-.message-image-preview header button kbd { padding: 1px 4px; border: 1px solid #6b6b62; border-radius: 4px; font: inherit; font-size: 11px; }
-.message-image-preview header button:hover { background: #fff; }
-.message-image-preview header button:focus-visible { outline: 2px solid #e8b491; outline-offset: 3px; }
+.message-image-preview header { position: absolute; top: var(--image-preview-top); left: 24px; right: 24px; z-index: 5; display: flex; align-items: center; justify-content: flex-start; gap: 16px; opacity: 0; transition: opacity 0.18s ease; }
+.message-image-preview header:hover, .message-image-preview header:focus-within { opacity: 1; }
+.message-image-preview .message-image-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: rgba(238, 237, 231, 0.8); }
+.message-image-preview header button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0; min-height: 44px; padding: 8px 14px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px; color: #eeede7; background: rgba(34, 34, 31, 0.88); backdrop-filter: blur(8px); font-size: 12.5px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.message-image-preview header button kbd { padding: 1px 5px; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 4px; font: inherit; font-size: 10.5px; color: rgba(238, 237, 231, 0.7); }
+.message-image-preview header button:hover { background: rgba(50, 50, 46, 0.95); }
+.message-image-preview header button:focus-visible { outline: 2px solid #e8b491; outline-offset: 2px; }
 .message-image-preview > img { display: block; max-width: 100%; max-height: calc(100dvh - var(--image-preview-top) - 84px); width: auto; height: auto; object-fit: contain; }
 .message-image-preview > p { display: flex; align-items: center; gap: 12px; max-width: 40ch; }
-.image-viewer-viewport { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; cursor: grab; }
+.image-viewer-viewport { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; cursor: default; }
 .image-viewer-viewport:active { cursor: grabbing; }
 .image-viewer-canvas { display: grid; place-items: center; min-width: 100%; min-height: 100%; width: max-content; height: max-content; }
-.image-viewer-canvas img { display: block; max-width: none; max-height: none; object-fit: contain; user-select: none; }
-.image-viewer-controls { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; max-width: calc(100% - 24px); padding: 6px; border-radius: 10px; background: #2b2b28; color: #eeede7; }
-.image-viewer-controls button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 38px; min-height: 38px; padding: 7px 10px; border: 0; border-radius: 7px; color: inherit; background: #3d3c36; font-size: 12px; white-space: nowrap; cursor: pointer; }
-.image-viewer-controls button:hover { background: #505048; }
+.image-viewer-canvas img { display: block; max-width: none; max-height: none; object-fit: contain; user-select: none; border-radius: 12px; box-shadow: 0 24px 68px rgba(0, 0, 0, 0.68), 0 0 0 1px rgba(255, 255, 255, 0.1); cursor: grab; }
+.image-viewer-canvas img:active { cursor: grabbing; }
+.claude-image-context-menu { position: fixed; z-index: 30; display: flex; flex-direction: column; gap: 2px; min-width: 156px; padding: 6px; border-radius: 12px; background: #262624; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 14px 36px rgba(0, 0, 0, 0.58); }
+.claude-image-context-menu button { display: flex; align-items: center; width: 100%; padding: 8px 12px; border: 0; border-radius: 8px; background: transparent; color: #f1f0eb; font-size: 13.5px; text-align: left; cursor: pointer; }
+.claude-image-context-menu button:hover, .claude-image-context-menu button:focus-visible { background: rgba(255, 255, 255, 0.08); outline: none; }
+.image-viewer-controls { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; align-items: center; gap: 5px; max-width: calc(100% - 24px); padding: 6px; border-radius: 11px; background: rgba(34, 34, 31, 0.88); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(8px); color: #eeede7; opacity: 0; transition: opacity 0.18s ease; }
+.image-viewer-controls:hover, .image-viewer-controls:focus-within { opacity: 1; }
+.image-viewer-controls button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 36px; min-height: 34px; padding: 6px 10px; border: 0; border-radius: 7px; color: inherit; background: rgba(255, 255, 255, 0.07); font-size: 12px; white-space: nowrap; cursor: pointer; }
+.image-viewer-controls button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.15); }
 .image-viewer-controls button:focus-visible { outline: 2px solid #e8b491; outline-offset: 2px; }
 .image-viewer-controls button:disabled { opacity: .45; cursor: default; }
 .image-viewer-controls output { min-width: 48px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
 #root .markdown-image { display: inline-flex; flex-direction: column; gap: 8px; width: min(100%, 620px); max-width: 100%; margin: 8px 0 12px; vertical-align: top; }
+#root .markdown-image-frame { position: relative; display: block; width: 100%; }
+#root .markdown-image-copy-btn { position: absolute; top: 10px; right: 10px; z-index: 3; display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(28, 28, 26, 0.82); backdrop-filter: blur(6px); color: #f1f0eb; font-size: 11.5px; font-weight: 500; opacity: 0; transition: opacity 0.15s ease, background 0.15s ease; cursor: pointer; }
+#root .markdown-image-frame:hover .markdown-image-copy-btn, #root .markdown-image-copy-btn:focus-visible, #root .markdown-image-copy-btn.is-copied { opacity: 1; }
+#root .markdown-image-copy-btn:hover { background: rgba(45, 45, 41, 0.95); }
 #root .markdown-image-caption { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; }
 #root .markdown-image-caption small { color: var(--dim); font-size: 11px; }
 #root .markdown-image-open { display: block; width: 100%; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: zoom-in; }

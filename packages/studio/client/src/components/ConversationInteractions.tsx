@@ -7,11 +7,12 @@ import { prepareMessage } from '../recovery';
 import '../conversation-interactions.css';
 import { tr } from '../i18n';
 import { ImageEndpointContext, revealLinkedFile } from './MarkdownImage';
+import { copyImageToClipboard, saveImageFromSrc } from '../imageActions';
 import { openExternalLink, openPreviewLink } from '../previewLinks';
 
 interface Message { id: string; kind: string; text?: string; }
 interface Chapter { id: string; label: string; }
-interface MenuState { x: number; y: number; id: string; selection: string; plain: string; code?: string; /** A link or media under the pointer. */ url?: string; file?: string; }
+interface MenuState { x: number; y: number; id: string; selection: string; plain: string; code?: string; /** A link or media under the pointer. */ url?: string; file?: string; imageSrc?: string; imageName?: string; }
 type Highlights = { set(name: string, value: unknown): void; delete(name: string): void };
 const highlights = () => (CSS as typeof CSS & { highlights?: Highlights }).highlights;
 const HighlightClass = () => (window as typeof window & { Highlight?: new (...ranges: Range[]) => unknown }).Highlight;
@@ -186,6 +187,14 @@ export function ConversationInteractions({ sessionId, active, messages, revision
     try { await navigator.clipboard.writeText(text); setProblem(''); closeMenu(); }
     catch { setProblem(tr("คัดลอกไม่ได้ กรุณาลองอีกครั้งหรือกด Ctrl+C")); }
   };
+  const copyImage = async (src: string) => {
+    try { await copyImageToClipboard(src); setProblem(''); closeMenu(); }
+    catch { setProblem(tr("คัดลอกไม่ได้ กรุณาลองอีกครั้งหรือกด Ctrl+C")); }
+  };
+  const saveImage = async (src: string, name = 'image.png') => {
+    try { await saveImageFromSrc(src, name); setProblem(''); closeMenu(); }
+    catch { setProblem(tr("คัดลอกไม่ได้ กรุณาลองอีกครั้งหรือกด Ctrl+C")); }
+  };
   const endpoint = useContext(ImageEndpointContext);
   const showInFolder = async (file: string) => {
     try {
@@ -235,16 +244,23 @@ export function ConversationInteractions({ sessionId, active, messages, revision
     return () => window.removeEventListener('keydown', keyboard);
   }, [active, menu, selection, sessionId]);
   return <div ref={root} className="conversation-interactions" tabIndex={-1} onContextMenu={event => {
-    const body = (event.target as HTMLElement).closest<HTMLElement>('[data-message-body]');
-    if (!body || !root.current?.contains(body)) return;
+    const targetEl = event.target as HTMLElement;
+    const imgEl = targetEl.closest<HTMLImageElement>('img')
+      || targetEl.closest('.markdown-image, .message-image-thumb')?.querySelector<HTMLImageElement>('img')
+      || null;
+    const body = targetEl.closest<HTMLElement>('[data-message-body]');
+    if (!body && !imgEl) return;
+    if (body && !root.current?.contains(body)) return;
+    if (imgEl && !root.current?.contains(imgEl)) return;
     event.preventDefault();
     returnFocus.current = document.activeElement as HTMLElement;
     const selected = window.getSelection();
-    const text = selection?.id === body.dataset.messageBody && selected?.toString() ? selected.toString() : '';
-    const pre = (event.target as HTMLElement).closest('pre');
-    const linked = (event.target as HTMLElement).closest<HTMLElement>('[data-link-url], [data-link-file]');
+    const text = body && selection?.id === body.dataset.messageBody && selected?.toString() ? selected.toString() : '';
+    const pre = targetEl.closest('pre');
+    const linked = targetEl.closest<HTMLElement>('[data-link-url], [data-link-file]');
     const target = linked ? { ...(linked.dataset.linkUrl ? { url: linked.dataset.linkUrl } : {}), ...(linked.dataset.linkFile ? { file: linked.dataset.linkFile } : {}) } : {};
-    setMenu({ id: body.dataset.messageBody!, x: event.clientX, y: event.clientY, selection: text, plain: bodyText(body), ...(pre ? { code: (pre.querySelector('code')?.textContent || pre.textContent || '').replace(/\n$/, '') } : {}), ...target });
+    const imageInfo = imgEl?.src ? { imageSrc: imgEl.currentSrc || imgEl.src, imageName: imgEl.alt || 'image.png' } : {};
+    setMenu({ id: body?.dataset.messageBody || '', x: event.clientX, y: event.clientY, selection: text, plain: body ? bodyText(body) : '', ...(pre ? { code: (pre.querySelector('code')?.textContent || pre.textContent || '').replace(/\n$/, '') } : {}), ...target, ...imageInfo });
     setSelection(null);
   }}>
     <style>{`::highlight(${matchName}){background:#806c28;color:#fff}::highlight(${activeName}){background:#edaa42;color:#171715}`}</style>
@@ -271,6 +287,11 @@ export function ConversationInteractions({ sessionId, active, messages, revision
       }
       if (event.key === 'Tab') setMenu(null);
     }}>
+      {menu.imageSrc && <>
+        <button role="menuitem" onClick={() => void copyImage(menu.imageSrc!)}>Copy image</button>
+        <button role="menuitem" onClick={() => void saveImage(menu.imageSrc!, menu.imageName)}>Save image</button>
+        {(menu.file || menu.id) && <hr />}
+      </>}
       {menu.url && <>
         <button role="menuitem" onClick={() => { openPreviewLink(menu.url!); closeMenu(); }}>{tr("เปิดใน Browser ภายในแอป")}</button>
         <button role="menuitem" onClick={() => { openExternalLink(menu.url!); closeMenu(); }}>{tr("เปิดในเบราว์เซอร์ภายนอก")}</button>
@@ -281,16 +302,18 @@ export function ConversationInteractions({ sessionId, active, messages, revision
         <button role="menuitem" onClick={() => { openPreviewLink(menu.file!); closeMenu(); }}>{tr("เปิดใน Preview")}</button>
         {window.superai?.revealFile && <button role="menuitem" onClick={() => void showInFolder(menu.file!)}>{window.superai.platform === 'darwin' ? tr("แสดงใน Finder") : tr("เปิดในโฟลเดอร์")}</button>}
         <button role="menuitem" onClick={() => void copy(menu.file!)}>{tr("คัดลอกที่อยู่ไฟล์")}</button>
-        <hr />
+        {menu.id && <hr />}
       </>}
-      {menu.selection ? <button role="menuitem" onClick={() => void copy(menu.selection)}>Copy <kbd>Ctrl+C</kbd></button> : menu.code !== undefined && <button role="menuitem" onClick={() => void copy(menu.code!)}>Copy code</button>}
-      <button role="menuitem" onClick={() => void copy(menu.plain)}>Copy message</button>
-      <button role="menuitem" onClick={() => void copy(message?.text || '')}>Copy message as Markdown</button>
-      <hr />
-      <button role="menuitem" onClick={() => attach(menu)}>Attach {menu.selection ? 'selection' : 'message'} as context</button>
-      <button role="menuitem" onClick={() => { if (saveChapters([...chapters.filter(chapter => chapter.id !== menu.id), { id: menu.id, label: (menu.selection || menu.plain).slice(0, 90) }])) setMenu(null); }}>Pin as chapter</button>
-      <hr />
-      <button role="menuitem" disabled={busy} onClick={() => void fork(menu)}>Fork from here<small>Starts a new session, keeps this one</small></button>
+      {menu.id && !menu.imageSrc && <>
+        {menu.selection ? <button role="menuitem" onClick={() => void copy(menu.selection)}>Copy <kbd>Ctrl+C</kbd></button> : menu.code !== undefined && <button role="menuitem" onClick={() => void copy(menu.code!)}>Copy code</button>}
+        <button role="menuitem" onClick={() => void copy(menu.plain)}>Copy message</button>
+        <button role="menuitem" onClick={() => void copy(message?.text || '')}>Copy message as Markdown</button>
+        <hr />
+        <button role="menuitem" onClick={() => attach(menu)}>Attach {menu.selection ? 'selection' : 'message'} as context</button>
+        <button role="menuitem" onClick={() => { if (saveChapters([...chapters.filter(chapter => chapter.id !== menu.id), { id: menu.id, label: (menu.selection || menu.plain).slice(0, 90) }])) setMenu(null); }}>Pin as chapter</button>
+        <hr />
+        <button role="menuitem" disabled={busy} onClick={() => void fork(menu)}>Fork from here<small>Starts a new session, keeps this one</small></button>
+      </>}
     </div>, document.body)}
     {!!chapters.length && <div className="conversation-chapters">
       <button type="button" aria-label={tr("หมุดบทสนทนา")} aria-expanded={chaptersOpen} onClick={() => setChaptersOpen(value => !value)}><Bookmark size={14} /><span>{chapters.length}</span></button>

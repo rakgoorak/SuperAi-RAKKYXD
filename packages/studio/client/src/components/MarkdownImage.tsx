@@ -1,5 +1,7 @@
 import { createContext, useContext, useState } from 'react';
+import { Check, Copy } from 'lucide-react';
 import { ImageViewer } from './ImageViewer';
+import { copyImageToClipboard } from '../imageActions';
 import { tr } from '../i18n';
 
 export const ImageEndpointContext = createContext<string | undefined>(undefined);
@@ -33,6 +35,7 @@ export function MarkdownMedia({ path, label, kind }: { path: string; label: stri
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [copied, setCopied] = useState(false);
   if (!endpoint) return null;
   const src = `${endpoint}?path=${encodeURIComponent(path)}${attempt ? `&r=${attempt}` : ''}`;
   const data = { 'data-link-file': path };
@@ -53,8 +56,28 @@ export function MarkdownMedia({ path, label, kind }: { path: string; label: stri
   </span>;
   return <span className={`markdown-image${kind === 'video' ? ' markdown-video' : ''}`} {...data}>
     {kind === 'image'
-      ? <button type="button" className="markdown-image-open" aria-label={tr`ขยายรูป ${label}`} title={tr("กดดูรูปและซูม")}
-        onClick={() => setOpen(true)}><img key={src} src={src} alt={label} loading="lazy" decoding="async" onError={() => void recover()} /></button>
+      ? <span className="markdown-image-frame">
+          <button type="button" className="markdown-image-open" aria-label={tr`ขยายรูป ${label}`} title={tr("กดดูรูปและซูม")}
+            onClick={() => setOpen(true)}><img key={src} src={src} alt={label} loading="lazy" decoding="async" onError={() => void recover()} /></button>
+          <button
+            type="button"
+            className={`markdown-image-copy-btn ${copied ? 'is-copied' : ''}`}
+            title="Copy image"
+            aria-label="Copy image"
+            data-copy-exclude="true"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                await copyImageToClipboard(src);
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 1800);
+              } catch {}
+            }}
+          >
+            {copied ? <Check size={13} /> : <Copy size={13} />}
+            <span>{copied ? 'Copied' : 'Copy image'}</span>
+          </button>
+        </span>
       : <video key={src} className="markdown-video-player" src={src} controls preload="metadata" playsInline aria-label={label} onError={() => void recover()} />}
     {open && <ImageViewer image={{ src, name: label }} onClose={() => setOpen(false)} />}
   </span>;
