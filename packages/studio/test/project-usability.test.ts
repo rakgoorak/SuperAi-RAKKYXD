@@ -56,7 +56,7 @@ test('context and response style reach a CLI turn while user history remains cle
   try {
     const context = buildProjectContext({ rootPath: dir, instructions: 'isolated project instructions' }, dir);
     manager.send('chat', { agent: 'codex', cwd: dir, text: 'my short question', projectContext: context, responseStyle: 'concise' });
-    assert.match(input, /isolated project instructions/); assert.match(input, /ตอบสั้นและตรงประเด็น/);
+    assert.match(input, /isolated project instructions/); assert.match(input, /short and to the point/);
     assert.equal((manager.snapshot('chat').items[0] as any).text, 'my short question');
     proc.emit('close', 0);
     const restored = new CliChatManager(undefined, dir).snapshot('chat').items[0] as any;
@@ -71,7 +71,7 @@ test('Agent planner, subagent, summary and all comparison participants receive t
   t.mock.method(manager as any, 'begin', (_ws: string, prompt: string) => prompt);
   t.mock.method(manager as any, 'provider', () => ({ stream: async (messages: { content: string }[]) => {
     const prompt = messages[0].content; received.push(prompt);
-    return { text: prompt.includes('ตอบเป็น JSON อย่างเดียว') ? JSON.stringify({ note: 'plan', tasks: [{ id: 'one', title: 'task', assignee: 1, instructions: 'do work', dependsOn: [] }] }) : 'done' };
+    return { text: prompt.includes('Reply with JSON only') ? JSON.stringify({ note: 'plan', tasks: [{ id: 'one', title: 'task', assignee: 1, instructions: 'do work', dependsOn: [] }] }) : 'done' };
   } }));
   const wait = async (run: { status: string }) => {
     for (let index = 0; index < 100 && run.status === 'running'; index++) await new Promise(resolve => setTimeout(resolve, 5));
@@ -82,13 +82,13 @@ test('Agent planner, subagent, summary and all comparison participants receive t
     const agent = manager.startAgent('agent-ws', dir, { prompt: 'original question', main: seat, subagents: [{ ...seat, name: 'Worker' }], projectContext: context, responseStyle: 'explanatory' });
     await wait(agent); assert.equal(received.length, 3);
     assert.ok(received.every(prompt => prompt.includes('shared context marker')));
-    assert.doesNotMatch(received[0], /รูปแบบคำตอบ:/, 'response style must not change the JSON planner protocol');
-    assert.match(received[2], /รูปแบบคำตอบ: อธิบาย/);
+    assert.doesNotMatch(received[0], /Answer style:/, 'response style must not change the JSON planner protocol');
+    assert.match(received[2], /Answer style: explain/);
     assert.equal(agent.prompt, 'original question');
     received.length = 0;
     const chat = manager.startChat('compare-ws', dir, { prompt: 'compare question', panel: [seat, { ...seat, name: 'Second' }], summarizer: seat, projectContext: context, responseStyle: 'concise' });
     await wait(chat); assert.equal(received.length, 3);
-    assert.ok(received.every(prompt => prompt.includes('shared context marker') && prompt.includes('ตอบสั้นและตรงประเด็น')));
+    assert.ok(received.every(prompt => prompt.includes('shared context marker') && prompt.includes('short and to the point')));
     assert.equal(chat.prompt, 'compare question');
   } finally { manager.stop(); cleanup(dir); }
 });

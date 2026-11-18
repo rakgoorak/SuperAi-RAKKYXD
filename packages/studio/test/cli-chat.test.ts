@@ -190,7 +190,7 @@ test('the manager streams items, resumes the next turn and rejects overlapping t
     { type: 'turn.completed' },
   ]);
   await settle(chats, 's1');
-  assert.match(turn.stdin, /สวัสดี\n\nไฟล์แนบ:\n- C:\/x\/spec\.pdf/, 'non-image files are listed in the prompt');
+  assert.match(turn.stdin, /สวัสดี\n\nAttached files:\n- C:\/x\/spec\.pdf/, 'non-image files are listed in the prompt');
   const chat = chats.snapshot('s1');
   assert.equal(chat.running, false);
   assert.equal(chat.conversationId, 'th-1');

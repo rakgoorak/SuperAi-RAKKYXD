@@ -20,6 +20,8 @@ import { timeLabel, tokenLabel } from '../chatFormat';
 import { taskProgressNote } from '../taskProgress';
 import { createItemBatch } from '../chatStreamBatch';
 import { notifyDone, sessionNotice } from '../completionNotify';
+import { loadTokenSaver } from '../tokenSaver';
+import { LONG_CHAT_TOKENS, conversationTokens } from '../conversationLength';
 import { loadNextPromptSettings, predictNextPrompt, publishChatRunning, publishNextPrompt } from '../nextPrompt';
 import '../chat-idle.css';
 import '../chat-permission.css';
@@ -300,6 +302,8 @@ function UserMessageItem({
  */
 export function ChatView({ sessionId, name, active = true }: { sessionId: string; name: string; active?: boolean }) {
   const [items, setItems] = useState<ChatItem[]>([]);
+  // Long-chat notice: dismissed per session until the chat grows by another LONG_CHAT_TOKENS.
+  const [longDismissedAt, setLongDismissedAt] = useState(() => { try { return Number(localStorage.getItem(`superai-long-chat:${sessionId}`)) || 0; } catch { return 0; } });
   const [running, setRunning] = useState(false);
   const [activity, setActivity] = useState<Activity | undefined>();
   const [queued, setQueued] = useState<Queued[]>([]);
@@ -350,7 +354,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   useEffect(() => {
     if (!turnsDone || !canSuggest) return;
     if (nextSteps.length) { publishNextPrompt(sessionId, nextSteps[0].label); return; }
-    if (!loadNextPromptSettings().ai) return;
+    if (!loadNextPromptSettings().ai || loadTokenSaver()) return;
     const controller = new AbortController();
     predictNextPrompt(sessionId, controller.signal).then(text => { if (!controller.signal.aborted) publishNextPrompt(sessionId, text); }).catch(() => {});
     return () => controller.abort();
@@ -532,6 +536,16 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
             }
             return <div key={block.id} className="chat-notice">{block.text}</div>;
           })}
+          {(() => {
+            const size = conversationTokens(items as any);
+            if (running || pending || size < LONG_CHAT_TOKENS || size < longDismissedAt + LONG_CHAT_TOKENS) return null;
+            const later = () => { setLongDismissedAt(size); try { localStorage.setItem(`superai-long-chat:${sessionId}`, String(size)); } catch {} };
+            const compact = async () => { try { await post(`/api/terminals/${sessionId}/chat`, { text: '/compact' }); } catch (error) { setProblem((error as Error).message); } };
+            return <div className="chat-long-notice" role="status">
+              <div><strong>{tr("บทสนทนานี้ยาวแล้ว")}</strong><span>{tr`ทุกข้อความใหม่ AI ต้องอ่านทั้งหมดซ้ำ ประมาณ ${Math.round(size / 1000)}k token สรุปบทสนทนาให้สั้นลงเพื่อประหยัด token หรือเริ่มห้องใหม่สำหรับงานถัดไป`}</span></div>
+              <div className="chat-long-actions"><button type="button" className="primary" onClick={() => void compact()}>{tr("สรุปบทสนทนา")}</button><button type="button" className="secondary" onClick={later}>{tr("ไว้ทีหลัง")}</button></div>
+            </div>;
+          })()}
           {liveTodos && liveTodos.todos.length > 0 && <TaskList key={liveTodos.id} item={liveTodos} live items={items} />}
           {running && activity?.quiet && !pendingPermissions.length && <div className="chat-idle-warning" role="status" aria-label={tr("รอข้อมูลจากงานปัจจุบัน")}>
             <div><Clock3 size={16} /><strong>{tr("ยังไม่ได้รับข้อมูลใหม่ครบ")} {Math.max(1, Math.ceil(activity.quiet.timeoutMs / 60000))} {tr("นาที")}</strong></div>

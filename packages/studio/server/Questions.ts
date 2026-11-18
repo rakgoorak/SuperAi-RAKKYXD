@@ -36,11 +36,11 @@ export function extractJson(raw: string): any {
 }
 
 export const MAX_QUESTIONS = 4;
-export const ASK_RULES = `ถามเฉพาะเรื่องที่คำตอบเปลี่ยนผลลัพธ์อย่างมีนัยสำคัญ และเดาจากคำขอ ไฟล์แนบ หรือไฟล์ในโปรเจกต์ไม่ได้
-ถามได้ไม่เกิน ${MAX_QUESTIONS} ข้อ แต่ละข้อมี 2-4 ตัวเลือกที่ต่างกันชัดเจน ใส่ "recommended":true ที่ตัวเลือกที่แนะนำและวางไว้เป็นตัวแรก
-ใช้ "multiSelect":true เมื่อเลือกได้หลายข้อ ไม่ต้องใส่ตัวเลือก "อื่นๆ" เพราะผู้ใช้พิมพ์คำตอบเองได้เสมอ
-รูปแบบ JSON:
-{"intro":"บอกสั้นๆ ว่าตรวจอะไรแล้วและทำไมต้องถาม","questions":[{"header":"หัวข้อสั้น","question":"คำถามเต็ม?","multiSelect":false,"options":[{"label":"ตัวเลือกสั้นๆ","description":"ผลของการเลือกข้อนี้","recommended":true},{"label":"ตัวเลือกอื่น","description":"ผลของการเลือกข้อนี้"}]}]}`;
+export const ASK_RULES = `Ask only about things whose answer changes the outcome significantly and that you cannot infer from the request, the attachments or the project files.
+Ask at most ${MAX_QUESTIONS} questions, each with 2-4 clearly different options. Put "recommended":true on the recommended option and list it first.
+Use "multiSelect":true when several can be chosen. Do not add an "Other" option: the user can always type their own answer.
+JSON format:
+{"intro":"what you checked and why you need to ask, briefly","questions":[{"header":"short topic","question":"full question?","multiSelect":false,"options":[{"label":"short option","description":"what choosing this means","recommended":true},{"label":"another option","description":"what choosing this means"}]}]}`;
 
 /** Read clarifying questions from an AI reply; null when it asked none or the reply is not usable. */
 export function parseQuestions(raw: string | object): { intro: string; questions: ClarifyQuestion[] } | null {
@@ -79,10 +79,10 @@ export const QUESTION_FENCE = "superai-questions";
  */
 export function questionRules(): string {
   return [
-    "ตัดสินใจเองว่าต้องถามผู้ใช้ก่อนหรือไม่: ถ้าคำขอชัดเจนหรือเป็นงานเล็ก ให้ลงมือทำเลยโดยไม่ต้องถาม ถ้าเป็นงานที่ต้องแก้หลายส่วนและยังมีเรื่องที่ผู้ใช้ต้องตัดสินใจ (เป้าหมาย ขอบเขต วิธีทำ) ซึ่งเดาผิดแล้วต้องทำใหม่ ให้ถามทั้งหมดในครั้งเดียวก่อนแก้ไฟล์หรือรันคำสั่ง แล้วหยุดรอคำตอบ",
-    `เวลาถาม ให้เขียนคำถามเป็นบล็อกโค้ดภาษา ${QUESTION_FENCE} ที่มี JSON อยู่ข้างใน ไว้ท้ายข้อความ แล้วจบข้อความทันที โปรแกรมจะแสดงเป็นตัวเลือกให้ผู้ใช้กด`,
+    "Decide yourself whether to ask the user first: if the request is clear or the task is small, just do it. If the task touches several parts and leaves decisions to the user (goal, scope, approach) that would mean redoing work if guessed wrong, ask them all at once before editing files or running commands, then stop and wait.",
+    `To ask, put the questions in a ${QUESTION_FENCE} code block containing JSON at the end of your message, then end the message. The app shows them as options the user can click.`,
     ASK_RULES,
-    `เขียนคำถามและตัวเลือกตามกฎนี้: ${replyLanguageRule()}`,
+    `Write the questions and options following this rule: ${replyLanguageRule()}`,
   ].join("\n");
 }
 

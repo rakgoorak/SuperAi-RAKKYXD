@@ -27,7 +27,7 @@ test('chat sends one prompt to every Main and the summarizer credits each answer
     assert.equal(run.output, 'สรุปจากทั้งสองตัว');
     assert.match(prompts.judge, /Main 1[\s\S]*ความเห็นของ alpha/);
     assert.match(prompts.judge, /Main 2[\s\S]*ความเห็นของ beta/);
-    assert.match(prompts.judge, /ตัดส่วนที่ผิด/);
+    assert.match(prompts.judge, /Drop what is wrong/);
     assert.equal(new AgentRunManager(path.join(dir, 'h.json')).list('p')[0].panel!.length, 2);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
@@ -146,7 +146,7 @@ test('chat: the screener asks multiple-choice questions and every Main gets the 
   const dir = tmp('chat-ask'); const prompts: Record<string, string> = {};
   t.mock.method(globalThis, 'fetch', async (_url: any, options: any) => {
     const body = JSON.parse(options.body); const text = body.messages.map((m: any) => m.content).join('\n');
-    if (text.includes('ตรวจว่าคำถามนี้กำกวม') || text.includes('ผู้ช่วยตรวจคำถาม')) return reply(questions);
+    if (text.includes('ตรวจว่าคำถามนี้กำกวม') || text.includes('You check a question')) return reply(questions);
     prompts[body.model] = text;
     return reply(`คำตอบ ${body.model}`);
   });
@@ -172,7 +172,7 @@ test('chat goes straight to answers when the screener asks nothing, and cancel r
   const dir = tmp('chat-noask'); let asking = false;
   t.mock.method(globalThis, 'fetch', async (_url: any, options: any) => {
     const text = JSON.parse(options.body).messages.map((m: any) => m.content).join('\n');
-    return reply(text.includes('ตรวจว่าคำถามนี้กำกวม') || text.includes('ผู้ช่วยตรวจคำถาม') ? (asking ? questions : '{"questions":[]}') : 'ตอบ');
+    return reply(text.includes('ตรวจว่าคำถามนี้กำกวม') || text.includes('You check a question') ? (asking ? questions : '{"questions":[]}') : 'ตอบ');
   });
   try {
     const manager = new AgentRunManager(path.join(dir, 'h.json'));
@@ -204,12 +204,12 @@ test('agent: Main may ask before planning, then plans with the answers (skip let
     const manager = new AgentRunManager(path.join(dir, 'h.json'));
     const run = manager.startAgent('p', dir, { prompt: 'สร้างระบบ', main: seat('main', 'Main'), subagents: [seat('w')], clarify: true });
     await waitFor(() => run.stage === 'asking');
-    assert.match(mainPrompts[0], /ถามผู้ใช้กลับ/);
+    assert.match(mainPrompts[0], /ask the user instead of sending a plan/);
     manager.answer(run.id, { skip: true });
     await settle(run);
     assert.equal(run.status, 'completed', run.error);
     assert.equal(run.clarify!.status, 'skipped');
-    assert.doesNotMatch(mainPrompts[1], /ถามผู้ใช้กลับ/);
+    assert.doesNotMatch(mainPrompts[1], /ask the user instead of sending a plan/);
     assert.match(mainPrompts[1], /คำตอบ: ข้าม/);
     assert.match(workerPrompt, /ใช้ฐานข้อมูลอะไร/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
@@ -226,7 +226,7 @@ test('agent without clarify never offers Main the chance to ask', async t => {
     const run = new AgentRunManager(path.join(dir, 'h.json')).startAgent('p', dir, { prompt: 'ทำ', main: seat('main'), subagents: [seat('w')] });
     await settle(run);
     assert.equal(run.status, 'completed', run.error);
-    assert.doesNotMatch(first, /ถามผู้ใช้กลับ/);
+    assert.doesNotMatch(first, /ask the user instead of sending a plan/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -254,16 +254,16 @@ test('agent respects allowTools: true permits editing and false enforces read-on
     await settle(readOnlyRun);
     assert.equal(readOnlyRun.status, 'completed');
     assert.equal(readOnlyRun.allowTools, false);
-    assert.match(mainPrompts[0], /Sub-agent อ่านไฟล์ได้อย่างเดียว/);
-    assert.match(workerPromptCaptured, /อ่านไฟล์ได้อย่างเดียว ห้ามแก้ไฟล์/);
+    assert.match(mainPrompts[0], /Sub-agents can only read files/);
+    assert.match(workerPromptCaptured, /You can only read files; do not edit any/);
 
     // 2. With allowTools: true
     const writeRun = manager.startAgent('p', dir, { prompt: 'สร้างฟีเจอร์', main: seat('main'), subagents: [seat('w')], allowTools: true });
     await settle(writeRun);
     assert.equal(writeRun.status, 'completed');
     assert.equal(writeRun.allowTools, true);
-    assert.match(mainPrompts[2], /Sub-agent แก้ไฟล์และรันคำสั่งได้/);
-    assert.match(workerPromptCaptured, /แก้ไฟล์\/รันคำสั่งได้เท่าที่จำเป็น/);
+    assert.match(mainPrompts[2], /Sub-agents can edit files and run commands/);
+    assert.match(workerPromptCaptured, /Edit files and run commands only as this task needs/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

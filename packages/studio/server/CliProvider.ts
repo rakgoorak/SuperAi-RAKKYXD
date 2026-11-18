@@ -72,7 +72,7 @@ export function promptArguments(
       inputFile,
       ...attachments.flatMap((file) => ["--file", file]),
       "--",
-      `อ่านคำขอและบริบททั้งหมดจากไฟล์แนบ ${replyLanguageRule()}`,
+      `Read the full request and context from the attached file. ${replyLanguageRule()}`,
     ];
   }
   throw new Error(tr("CLI นี้รองรับเฉพาะ terminal กรุณาใช้โหมดโค้ด"));

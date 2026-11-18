@@ -55,6 +55,7 @@ import { api, post, Workspace, Cli, Session, Run, Seat, togglePinnedFile } from 
 import { MessageContextChips } from './components/MessageContextChips';
 import { contextPrompt, saveMessageContexts } from './conversationContext';
 import { useResponseStyle } from './responseStyle';
+import { loadTokenSaver, styleToSend } from './tokenSaver';
 import { ResponseStyleSelect } from './components/ResponseStyleSelect';
 import { ComposerOptions } from './components/ComposerOptions';
 import { ProjectContextStatus } from './components/ProjectContextStatus';
@@ -226,6 +227,9 @@ export function App() {
   // Model/effort for the CLI chosen in the "open session" dialog (Code mode).
   const [sessionSeat, setSessionSeat] = useState<Seat>(() => seatFor("claude-code", ""));
   const [runs, setRuns] = useState<Run[]>([]);
+  // Agent team / multi-AI: Enter while a run is working queues the message (with its uploaded files)
+  // and it goes out by itself once that run ends, like a CLI chat's queue.
+  const [queuedRun, setQueuedRun] = useState<{ wsId: string; mode: string; prompt: string; body: Record<string, unknown> } | null>(null);
   const [menu, setMenu] = useState("");
   const composer = useRef<HTMLTextAreaElement>(null);
   const update = useUpdateState();
@@ -627,10 +631,20 @@ export function App() {
     // Apply the returned run before releasing shared busy state: all rows and Send stay locked.
     if (activeWsRef.current === previous.wsId) setRuns(current => [...current.filter(run => run.id !== created.id), created]);
   });
-  /** `queue` (Ctrl+Enter): a chat that is still answering takes the message after its current turn. */
+  useEffect(() => {
+    if (!queuedRun || runs.some((r) => r.wsId === queuedRun.wsId && r.status === "running")) return;
+    if (activeWsRef.current !== queuedRun.wsId) return;
+    const next = queuedRun;
+    setQueuedRun(null);
+    void task(async () => {
+      await post(`/api/conversations/${next.wsId}`, next.body);
+      if (activeWsRef.current === next.wsId) setRuns(await api<Run[]>(`/api/conversations/${next.wsId}`));
+    });
+  }, [queuedRun, runs]);
+  /** Enter while a chat is answering queues the message for after that turn; `interruptNow` (Ctrl+Enter) stops the turn and sends at once. */
   // Like Claude: the box grows with what is typed and shrinks back to one line once it is sent or cleared.
   useEffect(() => { if (!draft) setComposerExpanded(false); }, [draft]);
-  const send = async (queue = false) => {
+  const send = async (interruptNow = false) => {
     if (sending.current) return;
     sending.current = true;
     try { await task(async () => {
@@ -657,7 +671,7 @@ export function App() {
         const files: SavedAttachment[] = [];
         for (const item of attachments.items) files.push(await uploadAttachment(`/api/workspaces/${ws.id}/attachments`, item.file));
         await post(`/api/terminals/${session.id}/chat`, { text: draft.trim() || tr("ดูไฟล์แนบนี้"),
-          model: chosen.model, effort: chosen.effort, permission: "read", responseStyle: answerStyle, attachments: files.map(file => file.path) });
+          model: chosen.model, effort: chosen.effort, permission: "read", responseStyle: styleToSend(answerStyle), attachments: files.map(file => file.path) });
         setChatPrefs(session.id, { responseStyle: answerStyle });
         const created = session;
         setWorkspaces(current => current.some(item => item.id === ws.id) ? current : [...current, ws]);
@@ -703,18 +717,17 @@ export function App() {
             if (recipients.length === 1 && /^\/skills?\s*$/.test(text)) { setDialog("skills"); setDraft(""); return; }
             const hasSkill = /(?:^|\s)\/(?:skill\s+)?([\w.:-]+)/.test(text);
             const skillId = prefs.skillId && hasSkill ? prefs.skillId : "";
-            // Enter while the chat is answering stops that answer and sends this one at once.
+            // Enter while the chat is answering waits for it; Ctrl+Enter stops that answer and sends this one.
             const result = await post<{ queued?: boolean; interrupted?: boolean }>(`/api/terminals/${recipient.id}/chat`, {
               text: contextPrompt(recipient.id, text),
               model: prefs.model,
               effort: prefs.effort,
               permission: prefs.permission,
-              responseStyle: prefs.responseStyle,
+              responseStyle: styleToSend(prefs.responseStyle),
               includeProjectContext: prefs.includeProjectContext,
               ...(skillId ? { skillId } : {}),
               attachments: saved.map((file) => file.path),
-              // Ctrl+Enter: wait behind a running turn instead of being refused.
-              ...(queue ? { queue: true } : {}),
+              ...(interruptNow ? { interrupt: true } : {}),
             });
             if (result.queued) queuedCount++;
             if (result.interrupted) interruptedCount++;
@@ -746,14 +759,22 @@ export function App() {
       } else {
         const prompt = draft.trim() || tr("ช่วยดูไฟล์แนบนี้");
         const files = saved.map((file) => file.path);
+        let body: Record<string, unknown>;
         if (mode === "agent") {
           if (!agentConfig) throw new Error(tr("กรุณาเลือก Main และ Sub-agent ก่อน"));
-          await post(`/api/conversations/${workspace.id}`, { mode, prompt, attachments: files, allowTools: agentConfig.allowTools ?? allowTools, main: agentConfig.main, subagents: agentConfig.subagents, responseStyle: answerStyle, clarify: agentConfig.clarify });
+          body = { mode, prompt, attachments: files, allowTools: agentConfig.allowTools ?? allowTools, main: agentConfig.main, subagents: agentConfig.subagents, responseStyle: styleToSend(answerStyle), tokenSaver: loadTokenSaver(), clarify: agentConfig.clarify };
         } else {
           if (!chatConfig) throw new Error(tr("กรุณาเลือก AI ที่จะถามก่อน"));
-          await post(`/api/conversations/${workspace.id}`, { mode, prompt, attachments: files, panel: chatConfig.panel, summarizer: chatConfig.summarizer, summaryStyle: chatConfig.style, responseStyle: answerStyle, clarify: chatConfig.clarify });
+          body = { mode, prompt, attachments: files, panel: chatConfig.panel, summarizer: chatConfig.summarizer, summaryStyle: chatConfig.style, responseStyle: styleToSend(answerStyle), tokenSaver: loadTokenSaver(), clarify: chatConfig.clarify };
         }
-        setRuns(await api<Run[]>(`/api/conversations/${workspace.id}`));
+        if (activeRun && activeRun.wsId === workspace.id) {
+          if (queuedRun) throw new Error(tr("มีข้อความรอคิวอยู่แล้ว ยกเลิกข้อความนั้นก่อน หรือรอให้ส่งไป"));
+          setQueuedRun({ wsId: workspace.id, mode, prompt, body });
+          setNotice(tr("ต่อคิวแล้ว · ส่งเองเมื่องานก่อนหน้าเสร็จ"));
+        } else {
+          await post(`/api/conversations/${workspace.id}`, body);
+          setRuns(await api<Run[]>(`/api/conversations/${workspace.id}`));
+        }
       }
       setDraft("");
       attachments.clear();
@@ -1852,8 +1873,15 @@ export function App() {
                     ))}
                   </div>
                 )}
+                {queuedRun && queuedRun.wsId === activeWs && (
+                  <div className="queued-run" role="status">
+                    <span>{tr("รอคิว:")} {queuedRun.prompt.split("\n")[0].slice(0, 120)}</span>
+                    <button type="button" className="text-button" onClick={() => { setDraft(queuedRun.prompt); setQueuedRun(null); }}>{tr("แก้ไข")}</button>
+                    <button type="button" className="text-button" onClick={() => setQueuedRun(null)}>{tr("ยกเลิก")}</button>
+                  </div>
+                )}
                 <div className="composer-hint">
-                  <span>{tr("Enter ส่ง")}{chatTarget ? tr(" (ขณะ AI ทำงาน = แทรกทันที) · Ctrl+Enter ต่อคิว") : mode === "code" ? tr(" · Ctrl+Enter ต่อคิว") : ""} {tr("· Shift + Enter ขึ้นบรรทัดใหม่ · Ctrl+Click เพื่อเปิดลิงก์")}</span>
+                  <span>{tr("Enter ส่ง")}{chatTarget ? tr(" (ขณะ AI ทำงาน = ต่อคิว) · Ctrl+Enter แทรกทันที") : mode === "code" ? tr(" · Ctrl+Enter แทรกทันที") : tr(" (ขณะ AI ทำงาน = ต่อคิว)")} {tr("· Shift + Enter ขึ้นบรรทัดใหม่ · Ctrl+Click เพื่อเปิดลิงก์")}</span>
                   <span>{tr("ตรวจคำสั่งก่อนส่งเสมอ")}</span>
                 </div>
               </div>

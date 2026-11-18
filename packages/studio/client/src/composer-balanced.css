@@ -102,3 +102,7 @@
 @media (max-width:760px) {
   #root .work-canvas .composer-area.composer-balanced { padding:8px 12px 10px; }
 }
+
+/* Agent team / multi-AI: the message waiting for the current run */
+.queued-run { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 10px; margin: 0 0 6px; border: 1px dashed var(--border, #3a3a35); border-radius: 8px; font-size: 12px; color: var(--dim, #a3a29b); }
+.queued-run span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
