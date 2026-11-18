@@ -627,6 +627,20 @@ export function App() {
     // Apply the returned run before releasing shared busy state: all rows and Send stay locked.
     if (activeWsRef.current === previous.wsId) setRuns(current => [...current.filter(run => run.id !== created.id), created]);
   });
+  // Quick ask (global shortcut box): its text starts a new chat here, the same way as New + Send.
+  const quickAskText = useRef("");
+  useEffect(() => window.superai?.onQuickAsk?.((text) => {
+    if (typeof text !== "string" || !text.trim()) return;
+    quickAskText.current = text;
+    newConversationWorkspace.current = activeWsRef.current;
+    setMode("code"); setSelected(""); setTarget("active"); setZoomed(false);
+    setDraft(text);
+  }), []);
+  useEffect(() => {
+    if (!quickAskText.current || draft !== quickAskText.current || mode !== "code" || target !== "active" || selected) return;
+    quickAskText.current = "";
+    void send();
+  }, [draft, mode, target, selected]);
   /** `queue` (Ctrl+Enter): a chat that is still answering takes the message after its current turn. */
   // Like Claude: the box grows with what is typed and shrinks back to one line once it is sent or cleared.
   useEffect(() => { if (!draft) setComposerExpanded(false); }, [draft]);

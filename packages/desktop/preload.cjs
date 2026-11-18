@@ -23,4 +23,6 @@ contextBridge.exposeInMainWorld('superai', {
   onComputer: callback => listen('computer:state', callback),
   notify: notice => ipcRenderer.invoke('app:notify', notice),
   onNotifyOpen: callback => listen('notify:open', callback),
+  quickAsk: action => ipcRenderer.invoke('quick:action', action),
+  onQuickAsk: callback => listen('quick:ask', callback),
 });
