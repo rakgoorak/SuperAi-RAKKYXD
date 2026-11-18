@@ -89,6 +89,10 @@ declare global {
       /** OS notification + taskbar flash; clicking it focuses the window and reports `target` via onNotifyOpen. */
       notify?: (notice: { tag: string; title: string; body: string; target: unknown }) => Promise<void>;
       onNotifyOpen?: (callback: (target: unknown) => void) => () => void;
+      /** Quick ask box: which global shortcut works ("" when none), or open it now. */
+      quickAsk?: (action: "state" | "open") => Promise<{ key: string }>;
+      /** Text sent from the quick ask box, to start a new chat with. */
+      onQuickAsk?: (callback: (text: unknown) => void) => () => void;
     };
   }
 }

@@ -1247,8 +1247,9 @@ export class StudioServer {
           attachments,
           projectContext: req.body.includeProjectContext === false ? { text: '', instructions: false, files: [], preparedAt: Date.now(), chunks: [] } : buildProjectContext(session.wsId ? this.workspaceRegistry.getWorkspace(session.wsId) : undefined, session.cwd, { native: nativeRuleFiles(agent) }),
           responseStyle: style,
-        // Enter while the chat is answering interrupts it (like Claude); Ctrl+Enter (`queue`) waits instead.
-        }, { queue: req.body.queue === true, interrupt: req.body.queue !== true && req.body.interrupt !== false });
+        // Enter while the chat is answering waits for the current turn (like Codex and Claude Code);
+        // Ctrl+Enter (`interrupt: true`) stops that turn and sends at once.
+        }, { queue: req.body.interrupt !== true, interrupt: req.body.interrupt === true });
         session.restart = { ...session.restart, ...chosen };
         this.saveSessions();
         res.json({ success: true, queued: outcome === "queued", interrupted: outcome === "interrupted" });

@@ -82,3 +82,10 @@ dialog.message-image-preview[open] { display: grid; place-items: center; }
 #root .markdown .katex-display { margin: 10px 0 14px; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
 #root .markdown .md-mermaid { display: flex; justify-content: center; padding: 16px; overflow-x: auto; }
 #root .markdown .md-mermaid svg { max-width: 100%; height: auto; }
+
+/* Long conversation: suggest /compact to save tokens */
+.chat-long-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 6px 0 12px; padding: 12px 14px; border: 1px solid var(--border, #3a3a35); border-radius: 10px; background: #2a2924; }
+.chat-long-notice > div:first-child { display: grid; gap: 3px; min-width: 0; flex: 1 1 260px; }
+.chat-long-notice strong { font-size: 13px; font-weight: 600; }
+.chat-long-notice span { color: var(--dim, #a3a29b); font-size: 12px; line-height: 1.5; }
+.chat-long-actions { display: flex; gap: 8px; }

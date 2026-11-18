@@ -471,6 +471,8 @@ const text: Record<string, string> = {
   "คำสั่ง browser ไม่ถูกต้อง": "browser 命令不正确",
   "ลืมข้อมูลไม่สำเร็จ กรุณาตรวจคลัง credential ของระบบ": "无法清除数据，请检查系统的凭据存储",
   "พอร์ต 3888–3899 ถูกใช้งานทั้งหมด": "端口 3888–3899 均已被占用",
+  "ถาม AI อะไรก็ได้…": "向 AI 提问任何问题…",
+  "Enter ส่งไปที่แชทใหม่ในโปรแกรม · Shift+Enter ขึ้นบรรทัดใหม่ · Esc ปิด": "Enter 发送到应用中的新对话 · Shift+Enter 换行 · Esc 关闭",
   "เปิด SuperAi & RAKKYXD ไม่สำเร็จ": "无法打开 SuperAi & RAKKYXD",
   "{0}\nลอง npm run build แล้วเปิดใหม่": "{0}\n请运行 npm run build 后重新打开",
   "กรุณาระบุ URL": "请填写 URL",
