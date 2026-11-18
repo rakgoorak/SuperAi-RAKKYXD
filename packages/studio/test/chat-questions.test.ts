@@ -44,7 +44,7 @@ test('a question block is split from the reply text; anything else is left alone
   assert.equal(asked!.questions[0].options[0].recommended, true);
   assert.deepEqual(takeQuestions('```js\nconsole.log(1)\n```'), { text: '```js\nconsole.log(1)\n```', asked: null });
   assert.equal(takeQuestions('```superai-questions\nnot json\n```').asked, null, 'a broken block stays visible as text');
-  assert.match(questionRules(), /ตัดสินใจเองว่าต้องถามผู้ใช้ก่อนหรือไม่/, 'the AI decides; there is no switch');
+  assert.match(questionRules(), /Decide yourself whether to ask the user first/, 'the AI decides; there is no switch');
 });
 
 test('answers are checked against the options before going back to the AI', () => {
