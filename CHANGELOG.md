@@ -6,6 +6,22 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.2.5] - 2026-11-18
+
+### Added
+- Open a new session without choosing a project folder first (general chat workspace), just like Claude Desktop and Codex Desktop.
+- Rewind project files to before any message with checkpoints (#48).
+- Review AI edits section by section and keep or undo each hunk (#47).
+- Global shortcut for Quick Ask from anywhere on your computer (#46).
+
+### Changed
+- Redesigned the left sidebar: primary New Session action at the top, unified search + favorites bar, cleaner session rows without duplicate provider subtitles, and a compact 2-column bottom utility dock.
+- Simplified the live chat working indicator to show `กำลังทำงาน` alongside token count and elapsed time without repeating the CLI and model name.
+- Improved scrolling performance in long chats by skipping off-screen rendering (#45).
+
+### Fixed
+- Opening a 2nd or subsequent session now immediately switches focus to the newly opened session instead of reverting to the first session.
+
 ## [1.2.4] - 2026-11-17
 
 ### Added

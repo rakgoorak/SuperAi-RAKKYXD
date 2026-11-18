@@ -178,7 +178,7 @@ try {
 
   // 8. Opening a new session without selecting a project folder (general chat workspace)
   await page.getByRole('button', { name: 'เปิด session ใหม่', exact: true }).click();
-  await page.getByLabel('โฟลเดอร์ทำงาน', { exact: true }).selectOption('');
+  await page.getByRole('button', { name: 'คุยทั่วไปโดยไม่เลือกโฟลเดอร์', exact: true }).click();
   await page.getByRole('button', { name: 'เปิด 1 session', exact: true }).click();
   await page.locator('#session-sess-5.focused').waitFor({ state: 'visible' });
   check(sessions.at(-1)?.wsId === 'general', 'Opening a session without selecting a folder spawns into general-chat workspace');

@@ -2166,23 +2166,34 @@ export function App() {
                       )}
                     </select>
                   </label>
-                  <label>
-                    {tr("โฟลเดอร์ทำงาน")}
-                    <select
-                      aria-label={tr("โฟลเดอร์ทำงาน")}
-                      value={sessionWs}
-                      onChange={(e) => setSessionWs(e.target.value)}
-                    >
-                      <option value="">{tr("คุยทั่วไปโดยไม่เลือกโฟลเดอร์")}</option>
+                  <div className="session-folder-field" role="group" aria-label={tr("โฟลเดอร์ทำงาน")}>
+                    <span>{tr("โฟลเดอร์ทำงาน")}</span>
+                    <div className="session-folder-choices">
+                      <button
+                        type="button"
+                        className={`secondary ${sessionWs === "" ? "selected" : ""}`}
+                        aria-pressed={sessionWs === ""}
+                        onClick={() => setSessionWs("")}
+                      >
+                        <MessageSquare size={13} />
+                        <span>{tr("คุยทั่วไปโดยไม่เลือกโฟลเดอร์")}</span>
+                      </button>
                       {workspaces
                         .filter((w) => !isGeneralChatWorkspace(w))
                         .map((w) => (
-                          <option key={w.id} value={w.id}>
-                            {w.name}
-                          </option>
+                          <button
+                            type="button"
+                            key={w.id}
+                            className={`secondary ${sessionWs === w.id ? "selected" : ""}`}
+                            aria-pressed={sessionWs === w.id}
+                            onClick={() => setSessionWs(w.id)}
+                          >
+                            <Folder size={13} />
+                            <span>{w.name}</span>
+                          </button>
                         ))}
-                    </select>
-                  </label>
+                    </div>
+                  </div>
                 </div>
                 {launchCli && !launchCli.available && (
                   <p className="inline-error">

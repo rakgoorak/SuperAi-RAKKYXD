@@ -1,3 +1,21 @@
+# SuperAi & RAKKYXD v1.2.5
+
+- **Open a session without choosing a folder:** start any AI session in general chat right away, or switch between general chat and project folders directly from the New Session dialog.
+- **Cleaner, more compact sidebar:** New Session sits at the top alongside Add Project, search and favorites share one row, session rows avoid repeating the provider name twice, and the bottom tools dock is arranged in a compact 2-column grid.
+- **Immediate focus on new sessions:** opening a second or subsequent session focuses the new session immediately instead of snapping back to the first session.
+- **Concise live status:** the working indicator now shows `Working · tokens · time` without repeating the CLI and model name.
+- **Checkpoints, hunk review & Quick Ask:** rewind project files to before any message, review AI changes section by section, and open Quick Ask from anywhere with a global shortcut.
+
+## ภาษาไทย
+
+- **เปิด session ใหม่โดยไม่ต้องเลือกโฟลเดอร์:** กดเปิด session คุยทั่วไปได้ทันทีเหมือน Claude Desktop และ Codex Desktop หรือเลือกสลับระหว่างคุยทั่วไปกับโฟลเดอร์โปรเจกต์ได้ในหน้าต่างเปิด session
+- **แถบข้าง (Sidebar) ใหม่ กะทัดรัดและสะอาดตา:** ย้ายปุ่ม `+ เปิด session ใหม่` ขึ้นด้านบนสุด รวมช่องค้นหากับดาวโปรเจกต์โปรดไว้แถวเดียว ไม่แสดงชื่อค่าย AI ซ้ำสองบรรทัด และจัดปุ่มเครื่องมือด้านล่างเป็น Grid 2 คอลัมน์
+- **สลับไปหา session ใหม่ทันที:** แก้ปัญหาเปิด session ตัวที่ 2 แล้วหน้าจอดีดกลับไปหาตัวแรก
+- **ข้อความสถานะกระชับขึ้น:** แสดงเฉพาะ `กำลังทำงาน · tokens · เวลา` โดยไม่พ่วงชื่อ CLI และโมเดลซ้ำ
+- **Checkpoints, ตรวจแก้รายส่วน และ Quick Ask:** ย้อนไฟล์โปรเจกต์กลับไปก่อนข้อความใดก็ได้ ตรวจและเลือกเก็บ/ย้อนโค้ดที่ AI แก้ทีละส่วน และเรียกกล่องถามด่วนจากที่ไหนก็ได้ด้วยคีย์ลัด
+
+---
+
 # SuperAi & RAKKYXD v1.2.4
 
 - **Answers look like Claude and Codex:** full Markdown in chat, including headings, nested and task lists, tables, and code coloured by language. Math (`\( \)`, `$$ $$`) is typeset, and `mermaid` code blocks are drawn as diagrams.
