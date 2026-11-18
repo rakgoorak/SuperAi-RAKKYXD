@@ -21,6 +21,10 @@ in the projects linked below.
 | [Lucide](https://github.com/lucide-icons/lucide) (`lucide-react`) | ISC |
 | [Transformers.js](https://github.com/huggingface/transformers.js) (`@huggingface/transformers`) | Apache-2.0 |
 | [Playwright](https://github.com/microsoft/playwright) (`playwright-core`) | Apache-2.0 |
+| [react-markdown](https://github.com/remarkjs/react-markdown), [remark-gfm](https://github.com/remarkjs/remark-gfm), [remark-breaks](https://github.com/remarkjs/remark-breaks), [remark-math](https://github.com/remarkjs/remark-math), [rehype-katex](https://github.com/remarkjs/remark-math), [rehype-highlight](https://github.com/rehypejs/rehype-highlight) | MIT |
+| [KaTeX](https://github.com/KaTeX/KaTeX) (math in answers, with its fonts) | MIT |
+| [Mermaid](https://github.com/mermaid-js/mermaid) (diagrams in answers) | MIT |
+| [highlight.js](https://github.com/highlightjs/highlight.js) (code colours, via `lowlight`) | BSD-3-Clause |
 | [Noto Sans Thai](https://fonts.google.com/noto/specimen/Noto+Sans+Thai) (`@fontsource/noto-sans-thai`) | SIL Open Font License 1.1 |
 
 Packages these depend on are installed alongside them, each with its own license file.
@@ -37,6 +41,17 @@ them, and their own terms apply:
   `onnx-community/whisper-small` and `phagehunter/whisper-th-small-onnx`, under the licenses on
   their model pages.
 - **Node.js and Git**, when the setup guide installs them for you.
+- **Agent Skills** you install from the Skills page, from the repositories it lists (Anthropic,
+  OpenAI, Vercel, Cloudflare, Supabase, Addy Osmani's web-quality skills) or from skills.sh, under
+  each skill's own license.
+
+## In this repository only
+
+The project ships two Agent Skills for people developing SuperAi with Claude Code, in
+`.claude/skills/`. They are not part of the app, and each folder keeps its MIT license file:
+
+- `accessibility` from [addyosmani/web-quality-skills](https://github.com/addyosmani/web-quality-skills)
+- `native-feel-cross-platform-desktop` from [yetone/native-feel-skill](https://github.com/yetone/native-feel-skill)
 
 SuperAi & RAKKYXD is not affiliated with, endorsed by, or sponsored by Anthropic, OpenAI, Google,
 or any other AI provider. All product names and trademarks belong to their owners.

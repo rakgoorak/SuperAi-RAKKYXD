@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "skills": {
+    "accessibility": {
+      "source": "addyosmani/web-quality-skills",
+      "commit": "afa8da942115f2961fdbfa80807ea0b232ff6c00",
+      "sourceType": "github",
+      "skillPath": "skills/accessibility/SKILL.md",
+      "computedHash": "c668809f5df57feb87cc06f1bc37fb340d1d92e26bacb6edbeab9258d22e76a5"
+    },
+    "native-feel-cross-platform-desktop": {
+      "source": "yetone/native-feel-skill",
+      "commit": "9bd88c6378e1a80a4da165f3ee7bebb761a74945",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "80d1e61a0853859ae1c2dd993ea91642ea88e9d2a5267920e30cdb87d28b2dca"
+    }
+  }
+}
