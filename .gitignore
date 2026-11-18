@@ -25,7 +25,12 @@ packages/studio/client/public/ort/
 .superai/
 
 .agents/
-.claude/
+# Local Claude settings stay private; only the project's shared skills are committed.
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/accessibility/
+!.claude/skills/native-feel-cross-platform-desktop/
 
 .wrangler/
 

@@ -17,6 +17,8 @@ export const SKILL_SOURCES = [
   { id: "vercel-tools", label: "Vercel Tools", repo: "vercel-labs/skills", branch: "main", prefix: "skills/" },
   { id: "cloudflare", label: "Cloudflare Security", repo: "cloudflare/security-audit-skill", branch: "main", prefix: "skills/" },
   { id: "supabase", label: "Supabase", repo: "supabase/agent-skills", branch: "main", prefix: "skills/" },
+  // Addy Osmani (Chrome team), MIT: accessibility, performance, Core Web Vitals, SEO and web best practices.
+  { id: "web-quality", label: "Web Quality (Addy Osmani)", repo: "addyosmani/web-quality-skills", branch: "main", prefix: "skills/" },
 ] as const;
 export const SKILL_TARGETS = [".claude/skills", ".agents/skills"];
 const MARKER = ".superai-skill.json";
