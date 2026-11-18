@@ -3084,3 +3084,6 @@ img.small-brand { width: 18px; height: auto; background: none; border-radius: 0;
 .account-chips-row button.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--text); font-weight: 600; }
 .account-chips-row button.on::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 .account-chips-row button:focus-visible { outline: 2px solid var(--focus, var(--accent)); outline-offset: 2px; }
+
+/* Long chats: each message sits in a wrapper that keeps the column's flex alignment (OffscreenSkip). */
+.offscreen-skip { display: flex; flex-direction: column; min-width: 0; }
