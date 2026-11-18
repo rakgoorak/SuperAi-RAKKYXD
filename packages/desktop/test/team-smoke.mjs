@@ -18,8 +18,8 @@ const service=http.createServer(async(req,res)=>{
  let input='';for await(const chunk of req)input+=chunk;
  const body=JSON.parse(input), prompt=body.messages.map(m=>m.content).join('\n');calls.push({model:body.model,prompt});
  // Answer by role so parallel Sub-agents can arrive in any order.
- const content=prompt.includes('ผู้สรุปความเห็น')?'CHAT_SUMMARY จาก Main 1 และ Main 2'
-  :prompt.includes('Sub-agent ที่มี')?JSON.stringify({note:'แบ่งงานทดสอบ',tasks:[{id:'a',title:'สร้างงานจริง',assignee:1,instructions:'implement'},{id:'b',title:'ตรวจผลจริง',assignee:2,instructions:'review',dependsOn:['a']}]})
+ const content=prompt.includes('You summarize several AIs')?'CHAT_SUMMARY จาก Main 1 และ Main 2'
+  :prompt.includes('Available Sub-agents')?JSON.stringify({note:'แบ่งงานทดสอบ',tasks:[{id:'a',title:'สร้างงานจริง',assignee:1,instructions:'implement'},{id:'b',title:'ตรวจผลจริง',assignee:2,instructions:'review',dependsOn:['a']}]})
   :body.model==='coder-fixture'?'CODER_RESULT_ACTUAL':body.model==='reviewer-fixture'?'REVIEW_RESULT_ACTUAL':'สรุปผลจากหัวหน้า TEAM_COMPLETE';
  res.setHeader('Content-Type','application/json');res.end(JSON.stringify({choices:[{message:{content}}]}));
 });
