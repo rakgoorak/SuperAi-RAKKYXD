@@ -158,6 +158,8 @@ export interface ConversationRun {
 export interface ChatRequest {
   projectContext?: ProjectContext;
   responseStyle?: ResponseStyle;
+  /** Token saver: send less earlier history. */
+  tokenSaver?: boolean;
   prompt: string;
   panel: unknown;
   summarizer?: unknown;
@@ -168,6 +170,8 @@ export interface ChatRequest {
 export interface AgentRequest {
   projectContext?: ProjectContext;
   responseStyle?: ResponseStyle;
+  /** Token saver: send less earlier history. */
+  tokenSaver?: boolean;
   prompt: string;
   main: unknown;
   subagents: unknown;
@@ -283,7 +287,7 @@ export class AgentRunManager {
       if (problem) throw new Error(`${seat.name}: ${problem}`);
     }
     return attachments.length
-      ? `${prompt}\n\nไฟล์แนบ (อ่านจากตำแหน่งนี้ได้):\n${attachments.map((file) => `- "${file}"`).join("\n")}`
+      ? `${prompt}\n\nAttached files (read them at these paths):\n${attachments.map((file) => `- "${file}"`).join("\n")}`
       : prompt;
   }
 
@@ -380,7 +384,7 @@ export class AgentRunManager {
       return response;
     };
     const loop = new AgentLoop(
-      { id: randomUUID(), name: seat.name, role: "assistant", systemPrompt: `${replyLanguageRule()} บอกตามจริงเมื่อไม่มีเครื่องมือเข้าถึงไฟล์`, maxSteps: 15 },
+      { id: randomUUID(), name: seat.name, role: "assistant", systemPrompt: `${replyLanguageRule()} If you have no tool to reach a file, say so plainly.`, maxSteps: 15 },
       provider,
       opts.tools ? createDefaultTools() : [],
     );
@@ -432,17 +436,18 @@ export class AgentRunManager {
     return run;
   }
 
-  private history(wsId: string, mode: "chat" | "agent") {
+  /** Earlier runs for context; `lean` (token saver) keeps fewer and shorter ones. */
+  private history(wsId: string, mode: "chat" | "agent", lean = false) {
     const runs = this.list(wsId).filter((r) => r.mode === mode && r.status === "completed");
     if (!runs.length) return "";
     return runs
-      .slice(-6)
+      .slice(lean ? -3 : -6)
       .map((r, i, arr) => {
         const isLatest = i === arr.length - 1;
         const answer = (r.output || r.panel?.find((a) => a.status === "completed")?.output || "").trim();
         const compactAnswer = isLatest
-          ? answer.slice(0, 1800)
-          : (answer.length > 350 ? answer.slice(0, 350) + "… [ย่อผลลัพธ์รอบก่อนเพื่อประหยัด Token]" : answer);
+          ? answer.slice(0, lean ? 900 : 1800)
+          : (answer.length > (lean ? 200 : 350) ? answer.slice(0, lean ? 200 : 350) + "… [ย่อผลลัพธ์รอบก่อนเพื่อประหยัด Token]" : answer);
         const prompt = isLatest ? r.prompt : (r.prompt.length > 200 ? r.prompt.slice(0, 200) + "…" : r.prompt);
         return `ผู้ใช้: ${prompt}${r.clarify?.status === "answered" ? `\n${describeAnswers(r.clarify)}` : ""}\nคำตอบ: ${compactAnswer}`;
       })
@@ -458,7 +463,7 @@ export class AgentRunManager {
     const style = body.summaryStyle === "best" ? "best" : "merge";
     const attachments = body.attachments || [];
     const prompt = this.begin(wsId, String(body.prompt || ""), attachments, summarizer ? [...panel, summarizer] : panel);
-    const history = this.history(wsId, "chat");
+    const history = this.history(wsId, "chat", body.tokenSaver === true);
     const clarify = body.clarify === true;
     const run: ConversationRun = {
       id: randomUUID(), wsId, prompt, mode: "chat", status: "running", output: "", createdAt: Date.now(), allowTools: false, attachments, activity: [], projectContext: body.projectContext, responseStyle: body.responseStyle,
@@ -472,7 +477,7 @@ export class AgentRunManager {
         note(screener.name, tr("ตรวจว่าคำถามชัดพอหรือยัง"));
         let reply = "";
         try {
-          reply = await this.ask(screener, `คุณคือผู้ช่วยตรวจคำถามก่อนส่งให้ AI หลายตัวตอบ\n${question}\n\nถ้าคำถามชัดพอจะตอบได้ดีแล้ว ให้ตอบ {"questions":[]} เท่านั้น\nถ้ายังกำกวม ให้ถามผู้ใช้กลับแบบมีตัวเลือก (${replyLanguageRule(prompt)})\n${ASK_RULES}\nตอบเป็น JSON อย่างเดียว ไม่ต้องมีคำอธิบายอื่น`, cwd, controller.signal, {
+          reply = await this.ask(screener, `You check a question before several AIs answer it.\n${question}\n\nIf the question is clear enough to answer well, reply only {"questions":[]}.\nIf it is ambiguous, ask the user back with options (${replyLanguageRule(prompt)})\n${ASK_RULES}\nReply with JSON only, no other text.`, cwd, controller.signal, {
             tools: false, readTools: true, attachments, projectContext: run.projectContext, responseStyle: run.responseStyle, run, stage: tr("ตรวจคำถาม"), onChunk: () => {},
           });
         } catch (err: any) {
@@ -492,8 +497,8 @@ export class AgentRunManager {
           note(answer.seat.name, tr`เริ่มคิด (${describe(answer.seat)})`);
           try {
             const selected = answer.seat.provider.startsWith("cli:") ? skillPrompt(basePrompt, cwd, answer.seat.provider.slice(4), undefined, undefined, accounts.environment(answer.seat.provider.slice(4), answer.seat.accountId || "system")) : basePrompt;
-            const fullQuestion = `${history ? `บทสนทนาก่อนหน้า:\n${history}\n\n` : ""}${selected}`;
-            const text = await this.ask(answer.seat, `${replyLanguageRule(prompt)} ให้เหตุผลประกอบ\n\n${fullQuestion}`, cwd, controller.signal, {
+            const fullQuestion = `${history ? `Earlier conversation:\n${history}\n\n` : ""}${selected}`;
+            const text = await this.ask(answer.seat, `${replyLanguageRule(prompt)} Give your reasoning.\n\n${fullQuestion}`, cwd, controller.signal, {
               tools: false, readTools: true, attachments, projectContext: run.projectContext, responseStyle: run.responseStyle, run, stage: tr("ตอบคำถาม"),
               onChunk: (t) => {
                 if (!controller.signal.aborted) {
@@ -528,22 +533,22 @@ export class AgentRunManager {
         .map((a) => `### ${a.seat.name} (${describe(a.seat)})\n${a.status === "completed" ? a.output : tr`ตอบไม่สำเร็จ: ${a.error}`}`)
         .join("\n\n");
       const instructions = style === "best"
-        ? "คัดเฉพาะความเห็นที่ถูกต้องและมีประโยชน์ที่สุด ตัดส่วนที่ผิด ซ้ำ หรืออ่อนออก และบอกสั้นๆ ว่าตัดอะไรออกเพราะอะไร"
-        : "รวมความเห็นที่มีประโยชน์จากทุกตัวเข้าด้วยกันให้ครบ";
-      const summaryPrompt = `คุณคือผู้สรุปความเห็นจาก AI หลายตัวให้ผู้ใช้ ${replyLanguageRule(prompt)}
-คำถามของผู้ใช้:
+        ? "Keep only the most correct and useful points. Drop what is wrong, repeated or weak, and say briefly what you dropped and why."
+        : "Combine every useful point from all of them.";
+      const summaryPrompt = `You summarize several AIs' answers for the user. ${replyLanguageRule(prompt)}
+The user's question:
 ${prompt}${run.clarify ? `\n\n${describeAnswers(run.clarify)}` : ""}
 
-คำตอบจาก AI แต่ละตัว:
+Each AI's answer:
 ${answers}
 
 ${instructions}
-ระบุชื่อ AI ทุกครั้งที่อ้างความเห็น (เช่น "${answered[0].seat.name} แนะนำว่า…") ห้ามแต่งความเห็นที่ไม่มีในคำตอบ
-จัดรูปแบบเป็นหัวข้อ (แปลชื่อหัวข้อเป็นภาษาเดียวกับคำตอบ):
-## สรุปคำตอบ
-## ใครเสนออะไร
-## จุดที่เห็นตรงกัน / ต่างกัน
-## คำแนะนำสุดท้าย
+Name the AI whenever you cite a point (for example "${answered[0].seat.name} suggests…"). Never invent a point that is not in the answers.
+Use these headings, translated into the language of your reply:
+## Summary
+## Who suggested what
+## Where they agree / differ
+## Final recommendation
 
 ${replyLanguageRule(prompt)}`;
       try {
@@ -570,7 +575,7 @@ ${replyLanguageRule(prompt)}`;
     const allowTools = body.allowTools === true;
     const attachments = body.attachments || [];
     const prompt = this.begin(wsId, String(body.prompt || ""), attachments, [main, ...subagents]);
-    const history = this.history(wsId, "agent");
+    const history = this.history(wsId, "agent", body.tokenSaver === true);
     const run: ConversationRun = {
       id: randomUUID(), wsId, prompt, mode: "agent", status: "running", output: "", createdAt: Date.now(), allowTools, attachments, activity: [], projectContext: body.projectContext, responseStyle: body.responseStyle,
       main, subagents, stage: "planning", tasks: [],
@@ -580,19 +585,19 @@ ${replyLanguageRule(prompt)}`;
       const roster = subagents.map((s, i) => `${i + 1}. ${s.name} — ${describe(s)}`).join("\n");
       note(main.name, tr("กำลังวางแผนและแบ่งงาน"));
       const planPrompt = (answers: string, mayAsk: boolean) => {
-        let text = "คุณคือ Main agent หัวหน้าทีม AI ที่ทำงานในโฟลเดอร์โปรเจกต์ของผู้ใช้\n" +
-          (history ? `งานก่อนหน้าในโปรเจกต์นี้:\n${history}\n\n` : "") +
-          `เป้าหมายของผู้ใช้:\n${prompt}\n` +
+        let text = "You are the Main agent, leading a team of AIs working in the user's project folder.\n" +
+          (history ? `Earlier work in this project:\n${history}\n\n` : "") +
+          `The user's goal:\n${prompt}\n` +
           (answers ? `\n${answers}\n` : "") +
-          `Sub-agent ที่มี (ใช้หมายเลขเป็น assignee):\n${roster}\n\n` +
-          (allowTools ? "Sub-agent แก้ไฟล์และรันคำสั่งได้" : "Sub-agent อ่านไฟล์ได้อย่างเดียว ห้ามสั่งให้แก้ไฟล์ ให้เสนอโค้ดหรือขั้นตอนแทน") +
-          `\nแบ่งงานเป็น 1-${MAX_TASKS} งาน งานที่ไม่มี dependsOn จะทำพร้อมกัน ดังนั้นงานที่ทำพร้อมกันห้ามแก้ไฟล์เดียวกัน\n` +
-          "ถ้างานต้องใช้ผลของงานอื่นให้ใส่ id ของงานนั้นใน dependsOn เลือก Sub-agent ให้เหมาะกับงาน\n" +
-          `${replyLanguageRule(prompt)} ใช้ภาษานี้กับ note และ title\n` +
-          "ตอบเป็น JSON อย่างเดียว ไม่ต้องมีคำอธิบายอื่น:\n" +
-          "{\"note\":\"แนวทางโดยย่อ\",\"tasks\":[{\"id\":\"t1\",\"title\":\"ชื่องาน\",\"assignee\":1,\"instructions\":\"คำสั่งละเอียด\",\"dependsOn\":[]}]}";
+          `Available Sub-agents (use the number as assignee):\n${roster}\n\n` +
+          (allowTools ? "Sub-agents can edit files and run commands." : "Sub-agents can only read files: do not ask them to edit; have them propose code or steps instead.") +
+          `\nSplit the work into 1-${MAX_TASKS} tasks. Tasks without dependsOn run at the same time, so tasks that run together must not edit the same file.\n` +
+          "If a task needs another task's result, put that task's id in dependsOn. Pick the Sub-agent that suits each task.\n" +
+          `${replyLanguageRule(prompt)} Use that language for note and title.\n` +
+          "Reply with JSON only, no other text:\n" +
+          "{\"note\":\"short approach\",\"tasks\":[{\"id\":\"t1\",\"title\":\"task name\",\"assignee\":1,\"instructions\":\"detailed instructions\",\"dependsOn\":[]}]}";
         if (mayAsk) {
-          text += `\n\nก่อนวางแผน ตรวจคำขอและไฟล์ในโปรเจกต์ก่อน ถ้าเป้าหมายยังกำกวมจนแผนอาจผิดทาง ให้ถามผู้ใช้กลับแทนการส่งแผน (${replyLanguageRule(prompt)})\n${ASK_RULES}`;
+          text += `\n\nBefore planning, check the request and the project files. If the goal is unclear enough that the plan could go the wrong way, ask the user instead of sending a plan (${replyLanguageRule(prompt)})\n${ASK_RULES}`;
         }
         return text;
       };
@@ -641,15 +646,15 @@ ${replyLanguageRule(prompt)}`;
             const seat = subagents[t.assignee];
             t.status = "running";
             note(seat.name, tr`เริ่ม “${t.title}”`);
-            const context = t.dependsOn.map((d) => `[ผลจาก ${resultOf(d).title} โดย ${subagents[resultOf(d).assignee].name}]\n${resultOf(d).output}`).join("\n\n");
-            const taskPrompt = `คุณคือ ${seat.name} Sub-agent ในทีม ทำงานในโฟลเดอร์โปรเจกต์ของผู้ใช้ ${replyLanguageRule(prompt)}
-เป้าหมายรวมของผู้ใช้: ${goal}
-${plan.note ? `แนวทางจาก Main: ${plan.note}\n` : ""}${context ? `\n${context}\n` : ""}
-งานของคุณ (${t.title}):
+            const context = t.dependsOn.map((d) => `[Result of ${resultOf(d).title} by ${subagents[resultOf(d).assignee].name}]\n${resultOf(d).output}`).join("\n\n");
+            const taskPrompt = `You are ${seat.name}, a Sub-agent in the team, working in the user's project folder. ${replyLanguageRule(prompt)}
+The user's overall goal: ${goal}
+${plan.note ? `Approach from Main: ${plan.note}\n` : ""}${context ? `\n${context}\n` : ""}
+Your task (${t.title}):
 ${t.instructions}
 
-${allowTools ? "แก้ไฟล์/รันคำสั่งได้เท่าที่จำเป็นกับงานนี้ ห้ามแก้ไฟล์ที่ไม่เกี่ยวข้อง" : "อ่านไฟล์ได้อย่างเดียว ห้ามแก้ไฟล์"}
-จบด้วยสรุปสั้นๆ ว่าทำอะไรไปจริง ไฟล์ไหนเปลี่ยน และผลตรวจ/ทดสอบที่ทำจริง`;
+${allowTools ? "Edit files and run commands only as this task needs; do not touch unrelated files." : "You can only read files; do not edit any."}
+End with a short summary of what you actually did, which files changed, and the checks or tests you actually ran.`;
             try {
               const text = await this.ask(seat, taskPrompt, cwd, signal, {
                 tools: allowTools, readTools: true, attachments, projectContext: run.projectContext, run, stage: tr`งาน: ${t.title}`,
@@ -673,13 +678,13 @@ ${allowTools ? "แก้ไฟล์/รันคำสั่งได้เท
         .map((t) => `### ${t.title} — ${subagents[t.assignee].name} (${t.status})\n${t.output || t.error || tr("ไม่มีผลลัพธ์")}`)
         .join("\n\n");
       try {
-        const text = await this.ask(main, `คุณคือ Main agent ทุก Sub-agent ทำงานเสร็จแล้ว
-เป้าหมายของผู้ใช้: ${goal}
+        const text = await this.ask(main, `You are the Main agent. Every Sub-agent has finished.
+The user's goal: ${goal}
 
-ผลงานของแต่ละ Sub-agent:
+Each Sub-agent's work:
 ${report}
 
-${replyLanguageRule(prompt)} สรุปเฉพาะสิ่งที่เกิดขึ้นจริง: ใครทำอะไร ไฟล์ที่เปลี่ยน ผลทดสอบ งานที่ล้มเหลวหรือยังไม่ได้ทำ และขั้นตอนถัดไปที่แนะนำ ห้ามอ้างว่าสำเร็จถ้ามีงานไม่สำเร็จ`, cwd, signal, {
+${replyLanguageRule(prompt)} Report only what actually happened: who did what, files changed, test results, tasks that failed or were not done, and the recommended next step. Never claim success if any task failed.`, cwd, signal, {
           tools: false, readTools: true, attachments: [], projectContext: run.projectContext, responseStyle: run.responseStyle, run, stage: tr("สรุปงาน"),
           onChunk: (c) => { if (!signal.aborted) run.output += c; },
         });

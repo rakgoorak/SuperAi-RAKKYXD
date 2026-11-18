@@ -2,7 +2,7 @@ import { accounts } from "./Accounts.js";
 import { registerAccountRoutes } from "./AccountRoutes.js";
 import { SelfHealingManager } from './SelfHealingManager.js';
 import { CrossReviewManager } from './CrossReviewManager.js';
-import { projectChanges, projectFile, stageFile, unstageFile, discardFile, saveProjectFile } from "./ProjectChanges.js";
+import { projectChanges, projectFile, stageFile, unstageFile, discardFile, saveProjectFile, revertHunk } from "./ProjectChanges.js";
 import { listWorktrees, createWorktree, mergeWorktree, removeWorktree } from "./GitWorktrees.js";
 import { readPreviewFile, resolvePreviewPath, OutsideProjectError } from './PreviewFiles.js';
 import { workingContext } from './WorkingContext.js';
@@ -383,6 +383,15 @@ export class StudioServer {
       } catch (error) {
         res.status(400).json({ error: (error as Error).message });
       }
+    });
+    // Undo one section of a file's changes (Review by section in the diff viewer).
+    this.app.post('/api/workspaces/:wsId/files/revert-hunk', async (req, res) => {
+      const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
+      if (!ws) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
+      const filePath = typeof req.body?.filePath === 'string' ? req.body.filePath.trim() : '';
+      if (!filePath || typeof req.body?.hunk !== 'string') return res.status(400).json({ error: tr("กรุณาระบุพาธไฟล์") });
+      try { res.json({ success: await revertHunk(ws.rootPath, filePath, Number(req.body.index), req.body.hunk) }); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
     this.app.post('/api/workspaces/:wsId/files/discard', async (req, res) => {
       const ws = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
@@ -1251,8 +1260,9 @@ export class StudioServer {
           attachments,
           projectContext: req.body.includeProjectContext === false ? { text: '', instructions: false, files: [], preparedAt: Date.now(), chunks: [] } : buildProjectContext(session.wsId ? this.workspaceRegistry.getWorkspace(session.wsId) : undefined, session.cwd, { native: nativeRuleFiles(agent) }),
           responseStyle: style,
-        // Enter while the chat is answering interrupts it (like Claude); Ctrl+Enter (`queue`) waits instead.
-        }, { queue: req.body.queue === true, interrupt: req.body.queue !== true && req.body.interrupt !== false });
+        // Enter while the chat is answering waits for the current turn (like Codex and Claude Code);
+        // Ctrl+Enter (`interrupt: true`) stops that turn and sends at once.
+        }, { queue: req.body.interrupt !== true, interrupt: req.body.interrupt === true });
         session.restart = { ...session.restart, ...chosen };
         this.saveSessions();
         res.json({ success: true, queued: outcome === "queued", interrupted: outcome === "interrupted" });

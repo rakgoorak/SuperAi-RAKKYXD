@@ -107,7 +107,8 @@ export function ChangesPanel({
       return;
     }
     let disposed = false;
-    setFile(null);
+    // A refresh after an action (undo a section, stage…) keeps the viewer and its mode on screen.
+    setFile(current => current?.name === selected ? current : null);
     setProblem('');
     api<{
       name: string;

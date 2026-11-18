@@ -13,6 +13,7 @@ import { Updater, STORE_URL } from "./updater.mjs";
 import { UsagePing } from "./usage.mjs";
 import { createTrayController } from './tray.mjs';
 import { tr } from './i18n.mjs';
+import { createQuickAsk, keyLabel } from "./quick-ask.mjs";
 prepareDesktopPath();
 // Started from inside a Claude Code session: do not pass its session markers on to the CLIs
 // opened here (with CLAUDE_CODE_CHILD_SESSION, Claude Code stops saving conversations).
@@ -269,6 +270,14 @@ ipcMain.handle("computer:action", async (e, action, value) => {
   if (action === "os-reset") return computer.resetOsAccess(String(value));
   throw new Error(tr("คำสั่งไม่ถูกต้อง"));
 });
+// Quick ask (global shortcut): the window reads which key works and can open the box itself.
+let quick;
+ipcMain.handle("quick:action", async (e, action) => {
+  trusted(e);
+  if (action === "state") return { key: quick?.key() ? keyLabel(quick.key()) : "" };
+  if (action === "open") { quick?.open(); return { key: quick?.key() ? keyLabel(quick.key()) : "" }; }
+  throw new Error(tr("คำสั่งไม่ถูกต้อง"));
+});
 ipcMain.handle("usage:action", async (e, action, value) => {
   trusted(e);
   if (action === "state") return usagePing().state();
@@ -390,13 +399,11 @@ else {
         autoHideMenuBar: true,
         titleBarStyle: "hidden",
         ...(process.platform === "darwin"
-          ? { trafficLightPosition: { x: 16, y: 19 } }
-          : {}),
-        titleBarOverlay: {
-          color: "#0d1117",
-          symbolColor: "#e2e8f0",
-          height: 38,
-        },
+          // macOS: the system's standard-size buttons, centred in the window's 38px top bar like other
+          // Mac apps (their top is 12px down; the bar's left padding in index.css leaves room for them).
+          // No titleBarOverlay here: a taller system title bar makes macOS draw larger buttons.
+          ? { trafficLightPosition: { x: 14, y: 12 } }
+          : { titleBarOverlay: { color: "#0d1117", symbolColor: "#e2e8f0", height: 38 } }),
         webPreferences: {
           preload: path.join(directory, "preload.cjs"),
           contextIsolation: true,
@@ -457,6 +464,21 @@ else {
       });
       await log(`SuperAi & RAKKYXD ${app.getVersion()} started at ${appUrl}`);
       usagePing().start();
+      quick = createQuickAsk({
+        directory,
+        labels: { placeholder: tr("ถาม AI อะไรก็ได้…"), hint: tr("Enter ส่งไปที่แชทใหม่ในโปรแกรม · Shift+Enter ขึ้นบรรทัดใหม่ · Esc ปิด") },
+        onSubmit: (text) => {
+          if (!window || window.isDestroyed()) return;
+          if (window.isMinimized()) window.restore();
+          window.show(); window.focus();
+          window.webContents.send("quick:ask", text);
+        },
+      });
+      // Tests open the box through quick:action instead of taking a key on the machine running them.
+      if (!process.env.SUPERAI_TEST_MODE) {
+        const key = quick.register();
+        await log(key ? `Quick ask shortcut: ${key}` : "Quick ask shortcut: every candidate is taken by another app");
+      }
       if (updater.packaged && !process.env.SUPERAI_TEST_MODE) {
         setTimeout(() => void checkForUpdate(), 4000);
         setInterval(() => void checkForUpdate(), 30 * 60_000);
@@ -471,6 +493,7 @@ else {
     }
   });
   let installedOnQuit = false;
+  app.on("will-quit", () => quick?.unregister());
   app.on("before-quit", (event) => {
     // Like Claude Desktop: a downloaded update installs quietly when the app exits; it opens on the new version next time.
     if (!installedOnQuit && !applying && updater.state.status === "ready" && updater.packaged && !updater.storeManaged && !process.env.SUPERAI_TEST_MODE) {

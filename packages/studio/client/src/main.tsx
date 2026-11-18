@@ -1,16 +1,21 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { App } from './App.js';
-import { ErrorBoundary } from './components/ErrorBoundary.js';
+import { loadLocaleText } from './i18n.js';
 import './index.css';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
-  </React.StrictMode>
-);
+// The interface text of the chosen language comes first: some modules build their labels when
+// they load, so the app is imported only once that text is here.
+void loadLocaleText().catch(() => {})
+  .then(() => Promise.all([import('./App.js'), import('./components/ErrorBoundary.js')]))
+  .then(([{ App }, { ErrorBoundary }]) => {
+    ReactDOM.createRoot(document.getElementById('root')!).render(
+      <React.StrictMode>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </React.StrictMode>
+    );
+  });
 
 import "./mission-control.css";
 
