@@ -54,15 +54,15 @@ It supports Claude Code, Codex, Antigravity (<code>agy</code>), OpenCode, Freebu
 
 ## Tools around the conversation
 
-- Search and reopen conversations across providers.
-- Hide sessions without stopping background work.
-- Create Git worktrees for parallel branches.
-- Preview HTML, SVG, Tailwind CSS, Mermaid and supported React artifacts.
-- Dictate Thai or English with local Whisper, then review the transcript before sending.
-- Check provider usage and quota information where the provider exposes it.
-- Choose read-only planning or allow file edits when you want an agent to make changes.
-- Use multiple supported accounts and optional API providers.
-- Browse and install skills with confirmation before each install.
+- Search and reopen conversations across providers, or rewind project files to before any message with **Checkpoints**.
+- Review AI file changes section by section (keep or undo each hunk) and create **Git worktrees** for parallel branches.
+- Render full Markdown, math (**KaTeX**), **Mermaid** diagrams, inline videos and clickable file paths in chat, or preview HTML, SVG, Tailwind CSS and React artifacts beside your work.
+- Let the AI use the built-in browser panel, Google Chrome / Microsoft Edge, or opt-in **Computer use** (screen view, clicks and typing with per-app permissions and a live Stop bar).
+- Cut token consumption with the one-click **Save tokens** switch, queue your next message while the AI works, or open **Quick Ask** from anywhere with a global shortcut.
+- Dictate with local Whisper and review the transcript before sending.
+- Check provider usage and quota information, use multiple accounts, and connect optional API providers (OpenRouter, DeepSeek, Groq or custom OpenAI-compatible endpoints).
+- Browse and install skills with confirmation, or paste `mcpServers` JSON across several AIs at once.
+- Use the installer and workspace in **English, Thai, Japanese or Chinese**.
 
 ## Download
 
@@ -76,7 +76,7 @@ Choose the latest installer for your computer:
 
 Downloads do not require a GitHub account. Portable ZIP files and SHA-256 checksums are listed on the [latest release page](https://github.com/rakgoorak/SuperAi-RAKKYXD-releases/releases/latest).
 
-**Security prompt:** Windows builds are not code-signed. macOS builds use ad-hoc signing and are not notarized, so Windows SmartScreen or macOS Gatekeeper may ask you to confirm the app. Verify the SHA-256 checksum from the same release before opening it.
+**Security prompt:** Windows builds are not code-signed. macOS builds are signed with a consistent project certificate (so macOS permissions stay granted across updates) and are not Apple-notarized yet, so Windows SmartScreen or macOS Gatekeeper may ask you to confirm the app. Verify the SHA-256 checksum from the same release before opening it.
 
 ## First run
 
@@ -89,7 +89,7 @@ Downloads do not require a GitHub account. Portable ZIP files and SHA-256 checks
 
 The app does not operate an AI relay server. Prompts are handled by the provider or CLI you choose. Local Ollama models can run on your device. Provider privacy terms apply to prompts sent to that provider.
 
-The optional anonymous usage count is sent every 10 minutes while the app is open. It includes a random install ID, app version and operating system. Cloudflare supplies a two-letter country code, stored with that anonymous record so the website can show aggregate online counts. The usage service does not store IP addresses, prompts, files, project names, accounts or API keys. Turn the count off in **Settings → Notifications**.
+On first launch, the app asks before counting your computer as a user. Nothing is sent and no ID exists unless you allow it. When enabled, the anonymous usage count is sent every 10 minutes while the app is open and includes a random install ID, app version and operating system, with a two-letter country code from Cloudflare for aggregate online counts. The usage service does not store IP addresses, prompts, files, project names, accounts or API keys. Turning it off in **Settings → Notifications** deletes the ID.
 
 Settings and conversation history are stored on your computer. Attachments are kept under <code>.superai/attachments/</code> inside the project; add <code>.superai/</code> to your <code>.gitignore</code> when needed.
 

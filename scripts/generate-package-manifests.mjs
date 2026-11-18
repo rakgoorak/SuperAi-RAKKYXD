@@ -133,7 +133,7 @@ const cask = `cask "superai-rakkyxd" do
         verified: "github.com/${REPO}/"
   end
 
-  depends_on macos: ">= :big_sur"
+  depends_on macos: ">= :ventura"
 
   app "SuperAi-RAKKYXD.app"
 
