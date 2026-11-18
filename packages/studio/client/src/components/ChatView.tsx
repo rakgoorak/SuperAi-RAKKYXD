@@ -1,14 +1,14 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ShieldCheck, Check, CheckCheck, CheckCircle2, ChevronRight, Circle, Clock3, Copy, FilePen, FileText, GitFork, Globe, ListChecks, Loader2, Paperclip, RotateCcw, Search, Send, Terminal as TerminalIcon, Wrench, X } from 'lucide-react';
 import { Markdown } from './Markdown';
-import { post } from '../api';
+import { api, post } from '../api';
 import { prepareMessage, recoveryHint, showChanges } from '../recovery';
 import { getSuggestions } from '../suggestions';
 import { NextSteps } from './NextSteps';
 import { ResponseActions } from './ResponseActions';
 import { ConversationInteractions } from './ConversationInteractions';
 import { ConversationExport } from './ConversationExport';
-import { ArrowDown, Pencil } from 'lucide-react';
+import { ArrowDown, History, Pencil } from 'lucide-react';
 import { MessageAttachments } from './MessageAttachments';
 import { stepLabel } from '../stepLabel';
 import { QuestionCard, type QuestionItem } from './QuestionCard';
@@ -34,7 +34,7 @@ type TodosItem = { id: string; kind: 'todos'; todos: { text: string; status: Tod
 type Activity = { startedAt: number; outputTokens: number; quiet?: { since: number; timeoutMs: number } };
 type Queued = { id: string; text: string; attachments?: string[] };
 type ChatItem =
-  | { id: string; kind: 'user'; text: string; attachments?: string[]; request?: { text: string; model?: string; effort?: string; skillId?: string; attachments?: string[] }; at: number }
+  | { id: string; kind: 'user'; text: string; attachments?: string[]; request?: { text: string; model?: string; effort?: string; skillId?: string; attachments?: string[] }; at: number; checkpoint?: { commit: string } }
   | { id: string; kind: 'assistant'; text: string; at: number }
   | ToolItem
   | TodosItem
@@ -226,6 +226,22 @@ function UserMessageItem({
     }
   };
 
+  // Rewind files: the project's files go back to how they were just before this message.
+  type FileChange = { path: string; status: 'changed' | 'deleted' | 'created' };
+  const [rewind, setRewind] = useState<null | { files: FileChange[] } | { done: number }>(null);
+  const previewRewind = async () => {
+    try { setRewind(await api<{ files: FileChange[] }>(`/api/terminals/${encodeURIComponent(sessionId)}/chat/checkpoint?item=${encodeURIComponent(block.id)}`)); }
+    catch (error) { onProblem((error as Error).message); }
+  };
+  const confirmRewind = async () => {
+    try { const result = await post<{ files: FileChange[] }>(`/api/terminals/${encodeURIComponent(sessionId)}/chat/checkpoint/rewind`, { itemId: block.id }); setRewind({ done: result.files.length }); }
+    catch (error) { onProblem((error as Error).message); setRewind(null); }
+  };
+  const undoRewind = async () => {
+    try { await post(`/api/terminals/${encodeURIComponent(sessionId)}/chat/checkpoint/undo`); setRewind(null); }
+    catch (error) { onProblem((error as Error).message); }
+  };
+
   const handleFork = async () => {
     try {
       const session = await post(`/api/terminals/${encodeURIComponent(sessionId)}/chat/fork`, { messageId: block.id });
@@ -236,6 +252,20 @@ function UserMessageItem({
   return (
     <div key={block.id} data-message-id={block.id} className="chat-user">
       <div className="chat-user-wrap">
+        {rewind && <div className="chat-rewind" role="status">
+          {'done' in rewind ? <>
+            <span>{tr`ย้อนไฟล์แล้ว ${rewind.done} ไฟล์`}</span>
+            <button type="button" className="text-button" onClick={() => void undoRewind()}>{tr("เลิกย้อน")}</button>
+            <button type="button" className="text-button" onClick={() => setRewind(null)}>{tr("ปิด")}</button>
+          </> : rewind.files.length === 0 ? <>
+            <span>{tr("ไฟล์ยังเหมือนก่อนข้อความนี้ ไม่มีอะไรต้องย้อน")}</span>
+            <button type="button" className="text-button" onClick={() => setRewind(null)}>{tr("ปิด")}</button>
+          </> : <>
+            <span>{tr`ย้อน ${rewind.files.length} ไฟล์กลับไปก่อนข้อความนี้? แก้ ${rewind.files.filter(f => f.status === 'changed').length} · คืนไฟล์ที่ถูกลบ ${rewind.files.filter(f => f.status === 'deleted').length} · ลบไฟล์ที่สร้างใหม่ ${rewind.files.filter(f => f.status === 'created').length}`}</span>
+            <button type="button" className="primary" onClick={() => void confirmRewind()}>{tr("ย้อนไฟล์")}</button>
+            <button type="button" className="text-button" onClick={() => setRewind(null)}>{tr("ยกเลิก")}</button>
+          </>}
+        </div>}
         <div className="chat-user-bubble">
           <div className="chat-user-text" data-message-body={block.id}>{renderTextWithLinks(block.text)}</div>
           {block.attachments && block.attachments.length > 0 && (
@@ -267,6 +297,16 @@ function UserMessageItem({
             >
               {copied ? <Check size={13} /> : <Copy size={13} />}
             </button>
+            {block.checkpoint && <button
+              type="button"
+              className="chat-user-action-btn"
+              aria-label={tr("ย้อนไฟล์กลับไปก่อนข้อความนี้")}
+              title={tr("ย้อนไฟล์ในโปรเจกต์กลับไปเหมือนก่อนส่งข้อความนี้")}
+              disabled={running || pending}
+              onClick={() => void previewRewind()}
+            >
+              <History size={13} />
+            </button>}
             <button
               type="button"
               className="chat-user-action-btn"

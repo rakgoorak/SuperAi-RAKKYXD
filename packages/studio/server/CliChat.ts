@@ -1,4 +1,5 @@
 import { accounts } from "./Accounts.js";
+import { checkpointChanges, createCheckpoint, restoreCheckpoint, type Checkpoint, type CheckpointFile } from "./Checkpoints.js";
 import { cleanAnswers, describeChoices, fromAskUserQuestion, questionRules, takeQuestions, type ClarifyAnswer, type ClarifyQuestion } from "./Questions.js";
 import { openCodeNoAnswer, openCodePermissionEnv } from "./OpenCodePermissions.js";
 import { spawn, execFile, type ChildProcess, type SpawnOptions } from "node:child_process";
@@ -49,7 +50,7 @@ export function supportsChatPermission(agent: string, permission: ChatPermission
 }
 type ChatRequestRecord = { text: string; model?: string; effort?: string; skillId?: string; attachments?: string[]; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle };
 export type ChatItem =
-  | { id: string; kind: "user"; text: string; attachments?: string[]; request?: ChatRequestRecord; at: number }
+  | { id: string; kind: "user"; text: string; attachments?: string[]; request?: ChatRequestRecord; at: number; /** Project files saved just before this turn (Rewind files). */ checkpoint?: Checkpoint }
   | { id: string; kind: "assistant"; text: string; at: number }
   | { id: string; kind: "tool"; tool: ToolKind; title: string; output?: string; images?: string[]; status: "running" | "done" | "failed"; at: number }
   /** The CLI's own task list (Claude TodoWrite, Codex todo_list, OpenCode todowrite), one per turn, updated in place. */
@@ -448,7 +449,7 @@ interface LiveClaude { proc: ChildProcess; key: string; closed: boolean; errors:
 interface PendingPermission { live: LiveClaude; input: unknown; itemId: string; tool: string; protocol?: 'codex' | 'opencode'; rpcId?: string | number; reply?: (decision: PermissionDecision) => Promise<void>; answering?: boolean }
 interface Chat extends Omit<ChatSnapshot, "queued"> {
   apiAbort?: AbortController;
-  seed?: string; turns: number; proc?: ChildProcess; cancelled?: boolean; /** Stopped to take a new message (Enter while answering). */ interrupting?: boolean;
+  seed?: string; turns: number; /** Files just before the last Rewind, for Undo. */ lastRewind?: Checkpoint; proc?: ChildProcess; cancelled?: boolean; /** Stopped to take a new message (Enter while answering). */ interrupting?: boolean;
   wait?: () => void; listeners: Set<(m: ChatMessage) => void>; saveTimer?: NodeJS.Timeout; queue: QueuedRequest[];
   live?: LiveClaude; permissions: Map<string, PendingPermission>; /** Tools the user allowed for the rest of this chat. */ alwaysAllowed: Set<string>;
   /** Claude's AskUserQuestion calls waiting for the user's choices. */ asks: Map<string, { live: LiveClaude; itemId: string }>;
@@ -524,6 +525,32 @@ export class CliChatManager {
     this.save(id, chat);
   }
 
+  /** What rewinding to the files saved before message `itemId` would change. */
+  checkpointPreview(id: string, itemId: string): CheckpointFile[] {
+    return checkpointChanges(this.checkpointOf(id, itemId));
+  }
+  /** Rewinds the project's files to before message `itemId`; the state just before is kept for undoRewind. */
+  rewind(id: string, itemId: string): CheckpointFile[] {
+    const chat = this.chat(id);
+    if (chat.running) throw new Error(tr("รอให้ AI ทำงานเสร็จหรือหยุดก่อน แล้วค่อยย้อนไฟล์"));
+    const { files, undo } = restoreCheckpoint(this.checkpointOf(id, itemId));
+    if (undo) chat.lastRewind = undo;
+    return files;
+  }
+  /** Puts back the files as they were right before the last rewind. */
+  undoRewind(id: string): CheckpointFile[] {
+    const chat = this.chat(id);
+    if (!chat.lastRewind) throw new Error(tr("ไม่มีการย้อนไฟล์ให้ยกเลิก"));
+    if (chat.running) throw new Error(tr("รอให้ AI ทำงานเสร็จหรือหยุดก่อน แล้วค่อยย้อนไฟล์"));
+    const { files } = restoreCheckpoint(chat.lastRewind);
+    chat.lastRewind = undefined;
+    return files;
+  }
+  private checkpointOf(id: string, itemId: string): Checkpoint {
+    const item = this.chat(id).items.find((i) => i.id === itemId);
+    if (item?.kind !== "user" || !item.checkpoint) throw new Error(tr("ข้อความนี้ไม่มีจุดย้อนไฟล์"));
+    return item.checkpoint;
+  }
   snapshot(id: string): ChatSnapshot {
     const { items, running, conversationId, activity, queue } = this.chat(id);
     return { items, running, conversationId, activity, queued: queue.map(({ id, text, attachments }) => ({ id, text, attachments })) };
@@ -665,8 +692,12 @@ export class CliChatManager {
     const launch = reuse ? undefined : this.launcher(agent, args);
     if (sendContext) chat.contextKey = contextKey;
     if (sendRules) chat.rulesKey = rulesKey;
+    // Before an AI that may edit files starts: save the project so this turn can be rewound.
+    // Off in tests (SUPERAI_CHECKPOINTS=off, or desktop test mode) so chats inside this repository leave no refs; on otherwise.
+    const checkpointsOn = process.env.SUPERAI_CHECKPOINTS === "on" || (process.env.SUPERAI_CHECKPOINTS !== "off" && !process.env.SUPERAI_TEST_MODE);
+    const checkpoint = request.permission !== "read" && checkpointsOn ? createCheckpoint(request.cwd) : undefined;
     const prefix = `t${++chat.turns}`;
-    this.put(id, chat, { id: `${prefix}-user`, kind: "user", text, request: { text, model: request.model, effort: request.effort, skillId: request.skillId, attachments: files, permission: request.permission, projectContext: request.projectContext, responseStyle: request.responseStyle }, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}) });
+    this.put(id, chat, { id: `${prefix}-user`, kind: "user", ...(checkpoint ? { checkpoint } : {}), text, request: { text, model: request.model, effort: request.effort, skillId: request.skillId, attachments: files, permission: request.permission, projectContext: request.projectContext, responseStyle: request.responseStyle }, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}) });
     chat.running = true;
     chat.activity = { startedAt: Date.now(), outputTokens: 0 };
     this.emit(chat, { type: "activity", activity: chat.activity });

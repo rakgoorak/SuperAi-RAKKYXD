@@ -1184,6 +1184,19 @@ export class StudioServer {
       session.name = name; session.restart = { ...session.restart, name }; this.saveSessions();
       res.json({ ...this.terminalManager.listSessions().find(item => item.id === session.id), view: this.viewOf(session.id) });
     });
+    // Checkpoints: rewind the project's files to before a chat message (and undo that).
+    this.app.get('/api/terminals/:id/chat/checkpoint', (req: Request, res: Response) => {
+      try { res.json({ files: this.chats.checkpointPreview(String(req.params.id), String(req.query.item || '')) }); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); }
+    });
+    this.app.post('/api/terminals/:id/chat/checkpoint/rewind', (req: Request, res: Response) => {
+      try { res.json({ files: this.chats.rewind(String(req.params.id), String(req.body?.itemId || '')) }); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); }
+    });
+    this.app.post('/api/terminals/:id/chat/checkpoint/undo', (req: Request, res: Response) => {
+      try { res.json({ files: this.chats.undoRewind(String(req.params.id)) }); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); }
+    });
     this.app.post('/api/terminals/:id/chat/fork', (req: Request, res: Response) => {
       const source = this.terminalManager.getSession(String(req.params.id));
       if (!source) return res.status(404).json({ error: tr("ไม่พบห้องต้นทาง") });
