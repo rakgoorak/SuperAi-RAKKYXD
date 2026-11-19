@@ -3,10 +3,14 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { createHash } from "node:crypto";
+import { promisify } from "node:util";
 import { tr } from './i18n.js';
 
 export interface ChatSkill { id: string; name: string; description: string; source: string; path: string }
 const PROVIDERS = ["claude-code", "codex", "antigravity", "opencode"];
+// Match the sync discovery path and IDs. fs.promises.realpath uses the native resolver,
+// which expands Windows 8.3 paths that fs.realpathSync preserves.
+const realpath = promisify(fs.realpath);
 export const CLI_PASSTHROUGH_COMMANDS = new Set([
   "compact", "cost", "doctor", "review", "pr_comments", "init", "clear", "bug", "help",
   "terminal:setup", "permissions", "memory", "export", "config", "stats", "usage",
@@ -141,7 +145,7 @@ export async function chatSkillsAsync(root: string, provider: string, home = os.
       if (entry.name === ".system" && !nested) return scanAsync(path.join(dir, entry.name), source, true);
       const file = path.join(dir, entry.name, "SKILL.md");
       try {
-        const real = await fsp.realpath(file);
+        const real = await realpath(file);
         const st = await fsp.stat(real);
         if (!st.isFile() || st.size > 256 * 1024) return [];
         const skill = parseSkill(await fsp.readFile(real, "utf8"), real, entry.name, source);

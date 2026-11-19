@@ -86,5 +86,9 @@ test('chatSkillsAsync and skillPromptAsync match sync behavior without blocking'
       await skillPromptAsync('/demo run it', root, 'antigravity', undefined, home),
       skillPrompt('/demo run it', root, 'antigravity', undefined, home),
     );
+    assert.equal(
+      await skillPromptAsync('/demo run it', root, 'antigravity', syncList[0].id, home),
+      skillPrompt('/demo run it', root, 'antigravity', syncList[0].id, home),
+    );
   } finally { fs.rmSync(home, { recursive: true, force: true }); }
 });
