@@ -36,7 +36,7 @@ export function ComputerUsePanel({ onError }: { onError: (message: string) => vo
   };
   return <div className="computer-use-panel">
     <h3><MonitorSmartphone size={16} /> {tr("ให้ AI ควบคุมคอมพิวเตอร์")}</h3>
-    <p>{tr("เมื่อเปิด AI ใน Claude, Codex และ OpenCode จะดูหน้าจอ ขยับเมาส์ คลิก และพิมพ์ได้เองเหมือนคนใช้งาน เพื่อทำงานในแอปอื่นของเครื่อง ระหว่างที่ AI ทำงานจะมีแถบ \"AI กำลังควบคุมคอมพิวเตอร์\" ด้านบนของจอ กด \"หยุด\" เพื่อปิดได้ทันที")}</p>
+    <p>{tr("เมื่อเปิด AI ใน Claude, Codex, Antigravity และ OpenCode จะดูหน้าจอ ขยับเมาส์ คลิก และพิมพ์ได้เองเหมือนคนใช้งาน เพื่อทำงานในแอปอื่นของเครื่อง ระหว่างที่ AI ทำงานจะมีแถบ \"AI กำลังควบคุมคอมพิวเตอร์\" ด้านบนของจอ กด \"หยุด\" เพื่อปิดได้ทันที")}</p>
     <label className="tool-permission">
       <input type="checkbox" checked={!!state?.enabled} disabled={!state} onChange={(event) => void call('set', event.target.checked)} />
       {tr("อนุญาตให้ AI ควบคุมคอมพิวเตอร์เครื่องนี้")}

@@ -80,10 +80,18 @@ export class BrowserController {
           partition: "persist:superai-preview",
         },
       });
-      const tab = { view, url, error: "" };
+      const tab = { view, url, error: "", logs: [] };
       this.tabs.set(id, tab);
       this.activeId = id;
       this.window.contentView.addChildView(view);
+      const pushLog = (entry) => {
+        tab.logs.push(entry);
+        if (tab.logs.length > 100) tab.logs.splice(0, tab.logs.length - 100);
+      };
+      view.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+        // Electron level: 0=verbose, 1=info, 2=warning, 3=error
+        if (level >= 2) pushLog(`[${level === 3 ? "console.error" : "console.warn"}] ${String(message).slice(0, 400)}${sourceId ? ` (${sourceId}:${line})` : ""}`);
+      });
       view.webContents.session.setPermissionRequestHandler(
         (_wc, _permission, callback) => callback(false),
       );
@@ -126,7 +134,8 @@ export class BrowserController {
       });
       view.webContents.on(
         "did-fail-load",
-        (_e, code, description, _url, isMainFrame) => {
+        (_e, code, description, failedUrl, isMainFrame) => {
+          if (code !== -3) pushLog(`[load-failed] ${code} ${description} (${failedUrl || ""})`);
           if (isMainFrame && code !== -3) {
             tab.error = tr`เปิดหน้าเว็บไม่ได้ (${code}): ${description}`;
             this.layout();

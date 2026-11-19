@@ -52,3 +52,15 @@ jobs:
         if: runner.os == 'Windows'
         run: npm run test:desktop
         timeout-minutes: 5
+
+      - name: Run Browser Use, Computer Use and Chat Queue Smoke (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          npm run test:browser-tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:computer-use
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:queue
+          exit $LASTEXITCODE
+        timeout-minutes: 8

@@ -388,6 +388,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   const [problem, setProblem] = useState('');
   const [search, setSearch] = useState('');
   const groupedBlocks = useMemo(() => blocks(items), [items]);
+  const estimatedTokens = useMemo(() => conversationTokens(items as any), [items]);
   const lastUser = [...items].reverse().find(item => item.kind === 'user');
   const lastReply = [...items].reverse().find(item => item.kind === 'assistant');
   const replyIndex = lastReply ? items.indexOf(lastReply) : -1;
@@ -411,6 +412,13 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
     if (!lastUser || lastUser.kind !== 'user') return;
     setPending(true); setProblem('');
     try { await post(`/api/terminals/${sessionId}/chat`, lastUser.request || { text: lastUser.text }); }
+    catch (error) { setProblem((error as Error).message); }
+    finally { setPending(false); }
+  };
+  const compact = async () => {
+    if (pending || running) return;
+    setPending(true); setProblem('');
+    try { await post(`/api/terminals/${sessionId}/chat`, { text: '/compact' }); }
     catch (error) { setProblem((error as Error).message); }
     finally { setPending(false); }
   };
@@ -573,8 +581,15 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
     : activity?.quiet ? tr("รอข้อมูลเพิ่มเติม")
       : workingTool ? tr`กำลังทำงาน: ${stepLabel(workingTool.title)}` : tr("กำลังทำงาน");
   const popupPermission = active && pendingPermissions.find(item => !dismissedPermissions.includes(item.id));
-  const queueAction = (id: string, action: 'send' | 'remove') => {
-    post(`/api/terminals/${sessionId}/chat/queue/${id}/${action}`).catch((error) => setProblem((error as Error).message));
+  const queueAction = async (id: string, action: 'send' | 'remove') => {
+    try {
+      const result = await post<{ success: boolean; draft?: { text: string } }>(`/api/terminals/${sessionId}/chat/queue/${id}/${action}`);
+      if (action === 'remove' && result.success && result.draft) {
+        window.dispatchEvent(new CustomEvent('superai:prepare-message', {
+          detail: { sessionId, text: result.draft.text, append: true, expand: false },
+        }));
+      }
+    } catch (error) { setProblem((error as Error).message); }
   };
 
   return (
@@ -648,13 +663,12 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
             return <div key={block.id} className="chat-notice">{block.text}</div>;
           })(); return view ? <OffscreenSkip key={block.id}>{view}</OffscreenSkip> : null; })}
           {(() => {
-            const size = conversationTokens(items as any);
+            const size = estimatedTokens;
             if (running || pending || size < LONG_CHAT_TOKENS || size < longDismissedAt + LONG_CHAT_TOKENS) return null;
             const later = () => { setLongDismissedAt(size); try { localStorage.setItem(`superai-long-chat:${sessionId}`, String(size)); } catch {} };
-            const compact = async () => { try { await post(`/api/terminals/${sessionId}/chat`, { text: '/compact' }); } catch (error) { setProblem((error as Error).message); } };
             return <div className="chat-long-notice" role="status">
               <div><strong>{tr("บทสนทนานี้ยาวแล้ว")}</strong><span>{tr`ทุกข้อความใหม่ AI ต้องอ่านทั้งหมดซ้ำ ประมาณ ${Math.round(size / 1000)}k token สรุปบทสนทนาให้สั้นลงเพื่อประหยัด token หรือเริ่มห้องใหม่สำหรับงานถัดไป`}</span></div>
-              <div className="chat-long-actions"><button type="button" className="primary" onClick={() => void compact()}>{tr("สรุปบทสนทนา")}</button><button type="button" className="secondary" onClick={later}>{tr("ไว้ทีหลัง")}</button></div>
+              <div className="chat-long-actions"><button type="button" className="primary" disabled={pending || offline} onClick={() => void compact()}>{tr("สรุปบทสนทนา")}</button><button type="button" className="secondary" onClick={later}>{tr("ไว้ทีหลัง")}</button></div>
             </div>;
           })()}
           {liveTodos && liveTodos.todos.length > 0 && <TaskList key={liveTodos.id} item={liveTodos} live items={items} />}

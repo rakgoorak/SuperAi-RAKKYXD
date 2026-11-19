@@ -19,7 +19,7 @@ import express, { Express, Request, Response } from "express";
 import type { ErrorRequestHandler } from "express";
 import { listClis, listOpenCodeModels, getNodeStatus, findExecutable, cliLaunch, getCliDefinition } from "./CliCatalog.js";
 import { cliAuth, LOGIN_ARGS } from "./CliAuth.js";
-import { chatSkills } from "./ChatSkills.js";
+import { chatSkillsAsync } from "./ChatSkills.js";
 import { getGitStatus } from "./GitInstaller.js";
 import { AgentRunManager, ollamaBase } from "./AgentRunManager.js";
 import { CliInstallManager } from "./CliInstallManager.js";
@@ -501,7 +501,7 @@ export class StudioServer {
         if (sessionId) {
           const session = this.terminalManager.getSession(sessionId);
           if (!session) throw new Error(tr`ไม่พบเซสชัน ${sessionId}`);
-          this.chats.send(sessionId, {
+          await this.chats.sendAsync(sessionId, {
             agent: session.agentType || 'claude-code',
             cwd: session.cwd || ws.rootPath,
             text: prompt,
@@ -564,7 +564,7 @@ export class StudioServer {
 
       try {
         const prompt = this.crossReview.formatApplyPrompt(review);
-        this.chats.send(sessionId, {
+        await this.chats.sendAsync(sessionId, {
           agent: session.agentType || 'claude-code',
           cwd: session.cwd || ws.rootPath,
           text: prompt,
@@ -685,13 +685,13 @@ export class StudioServer {
         res.status(400).json({ error: err.message });
       }
     });
-    this.app.get("/api/workspaces/:wsId/chat-skills/:provider", (req, res) => {
+    this.app.get("/api/workspaces/:wsId/chat-skills/:provider", async (req, res) => {
       const workspace = this.workspaceRegistry.getWorkspace(String(req.params.wsId));
       if (!workspace) return res.status(404).json({ error: tr("ไม่พบโปรเจกต์") });
       try {
         const provider = String(req.params.provider);
         const accountId = accounts.resolve(provider, req.query.accountId);
-        res.json(chatSkills(workspace.rootPath, provider, undefined, accounts.environment(provider, accountId)));
+        res.json(await chatSkillsAsync(workspace.rootPath, provider, undefined, accounts.environment(provider, accountId)));
       } catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
     this.app.get("/api/workspaces/:wsId/rules", (req, res) => {
@@ -1167,11 +1167,12 @@ export class StudioServer {
       res.json(await workingContext(session.cwd));
     });
     // Chat view of a Code session: the same CLI, model and folder, driven through its JSON stream.
-    this.app.get("/api/terminals/:id/chat/settings", (req, res) => {
+    this.app.get("/api/terminals/:id/chat/settings", async (req, res) => {
       const session = this.terminalManager.getSession(String(req.params.id));
       if (!session) return res.status(404).json({ error: tr("ไม่พบ session นี้แล้ว") });
+      const skills = isCloud(session.agentType || '') ? [] : await chatSkillsAsync(session.cwd, session.agentType || "", undefined, accounts.environment(session.agentType || "", session.accountId));
       res.json({ agent: session.agentType, accountId: session.accountId || "system", accountName: accounts.list(session.agentType || "").find(p => p.id === (session.accountId || "system"))?.name || tr("บัญชีไม่พร้อม"), model: session.restart?.model || session.restart?.openCodeModel || "", effort: session.restart?.effort || "",
-        skills: isCloud(session.agentType || '') ? [] : chatSkills(session.cwd, session.agentType || "", undefined, accounts.environment(session.agentType || "", session.accountId)) });
+        skills });
     });
     this.app.get("/api/terminals/:id/chat", (req: Request, res: Response) => {
       res.json(this.chats.snapshot(String(req.params.id)));
@@ -1197,16 +1198,16 @@ export class StudioServer {
       res.json({ ...this.terminalManager.listSessions().find(item => item.id === session.id), view: this.viewOf(session.id) });
     });
     // Checkpoints: rewind the project's files to before a chat message (and undo that).
-    this.app.get('/api/terminals/:id/chat/checkpoint', (req: Request, res: Response) => {
-      try { res.json({ files: this.chats.checkpointPreview(String(req.params.id), String(req.query.item || '')) }); }
+    this.app.get('/api/terminals/:id/chat/checkpoint', async (req: Request, res: Response) => {
+      try { res.json({ files: await this.chats.checkpointPreviewAsync(String(req.params.id), String(req.query.item || '')) }); }
       catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
-    this.app.post('/api/terminals/:id/chat/checkpoint/rewind', (req: Request, res: Response) => {
-      try { res.json({ files: this.chats.rewind(String(req.params.id), String(req.body?.itemId || '')) }); }
+    this.app.post('/api/terminals/:id/chat/checkpoint/rewind', async (req: Request, res: Response) => {
+      try { res.json({ files: await this.chats.rewindAsync(String(req.params.id), String(req.body?.itemId || '')) }); }
       catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
-    this.app.post('/api/terminals/:id/chat/checkpoint/undo', (req: Request, res: Response) => {
-      try { res.json({ files: this.chats.undoRewind(String(req.params.id)) }); }
+    this.app.post('/api/terminals/:id/chat/checkpoint/undo', async (req: Request, res: Response) => {
+      try { res.json({ files: await this.chats.undoRewindAsync(String(req.params.id)) }); }
       catch (error) { res.status(400).json({ error: (error as Error).message }); }
     });
     this.app.post('/api/terminals/:id/chat/fork', (req: Request, res: Response) => {
@@ -1252,11 +1253,13 @@ export class StudioServer {
         if (this.terminalManager.getSession(id) !== session || this.viewOf(id) !== "chat") return res.status(409).json({ error: tr("session เปลี่ยนไปแล้ว กรุณาลองใหม่") });
         if (session.sleeping || ["running", "stopping"].includes(session.status)) return res.status(409).json({ error: tr("Terminal ยังปิดไม่เสร็จ กรุณารอก่อนส่งข้อความ") });
         if (this.branchChanging) return res.status(409).json({ error: tr("กำลังสลับ branch กรุณารอก่อนส่งข้อความ") });
-        const outcome = this.chats.send(id, {
+        const prevRestart = JSON.stringify(session.restart || {});
+        const outcome = await this.chats.sendAsync(id, {
           agent,
           accountId: session.accountId || "system",
           cwd: session.cwd,
           text: typeof req.body?.text === "string" ? req.body.text : "",
+          draftText: typeof req.body?.draftText === "string" ? req.body.draftText : undefined,
           ...chosen,
           skillId: req.body.skillId,
           permission: req.body.permission,
@@ -1265,9 +1268,10 @@ export class StudioServer {
           responseStyle: style,
         // Enter while the chat is answering waits for the current turn (like Codex and Claude Code);
         // Ctrl+Enter (`interrupt: true`) stops that turn and sends at once.
-        }, { queue: req.body.interrupt !== true, interrupt: req.body.interrupt === true });
+        }, { queue: req.body.interrupt !== true, interrupt: req.body.interrupt === true, deferCheckpoint: true });
         session.restart = { ...session.restart, ...chosen };
-        this.saveSessions();
+        // `sendAsync` already triggered `saveSessions()` via `onChange`; only write again if restart prefs changed.
+        if (JSON.stringify(session.restart) !== prevRestart) this.saveSessions();
         res.json({ success: true, queued: outcome === "queued", interrupted: outcome === "interrupted" });
       } catch (err: any) {
         res.status(/ยังตอบ/.test(err.message) ? 409 : 400).json({ error: err.message });
@@ -1319,11 +1323,12 @@ export class StudioServer {
       res.json({ success: this.chats.wait(String(req.params.id)) });
     });
     // Queued messages (Ctrl+Enter): send one now, or take it back.
-    this.app.post("/api/terminals/:id/chat/queue/:queued/send", (req: Request, res: Response) => {
-      res.json({ success: this.chats.sendNext(String(req.params.id), String(req.params.queued)) });
+    this.app.post("/api/terminals/:id/chat/queue/:queued/send", async (req: Request, res: Response) => {
+      res.json({ success: await this.chats.sendNextAsync(String(req.params.id), String(req.params.queued)) });
     });
     this.app.post("/api/terminals/:id/chat/queue/:queued/remove", (req: Request, res: Response) => {
-      res.json({ success: this.chats.unqueue(String(req.params.id), String(req.params.queued)) });
+      const draft = this.chats.unqueue(String(req.params.id), String(req.params.queued));
+      res.json({ success: !!draft, draft });
     });
 
     this.app.post("/api/terminals/:id/restart", (req: Request, res: Response) => {

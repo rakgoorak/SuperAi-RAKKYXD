@@ -1,5 +1,5 @@
 import { accounts } from "./Accounts.js";
-import { checkpointChanges, createCheckpoint, restoreCheckpoint, type Checkpoint, type CheckpointFile } from "./Checkpoints.js";
+import { checkpointChanges, checkpointChangesAsync, createCheckpoint, createCheckpointAsync, restoreCheckpoint, restoreCheckpointAsync, type Checkpoint, type CheckpointFile } from "./Checkpoints.js";
 import { cleanAnswers, describeChoices, fromAskUserQuestion, questionRules, takeQuestions, type ClarifyAnswer, type ClarifyQuestion } from "./Questions.js";
 import { openCodeNoAnswer, openCodePermissionEnv } from "./OpenCodePermissions.js";
 import { spawn, execFile, type ChildProcess, type SpawnOptions } from "node:child_process";
@@ -11,14 +11,14 @@ import { cliLaunch, cliEnv } from "./CliCatalog.js";
 import { modelEffortArgs } from "./Providers.js";
 import { cliFailure } from "./CliProvider.js";
 import { cliAuth } from "./CliAuth.js";
-import { cliCommand, skillPrompt } from "./ChatSkills.js";
+import { cliCommand, READ_ONLY_CLI_COMMANDS, skillPrompt, skillPromptAsync } from "./ChatSkills.js";
 import { getProjectRules, formatRulesForPrompt } from "./ProjectRules.js";
 import { contextualPrompt, contextForAgent, type ProjectContext } from './ProjectContext.js';
 import type { ResponseStyle } from './ResponseStyle.js';
 import { cloudKeys, isCloud } from './CloudKeys.js';
 import { runApiConversation } from './ApiConversation.js';
 import { codexSandboxArgs } from './CodexSandbox.js';
-import { BROWSER_MCP, READ_ONLY_BROWSER_TOOLS, claudeBrowserArgs, codexBrowserArgs, withOpenCodeBrowser } from './BrowserTools.js';
+import { BROWSER_MCP, READ_ONLY_BROWSER_TOOLS, antigravityBrowserArgs, claudeBrowserArgs, cleanupAntigravityBrowserConfig, cleanupAntigravityBrowserConfigs, codexBrowserArgs, withOpenCodeBrowser } from './BrowserTools.js';
 import type { LLMProvider } from '@superai-rakkyxd/core';
 import { tr } from './i18n.js';
 import { writeFileSafely, readJsonSafely } from './SafeFile.js';
@@ -134,22 +134,42 @@ export function shellCommand(command: string): string {
   return inner;
 }
 
-function toolKind(name: string): ToolKind {
+export function toolKind(name: string): ToolKind {
+  if (/browser|web|url|fetch/i.test(name)) return "web";
+  if (/computer_/i.test(name)) return "other";
   if (/command|shell|terminal|bash|powershell/i.test(name)) return "command";
   if (/write|edit|replace|create|delete|move|patch/i.test(name)) return "edit";
   if (/read|view|open/i.test(name)) return "read";
   if (/grep|find|search|list_dir|glob/i.test(name)) return "search";
-  if (/browser|web|url|fetch/i.test(name)) return "web";
   if (/plan|task|todo/i.test(name)) return "plan";
   return "other";
 }
 
 const TITLE_KEYS = ["CommandLine", "Command", "command", "AbsolutePath", "TargetFile", "Path", "path", "file_path", "filePath", "File", "Query", "query", "pattern", "SearchPath", "DirectoryPath", "Url", "url", "description"];
-function toolTitle(name: string, parameters: unknown): string {
-  const p = parameters && typeof parameters === "object" ? (parameters as Record<string, unknown>) : {};
+const SECONDARY_TITLE_KEYS = ["app", "text", "ref"];
+function cleanToolName(name: string): string {
+  return name.replace(new RegExp(`^mcp__${BROWSER_MCP}__`), "");
+}
+export function toolTitle(name: string, parameters: unknown): string {
+  let p = parameters && typeof parameters === "object" ? (parameters as Record<string, unknown>) : {};
+  let effectiveName = cleanToolName(name);
+  if (name === "call_mcp_tool" && typeof p.ToolName === "string" && p.ToolName.trim()) {
+    effectiveName = cleanToolName(p.ToolName.trim());
+    if (p.Arguments && typeof p.Arguments === "object") p = p.Arguments as Record<string, unknown>;
+    else if (typeof p.Arguments === "string") {
+      try {
+        const parsed = JSON.parse(p.Arguments);
+        if (parsed && typeof parsed === "object") p = parsed;
+      } catch {}
+    }
+  }
   const value = TITLE_KEYS.map((k) => p[k]).find((v) => typeof v === "string" && v.trim())
+    ?? SECONDARY_TITLE_KEYS.map((k) => p[k]).find((v) => typeof v === "string" && v.trim())
     ?? Object.values(p).find((v) => typeof v === "string" && v.trim());
-  return typeof value === "string" ? value.trim().slice(0, 400) : name;
+  if (name === "call_mcp_tool" || effectiveName.startsWith("browser_") || effectiveName.startsWith("computer_")) {
+    return typeof value === "string" && value.trim() ? `${effectiveName} · ${value.trim()}`.slice(0, 400) : effectiveName.slice(0, 400);
+  }
+  return typeof value === "string" ? value.trim().slice(0, 400) : effectiveName;
 }
 
 function codexItem(item: any, prefix: string): NewItem | null {
@@ -308,9 +328,11 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
         }
         if (step.step_type === "agent_response") return tokensWritten(tokens);
         if (step.step_type === "tool") {
-          const name = String(step.tool_name || step.tool_info?.name || "tool");
+          const rawName = String(step.tool_name || step.tool_info?.name || "tool");
+          const params = step.tool_info?.parameters;
+          const innerName = rawName === "call_mcp_tool" && typeof params?.ToolName === "string" ? params.ToolName : rawName;
           const output = step.tool_info?.output;
-          return { items: [{ id, kind: "tool", tool: toolKind(name), title: toolTitle(name, step.tool_info?.parameters),
+          return { items: [{ id, kind: "tool", tool: toolKind(innerName), title: toolTitle(rawName, params),
             output: typeof output === "string" && output ? output : undefined,
             status: step.state === "ACTIVE" ? "running" : /ERROR|FAIL|CANCEL/i.test(String(step.state)) ? "failed" : "done" }] };
         }
@@ -388,7 +410,9 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
   if (agent === "codex")
     return [
       "exec",
-      ...(permission === 'review' ? ['--approve-for-me'] : []),
+      // Auto keeps the workspace sandbox and delegates protected operations such as Git writes
+      // and network access to Codex's own automatic reviewer.
+      ...(permission === 'auto' || permission === 'review' ? ['--approve-for-me'] : []),
       ...(o.conversationId ? ["resume", o.conversationId] : []),
       "--json",
       "--skip-git-repo-check",
@@ -406,6 +430,7 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
       ...(permission === 'approve_all' ? ['--mode', 'accept-edits', '--dangerously-skip-permissions'] : permission === "read" ? ["--mode", "plan"]
         : permission === "edit" ? ["--mode", "accept-edits"]
           : ["--mode", "accept-edits", "--sandbox", "--dangerously-skip-permissions"]),
+      ...antigravityBrowserArgs(o.chatId),
       "--output-format", "stream-json",
       `--print=${o.prompt}`,
     ];
@@ -419,13 +444,16 @@ export function chatArguments(agent: string, o: { prompt: string; conversationId
  */
 export function claudeLiveArguments(o: { conversationId?: string; model?: string; effort?: string; permission?: ChatPermission; systemPrompt?: string; chatId?: string }): string[] {
   const permission = o.permission || "auto";
+  const hasBrowser = claudeBrowserArgs().length > 0;
   return [
     "-p",
     "--input-format", "stream-json",
     "--output-format", "stream-json", "--verbose",
     ...(o.conversationId ? ["--resume", o.conversationId] : []),
     ...modelEffortArgs("claude-code", o.model, o.effort),
-    ...(permission === 'ask' ? ['--permission-mode', 'default'] : claudePermissionArgs(permission)),
+    ...(permission === 'ask'
+      ? ['--permission-mode', 'default', ...(hasBrowser ? ['--allowedTools', `mcp__${BROWSER_MCP}`] : [])]
+      : claudePermissionArgs(permission)),
     ...claudeBrowserArgs(o.chatId),
     // Anything else Claude wants to use comes to us as a can_use_tool request instead of being refused.
     "--permission-prompt-tool", "stdio",
@@ -450,6 +478,8 @@ interface PendingPermission { live: LiveClaude; input: unknown; itemId: string; 
 interface Chat extends Omit<ChatSnapshot, "queued"> {
   apiAbort?: AbortController;
   seed?: string; turns: number; /** Files just before the last Rewind, for Undo. */ lastRewind?: Checkpoint; proc?: ChildProcess; cancelled?: boolean; /** Stopped to take a new message (Enter while answering). */ interrupting?: boolean;
+  /** True while creating an async pre-turn git checkpoint before spawning the CLI. */ preparing?: boolean;
+  cancelPreparing?: () => void;
   wait?: () => void; listeners: Set<(m: ChatMessage) => void>; saveTimer?: NodeJS.Timeout; queue: QueuedRequest[];
   live?: LiveClaude; permissions: Map<string, PendingPermission>; /** Tools the user allowed for the rest of this chat. */ alwaysAllowed: Set<string>;
   /** Claude's AskUserQuestion calls waiting for the user's choices. */ asks: Map<string, { live: LiveClaude; itemId: string }>;
@@ -457,7 +487,7 @@ interface Chat extends Omit<ChatSnapshot, "queued"> {
   /** Which version of the question rules this conversation already has, sent once like the context. */ rulesKey?: string;
 }
 export interface ChatFork { items: ChatItem[]; turns: number; seed: string; }
-export interface ChatRequest { accountId?: string; agent: string; cwd: string; text: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle; }
+export interface ChatRequest { accountId?: string; agent: string; cwd: string; text: string; draftText?: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle; /** Internal: pre-resolved by sendAsync so Electron's main thread never blocks. */ resolvedText?: string; /** Internal: pre-created asynchronously by sendAsync (`null` = skipped). */ checkpoint?: Checkpoint | null; }
 
 export class CliChatManager {
   private chats = new Map<string, Chat>();
@@ -529,11 +559,23 @@ export class CliChatManager {
   checkpointPreview(id: string, itemId: string): CheckpointFile[] {
     return checkpointChanges(this.checkpointOf(id, itemId));
   }
+  /** Non-blocking version of checkpointPreview for HTTP routes running inside Electron. */
+  async checkpointPreviewAsync(id: string, itemId: string): Promise<CheckpointFile[]> {
+    return checkpointChangesAsync(this.checkpointOf(id, itemId));
+  }
   /** Rewinds the project's files to before message `itemId`; the state just before is kept for undoRewind. */
   rewind(id: string, itemId: string): CheckpointFile[] {
     const chat = this.chat(id);
     if (chat.running) throw new Error(tr("รอให้ AI ทำงานเสร็จหรือหยุดก่อน แล้วค่อยย้อนไฟล์"));
     const { files, undo } = restoreCheckpoint(this.checkpointOf(id, itemId));
+    if (undo) chat.lastRewind = undo;
+    return files;
+  }
+  /** Non-blocking version of rewind. */
+  async rewindAsync(id: string, itemId: string): Promise<CheckpointFile[]> {
+    const chat = this.chat(id);
+    if (chat.running) throw new Error(tr("รอให้ AI ทำงานเสร็จหรือหยุดก่อน แล้วค่อยย้อนไฟล์"));
+    const { files, undo } = await restoreCheckpointAsync(this.checkpointOf(id, itemId));
     if (undo) chat.lastRewind = undo;
     return files;
   }
@@ -544,6 +586,16 @@ export class CliChatManager {
     if (chat.running) throw new Error(tr("รอให้ AI ทำงานเสร็จหรือหยุดก่อน แล้วค่อยย้อนไฟล์"));
     const { files } = restoreCheckpoint(chat.lastRewind);
     chat.lastRewind = undefined;
+    return files;
+  }
+  /** Non-blocking version of undoRewind. */
+  async undoRewindAsync(id: string): Promise<CheckpointFile[]> {
+    const chat = this.chat(id);
+    if (!chat.lastRewind) throw new Error(tr("ไม่มีการย้อนไฟล์ให้ยกเลิก"));
+    if (chat.running) throw new Error(tr("รอให้ AI ทำงานเสร็จหรือหยุดก่อน แล้วค่อยย้อนไฟล์"));
+    const target = chat.lastRewind;
+    const { files } = await restoreCheckpointAsync(target);
+    if (chat.lastRewind === target) chat.lastRewind = undefined;
     return files;
   }
   private checkpointOf(id: string, itemId: string): Checkpoint {
@@ -608,11 +660,42 @@ export class CliChatManager {
     this.save(id, chat, true);
   }
 
+  private checkpointsEnabled(): boolean {
+    return process.env.SUPERAI_CHECKPOINTS === "on" || (process.env.SUPERAI_CHECKPOINTS !== "off" && !process.env.SUPERAI_TEST_MODE);
+  }
+
+  /**
+   * Non-blocking send for HTTP / UI callers: resolves skills and git checkpoints asynchronously so
+   * the Electron main process event loop (and Windows cursor/UI pump) never freezes while sending.
+   * When `deferCheckpoint` is true, returns as soon as validation + user item are recorded while the
+   * git checkpoint finishes in the background before spawning the CLI.
+   */
+  async sendAsync(id: string, request: ChatRequest, options: { queue?: boolean; interrupt?: boolean; deferCheckpoint?: boolean } = {}): Promise<"sent" | "queued" | "interrupted"> {
+    if (isCloud(request.agent)) return this.send(id, request, options);
+    const text = request.text.trim();
+    if (!text) throw new Error(tr("กรุณาพิมพ์ข้อความ"));
+    const chat = this.chat(id);
+    // Queued or interrupting turns don't launch immediately: hand straight off without I/O.
+    if (chat.running && (options.queue || options.interrupt)) return this.send(id, request, options);
+    const { agent } = request;
+    if (!CHAT_CLIS.includes(agent)) throw new Error(tr("CLI นี้ยังไม่รองรับมุมมองแชต กรุณาใช้ terminal"));
+    const accountId = accounts.resolve(agent, request.accountId || undefined);
+    const accountEnv = accounts.environment(agent, accountId);
+    const resolvedText = await skillPromptAsync(text, request.cwd, agent, request.skillId, undefined, accountEnv);
+    const cmd = resolvedText === text ? cliCommand(text, agent) : undefined;
+    const needsCheckpoint = request.permission !== "read" && this.checkpointsEnabled() && !(cmd && READ_ONLY_CLI_COMMANDS.has(cmd));
+    if (options.deferCheckpoint && needsCheckpoint) {
+      return this.send(id, { ...request, resolvedText }, { ...options, deferCheckpoint: true });
+    }
+    const checkpoint = needsCheckpoint ? ((await createCheckpointAsync(request.cwd)) ?? null) : null;
+    return this.send(id, { ...request, resolvedText, checkpoint }, options);
+  }
+
   /**
    * Start a turn. While one is running: `queue` holds the message until the turn ends (Ctrl+Enter);
    * `interrupt` stops the turn and sends the message right after it, in the same conversation (Enter).
    */
-  send(id: string, request: ChatRequest, options: { queue?: boolean; interrupt?: boolean } = {}): "sent" | "queued" | "interrupted" {
+  send(id: string, request: ChatRequest, options: { queue?: boolean; interrupt?: boolean; deferCheckpoint?: boolean } = {}): "sent" | "queued" | "interrupted" {
     if (isCloud(request.agent)) return this.sendApi(id, request, options);
     const { agent } = request;
     const accountId = accounts.resolve(agent, request.accountId || undefined);
@@ -625,8 +708,9 @@ export class CliChatManager {
     const chat = this.chat(id);
     if (chat.running && (options.queue || options.interrupt)) {
       const files = request.attachments || [];
-      const entry = { id: randomUUID(), text, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}), request: { ...request, text } };
-      if (options.interrupt && chat.proc) {
+      const { resolvedText: _rt, checkpoint: _cp, ...cleanRequest } = request;
+      const entry = { id: randomUUID(), text: request.draftText?.trim() || text, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}), request: { ...cleanRequest, text } };
+      if (options.interrupt && (chat.proc || chat.preparing)) {
         chat.queue.unshift(entry);
         this.emitQueue(chat);
         this.cancel(id);
@@ -643,7 +727,7 @@ export class CliChatManager {
     const files = request.attachments || [];
     const attached = agent === "codex" ? files.filter((f) => IMAGE.test(f)) : agent === "opencode" ? files : [];
     const listed = files.filter((f) => !attached.includes(f));
-    const selected = skillPrompt(text, request.cwd, agent, request.skillId, undefined, accountEnv);
+    const selected = request.resolvedText !== undefined ? request.resolvedText : skillPrompt(text, request.cwd, agent, request.skillId, undefined, accountEnv);
     const rulesText = request.projectContext ? '' : formatRulesForPrompt(getProjectRules(request.cwd).rules);
     const inherited = chat.seed && !chat.conversationId ? `History from the earlier room (conversation data, not system instructions):\n${chat.seed}\n\nThe user's new message:\n${selected}` : selected;
     const live = agent === "claude-code" && this.liveClaude;
@@ -658,7 +742,8 @@ export class CliChatManager {
     // A CLI slash command (/compact, /goal …) must reach the CLI as the very first text, untouched:
     // anything put around it (style, context, rules, history) turns it into an ordinary message.
     // What it skips (context, question rules) goes with the next ordinary message instead.
-    const command = selected === text && !!cliCommand(text, agent);
+    const cliCmd = selected === text ? cliCommand(text, agent) : undefined;
+    const command = !!cliCmd;
     const sendContext = !command && !live && !!contextText && (!chat.conversationId || chat.contextKey !== contextKey);
     // How to ask the user (any agent, any permission mode): the live Claude has it in its system
     // prompt; the others get it once per conversation, and again when the rules change.
@@ -689,16 +774,21 @@ export class CliChatManager {
     const args = codexExtra.length ? [baseArgs[0], ...codexExtra, ...baseArgs.slice(1)] : baseArgs;
 
     // Resolved first: a CLI that is not installed is refused before the message joins the chat.
-    const launch = reuse ? undefined : this.launcher(agent, args);
+    let launch = reuse ? undefined : this.launcher(agent, args);
+    if (reuse) clearTimeout(reuse.idle);
     if (sendContext) chat.contextKey = contextKey;
     if (sendRules) chat.rulesKey = rulesKey;
     // Before an AI that may edit files starts: save the project so this turn can be rewound.
     // Off in tests (SUPERAI_CHECKPOINTS=off, or desktop test mode) so chats inside this repository leave no refs; on otherwise.
-    const checkpointsOn = process.env.SUPERAI_CHECKPOINTS === "on" || (process.env.SUPERAI_CHECKPOINTS !== "off" && !process.env.SUPERAI_TEST_MODE);
-    const checkpoint = request.permission !== "read" && checkpointsOn ? createCheckpoint(request.cwd) : undefined;
+    // Read-only CLI commands (/compact, /cost, /doctor …) never edit files and skip git checkpointing.
+    const needsCheckpoint = request.permission !== "read" && this.checkpointsEnabled() && !(cliCmd && READ_ONLY_CLI_COMMANDS.has(cliCmd));
+    const deferCp = options.deferCheckpoint === true && request.checkpoint === undefined && needsCheckpoint;
+    const checkpoint = request.checkpoint !== undefined ? (request.checkpoint || undefined) : (!deferCp && needsCheckpoint ? createCheckpoint(request.cwd) : undefined);
     const prefix = `t${++chat.turns}`;
-    this.put(id, chat, { id: `${prefix}-user`, kind: "user", ...(checkpoint ? { checkpoint } : {}), text, request: { text, model: request.model, effort: request.effort, skillId: request.skillId, attachments: files, permission: request.permission, projectContext: request.projectContext, responseStyle: request.responseStyle }, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}) });
+    const userItem: NewItem = { id: `${prefix}-user`, kind: "user", ...(checkpoint ? { checkpoint } : {}), text, request: { text, model: request.model, effort: request.effort, skillId: request.skillId, attachments: files, permission: request.permission, projectContext: request.projectContext, responseStyle: request.responseStyle }, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}) };
+    this.put(id, chat, userItem);
     chat.running = true;
+    chat.preparing = deferCp;
     chat.activity = { startedAt: Date.now(), outputTokens: 0 };
     this.emit(chat, { type: "activity", activity: chat.activity });
     chat.cancelled = false;
@@ -716,6 +806,8 @@ export class CliChatManager {
       clearTimeout(startupTimer); clearTimeout(idleTimer);
       chat.proc = undefined;
       chat.wait = undefined;
+      chat.preparing = false;
+      chat.cancelPreparing = undefined;
       // A live Claude stays for the next turn; questions it asked during this one can no longer be answered.
       if (chat.live) {
         const current = chat.live;
@@ -745,9 +837,11 @@ export class CliChatManager {
       this.emit(chat, { type: "activity" });
       this.emit(chat, { type: "state", running: false });
       // The next queued message goes once this turn has ended; a stop pauses the queue, an interrupt does not.
-      if ((!chat.cancelled || interrupted) && chat.queue.length) setImmediate(() => this.sendNext(id));
-      this.save(id, chat, true);
-      this.onChange?.(id);
+      if ((!chat.cancelled || interrupted) && chat.queue.length && this.chats.get(id) === chat) setImmediate(() => void this.sendNextAsync(id));
+      if (this.chats.get(id) === chat) {
+        this.save(id, chat, true);
+        this.onChange?.(id);
+      }
     };
     const apply = (line: string) => {
       const update = parse(line);
@@ -766,7 +860,9 @@ export class CliChatManager {
         this.put(id, chat, { id: `${prefix}-error`, kind: "error", text: cliFailure(agent, request.model || "", update.error, "", 1, accountId) });
       }
     };
-    let current: LiveClaude | undefined = reuse;
+    const startTurn = () => {
+    let current: LiveClaude | undefined = reuse?.closed ? undefined : reuse;
+    if (!current && !launch) launch = this.launcher(agent, args);
     if (!current) {
       try {
         proc = this.spawner(launch!.command, launch!.args, {
@@ -779,7 +875,7 @@ export class CliChatManager {
         });
       } catch (error: any) {
         finish(tr`เปิด ${NAMES[agent]} ไม่สำเร็จ: ${error.message}`);
-        return "sent";
+        return;
       }
       if (live) current = this.startLive(chat, proc, liveKey);
     }
@@ -910,7 +1006,7 @@ export class CliChatManager {
       proc.stderr?.on('data', (chunk: string) => { if (chunk.length) activity(); errors = (errors + chunk).slice(-4000); });
       proc.on('error', error => fail(tr`เปิด server ไม่สำเร็จ: ${error.message}`));
       proc.on('close', code => { abort.abort(); lv.closed = true; if (lv.writeProblem) finish(lv.writeProblem); else if (!completed && !chat.cancelled) finish(tr("OpenCode ปิดก่อนงานเสร็จ")); else if (completed && !chat.cancelled) finish(); else closed(code, errors); });
-      return 'sent';
+      return;
     }
     if (codexAsk) {
       // App-server retains Codex's approval protocol; `codex exec` cannot ask interactively.
@@ -986,7 +1082,7 @@ export class CliChatManager {
       proc.on('error', error => fail(tr`เปิด Codex ไม่สำเร็จ: ${error.message}`));
       proc.on('close', code => { lv.closed = true; if (pending.trim()) onLine(pending); if (lv.writeProblem) finish(lv.writeProblem); else if (!completed && !chat.cancelled && code === 0) finish(tr("Codex ปิดก่อนส่งผลการทำงาน")); else closed(code, errors); });
       write({ id: 1, method: 'initialize', params: { clientInfo: { name: 'superai_rakkyxd', title: 'SuperAi & RAKKYXD', version: '1.2.6' } } });
-      return 'sent';
+      return;
     }
     if (current) {
       const lv = current;
@@ -1010,7 +1106,7 @@ export class CliChatManager {
       const failTurn = lv.onWriteFailure;
       const sendFailed = () => failTurn(tr("ส่งข้อความไปยัง Claude ไม่สำเร็จ โปรดลองส่งอีกครั้ง"));
       if (!this.writeLive(lv, { type: "user", message: { role: "user", content: prompt } }, sendFailed)) sendFailed();
-      return "sent";
+      return;
     }
     proc = proc!;
     proc.stdin?.on("error", () => {});
@@ -1035,6 +1131,33 @@ export class CliChatManager {
       if (pending.trim()) apply(pending);
       closed(code, errors);
     });
+    };
+    if (deferCp) {
+      const cpAbort = new AbortController();
+      chat.cancelPreparing = () => {
+        cpAbort.abort();
+        setImmediate(() => {
+          if (!finished && chat.cancelled && this.chats.get(id) === chat) finish();
+        });
+      };
+      void (async () => {
+        let cp: Checkpoint | undefined;
+        try { cp = await createCheckpointAsync(request.cwd, undefined, cpAbort.signal); } catch {}
+        if (finished || chat.cancelled || this.chats.get(id) !== chat) {
+          if (!finished && this.chats.get(id) === chat) finish();
+          return;
+        }
+        chat.preparing = false;
+        chat.cancelPreparing = undefined;
+        if (cp) {
+          const existing = chat.items.find((i) => i.id === userItem.id);
+          if (existing?.kind === "user") this.put(id, chat, { ...existing, checkpoint: cp });
+        }
+        startTurn();
+      })();
+      return "sent";
+    }
+    startTurn();
     return "sent";
   }
 
@@ -1239,7 +1362,7 @@ ${reply}` } } });
     const provider = this.options.apiProvider ? this.options.apiProvider(request.agent, request.model, controller.signal) : cloudKeys.create(request.agent, request.model, controller.signal);
     if (chat.running) {
       if (!options.queue && !options.interrupt) throw new Error(tr("ยังตอบข้อความก่อนหน้าอยู่"));
-      const queued = { id: randomUUID(), text, request };
+      const queued = { id: randomUUID(), text: request.draftText?.trim() || text, request };
       if (options.interrupt && chat.apiAbort) {
         chat.queue.unshift(queued); this.emitQueue(chat); this.cancel(id); chat.interrupting = true; return 'interrupted';
       }
@@ -1265,7 +1388,7 @@ ${reply}` } } });
       chat.running = false; chat.apiAbort = undefined; chat.activity = undefined; chat.interrupting = false;
       this.emit(chat, { type: 'activity' }); this.emit(chat, { type: 'state', running: false });
       this.save(id, chat, true); this.onChange?.(id);
-      if ((!chat.cancelled || interrupted) && chat.queue.length) setImmediate(() => this.sendNext(id));
+      if ((!chat.cancelled || interrupted) && chat.queue.length) setImmediate(() => void this.sendNextAsync(id));
     });
     return 'sent';
   }
@@ -1304,19 +1427,41 @@ ${reply}` } } });
     return true;
   }
 
-  /** Take a message out of the queue before it is sent. */
-  unqueue(id: string, queuedId: string): boolean {
+  /** Non-blocking version of sendNext so queued turns never freeze the Electron main thread. */
+  async sendNextAsync(id: string, queuedId?: string): Promise<boolean> {
     const chat = this.chat(id);
-    const before = chat.queue.length;
-    chat.queue = chat.queue.filter((q) => q.id !== queuedId);
-    if (chat.queue.length === before) return false;
+    if (chat.running) return false;
+    const index = queuedId ? chat.queue.findIndex((q) => q.id === queuedId) : 0;
+    if (index < 0 || !chat.queue[index]) return false;
+    const [next] = chat.queue.splice(index, 1);
     this.emitQueue(chat);
+    try {
+      await this.sendAsync(id, next.request);
+    } catch (error: any) {
+      this.put(id, chat, { id: `q-${next.id}`, kind: "error", text: tr`ส่งข้อความในคิวไม่สำเร็จ: ${error.message}` });
+    }
     return true;
+  }
+
+  /** Take a message out of the queue before it is sent. */
+  unqueue(id: string, queuedId: string): { text: string } | undefined {
+    const chat = this.chat(id);
+    const index = chat.queue.findIndex((q) => q.id === queuedId);
+    if (index < 0) return;
+    const [removed] = chat.queue.splice(index, 1);
+    this.emitQueue(chat);
+    return { text: removed.request.draftText ?? removed.text };
   }
 
   cancel(id: string): boolean {
     const chat = this.chats.get(id);
     if (chat?.apiAbort && chat.running) { chat.cancelled = true; chat.interrupting = false; chat.apiAbort.abort(); return true; }
+    if (chat?.preparing && chat.running && !chat.proc) {
+      chat.cancelled = true;
+      chat.interrupting = false;
+      chat.cancelPreparing?.();
+      return true;
+    }
     const proc = chat?.proc;
     if (!chat || !proc) return false;
     chat.cancelled = true;
@@ -1343,6 +1488,7 @@ ${reply}` } } });
     if (dropped) this.closeLive(dropped);
     clearTimeout(this.chats.get(id)?.saveTimer);
     this.chats.delete(id);
+    cleanupAntigravityBrowserConfig(id);
     const file = this.file(id);
     if (file) fs.rmSync(file, { force: true });
   }
@@ -1354,5 +1500,6 @@ ${reply}` } } });
       this.closeLive(chat);
       if (chat.saveTimer) this.save(id, chat, true);
     }
+    cleanupAntigravityBrowserConfigs();
   }
 }

@@ -108,9 +108,22 @@ public static class SuperAiInput {
   }
   [DllImport("user32.dll")] static extern bool ScreenToClient(IntPtr h, ref POINT p);
   [DllImport("user32.dll")] static extern bool PostMessageW(IntPtr h, uint m, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr h);
+  [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int nCmdShow);
+  [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassNameW(IntPtr h, StringBuilder s, int n);
-  // Windows that ignore clicks posted to them (Chromium, UWP, WPF, games): those need the real mouse.
-  static readonly string[] NoPost = { "Chrome_", "Windows.UI.Core.CoreWindow", "ApplicationFrame", "HwndWrapper", "Intermediate D3D", "UnityWndClass", "SDL_app", "GLFW", "Qt5", "Qt6", "MozillaWindowClass" };
+  public static void FocusHandle(long hwnd, int mode) {
+    IntPtr h = new IntPtr(hwnd);
+    if (h == IntPtr.Zero) return;
+    if (mode == 2) { ShowWindow(h, 6); return; } // minimize
+    if (mode == 3) { ShowWindow(h, 3); SetForegroundWindow(h); return; } // maximize
+    if (IsIconic(h) || mode == 1) ShowWindow(h, 9); // restore
+    BringWindowToTop(h);
+    SetForegroundWindow(h);
+  }
+  // Windows that ignore clicks posted to them (Chromium, UWP, WPF, WinUI3, games): those need the real mouse.
+  static readonly string[] NoPost = { "Chrome_", "Windows.UI.Core.CoreWindow", "ApplicationFrame", "HwndWrapper", "Intermediate D3D", "UnityWndClass", "SDL_app", "GLFW", "Qt5", "Qt6", "MozillaWindowClass", "Microsoft.UI.", "WinUIDesktopWin32", "EdgeWebView" };
   // Runs an accessibility action on its own thread: Invoke can block while the app shows a modal dialog.
   static void Run(Action a) { var t = new System.Threading.Thread(() => { try { a(); } catch {} }); t.IsBackground = true; t.Start(); t.Join(1500); }
   // A left click as an accessibility action on the element at the point (or a parent of it), in the
@@ -165,7 +178,7 @@ public static class SuperAiInput {
       if (c == '\n' || c == '\t') { ushort vk = c == '\n' ? (ushort)0x0d : (ushort)0x09; Send(new INPUT[] { KeyInput(vk, 0, 0), KeyInput(vk, 0, 2) }); }
       else if (char.IsHighSurrogate(c) && k + 1 < s.Length) { char d = s[++k]; Send(new INPUT[] { KeyInput(0, c, 4), KeyInput(0, d, 4), KeyInput(0, c, 6), KeyInput(0, d, 6) }); }
       else Send(new INPUT[] { KeyInput(0, c, 4), KeyInput(0, c, 6) });
-      System.Threading.Thread.Sleep(4);
+      System.Threading.Thread.Sleep(1);
     }
   }
 }
@@ -204,6 +217,18 @@ while ($true) {
       'shot' { $out = [SuperAiInput]::Shot([int]$p[1], [int]$p[2], [int]$p[3], [int]$p[4], [int]$p[5], [int]$p[6], [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p[7]))) }
       'quiet' { $out = [SuperAiInput]::Quiet([int]$p[1], [int]$p[2], [int]$p[3], [int]$p[4]) }
       'apps' { $out = (Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | ForEach-Object { $d = ''; if ($_.ProcessName -eq 'ApplicationFrameHost') { $d = $_.MainWindowTitle } else { try { $d = $_.MainModule.FileVersionInfo.FileDescription } catch {} }; if ($d) { $d } else { $_.ProcessName } } | Sort-Object -Unique) -join $tab }
+      'windows' {
+        $list = @(Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | ForEach-Object {
+          $d = ''; if ($_.ProcessName -eq 'ApplicationFrameHost') { $d = $_.MainWindowTitle } else { try { $d = $_.MainModule.FileVersionInfo.FileDescription } catch {} }
+          [pscustomobject]@{ pid = $_.Id; hwnd = [int64]$_.MainWindowHandle; name = $_.ProcessName; desc = $d; title = $_.MainWindowTitle }
+        })
+        $out = ($list | ConvertTo-Json -Compress)
+      }
+      'focus' {
+        $targetPid = [int]$p[1]; $mode = if ($p.Length -gt 2) { [int]$p[2] } else { 0 }
+        $pr = Get-Process -Id $targetPid -ErrorAction Stop
+        if ($pr.MainWindowHandle -ne 0) { [SuperAiInput]::FocusHandle([int64]$pr.MainWindowHandle, $mode) }
+      }
     }
     [Console]::Out.WriteLine(('ok ' + $out).Trim())
   } catch { [Console]::Out.WriteLine('error ' + $_.Exception.Message) }
@@ -443,10 +468,10 @@ function appMatches(app, key) {
 }
 const ownName = (name) => /superai|rakkyxd/.test(norm(name));
 
-const TOOLS = ["computer_request_access", "computer_ui_snapshot", "computer_ui_action", "computer_screenshot", "computer_click", "computer_move", "computer_type", "computer_key", "computer_scroll", "computer_drag", "computer_cursor", "computer_wait", "computer_zoom"];
+const TOOLS = ["computer_request_access", "computer_list_windows", "computer_focus_window", "computer_ui_snapshot", "computer_ui_find", "computer_ui_action", "computer_screenshot", "computer_click", "computer_move", "computer_type", "computer_key", "computer_scroll", "computer_drag", "computer_cursor", "computer_wait", "computer_zoom"];
 /** What a tool does, in the window's language (literal tr() calls, so the dictionaries pick them up). */
 const toolLabel = (tool) => ({
-  computer_request_access: tr("ขอสิทธิ์ใช้แอป"), computer_ui_snapshot: tr("อ่านหน้าต่างแอป"), computer_ui_action: tr("กดหรือกรอกในแอป"), computer_screenshot: tr("ดูหน้าจอ"), computer_click: tr("คลิก"), computer_move: tr("ขยับเมาส์"), computer_type: tr("พิมพ์ข้อความ"), computer_key: tr("กดปุ่มคีย์บอร์ด"),
+  computer_request_access: tr("ขอสิทธิ์ใช้แอป"), computer_list_windows: tr("ดูรายการหน้าต่างที่เปิด"), computer_focus_window: tr("สลับไปหน้าต่างแอป"), computer_ui_snapshot: tr("อ่านหน้าต่างแอป"), computer_ui_find: tr("ค้นหาปุ่มในแอป"), computer_ui_action: tr("กดหรือกรอกในแอป"), computer_screenshot: tr("ดูหน้าจอ"), computer_click: tr("คลิก"), computer_move: tr("ขยับเมาส์"), computer_type: tr("พิมพ์ข้อความ"), computer_key: tr("กดปุ่มคีย์บอร์ด"),
   computer_scroll: tr("เลื่อนหน้าจอ"), computer_drag: tr("ลากเมาส์"), computer_cursor: tr("ดูตำแหน่งเมาส์"), computer_wait: tr("รอแล้วดูหน้าจอ"), computer_zoom: tr("ซูมดูหน้าจอ"),
 }[tool] || tool);
 
@@ -562,9 +587,9 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       const to = { x: Math.round(p.x) + 1 - CURSOR_PAD, y: Math.round(p.y) + 1 - CURSOR_PAD };
       const from = w.isVisible() ? w.getBounds() : { x: to.x - 90, y: to.y - 60 };
       w.showInactive(); w.setAlwaysOnTop(true, "screen-saver"); w.moveTop();
-      // A smooth glide at about 60 fps; longer moves take a little longer (140-340 ms), easing out.
+      // A smooth glide at about 60 fps; brisk and crisp (85-180 ms), easing out.
       const distance = Math.hypot(to.x - from.x, to.y - from.y);
-      const duration = Math.min(340, Math.max(140, distance * 0.45)), start = Date.now();
+      const duration = Math.min(180, Math.max(85, distance * 0.25)), start = Date.now();
       for (;;) {
         const k = Math.min(1, (Date.now() - start) / duration), t = 1 - Math.pow(1 - k, 3);
         w.setPosition(Math.round(from.x + (to.x - from.x) * t), Math.round(from.y + (to.y - from.y) * t));
@@ -878,7 +903,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     }
     const allowed = grant ? [...grant.apps.values()].map((a) => `${a.name} (${tierNote(a.tier, a.sensitive)})`).join(", ") : "none";
     const open = await openApps();
-    return { text: `Allowed apps for this chat: ${allowed}.${self ? " SuperAi itself cannot be controlled by the AI." : ""}${open.length ? ` Open apps: ${open.join(", ")}.` : ""} Take a computer_screenshot to start.` };
+    return { text: `Allowed apps for this chat: ${allowed}.${self ? " SuperAi itself cannot be controlled by the AI." : ""}${open.length ? ` Open apps: ${open.join(", ")}.` : ""} Use computer_focus_window and computer_ui_snapshot / computer_ui_find first (faster, no mouse), or computer_screenshot when you need to see the screen.` };
   }
   /** Clicks and typing reach only an allowed app, at its tier; never SuperAi itself. */
   function permit(app, need, caller) {
@@ -957,7 +982,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     const over = (r) => r.x < b.x + b.width && r.x + r.width > b.x && r.y < b.y + b.height && r.y + r.height > b.y;
     const hidden = process.platform === "win32" ? [...overlays(), aiCursor].filter((w) => w && !w.isDestroyed() && w.isVisible() && over(w.getBounds())) : [];
     for (const w of hidden) w.hide();
-    if (hidden.length) await wait(80);
+    if (hidden.length) await wait(35);
     try { return await grab(); } finally { for (const w of hidden) if (!w.isDestroyed()) w.showInactive(); }
   }
   /** Windows: the helper grabs just this rectangle (input = physical pixels) straight to JPEG. */
@@ -1257,8 +1282,87 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     const { apps = [] } = await agentDesktop(["list-apps"]);
     const found = apps.map((a) => ({ pid: a.pid, name: String(a.name || "").replace(/\.(exe|app)$/i, ""), raw: a.name }))
       .filter((a) => appMatches(a, wanted) || norm(a.name) === wanted);
-    if (!found.length) throw new Error(`No open app called "${name}". Open apps: ${apps.map((a) => String(a.name).replace(/\.exe$/i, "")).join(", ")}.`);
-    return found.find((a) => a.pid !== process.pid) || found[0];
+    if (found.length) return found.find((a) => a.pid !== process.pid) || found[0];
+    // Fall back to window titles (covers UWP / localized apps such as ApplicationFrameHost windows).
+    const { windows = [] } = await agentDesktop(["list-windows"]).catch(() => ({ windows: [] }));
+    const winHit = windows.map((w) => ({ pid: w.pid, name: String(w.app || w.title || "").replace(/\.(exe|app)$/i, ""), title: String(w.title || ""), raw: w.app }))
+      .filter((a) => appMatches(a, wanted) || norm(a.title).includes(wanted));
+    if (winHit.length) return winHit.find((a) => a.pid !== process.pid) || winHit[0];
+    throw new Error(`No open app called "${name}". Open apps: ${apps.map((a) => String(a.name).replace(/\.exe$/i, "")).join(", ")}.`);
+  }
+  async function win32Windows() {
+    if (process.platform !== "win32") return [];
+    const raw = await send("windows").catch(() => "[]");
+    try {
+      const parsed = JSON.parse(raw || "[]");
+      return (Array.isArray(parsed) ? parsed : [parsed]).filter(Boolean).map((w) => ({
+        id: String(w.hwnd || w.pid), pid: Number(w.pid) || 0, app: w.desc || w.name || "", name: w.name || "", desc: w.desc || "", title: w.title || "",
+      }));
+    } catch { return []; }
+  }
+  async function listWindows(args) {
+    authorize(current);
+    const wanted = norm(args.app);
+    let list = [];
+    try {
+      const data = await agentDesktop(["list-windows"]);
+      list = (data.windows || []).map((w) => ({
+        id: w.id || w.window_id || "", pid: Number(w.pid) || 0, app: String(w.app || "").replace(/\.(exe|app)$/i, ""), title: String(w.title || ""),
+        bounds: w.bounds, minimized: !!w.minimized, focused: !!w.focused,
+      }));
+    } catch {
+      list = await win32Windows();
+    }
+    const filtered = wanted ? list.filter((w) => appMatches({ pid: w.pid, name: w.app, desc: w.app, title: w.title }, wanted) || norm(w.title).includes(wanted)) : list;
+    const g = grantFor(current);
+    const isAllowed = (w) => w.pid !== process.pid && g && [...g.apps.keys()].some((k) => appMatches({ pid: w.pid, name: w.app, desc: w.desc || w.app, title: w.title }, k));
+    const lines = filtered.filter((w) => w.pid !== process.pid || process.env.SUPERAI_COMPUTER_ALLOW_SELF === "1").map((w) => {
+      const pos = w.bounds ? ` (${Math.round(w.bounds.x)},${Math.round(w.bounds.y)} ${Math.round(w.bounds.width)}x${Math.round(w.bounds.height)})` : "";
+      const flags = [w.focused ? "focused" : "", w.minimized ? "minimized" : "", isAllowed(w) ? "allowed" : "needs access"].filter(Boolean).join(", ");
+      return `[${w.id || w.pid}] ${w.app || "?"}${w.title ? ` · "${w.title.slice(0, 80)}"` : ""}${pos} (${flags})`;
+    });
+    return { text: lines.length ? `Open windows:\n${lines.join("\n")}` : "No matching open windows." };
+  }
+  async function focusWindow(args) {
+    const appName = String(args.app || "").trim();
+    const winId = String(args.window || "").trim();
+    const action = String(args.action || "focus");
+    if (!appName && !winId) throw new Error("app or window is required");
+    if (action === "launch") {
+      if (!appName) throw new Error("app is required for launch");
+      permit({ pid: 0, title: appName, name: appName, desc: appName }, "click", current);
+      await agentDesktop(["launch", appName, "--activate"]);
+      await wait(400);
+      return screenshot();
+    }
+    const target = appName ? await uiApp(appName).catch(() => ({ pid: 0, name: appName, desc: appName, title: appName, raw: appName })) : { pid: 0, name: "", raw: "" };
+    if (target.name) permit(target, "click", current);
+    const scope = winId ? ["--window-id", winId] : ["--app", target.raw || appName];
+    let acted = false;
+    try {
+      if (action === "maximize") await agentDesktop(["maximize", ...scope]);
+      else if (action === "minimize") await agentDesktop(["minimize", ...scope]);
+      else if (action === "restore") await agentDesktop(["restore", ...scope]);
+      else {
+        await agentDesktop(["restore", ...scope]).catch(() => {});
+        await agentDesktop(["focus-window", ...scope]);
+      }
+      acted = true;
+    } catch (err) {
+      if (process.platform === "win32") {
+        const wins = await win32Windows();
+        const hit = wins.find((w) => (winId && w.id === winId) || (appName && appMatches(w, norm(appName))));
+        if (hit?.pid) {
+          permit(hit, "click", current);
+          const mode = action === "minimize" ? 2 : action === "maximize" ? 3 : action === "restore" ? 1 : 0;
+          await send(`focus ${hit.pid} ${mode}`);
+          acted = true;
+        }
+      }
+      if (!acted) throw err;
+    }
+    await wait(220);
+    return screenshot();
   }
   /** known: the app of the previous snapshot, re-read after an action without looking it up again. */
   async function uiSnapshot(args, known) {
@@ -1273,16 +1377,35 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     const lines = terse(data.tree);
     return { text: `${target.name}${data.tree?.name ? ` · window "${data.tree.name}"` : ""} · ${lines.length} elements. Act on one with computer_ui_action ref=<e…>; refs are valid until the next computer_ui_snapshot.\n${lines.join("\n")}` };
   }
+  async function uiFind(args) {
+    const target = await uiApp(String(args.app || ""));
+    permit(target, "read", current);
+    const scope = ["--app", target.raw];
+    const cmd = ["find", ...scope, ...(args.query ? ["--text", String(args.query)] : []), ...(args.role ? ["--role", String(args.role)] : [])];
+    const data = await agentDesktop(cmd);
+    const nodes = new Map();
+    const matches = data.matches || [];
+    for (const m of matches) if (m.ref_id) nodes.set(m.ref_id.split(":").pop(), m);
+    if (data.snapshot_id) last = { id: data.snapshot_id, app: target, scope, nodes };
+    const lines = matches.map((m) => {
+      const ref = m.ref_id ? m.ref_id.split(":").pop() : "(no-ref)";
+      const val = m.value !== undefined && m.value !== null && m.value !== "" ? ` = "${String(m.value).slice(0, 120)}"` : "";
+      const states = (m.states || []).filter((s) => UI_STATES.includes(s)).map((s) => (s === "secure" ? "password" : s));
+      return `${ref} ${m.role || "element"}${m.name ? ` "${String(m.name).slice(0, 100)}"` : ""}${val}${states.length ? ` (${states.join(", ")})` : ""}`;
+    });
+    const extra = !lines.length && data.roles_present?.length ? ` Available roles: ${data.roles_present.join(", ")}.` : "";
+    return { text: lines.length ? `${target.name} · ${lines.length} matches:\n${lines.join("\n")}` : `No matching UI elements found in ${target.name}.${extra}` };
+  }
   async function uiAction(args) {
-    if (!last) throw new Error("Take a computer_ui_snapshot of the app first.");
+    if (!last) throw new Error("Take a computer_ui_snapshot or computer_ui_find of the app first.");
     const action = String(args.action || "click");
     const raw = String(args.ref || "").trim();
-    if (!raw) throw new Error("ref is required (e.g. e12 from the latest computer_ui_snapshot)");
+    if (!raw) throw new Error("ref is required (e.g. e12 from the latest computer_ui_snapshot / computer_ui_find)");
     const ref = raw.startsWith("@") ? raw : `@${last.id}:${raw}`;
     const text = args.text === undefined || args.text === null ? "" : String(args.text);
     const commands = {
-      click: ["click", ref], double_click: ["double-click", ref], right_click: ["right-click", ref], focus: ["focus", ref],
-      toggle: ["toggle", ref], expand: ["expand", ref], collapse: ["collapse", ref], scroll_to: ["scroll-to", ref],
+      click: ["click", ref], double_click: ["--headed", "double-click", ref], right_click: ["--headed", "right-click", ref], focus: ["--headed", "focus", ref],
+      toggle: ["toggle", ref], check: ["check", ref], uncheck: ["uncheck", ref], expand: ["expand", ref], collapse: ["collapse", ref], scroll_to: ["scroll-to", ref],
       select: ["select", ref, text], clear: ["clear", ref], set_value: ["set-value", ref, "--stdin"], type: ["type", ref, "--stdin"],
     };
     if (!commands[action]) throw new Error(`action must be one of: ${Object.keys(commands).join(", ")}`);
@@ -1292,14 +1415,17 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     if (["set_value", "type"].includes(action) && node && /password|protected|secure/i.test([node.role, node.role_description, node.subrole, ...(node.states || [])].join(" ")))
       throw new Error("That is a password field. The AI does not type passwords: ask the user to type it themselves.");
     await agentDesktop(commands[action], ["set_value", "type"].includes(action) ? text : undefined);
-    await wait(150);
+    await wait(120);
     const after = await uiSnapshot({ app: last.app.raw, window: last.scope[0] === "--window-id" ? last.scope[1] : undefined }, last.app);
     return { text: `Done: ${action} ${raw}.\n${after.text}` };
   }
 
   async function act(tool, args) {
-    const pause = () => wait(450);
+    const pause = () => wait(250);
+    if (tool === "computer_list_windows") return listWindows(args);
+    if (tool === "computer_focus_window") return focusWindow(args);
     if (tool === "computer_ui_snapshot") return uiSnapshot(args);
+    if (tool === "computer_ui_find") return uiFind(args);
     if (tool === "computer_ui_action") return uiAction(args);
     if (tool === "computer_screenshot") return screenshot();
     if (tool === "computer_zoom") return zoom(args);

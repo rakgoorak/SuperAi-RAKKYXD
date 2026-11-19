@@ -60,11 +60,14 @@ try {
   await box.fill('FIRST_QUESTION again'); await box.press('Enter');
   await page.waitForFunction(() => document.querySelectorAll('.conversation-run').length === 3);
   await box.fill('SECOND_QUESTION to cancel'); await box.press('Enter');
+  await chip.waitFor({ timeout: 5000 });
+  await box.fill('Existing draft');
   await chip.getByRole('button', { name: 'ยกเลิก', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="คำสั่ง"]')?.value === 'Existing draft\n\nSECOND_QUESTION to cancel', null, { timeout: 5000 });
   await page.waitForFunction(() => [...document.querySelectorAll('.conversation-run')].every(r => !r.querySelector('.spin')), null, { timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(5000);
-  assert.ok(!asked.includes('CANCELLED'), 'a cancelled message is never sent');
-  passed.push('a queued message can be cancelled');
+  assert.deepEqual(asked, ['FIRST', 'SECOND', 'FIRST'], 'a removed message is never sent');
+  passed.push('removing a queued message restores it alongside the current draft');
   console.log(JSON.stringify({ passed }, null, 1));
 } finally {
   await app.close().catch(() => {});

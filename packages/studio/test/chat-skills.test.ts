@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { chatSkills, cliCommand, skillPrompt } from '../server/ChatSkills.js';
+import { chatSkills, chatSkillsAsync, cliCommand, skillPrompt, skillPromptAsync } from '../server/ChatSkills.js';
 
 test('skill discovery follows the provider and includes project, linked and global skills', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-skills-'));
@@ -69,5 +69,26 @@ test('a selected ID distinguishes duplicate names and removed skills cannot be i
     assert.ok(skillPrompt('/skill review check', root, 'claude-code', list[1].id, home).includes(list[1].path));
     fs.unlinkSync(list[1].path);
     assert.throws(() => skillPrompt('/skill review check', root, 'claude-code', list[1].id, home), /ไม่พบ skill/);
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});
+
+test('chatSkillsAsync and skillPromptAsync match sync behavior without blocking', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'async-skills-')), root = path.join(home, 'project');
+  try {
+    const dir = path.join(root, '.agents/skills/demo');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), '---\nname: demo\ndescription: async demo\n---\nBody');
+    const syncList = chatSkills(root, 'antigravity', home);
+    const asyncList = await chatSkillsAsync(root, 'antigravity', home);
+    assert.deepEqual(asyncList, syncList);
+    assert.equal(await skillPromptAsync('/compact', root, 'antigravity', undefined, home), '/compact');
+    assert.equal(
+      await skillPromptAsync('/demo run it', root, 'antigravity', undefined, home),
+      skillPrompt('/demo run it', root, 'antigravity', undefined, home),
+    );
+    assert.equal(
+      await skillPromptAsync('/demo run it', root, 'antigravity', syncList[0].id, home),
+      skillPrompt('/demo run it', root, 'antigravity', syncList[0].id, home),
+    );
   } finally { fs.rmSync(home, { recursive: true, force: true }); }
 });

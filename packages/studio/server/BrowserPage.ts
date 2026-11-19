@@ -7,7 +7,7 @@
  * iframes; coordinates are always those of the top page. Cross-origin frames stay out of reach.
  */
 const MAX_TEXT = 12000;
-const MAX_ELEMENTS = 150;
+const MAX_ELEMENTS = 250;
 const CLICKABLE = "a,button,[role=button],[role=link],[role=tab],[role=menuitem],input[type=submit],input[type=button],summary,label";
 
 /** Shared helpers: every root (document, shadow roots, same-origin frames) with its offset, and lookup by ref. */
@@ -38,6 +38,15 @@ const DEEP = `
     }
     return null;
   };
+  const __byInputLabel = (text) => {
+    if (!text) return null; const want = String(text).toLowerCase();
+    for (const r of __roots()) {
+      const inputs = [...r.root.querySelectorAll('input:not([type=hidden]),textarea,[role=textbox],[contenteditable=""],[contenteditable=true]')];
+      const hit = inputs.find((e) => [e.getAttribute('aria-label'), e.getAttribute('placeholder'), e.getAttribute('name'), e.labels?.[0]?.innerText].some((s) => (s || '').toLowerCase().includes(want)));
+      if (hit) return { el: hit, ox: r.ox, oy: r.oy };
+    }
+    return null;
+  };
   const __active = () => { let a = document.activeElement; for (let i = 0; i < 20 && a; i++) { const inner = a.shadowRoot?.activeElement || (a.tagName === 'IFRAME' ? (() => { try { return a.contentDocument?.activeElement; } catch (e) { return null; } })() : null); if (!inner || inner === a) break; a = inner; } return a; };
 `;
 const wrap = (body: string) => `(() => {${DEEP}\n${body}\n})()`;
@@ -55,11 +64,21 @@ export const SNAPSHOT = wrap(`
     const where = r.root === document ? '' : r.root.nodeType === 9 ? ' (in frame)' : '';
     for (const el of r.root.querySelectorAll(query)) {
       if (elements.length >= ${MAX_ELEMENTS}) break;
-      if (!visible(el) || el.closest('[aria-hidden=true]')) continue;
+      const fileInput = el.tagName === 'INPUT' && el.type === 'file';
+      if (!fileInput && (!visible(el) || el.closest('[aria-hidden=true]'))) continue;
       const ref = 'e' + (++n); el.setAttribute('data-superai-ref', ref);
       const tag = el.tagName.toLowerCase(); const type = el.getAttribute('type');
       const role = el.getAttribute('role') || (tag === 'a' ? 'link' : tag === 'input' ? (type || 'text') + ' input' : tag);
-      const extra = (tag === 'input' || tag === 'textarea') && el.value && type !== 'password' ? ' value="' + String(el.value).slice(0, 60) + '"' : el.checked ? ' checked' : el.disabled ? ' disabled' : '';
+      const states = [];
+      if (fileInput && (!visible(el) || el.closest('[aria-hidden=true]'))) states.push('hidden (use browser_upload)');
+      if (fileInput && el.multiple) states.push('multiple');
+      if ((tag === 'input' || tag === 'textarea') && el.value && type !== 'password') states.push('value="' + String(el.value).slice(0, 60) + '"');
+      if (el.checked || el.getAttribute('aria-checked') === 'true') states.push('checked');
+      if (el.disabled || el.getAttribute('aria-disabled') === 'true') states.push('disabled');
+      if (el.getAttribute('aria-expanded') === 'true') states.push('expanded');
+      else if (el.getAttribute('aria-expanded') === 'false') states.push('collapsed');
+      if (el.getAttribute('aria-selected') === 'true') states.push('selected');
+      const extra = states.length ? ' ' + states.join(' ') : '';
       elements.push('[' + ref + '] ' + role + ' "' + label(el) + '"' + extra + where);
     }
   }
@@ -71,17 +90,24 @@ export const SNAPSHOT = wrap(`
     scroll: Math.round(scrollY) + '/' + Math.max(0, Math.round(document.documentElement.scrollHeight - innerHeight)) };
 `);
 
+export function fileInputScript(ref: string): string {
+  return wrap(`
+    const el = __byRef(${JSON.stringify(ref)})?.el;
+    return el?.tagName === 'INPUT' && el.type === 'file' && !el.matches(':disabled') ? el : null;
+  `);
+}
+
 export interface PageSnapshot { title: string; url: string; text: string; more: boolean; elements: string[]; scroll: string; dialogs?: string[] }
 
-/** Finds an element by ref (or visible text), scrolls it into view and returns its centre in top-page coordinates. */
-export const findScript = (ref?: unknown, text?: unknown) => wrap(`
-  const hit = __byRef(${JSON.stringify(String(ref || ""))}) || __byText(${JSON.stringify(String(text || ""))});
+/** Finds an element by ref (or visible text / input label), scrolls it into view and returns its centre in top-page coordinates. */
+export const findScript = (ref?: unknown, text?: unknown, inputLabel?: unknown) => wrap(`
+  const hit = __byRef(${JSON.stringify(String(ref || ""))}) || __byText(${JSON.stringify(String(text || ""))}) || __byInputLabel(${JSON.stringify(String(inputLabel || ""))});
   if (!hit) return null;
   hit.el.scrollIntoView({ block: 'center', inline: 'center' });
   // A frame scrolled into view moves too: measure it again.
   const again = __byRef(hit.el.getAttribute('data-superai-ref') || '') || hit;
   const r = hit.el.getBoundingClientRect();
-  return { x: Math.round(again.ox + r.left + r.width / 2), y: Math.round(again.oy + r.top + r.height / 2), tag: hit.el.tagName.toLowerCase() };
+  return { x: Math.round(again.ox + r.left + r.width / 2), y: Math.round(again.oy + r.top + r.height / 2), tag: hit.el.tagName.toLowerCase(), ref: hit.el.getAttribute('data-superai-ref') || '' };
 `);
 
 /**
@@ -143,23 +169,43 @@ export const clickScript = (ref?: unknown, text?: unknown) => wrap(`
   if (!hit) return false; hit.el.focus?.(); hit.el.click(); return true;
 `);
 
-/** Focuses an input by ref; true when it took the focus. */
-export const focusScript = (ref: unknown) => wrap(`
-  const hit = __byRef(${JSON.stringify(String(ref || ""))});
-  if (!hit) return false; hit.el.scrollIntoView({ block: 'center' }); hit.el.focus(); return __active() === hit.el;
+/** Hover dispatches mouseover/mouseenter events for frameworks that don't react to raw coordinates alone. */
+export const hoverScript = (ref?: unknown, text?: unknown) => wrap(`
+  const hit = __byRef(${JSON.stringify(String(ref || ""))}) || __byText(${JSON.stringify(String(text || ""))});
+  if (!hit) return false;
+  hit.el.scrollIntoView({ block: 'center', inline: 'center' });
+  const r = hit.el.getBoundingClientRect();
+  const opts = { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
+  hit.el.dispatchEvent(new MouseEvent('mouseover', opts));
+  hit.el.dispatchEvent(new MouseEvent('mouseenter', { ...opts, bubbles: false }));
+  return true;
 `);
 
-/** Selects all of the focused field's text, so typing replaces it. */
+/** Focuses an input by ref or label; true when it (or a nested input) took focus. */
+export const focusScript = (ref: unknown, inputLabel?: unknown) => wrap(`
+  const hit = __byRef(${JSON.stringify(String(ref || ""))}) || __byInputLabel(${JSON.stringify(String(inputLabel || ""))});
+  if (!hit) return false;
+  hit.el.scrollIntoView({ block: 'center' });
+  hit.el.click?.();
+  hit.el.focus?.();
+  const act = __active();
+  return act === hit.el || !!(act && hit.el.contains(act)) || !!hit.el.isContentEditable;
+`);
+
+/** Selects all of the focused field's text (inputs, textareas, and contenteditable), so typing replaces it. */
 export const SELECT_ALL = wrap(`
   const el = __active();
-  if (el && 'value' in el && typeof el.select === 'function') el.select();
-  else (el?.ownerDocument || document).execCommand('selectAll');
+  if (el && 'value' in el && typeof el.select === 'function') { el.select(); }
+  else if (el && el.isContentEditable) {
+    const sel = (el.ownerDocument.defaultView || window).getSelection();
+    if (sel) { const range = el.ownerDocument.createRange(); range.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(range); }
+  } else { (el?.ownerDocument || document).execCommand('selectAll'); }
 `);
 
 export const selectScript = (ref: unknown, value: unknown) => wrap(`
   const hit = __byRef(${JSON.stringify(String(ref || ""))}); const el = hit?.el;
   if (!el || el.tagName !== 'SELECT') return false; const want = ${JSON.stringify(String(value || ""))};
-  const option = [...el.options].find((o) => o.value === want || o.text.trim() === want); if (!option) return false;
+  const option = [...el.options].find((o) => o.value === want || o.text.trim() === want) || [...el.options].find((o) => o.text.trim().toLowerCase().includes(want.toLowerCase())); if (!option) return false;
   el.value = option.value; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return true;
 `);
 

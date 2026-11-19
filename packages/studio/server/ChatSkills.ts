@@ -1,15 +1,27 @@
 import fs from "node:fs";
+import fsp from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { createHash } from "node:crypto";
+import { promisify } from "node:util";
 import { tr } from './i18n.js';
 
 export interface ChatSkill { id: string; name: string; description: string; source: string; path: string }
 const PROVIDERS = ["claude-code", "codex", "antigravity", "opencode"];
+// Match the sync discovery path and IDs. fs.promises.realpath uses the native resolver,
+// which expands Windows 8.3 paths that fs.realpathSync preserves.
+const realpath = promisify(fs.realpath);
 export const CLI_PASSTHROUGH_COMMANDS = new Set([
   "compact", "cost", "doctor", "review", "pr_comments", "init", "clear", "bug", "help",
   "terminal:setup", "permissions", "memory", "export", "config", "stats", "usage",
   "summary", "context", "status", "model", "mode", "plan", "reset", "undo", "login",
+  "logout", "settings", "version", "ide", "listen", "tools",
+]);
+/** CLI slash commands that do not edit project files and therefore never need a pre-turn git checkpoint. */
+export const READ_ONLY_CLI_COMMANDS = new Set([
+  "compact", "cost", "doctor", "pr_comments", "clear", "bug", "help",
+  "permissions", "memory", "export", "config", "stats", "usage",
+  "summary", "context", "status", "model", "mode", "plan", "login",
   "logout", "settings", "version", "ide", "listen", "tools",
 ]);
 /** Commands only some CLIs run in headless chat (checked against Claude Code 2.1.310, agy 1.5.5). */
@@ -28,11 +40,7 @@ export function cliCommand(text: string, provider: string): string | undefined {
   return CLI_PASSTHROUGH_COMMANDS.has(name) || PROVIDER_COMMANDS[provider]?.includes(name) ? name : undefined;
 }
 
-/** Read only known skill directories. Project skills take precedence over global skills.
- * IDs distinguish duplicate names; clients never supply a file path to execute/read.
- */
-export function chatSkills(root: string, provider: string, home = os.homedir(), env: NodeJS.ProcessEnv = process.env): ChatSkill[] {
-  if (!PROVIDERS.includes(provider)) return [];
+function baseSkillDirs(root: string, provider: string, home: string, env: NodeJS.ProcessEnv): { dir: string; source: string }[] {
   const dirs: { dir: string; source: string }[] = [];
   const projectDirs = provider === "claude-code" ? [".claude/skills", ".agents/skills"]
     : provider === "opencode" ? [".opencode/skills", ".claude/skills", ".agents/skills"] : [".agents/skills"];
@@ -46,6 +54,25 @@ export function chatSkills(root: string, provider: string, home = os.homedir(), 
     : provider === "antigravity" ? [path.join(home, ".gemini/antigravity-cli/skills"), path.join(home, ".gemini/config/skills")]
     : [path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), "opencode/skills"), path.join(env.CLAUDE_CONFIG_DIR || path.join(home, ".claude"), "skills"), path.join(home, ".agents/skills")];
   globals.forEach((dir) => dirs.push({ dir, source: tr("ผู้ให้บริการ · ส่วนตัว") }));
+  return dirs;
+}
+
+function parseSkill(text: string, real: string, entryName: string, source: string): ChatSkill | null {
+  const header = /^---\s*\n([\s\S]*?)\n---/.exec(text.replace(/\r\n/g, "\n"))?.[1] || "";
+  if (/^user-invocable:\s*false\s*$/m.test(header)) return null;
+  const localName = (/^name:\s*([^\n]+)/m.exec(header)?.[1] || entryName).trim().replace(/^["']|["']$/g, "");
+  const name = source.startsWith("Plugin ") && !localName.includes(":") ? `${source.slice(7)}:${localName}` : localName;
+  if (!/^[\w.:-]+$/.test(name)) return null;
+  const description = (/^description:\s*([^\n]+)/m.exec(header)?.[1] || "").replace(/^["']|["']$/g, "").slice(0, 300);
+  return { id: createHash("sha256").update(real).digest("hex").slice(0, 20), name, description, source, path: real };
+}
+
+/** Read only known skill directories. Project skills take precedence over global skills.
+ * IDs distinguish duplicate names; clients never supply a file path to execute/read.
+ */
+export function chatSkills(root: string, provider: string, home = os.homedir(), env: NodeJS.ProcessEnv = process.env): ChatSkill[] {
+  if (!PROVIDERS.includes(provider)) return [];
+  const dirs = baseSkillDirs(root, provider, home, env);
 
   // Claude's registry lists installed versions, including externally installed plugins.
   // Scan only registered plugin roots, never every cached/removed plugin version.
@@ -74,16 +101,13 @@ export function chatSkills(root: string, provider: string, home = os.homedir(), 
       const file = path.join(dir, entry.name, "SKILL.md");
       try {
         const real = fs.realpathSync(file);
-        if (seen.has(real) || !fs.statSync(real).isFile() || fs.statSync(real).size > 256 * 1024) continue;
-        const text = fs.readFileSync(real, "utf8");
-        const header = /^---\s*\n([\s\S]*?)\n---/.exec(text.replace(/\r\n/g, "\n"))?.[1] || "";
-        if (/^user-invocable:\s*false\s*$/m.test(header)) continue;
-        const localName = (/^name:\s*([^\n]+)/m.exec(header)?.[1] || entry.name).trim().replace(/^["']|["']$/g, "");
-        const name = source.startsWith("Plugin ") && !localName.includes(":") ? `${source.slice(7)}:${localName}` : localName;
-        if (!/^[\w.:-]+$/.test(name)) continue;
-        const description = (/^description:\s*([^\n]+)/m.exec(header)?.[1] || "").replace(/^["']|["']$/g, "").slice(0, 300);
+        if (seen.has(real)) continue;
+        const st = fs.statSync(real);
+        if (!st.isFile() || st.size > 256 * 1024) continue;
+        const skill = parseSkill(fs.readFileSync(real, "utf8"), real, entry.name, source);
+        if (!skill) continue;
         seen.add(real);
-        result.push({ id: createHash("sha256").update(real).digest("hex").slice(0, 20), name, description, source, path: real });
+        result.push(skill);
       } catch {}
     }
   };
@@ -91,14 +115,66 @@ export function chatSkills(root: string, provider: string, home = os.homedir(), 
   return result;
 }
 
-/** Explicit manual invocation; never treat arbitrary input as a skill file path. */
-export function skillPrompt(text: string, root: string, provider: string, skillId?: string, home?: string, env?: NodeJS.ProcessEnv): string {
+/** Non-blocking version of chatSkills: runs FS scans on the libuv threadpool so the Electron main thread never stalls. */
+export async function chatSkillsAsync(root: string, provider: string, home = os.homedir(), env: NodeJS.ProcessEnv = process.env): Promise<ChatSkill[]> {
+  if (!PROVIDERS.includes(provider)) return [];
+  const dirs = baseSkillDirs(root, provider, home, env);
+
+  if (provider === "claude-code") {
+    try {
+      const claudeDir = env.CLAUDE_CONFIG_DIR || path.join(home, ".claude");
+      const registry = JSON.parse(await fsp.readFile(path.join(claudeDir, "plugins/installed_plugins.json"), "utf8"));
+      const settings = [path.join(claudeDir, "settings.json"), path.join(root, ".claude/settings.json"), path.join(root, ".claude/settings.local.json")];
+      const enabled: Record<string, boolean> = {};
+      const parsedSettings = await Promise.all(settings.map((file) => fsp.readFile(file, "utf8").then((raw) => JSON.parse(raw).enabledPlugins).catch(() => null)));
+      for (const item of parsedSettings) if (item) Object.assign(enabled, item);
+      for (const [key, installs] of Object.entries(registry.plugins || {})) {
+        if (enabled[key] !== true) continue;
+        for (const install of Array.isArray(installs) ? installs : []) {
+          if (install.projectPath && path.resolve(install.projectPath) !== path.resolve(root)) continue;
+          if (typeof install.installPath === "string") dirs.push({ dir: path.join(install.installPath, "skills"), source: `Plugin ${key.split("@")[0]}` });
+        }
+      }
+    } catch {}
+  }
+
+  const scanAsync = async (dir: string, source: string, nested = false): Promise<ChatSkill[]> => {
+    let entries: fs.Dirent[];
+    try { entries = await fsp.readdir(dir, { withFileTypes: true }); } catch { return []; }
+    const batches = await Promise.all(entries.slice(0, 500).map(async (entry): Promise<ChatSkill[]> => {
+      if (entry.name === ".system" && !nested) return scanAsync(path.join(dir, entry.name), source, true);
+      const file = path.join(dir, entry.name, "SKILL.md");
+      try {
+        const real = await realpath(file);
+        const st = await fsp.stat(real);
+        if (!st.isFile() || st.size > 256 * 1024) return [];
+        const skill = parseSkill(await fsp.readFile(real, "utf8"), real, entry.name, source);
+        return skill ? [skill] : [];
+      } catch {
+        return [];
+      }
+    }));
+    return batches.flat();
+  };
+
+  const perDir = await Promise.all(dirs.map((d) => scanAsync(d.dir, d.source)));
+  const result: ChatSkill[] = [], seen = new Set<string>();
+  for (const list of perDir) {
+    for (const skill of list) {
+      if (result.length >= 1000) return result;
+      if (seen.has(skill.path)) continue;
+      seen.add(skill.path);
+      result.push(skill);
+    }
+  }
+  return result;
+}
+
+function resolveSkillPrompt(text: string, provider: string, skills: ChatSkill[], skillId?: string): string {
   const trimmed = text.trim();
   const command = /^\/(skill|skills)(?:\s|$)/.exec(trimmed);
   const direct = /^\/([\w.:-]+)(?:\s+([\s\S]*))?$/.exec(trimmed);
   const inline = /(?:^|\s)\/(?:skill\s+)?([\w.:-]+)(?:\s+([\s\S]*))?$/.exec(trimmed);
-  if (!skillId && !command && !direct && !inline) return text;
-  const skills = chatSkills(root, provider, home, env);
   const parts = /^\/skill\s+(\S+)(?:\s+([\s\S]*))?$/.exec(trimmed);
   const skill = skillId ? skills.find((s) => s.id === skillId)
     : skills.find((s) => s.name === (parts?.[1] || (!command ? direct?.[1] : inline ? inline[1] : "")));
@@ -118,4 +194,23 @@ export function skillPrompt(text: string, root: string, provider: string, skillI
   const request = parts ? parts[2] || "" : direct && !command ? direct[2] || "" : text;
   // Paths go in as written: JSON.stringify would double every Windows backslash (C:\\Users\\...).
   return `The user explicitly selected the skill ${JSON.stringify(skill.name)}. Read and follow its SKILL.md at "${skill.path}". Resolve its relative resources from "${path.dirname(skill.path)}". Use the provider's native skill mechanism where available and honor its tool permissions. Do not execute any action outside the user's request or bypass approval requirements.\n\nUser request / skill arguments:\n${request || tr("ใช้ skill นี้กับโปรเจกต์ปัจจุบัน")}`;
+}
+
+function needsSkillLookup(text: string, skillId?: string): boolean {
+  const trimmed = text.trim();
+  return Boolean(skillId || /^\/(skill|skills)(?:\s|$)/.test(trimmed) || /^\/([\w.:-]+)(?:\s+([\s\S]*))?$/.test(trimmed) || /(?:^|\s)\/(?:skill\s+)?([\w.:-]+)(?:\s+([\s\S]*))?$/.test(trimmed));
+}
+
+/** Explicit manual invocation; never treat arbitrary input as a skill file path. */
+export function skillPrompt(text: string, root: string, provider: string, skillId?: string, home?: string, env?: NodeJS.ProcessEnv): string {
+  if (!needsSkillLookup(text, skillId)) return text;
+  const skills = chatSkills(root, provider, home, env);
+  return resolveSkillPrompt(text, provider, skills, skillId);
+}
+
+/** Non-blocking version of skillPrompt. */
+export async function skillPromptAsync(text: string, root: string, provider: string, skillId?: string, home?: string, env?: NodeJS.ProcessEnv): Promise<string> {
+  if (!needsSkillLookup(text, skillId)) return text;
+  const skills = await chatSkillsAsync(root, provider, home, env);
+  return resolveSkillPrompt(text, provider, skills, skillId);
 }

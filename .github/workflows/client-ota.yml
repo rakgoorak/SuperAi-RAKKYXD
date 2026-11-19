@@ -57,14 +57,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           PUBLIC_REPO: rakgoorak/SuperAi-RAKKYXD-releases
+          REQUESTED_TAG: ${{ inputs.target_tag || 'latest' }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
             echo "::warning::RELEASES_TOKEN secret is not configured; skipping upload."
             exit 0
           fi
-          TARGET_TAG="${{ github.event.inputs.target_tag || 'latest' }}"
+          TARGET_TAG="$REQUESTED_TAG"
           if [ "$TARGET_TAG" = "latest" ]; then
-            TARGET_TAG=$(gh release list --repo "$PUBLIC_REPO" --limit 1 --json tagName --jq '.[0].tagName')
+            TARGET_TAG=$(gh release view --repo "$PUBLIC_REPO" --json tagName --jq .tagName)
+            APP_TAG="v$(node -p "require('./package.json').version")"
+            if [ "$TARGET_TAG" != "$APP_TAG" ]; then
+              echo "::notice::Skipping OTA because the published desktop release is $TARGET_TAG and this bundle targets $APP_TAG."
+              exit 0
+            fi
           fi
           echo "Uploading dynamic client assets to $PUBLIC_REPO at tag $TARGET_TAG..."
           gh release upload "$TARGET_TAG" superai-client-dist.zip superai-client-dist.zip.sha256 --repo "$PUBLIC_REPO" --clobber
