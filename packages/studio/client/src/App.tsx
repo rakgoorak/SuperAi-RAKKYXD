@@ -142,6 +142,10 @@ export function App() {
   const mentionMenu = useRef<MentionMenuHandle>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWs, setActiveWs] = useState(initial("superai-workspace", ""));
+  const [openProjectIds, setOpenProjectIds] = useState<string[]>(() => activeWs ? [activeWs] : []);
+  useEffect(() => {
+    if (activeWs) setOpenProjectIds(ids => ids.includes(activeWs) ? ids : [...ids, activeWs]);
+  }, [activeWs]);
   const activeWsRef = useRef(activeWs);
   activeWsRef.current = activeWs;
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -1306,6 +1310,7 @@ export function App() {
                 .map((ws) => {
                   const entries = sessions.filter((s) => s.wsId === ws.id);
                   const isGeneral = isGeneralChatWorkspace(ws);
+                  const isExpanded = openProjectIds.includes(ws.id);
                   return (
                     <div className="project-group" key={ws.id}>
                       <div
@@ -1313,13 +1318,18 @@ export function App() {
                       >
                         <button
                           className="project-select"
+                          aria-expanded={isExpanded}
                           onClick={() => {
-                            setActiveWs(ws.id);
+                            if (activeWs === ws.id) {
+                              setOpenProjectIds(ids => ids.includes(ws.id) ? ids.filter(id => id !== ws.id) : [...ids, ws.id]);
+                            } else {
+                              setActiveWs(ws.id);
+                            }
                             setMenu("");
                           }}
                           title={isGeneral ? ws.name : ws.rootPath}
                         >
-                          {activeWs === ws.id ? (
+                          {isExpanded ? (
                             <ChevronDown size={13} />
                           ) : (
                             <ChevronRight size={13} />
@@ -1366,7 +1376,7 @@ export function App() {
                           </button>
                         </div>
                       )}
-                      {activeWs === ws.id && (
+                      {isExpanded && (
                         <div className="project-sessions">
                           {entries.map((s) => {
                             const isHidden = hiddenSessions.includes(s.id);

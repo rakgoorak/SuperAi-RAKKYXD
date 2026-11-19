@@ -49,6 +49,22 @@ function mediaBlocks(node: Element | undefined, shallow = false): ReactNode[] {
   return out;
 }
 
+function standaloneImage(node: Element | undefined): ReactNode {
+  const children = node?.children.filter(child => child.type !== 'text' || child.value.trim());
+  if (children?.length !== 1 || children[0].type !== 'element') return null;
+  const child = children[0];
+  if (child.tagName === 'p') return standaloneImage(child);
+  if (child.tagName !== 'a' && child.tagName !== 'img') return null;
+  const href = child.properties[child.tagName === 'a' ? 'href' : 'src'];
+  if (typeof href !== 'string') return null;
+  try {
+    const target = parsePreviewTarget(href);
+    if (target.kind !== 'file' || !IMAGE_FILE.test(target.path)) return null;
+    const label = (child.tagName === 'a' ? hastText(child) : String(child.properties.alt || '')) || target.path;
+    return <MarkdownMedia key={target.path} path={target.path} label={label} kind="image" fallback={link(label, href)} />;
+  } catch { return null; }
+}
+
 /** "> " lines: one quote block, with a Copy button for text meant to be pasted elsewhere (a post, a message). */
 function QuoteBlock({ children }: { children: ReactNode }) {
   const [copied, setCopied] = useState(false);
@@ -72,7 +88,6 @@ function QuoteBlock({ children }: { children: ReactNode }) {
 function link(label: ReactNode, href: string): ReactNode {
   try {
     const target = parsePreviewTarget(href);
-    // Images and videos are shown under their paragraph (see mediaBlocks); the link stays in the text.
     return (
       <a
         className="md-link"
@@ -299,8 +314,17 @@ const languageOf = (node: Element | undefined) => {
 const components: Components = {
   a: ({ href, children }) => <>{href ? link(children, href) : children}</>,
   img: ({ src, alt }) => <>{typeof src === 'string' && src ? link(alt || src, src) : alt}</>,
-  p: ({ node, children }) => <><p>{children}</p>{mediaBlocks(node)}</>,
-  li: ({ node, children, className }) => <li className={className}>{children}{mediaBlocks(node, true)}</li>,
+  p: function MarkdownParagraph({ node, children }) {
+    const endpoint = useContext(ImageEndpointContext);
+    return (endpoint && standaloneImage(node)) || <><p>{children}</p>{mediaBlocks(node)}</>;
+  },
+  li: function MarkdownListItem({ node, children, className }) {
+    const endpoint = useContext(ImageEndpointContext);
+    const image = endpoint && standaloneImage(node);
+    return image
+      ? <li className={[className, 'markdown-image-item'].filter(Boolean).join(' ')}>{image}</li>
+      : <li className={className}>{children}{mediaBlocks(node, true)}</li>;
+  },
   blockquote: ({ children }) => <QuoteBlock>{children}</QuoteBlock>,
   h1: ({ children }) => <h1 className="md-h1">{children}</h1>,
   h2: ({ children }) => <h2 className="md-h2">{children}</h2>,

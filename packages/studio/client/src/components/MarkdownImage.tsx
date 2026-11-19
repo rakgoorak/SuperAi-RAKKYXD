@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { ImageViewer } from './ImageViewer';
 import { copyImageToClipboard } from '../imageActions';
@@ -25,12 +25,12 @@ async function allowOutside(file: string) {
 }
 
 /**
- * A local image or video the AI linked, shown in full under its paragraph. The link itself stays
- * in the sentence. A file outside the project (often a clip the AI just made in another folder)
+ * A preview for a local image or video the AI linked. A file outside the project
+ * (often a clip the AI just made in another folder)
  * is shown too: only images and videos linked in the answer are opened this way, and only
  * displayed inside the app.
  */
-export function MarkdownMedia({ path, label, kind }: { path: string; label: string; kind: 'image' | 'video' }) {
+export function MarkdownMedia({ path, label, kind, fallback }: { path: string; label: string; kind: 'image' | 'video'; fallback?: ReactNode }) {
   const endpoint = useContext(ImageEndpointContext);
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -51,9 +51,9 @@ export function MarkdownMedia({ path, label, kind }: { path: string; label: stri
     setFailed(true);
   };
 
-  if (failed) return <span className="markdown-media-failed" {...data}>
+  if (failed) return <>{fallback}<span className="markdown-media-failed" {...data}>
     {kind === 'video' ? tr("เล่นวิดีโอในแชทไม่ได้ · เปิดใน Preview") : tr("เปิดรูปในแชทไม่ได้ · เปิดใน Preview")}
-  </span>;
+  </span></>;
   return <span className={`markdown-image${kind === 'video' ? ' markdown-video' : ''}`} {...data}>
     {kind === 'image'
       ? <span className="markdown-image-frame">

@@ -29,7 +29,7 @@ try {
     localStorage.setItem('superai-preview', 'false');
   });
   const imagePath = 'D:/AgentBuild/output/example image.png';
-  const answer = `[ดูภาพตัวอย่าง](/D:/AgentBuild/output/example%20image.png)\n\n![ภาพ Markdown](docs/image.png)\n\n[รูปที่หาย](missing.png)\n\n[อ่านเอกสาร](docs/readme.txt)
+  const answer = `- [ดูภาพตัวอย่าง](/D:/AgentBuild/output/example%20image.png)\n\n![ภาพ Markdown](docs/image.png)\n\n[รูปที่หาย](missing.png)\n\n[อ่านเอกสาร](docs/readme.txt)
 
 [คลิปตัวอย่าง](output/clip.webm)
 
@@ -104,6 +104,9 @@ graph LR
   await inline.waitFor();
   await page.waitForFunction(() => document.querySelector('.markdown-image-open img')?.naturalWidth > 0);
   check(await inline.locator('img').getAttribute('src') === '/api/terminals/images/preview-file?path=' + encodeURIComponent(imagePath), 'answer image loads inline through its originating session');
+  check(await page.getByRole('link', { name: 'ดูภาพตัวอย่าง', exact: true }).count() === 0, 'a standalone image has no duplicate filename link');
+  const thumbnail = await inline.boundingBox();
+  check(thumbnail && thumbnail.width <= 362 && thumbnail.height <= 282, 'answer image uses a compact preview');
   check(await page.getByRole('button', { name: 'ขยายรูป ภาพ Markdown', exact: true }).isVisible(), 'standard Markdown image syntax displays a thumbnail');
   check(await page.getByRole('link', { name: 'รูปที่หาย', exact: true }).isVisible() && await page.getByRole('button', { name: 'ขยายรูป รูปที่หาย', exact: true }).count() === 0, 'missing image keeps a Preview fallback link');
   const clip = page.getByLabel('คลิปตัวอย่าง', { exact: true });
@@ -163,6 +166,12 @@ graph LR
   await answerBox.locator('.md-code-block').first().scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(output, 'markdown-blocks.png') });
   await page.screenshot({ path: path.join(output, 'inline-images.png'), fullPage: true });
+  await inline.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(200);
+  await inline.locator('img').click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: 'Copy image' }).waitFor({ timeout: 5000 });
+  check(await menu.getByRole('menuitem', { name: 'Copy image' }).isVisible() && await menu.getByRole('menuitem', { name: 'Save image' }).isVisible(), 'the compact image keeps its context menu');
+  await page.keyboard.press('Escape');
   await inline.click();
   const viewer = page.getByRole('dialog', { name: 'ดูรูป ดูภาพตัวอย่าง', exact: true });
   const zoom = viewer.getByLabel('ระดับการซูม', { exact: true });

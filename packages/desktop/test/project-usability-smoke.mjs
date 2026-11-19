@@ -72,6 +72,18 @@ try {
     return route.fulfill({ json });
   });
   await page.goto(`http://127.0.0.1:${server.address().port}`, { waitUntil: 'networkidle' });
+  const alpha = page.locator('.project-select').filter({ hasText: 'Alpha' });
+  const beta = page.locator('.project-select').filter({ hasText: 'Beta' });
+  const alphaSessions = page.locator('.project-group').filter({ has: alpha }).locator('.project-sessions');
+  const betaSessions = page.locator('.project-group').filter({ has: beta }).locator('.project-sessions');
+  await alphaSessions.waitFor();
+  await beta.click();
+  await betaSessions.waitFor({ state: 'attached' });
+  check(await alphaSessions.isVisible(), 'opening Beta keeps Alpha expanded');
+  await beta.click();
+  await betaSessions.waitFor({ state: 'detached' });
+  check(await alphaSessions.isVisible(), 'closing Beta leaves Alpha expanded');
+  await alpha.click();
   const pane = page.locator('[data-session-id="one"]');
   const composer = page.getByLabel('คำสั่ง', { exact: true });
   await page.getByLabel('เป้าหมายคำสั่ง', { exact: true }).selectOption('active');
