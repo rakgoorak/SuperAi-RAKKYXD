@@ -41,7 +41,7 @@ export function ComputerUsePanel({ onError }: { onError: (message: string) => vo
       <input type="checkbox" checked={!!state?.enabled} disabled={!state} onChange={(event) => void call('set', event.target.checked)} />
       {tr("อนุญาตให้ AI ควบคุมคอมพิวเตอร์เครื่องนี้")}
     </label>
-    <p className="muted">{tr("AI ต้องขอใช้ทีละแอปในหน้าต่าง \"อนุญาต\" หรือ \"ปฏิเสธ\" ก่อนเสมอ แล้วคลิกและพิมพ์ได้เฉพาะแอปที่อนุญาต · เบราว์เซอร์ดูได้อย่างเดียว · Terminal และโปรแกรมเขียนโค้ดคลิกและเลื่อนได้เท่านั้น · AI ควบคุม SuperAi เองไม่ได้")}</p>
+    <p className="muted">{tr("เปิดสวิตช์เดียวเพื่อใช้ได้ทุกแอปบนเครื่อง (รวมเบราว์เซอร์, Terminal และโปรแกรมเขียนโค้ด) โดยไม่ต้องกดอนุญาตซ้ำทีละแอป · แอปหรือหน้าที่มีข้อมูลสำคัญ (รหัสผ่าน / การเงิน) จะถามยืนยันก่อนเสมอ · ไม่พิมพ์ลงช่องรหัสผ่าน และควบคุม SuperAi เองไม่ได้")}</p>
     <p className="computer-use-warning">{tr("AI จะทำได้ทุกอย่างที่คุณทำได้บนเครื่องนี้ รวมถึงเปิดไฟล์ ส่งข้อความ หรือลบข้อมูล เปิดเฉพาะตอนที่ต้องใช้ ดูหน้าจอระหว่างที่ AI ทำงาน และปิดเมื่อเสร็จ")}</p>
     {mac && <div className="computer-use-os">
       <p className="muted">{tr("macOS ต้องอนุญาต SuperAi ใน System Settings > Privacy & Security")}</p>

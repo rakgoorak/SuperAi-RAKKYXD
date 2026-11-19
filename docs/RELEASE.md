@@ -1,3 +1,17 @@
+# SuperAi & RAKKYXD v1.3.0
+
+- **Single-switch Computer Use:** Turning on Computer Control in Settings now lets AI assistants click, type, edit, and work directly across regular desktop apps—including Microsoft Edge, Chrome, terminals, and code editors—without repetitive per-app popups.
+- **Confirmation for sensitive apps:** Password managers, crypto wallets, and banking apps/pages still prompt in an Allow / Deny confirmation dialog before acting, while password fields and SuperAi's own window remain protected.
+- **Window focus & OTA UI fixes:** Focusing a maximized window via Computer Use no longer un-maximizes it, and newer built-in UI builds are no longer shadowed by older cached OTA client bundles.
+
+## ภาษาไทย
+
+- **Computer Use สวิตช์เดียวใช้งานได้ครบ:** เปิดสวิตช์ **"อนุญาตให้ AI ควบคุมคอมพิวเตอร์เครื่องนี้"** ในหน้าตั้งค่าเพียงอันเดียวเพื่อให้ AI คลิก พิมพ์ แก้ไข และช่วยงานได้ทุกแอปทั่วไป (รวม Microsoft Edge, Chrome, Terminal และโปรแกรมเขียนโค้ด) โดยไม่ต้องกดอนุญาตซ้ำทีละแอป
+- **ถามยืนยันก่อนสำหรับส่วนสำคัญ:** แอปหรือหน้าเว็บกลุ่มรหัสผ่าน กระเป๋าเงินดิจิทัล และธนาคารยังคงเด้งหน้าต่างถามยืนยันก่อนทำเสมอ พร้อมการป้องกันไม่พิมพ์ลงช่องรหัสผ่านและไม่ควบคุมตัว SuperAi เอง
+- **แก้การโฟกัสหน้าต่างและ OTA UI:** การสลับโฟกัสหน้าต่างผ่าน Computer Use จะไม่ทำให้หน้าต่างที่ขยายเต็มจอหดเล็กลง และป้องกันไม่ให้ OTA UI เก่ามาทับหน้าตา UI เวอร์ชันใหม่ของแอป
+
+---
+
 # SuperAi & RAKKYXD v1.2.9
 
 - **Antigravity chat stability:** Filtered out stale trajectory errors (such as previously recovered `stream idle timeout (10m0s)` retries) that Antigravity CLI (`agy`) re-emits at the end of resumed turns and `/compact` runs, while preserving all genuine failures.

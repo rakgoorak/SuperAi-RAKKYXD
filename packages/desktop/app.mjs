@@ -58,6 +58,7 @@ const updater = new Updater({
 const clientUpdater = new ClientBundleUpdater({
   userDataDir: app.getPath("userData"),
   builtInDist: path.resolve(directory, "../studio/client/dist"),
+  preferBuiltIn: !updater.packaged,
   onState: (state) => window?.webContents.send("client-update:state", state),
 });
 const sanitizeLog = (str) => {
@@ -534,7 +535,7 @@ else {
           await log(`Client bundle check failed: ${err.message}`);
         }
       }
-      if (!process.env.SUPERAI_TEST_MODE) {
+      if (updater.packaged && !process.env.SUPERAI_TEST_MODE) {
         setTimeout(() => void checkClientBundle(), 6000);
         setInterval(() => void checkClientBundle(), 60 * 60_000);
       }

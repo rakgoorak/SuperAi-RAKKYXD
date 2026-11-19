@@ -6,6 +6,16 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.3.0] - 2026-11-19
+
+### Changed
+- Streamlined Computer Use to a single switch in Settings > AI control: once enabled, AI agents can click, type, edit, and work directly across regular apps (including Microsoft Edge, Chrome, terminals, and code editors) without repetitive per-app approval popups (`packages/desktop/computer-control.mjs`, `packages/studio/client/src/components/ComputerUsePanel.tsx`).
+- Sensitive apps and pages (password managers, crypto wallets, and banking) still prompt the user in an Allow / Deny confirmation window before acting; password input fields and SuperAi's own window remain protected.
+
+### Fixed
+- Prevented `computer_focus_window` from un-maximizing already maximized windows when bringing them to the front (`packages/desktop/computer-control.mjs`).
+- Prevented `ClientBundleUpdater` from shadowing newer built-in UI builds (or dev builds) with older cached OTA client bundles (`packages/desktop/client-updater.mjs`, `packages/desktop/app.mjs`).
+
 ## [1.2.9] - 2026-11-19
 
 ### Fixed

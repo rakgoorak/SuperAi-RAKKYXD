@@ -22,6 +22,7 @@ export class ClientBundleUpdater {
   constructor({
     userDataDir,
     builtInDist = "",
+    preferBuiltIn = false,
     repo = RELEASES_REPO,
     onState,
     http = (...a) => fetch(...a),
@@ -30,6 +31,7 @@ export class ClientBundleUpdater {
     this.userDataDir = userDataDir;
     this.bundleDir = path.join(userDataDir, "client-bundle");
     this.builtInDist = builtInDist;
+    this.preferBuiltIn = preferBuiltIn === true;
     this.repo = repo;
     this.onState = onState || (() => {});
     this.http = http;
@@ -43,8 +45,14 @@ export class ClientBundleUpdater {
   }
 
   resolveInitialSource() {
+    if (this.preferBuiltIn) return "builtin";
     try {
-      if (fs.existsSync(path.join(this.bundleDir, "index.html"))) {
+      const dynamicIndex = path.join(this.bundleDir, "index.html");
+      if (fs.existsSync(dynamicIndex)) {
+        const builtInIndex = this.builtInDist ? path.join(this.builtInDist, "index.html") : "";
+        if (builtInIndex && fs.existsSync(builtInIndex) && fs.statSync(builtInIndex).mtimeMs > fs.statSync(dynamicIndex).mtimeMs) {
+          return "builtin";
+        }
         return "dynamic";
       }
     } catch {}

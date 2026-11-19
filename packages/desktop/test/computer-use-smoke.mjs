@@ -99,32 +99,28 @@ try {
   await setupCall;
   await page.evaluate(() => window.superai.computer('revoke'));
 
-  steps.step('Deny refuses, and is not asked again right away');
-  const noAsk = await call('computer_screenshot');
-  assert.equal(noAsk.isError, true, 'nothing works before computer_request_access');
-  assert.match(noAsk.content[0].text, /computer_request_access/);
-  const deniedCall = call('computer_request_access', { apps: ['SuperAi'] });
+  steps.step('sensitive apps still ask in Allow / Deny; Deny refuses right away');
+  const deniedCall = call('computer_request_access', { apps: ['1Password'] });
   await (await permissionWindow()).click('#deny');
   const denied = await deniedCall;
   assert.equal(denied.isError, true);
   assert.match(denied.content[0].text, /denied/);
-  const again = await call('computer_request_access', { apps: ['SuperAi'] });
+  const again = await call('computer_request_access', { apps: ['1Password'] });
   assert.equal(again.isError, true, 'a second call right after Deny is refused without a new window');
   assert.match(again.content[0].text, /denied/);
 
-  steps.step('revoke, then Allow this chat');
+  steps.step('revoke, regular apps work directly, sensitive apps ask once');
   await page.evaluate(() => window.superai.computer('revoke'));
-  const allowedCall = call('computer_request_access', { apps: ['Notepad', 'Google Chrome', 'Windows Terminal', '1Password'], reason: 'smoke test' });
+  const direct = await call('computer_request_access', { apps: ['Notepad', 'Google Chrome', 'Windows Terminal'], reason: 'smoke test' });
+  assert.ok(!direct.isError, direct.content?.[0]?.text);
+  assert.ok(direct.content[0].text.includes('Google Chrome (full control)'), direct.content[0].text);
+  const allowedCall = call('computer_request_access', { apps: ['1Password'], reason: 'smoke test' });
   const askWindow = await permissionWindow();
   await askWindow.waitForTimeout(500);
   await askWindow.screenshot({ path: path.join(output, 'permission-window.png') });
   await askWindow.click('#allow-chat');
   const granted = await allowedCall;
   assert.ok(!granted.isError, granted.content?.[0]?.text);
-  assert.ok(granted.content[0].text.includes('Notepad (full control)'), granted.content[0].text);
-  assert.ok(granted.content[0].text.includes('Google Chrome (view only'), 'browsers are view-only');
-  assert.ok(granted.content[0].text.includes('Windows Terminal (left-click and scroll only'), 'terminals take clicks only');
-  assert.ok(granted.content[0].text.includes('1Password (view only: it holds passwords'), 'password managers are view-only');
   const shot = await call('computer_screenshot');
   // The status bar the user sees while the AI acts (hidden from the AI's own screenshots).
   for (const w of desktop.windows()) if ((await w.evaluate(() => !!window.setStatus).catch(() => false))) { await w.waitForTimeout(400); await w.screenshot({ path: path.join(output, 'status-bar.png') }); }
@@ -136,7 +132,7 @@ try {
   const state = await page.evaluate(() => window.superai.computer('state'));
   assert.equal(state.allowed.length, 1, 'Settings lists the allowed chat');
   assert.equal(state.allowed[0].scope, 'chat');
-  assert.deepEqual(state.allowed[0].apps, ['Notepad', 'Google Chrome', 'Windows Terminal', '1Password'], 'Settings lists the allowed apps');
+  assert.deepEqual(state.allowed[0].apps, ['1Password'], 'Settings lists approved sensitive apps');
   steps.step('screens: a wrong number is refused; every screen can be seen');
   const screens = await desktop.evaluate(({ screen }) => screen.getAllDisplays().length);
   const wrong = await call('computer_screenshot', { display: screens + 1 });
@@ -192,13 +188,6 @@ try {
   const where = await desktop.evaluate(({ BrowserWindow, screen }) => { const win = BrowserWindow.getAllWindows().filter((x) => x.isVisible()).sort((a, b) => b.getBounds().width * b.getBounds().height - a.getBounds().width * a.getBounds().height)[0]; const d = screen.getPrimaryDisplay(); return { content: win.getContentBounds(), scaleFactor: d.scaleFactor, width: d.size.width }; });
   const toShot = (dip) => Math.round(dip * where.scaleFactor * w / (where.width * where.scaleFactor));
   const x = toShot(where.content.x + point.x), y = toShot(where.content.y + point.y);
-  const blocked = await call('computer_click', { x, y });
-  assert.equal(blocked.isError, true, 'a click on an app that was not allowed is refused');
-  assert.match(blocked.content[0].text, /not among the apps the user allowed/);
-  const moreCall = call('computer_request_access', { apps: ['SuperAi'] });
-  await (await permissionWindow()).click('#allow-chat');
-  assert.ok(!(await moreCall).isError);
-  // When the permission window closes, Windows may raise another app (the user's) over the test window.
   await desktop.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows().filter((x) => x.isVisible()).sort((a, b) => b.getBounds().width * b.getBounds().height - a.getBounds().width * a.getBounds().height)[0]; w.show(); w.focus(); w.moveTop(); });
   await page.waitForTimeout(300);
   const clicked = await call('computer_click', { x, y });
@@ -234,12 +223,6 @@ try {
     const saveAt = new Promise((resolve) => pad.stdout.on('data', (d) => resolve(String(d).trim().split(' ').map(Number))));
     try {
       await new Promise((r) => setTimeout(r, 1500));
-      const notYet = await call('computer_ui_snapshot', { app: 'UiTestPad' });
-      assert.equal(notYet.isError, true, 'an app that was not allowed cannot be read');
-      assert.match(notYet.content[0].text, /not among the apps the user allowed/);
-      const padCall = call('computer_request_access', { apps: ['UiTestPad'] });
-      await (await permissionWindow()).click('#allow-chat');
-      assert.ok(!(await padCall).isError);
       const started = performance.now();
       const ui = await call('computer_ui_snapshot', { app: 'UiTestPad' });
       assert.ok(!ui.isError, ui.content?.[0]?.text);

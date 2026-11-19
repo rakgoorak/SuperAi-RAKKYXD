@@ -421,34 +421,29 @@ export function openOsSettings(kind) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Apps. Like Claude Desktop, the user allows the AI app by app (computer_request_access); clicks and
-// typing reach only the allowed apps. Web browsers are view-only (the browser_ tools are for web
-// pages) and terminals / code editors take left-clicks and scrolling only, never typing.
+// Apps. Once the Settings switch is on, the AI has full control of regular apps (browsers,
+// terminals, editors, desktop apps) without repetitive per-app popups. Sensitive apps or pages
+// (password managers, wallets, banking) still ask the user in an Allow / Deny window first,
+// password fields are never typed into, and SuperAi itself is never controlled.
 const norm = (s) => String(s || "").toLowerCase().replace(/\.(exe|app)$/, "").replace(/[^\p{L}\p{N}]+/gu, "");
-const VIEW_ONLY = new Set(["chrome", "googlechrome", "msedge", "edge", "microsoftedge", "firefox", "mozillafirefox", "brave", "bravebrowser", "opera", "operagx",
-  "vivaldi", "arc", "safari", "iexplore", "internetexplorer", "chromium", "waterfox", "librewolf", "torbrowser", "zenbrowser", "floorp"]);
-const CLICK_ONLY = new Set(["windowsterminal", "terminal", "wt", "cmd", "windowscommandprocessor", "commandprompt", "powershell", "windowspowershell", "pwsh",
-  "conhost", "consolewindowhost", "openconsole", "wsl", "bash", "mintty", "gitbash", "code", "codeinsiders", "vscode", "visualstudiocode", "cursor", "windsurf",
-  "antigravity", "devenv", "visualstudio", "microsoftvisualstudio", "idea", "idea64", "intellijidea", "pycharm", "pycharm64", "webstorm", "webstorm64", "rider",
-  "rider64", "clion", "clion64", "goland", "goland64", "phpstorm", "phpstorm64", "rubymine", "rubymine64", "studio64", "androidstudio", "sublimetext", "iterm",
-  "iterm2", "warp", "wezterm", "weztermgui", "alacritty", "kitty", "hyper", "tabby", "xcode", "zed", "fleet", "ghostty"]);
-const VIEW_BUNDLES = /(google\.chrome|microsoft\.edgemac|mozilla\.firefox|apple\.safari|brave\.browser|thebrowsercompany|operasoftware|vivaldi|chromium)/i;
-const CLICK_BUNDLES = /(apple\.terminal|googlecode\.iterm2|microsoft\.vscode|dev\.warp|todesktop|jetbrains|apple\.dt\.xcode|wezterm|alacritty|kovidgoyal\.kitty|dev\.zed|ghostty|windsurf)/i;
-const RANK = { read: 0, click: 1, full: 2 };
-// Password managers, wallets and banking apps hold passwords or money: the AI may only look at them.
+// Password managers, wallets and banking apps/pages hold passwords or money: always ask first.
 const SENSITIVE = new Set(["1password", "bitwarden", "keepass", "keepassxc", "lastpass", "dashlane", "enpass", "nordpass", "protonpass", "roboform", "keeper",
   "keychainaccess", "passwords", "credentialmanager", "exodus", "ledgerlive", "trezorsuite", "electrum", "atomicwallet", "metamask", "trustwallet", "coinbase", "binance", "bitkub"]);
 const SENSITIVE_BUNDLES = /(1password|agilebits|bitwarden|keepassxc|lastpass|dashlane|apple\.keychainaccess|apple\.passwords|exodus|ledger|trezor)/i;
+const SENSITIVE_TITLE = /(1password|bitwarden|keepass|lastpass|dashlane|metamask|phantom|coinbase|binance|bitkub|ledger|trezor|kasikorn|k-?cyber|scbeasy|krungthai|bangkok\s*bank|ธนาคาร|กระเป๋าเงินดิจิทัล)/i;
 function isSensitive(names, bundle = "") {
   const keys = names.map(norm).filter(Boolean);
   return SENSITIVE_BUNDLES.test(bundle) || keys.some((k) => SENSITIVE.has(k) || /bank|wallet|password/.test(k));
 }
-/** "read" (look only), "click" (left-click and scroll) or "full". */
-function appTier(names, bundle = "") {
-  const keys = names.map(norm).filter(Boolean);
-  if (isSensitive(names, bundle)) return "read";
-  if (VIEW_BUNDLES.test(bundle) || keys.some((k) => VIEW_ONLY.has(k))) return "read";
-  if (CLICK_BUNDLES.test(bundle) || keys.some((k) => CLICK_ONLY.has(k))) return "click";
+function isSensitiveTitle(title = "") {
+  return SENSITIVE_TITLE.test(String(title || ""));
+}
+function isSensitiveApp(app) {
+  return isSensitive(appNames(app), app.bundle) || isSensitiveTitle(app.title);
+}
+/** "read" (requires confirmation for sensitive apps) or "full". */
+export function appTier(names, bundle = "", title = "") {
+  if (isSensitive(names, bundle) || isSensitiveTitle(title)) return "read";
   return "full";
 }
 /** Other names the user may know an app by (exact matches only). */
@@ -483,7 +478,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   if (enabled) setTimeout(() => { if (enabled) input().warm(); }, 4000).unref?.();
   let scale = 1; // screen pixels per screenshot pixel, from the last screenshot
   let hideTimer, prompt;
-  /** chatId → { chat: true } (whole chat) or { until } ("this task", extended on every call), with the allowed apps (normalized name → { name, tier }). */
+  /** chatId → { chat: true } (whole chat) or { until } ("this task", extended on every call), with the approved sensitive apps. */
   const grants = new Map();
   /** chatId → time until which a Deny still stands. */
   const denied = new Map();
@@ -716,7 +711,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
 
   // ------------------------------------------------------------------------------------------
   // The Allow / Deny window.
-  const TIER_TEXT = () => ({ full: tr("ควบคุมได้เต็มที่"), click: tr("คลิกและเลื่อนได้เท่านั้น"), read: tr("ดูได้อย่างเดียว"), secret: tr("ข้อมูลสำคัญ · ดูได้อย่างเดียว") });
+  const TIER_TEXT = () => ({ full: tr("ควบคุมได้เต็มที่"), click: tr("คลิกและเลื่อนได้เท่านั้น"), read: tr("ดูได้อย่างเดียว"), secret: tr("ข้อมูลสำคัญ · ต้องยืนยันก่อน") });
   function ask(caller, apps, reason) {
     return new Promise((resolve) => {
       const access = osAccess(false);
@@ -864,64 +859,64 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     if (g.until > Date.now()) { g.until = Date.now() + TASK_IDLE; return g; }
     return undefined;
   }
-  function authorize(caller) {
-    const g = grantFor(caller);
-    if (g?.apps.size) return g;
-    if ((denied.get(caller.chatId || "") || 0) > Date.now()) throw new Error(DENIED);
-    throw new Error('First ask the user which apps you may use: call computer_request_access with their names (for example ["Notepad", "File Explorer"]). The user answers in an Allow / Deny window.');
-  }
   async function openApps() {
     try { return (await send("apps")).split("\t").filter(Boolean); } catch { return []; }
   }
-  const tierNote = (tier, sensitive) => sensitive ? "view only: it holds passwords or money, so the user does those steps" : tier === "read" ? "view only: no clicks or typing; use the browser_ tools for web pages" : tier === "click" ? "left-click and scroll only, no typing" : "full control";
-  async function requestAccess(caller, args) {
+  function missingOsPermissions() {
+    if (process.platform !== "darwin" && !TEST_OS_ACCESS) return [];
+    const access = osAccess(false);
+    return ["accessibility", "screen"].filter((k) => access[k] !== "granted");
+  }
+  async function approveSensitive(caller, items, reason) {
     const id = caller.chatId || "";
+    if ((denied.get(id) || 0) > Date.now()) throw new Error(DENIED);
+    const answer = await ask(caller, items, String(reason || "").trim().slice(0, 300));
+    if (answer === "deny") {
+      denied.set(id, Date.now() + DENY_QUIET);
+      throw new Error("The user denied access to those sensitive apps. Do not retry; tell the user what you wanted to do and let them decide.");
+    }
+    denied.delete(id);
+    let grant = grantFor(caller);
+    if (!grant) grants.set(id, grant = answer === "chat" ? { chat: true, name: caller.chatName, apps: new Map() } : { until: Date.now() + TASK_IDLE, name: caller.chatName, apps: new Map() });
+    else if (answer === "chat") grant.chat = true;
+    for (const f of items) if (f.sensitive) grant.apps.set(f.key, { name: f.name, tier: "full", sensitive: true });
+    changed();
+    return grant;
+  }
+  async function requestAccess(caller, args) {
     const list = Array.isArray(args.apps) ? args.apps : typeof args.apps === "string" ? [args.apps] : [];
     const names = list.map((s) => String(s).trim()).filter(Boolean).slice(0, 20);
-    if (!names.length) throw new Error('apps must list the applications you need, e.g. ["Notepad", "File Explorer"]');
     const self = process.env.SUPERAI_COMPUTER_ALLOW_SELF !== "1" && names.some(ownName);
-    let grant = grantFor(caller);
-    const fresh = [];
+    const grant = grantFor(caller);
+    const needPrompt = [];
     for (const name of names) {
       const key = norm(name);
-      if (!key || (self && ownName(name)) || grant?.apps.has(key) || fresh.some((f) => f.key === key)) continue;
-      fresh.push({ key, name, tier: appTier([name]), sensitive: isSensitive([name]) });
+      if (!key || (self && ownName(name)) || needPrompt.some((f) => f.key === key)) continue;
+      const sensitive = isSensitive([name]) || isSensitiveTitle(name);
+      if (sensitive && !grant?.apps.has(key)) needPrompt.push({ key, name, tier: "full", sensitive: true });
     }
-    if (fresh.length) {
-      if ((denied.get(id) || 0) > Date.now()) throw new Error(DENIED);
-      const answer = await ask(caller, fresh, String(args.reason || "").trim().slice(0, 300));
-      if (answer === "deny") {
-        denied.set(id, Date.now() + DENY_QUIET);
-        throw new Error("The user denied access to those apps. Do not retry; tell the user what you wanted to do and let them decide.");
-      }
-      denied.delete(id);
-      grant = grantFor(caller);
-      if (!grant) grants.set(id, grant = answer === "chat" ? { chat: true, name: caller.chatName, apps: new Map() } : { until: Date.now() + TASK_IDLE, name: caller.chatName, apps: new Map() });
-      else if (answer === "chat") grant.chat = true;
-      for (const f of fresh) grant.apps.set(f.key, { name: f.name, tier: f.tier, sensitive: f.sensitive });
-      changed();
+    const missingOs = missingOsPermissions();
+    if (needPrompt.length || missingOs.length) {
+      const items = needPrompt.length ? needPrompt : names.filter((n) => !(self && ownName(n))).map((name) => ({ key: norm(name), name, tier: "full", sensitive: false })).filter((f) => f.key);
+      await approveSensitive(caller, items.length ? items : [{ key: "desktop", name: tr("คอมพิวเตอร์"), tier: "full", sensitive: false }], args.reason);
     }
-    const allowed = grant ? [...grant.apps.values()].map((a) => `${a.name} (${tierNote(a.tier, a.sensitive)})`).join(", ") : "none";
+    const allowed = names.filter((n) => !(self && ownName(n))).map((n) => `${n} (full control)`).join(", ");
     const open = await openApps();
-    return { text: `Allowed apps for this chat: ${allowed}.${self ? " SuperAi itself cannot be controlled by the AI." : ""}${open.length ? ` Open apps: ${open.join(", ")}.` : ""} Use computer_focus_window and computer_ui_snapshot / computer_ui_find first (faster, no mouse), or computer_screenshot when you need to see the screen.` };
+    return { text: `Computer control is active (full control for regular apps; sensitive apps such as password managers, wallets or banking ask before acting).${allowed ? ` Requested: ${allowed}.` : ""}${self ? " SuperAi itself cannot be controlled by the AI." : ""}${open.length ? ` Open apps: ${open.join(", ")}.` : ""} Use computer_focus_window and computer_ui_snapshot / computer_ui_find first (faster, no mouse), or computer_screenshot when you need to see the screen.` };
   }
-  /** Clicks and typing reach only an allowed app, at its tier; never SuperAi itself. */
-  function permit(app, need, caller) {
+  /** Full control for regular apps; sensitive apps/pages ask the user first; never SuperAi itself. */
+  async function permit(app, need, caller) {
     if (app.pid && app.pid === process.pid) {
       if (process.env.SUPERAI_COMPUTER_ALLOW_SELF !== "1") throw new Error("That is SuperAi's own window. The AI cannot control SuperAi itself; ask the user to do it, or click the app you want first.");
-      app = { ...app, name: "SuperAi", desc: "SuperAi" };
+      return;
     }
-    const g = authorize(caller);
+    if (!isSensitiveApp(app)) return;
     const label = appLabel(app);
-    const hit = [...g.apps.entries()].find(([key]) => appMatches(app, key));
-    if (!hit) throw new Error(`${label} is not among the apps the user allowed for this chat (${[...g.apps.values()].map((a) => a.name).join(", ")}). If you need it, call computer_request_access with ["${label}"].`);
-    const actual = appTier(appNames(app), app.bundle);
-    const tier = RANK[actual] < RANK[hit[1].tier] ? actual : hit[1].tier;
-    if (RANK[tier] < RANK[need]) throw new Error(hit[1].sensitive || isSensitive(appNames(app), app.bundle)
-      ? `${label} holds passwords or money, so the AI may only look at it. Ask the user to do this step themselves.`
-      : tier === "read"
-      ? `${label} is a web browser, allowed for viewing only: clicks and typing in it are blocked. Use the browser_ tools for web pages.`
-      : `${label} is a terminal or code editor, allowed for left-click and scroll only: typing, keys, right-click and drag are blocked there.`);
+    const g = grantFor(caller);
+    const hit = g && [...g.apps.entries()].find(([key]) => appMatches(app, key) || (app.title && norm(app.title).includes(key)));
+    if (hit) return;
+    const key = norm(label) || norm(app.title) || "sensitive";
+    await approveSensitive(caller, [{ key, name: label, tier: "full", sensitive: true }], tr("แอปหรือหน้าที่มีข้อมูลสำคัญ (รหัสผ่าน / การเงิน)"));
   }
   let current = { chatId: "", chatName: "" }; // the caller of the running tool
   // macOS also gets SuperAi's process id, to look past its click-through overlays (Windows ignores it).
@@ -1030,9 +1025,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     const list = displays(), n = list.findIndex((x) => x.id === d.id) + 1;
     let front = "";
     try { const app = await frontApp(); front = ` App in front: ${app.pid === process.pid ? "SuperAi" : appLabel(app)}.`; } catch {}
-    const g = grantFor(current);
-    const allowed = g ? ` Allowed apps: ${[...g.apps.values()].map((a) => a.name).join(", ")}.` : "";
-    return { text: `Screen ${shown.width}x${shown.height}${list.length > 1 ? ` (screen ${n} of ${list.length})` : ""} (coordinates for computer_click etc. are in this image).${front}${allowed}${describeScreens()}`,
+    return { text: `Screen ${shown.width}x${shown.height}${list.length > 1 ? ` (screen ${n} of ${list.length})` : ""} (coordinates for computer_click etc. are in this image).${front}${describeScreens()}`,
       image: { data: shot.data, mimeType: "image/jpeg" } };
   }
   async function zoom(args) {
@@ -1070,7 +1063,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   async function click(x, y, button, clicks, force) {
     const [sx, sy] = toScreen(x, y);
     await pointAt(sx, sy);
-    return aside([[sx, sy]], async () => { permit(await appAt(sx, sy), button === "left" ? "click" : "full", current); return clickAt(sx, sy, button, clicks, force); });
+    return aside([[sx, sy]], async () => { await permit(await appAt(sx, sy), button === "left" ? "click" : "full", current); return clickAt(sx, sy, button, clicks, force); });
   }
   /** Windows: an accessibility action or a click posted to the window, so the user keeps the mouse.
    *  Text fields, windows that ignore posted clicks, macOS, or mouse=true: the real mouse, put back after. */
@@ -1104,7 +1097,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   async function drag(args) {
     const [fx, fy] = toScreen(args.fromX, args.fromY), [tx, ty] = toScreen(args.toX, args.toY);
     return aside([[fx, fy], [tx, ty]], async () => {
-      permit(await appAt(fx, fy), "full", current); permit(await appAt(tx, ty), "full", current);
+      await permit(await appAt(fx, fy), "full", current); await permit(await appAt(tx, ty), "full", current);
       await pointAt(fx, fy);
       await withMouse(() => dragBetween(fx, fy, tx, ty));
       await pointAt(tx, ty);
@@ -1212,7 +1205,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     const steps = Math.max(1, Math.min(20, Number(amount) || 3));
     if (!["up", "down", "left", "right"].includes(direction)) throw new Error("direction must be up, down, left or right");
     const [sx, sy] = x !== undefined && y !== undefined ? toScreen(x, y) : (await send("pos")).split(" ").map(Number);
-    await aside([[sx, sy]], async () => permit(await appAt(sx, sy), "click", current));
+    await aside([[sx, sy]], async () => await permit(await appAt(sx, sy), "click", current));
     await pointAt(sx, sy);
     // The wheel goes to the window under the mouse: borrow it for a moment.
     await withMouse(async () => {
@@ -1301,7 +1294,6 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     } catch { return []; }
   }
   async function listWindows(args) {
-    authorize(current);
     const wanted = norm(args.app);
     let list = [];
     try {
@@ -1315,10 +1307,15 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     }
     const filtered = wanted ? list.filter((w) => appMatches({ pid: w.pid, name: w.app, desc: w.app, title: w.title }, wanted) || norm(w.title).includes(wanted)) : list;
     const g = grantFor(current);
-    const isAllowed = (w) => w.pid !== process.pid && g && [...g.apps.keys()].some((k) => appMatches({ pid: w.pid, name: w.app, desc: w.desc || w.app, title: w.title }, k));
+    const windowStatus = (w) => {
+      const target = { pid: w.pid, name: w.app, desc: w.desc || w.app, title: w.title };
+      if (!isSensitiveApp(target)) return "allowed";
+      const approved = g && [...g.apps.keys()].some((k) => appMatches(target, k) || (w.title && norm(w.title).includes(k)));
+      return approved ? "allowed" : "sensitive · asks first";
+    };
     const lines = filtered.filter((w) => w.pid !== process.pid || process.env.SUPERAI_COMPUTER_ALLOW_SELF === "1").map((w) => {
       const pos = w.bounds ? ` (${Math.round(w.bounds.x)},${Math.round(w.bounds.y)} ${Math.round(w.bounds.width)}x${Math.round(w.bounds.height)})` : "";
-      const flags = [w.focused ? "focused" : "", w.minimized ? "minimized" : "", isAllowed(w) ? "allowed" : "needs access"].filter(Boolean).join(", ");
+      const flags = [w.focused ? "focused" : "", w.minimized ? "minimized" : "", windowStatus(w)].filter(Boolean).join(", ");
       return `[${w.id || w.pid}] ${w.app || "?"}${w.title ? ` · "${w.title.slice(0, 80)}"` : ""}${pos} (${flags})`;
     });
     return { text: lines.length ? `Open windows:\n${lines.join("\n")}` : "No matching open windows." };
@@ -1330,30 +1327,27 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     if (!appName && !winId) throw new Error("app or window is required");
     if (action === "launch") {
       if (!appName) throw new Error("app is required for launch");
-      permit({ pid: 0, title: appName, name: appName, desc: appName }, "click", current);
+      await permit({ pid: 0, title: appName, name: appName, desc: appName }, "click", current);
       await agentDesktop(["launch", appName, "--activate"]);
       await wait(400);
       return screenshot();
     }
     const target = appName ? await uiApp(appName).catch(() => ({ pid: 0, name: appName, desc: appName, title: appName, raw: appName })) : { pid: 0, name: "", raw: "" };
-    if (target.name) permit(target, "click", current);
+    if (target.name) await permit(target, "click", current);
     const scope = winId ? ["--window-id", winId] : ["--app", target.raw || appName];
     let acted = false;
     try {
       if (action === "maximize") await agentDesktop(["maximize", ...scope]);
       else if (action === "minimize") await agentDesktop(["minimize", ...scope]);
       else if (action === "restore") await agentDesktop(["restore", ...scope]);
-      else {
-        await agentDesktop(["restore", ...scope]).catch(() => {});
-        await agentDesktop(["focus-window", ...scope]);
-      }
+      else await agentDesktop(["focus-window", ...scope]);
       acted = true;
     } catch (err) {
       if (process.platform === "win32") {
         const wins = await win32Windows();
         const hit = wins.find((w) => (winId && w.id === winId) || (appName && appMatches(w, norm(appName))));
         if (hit?.pid) {
-          permit(hit, "click", current);
+          await permit(hit, "click", current);
           const mode = action === "minimize" ? 2 : action === "maximize" ? 3 : action === "restore" ? 1 : 0;
           await send(`focus ${hit.pid} ${mode}`);
           acted = true;
@@ -1367,7 +1361,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   /** known: the app of the previous snapshot, re-read after an action without looking it up again. */
   async function uiSnapshot(args, known) {
     const target = known || await uiApp(String(args.app || ""));
-    permit(target, "read", current);
+    await permit(target, "read", current);
     const scope = args.window ? ["--window-id", String(args.window)] : ["--app", target.raw];
     const rootRef = args.root && last?.app.pid === target.pid ? (String(args.root).startsWith("@") ? String(args.root) : `@${last.id}:${args.root}`) : "";
     const data = await agentDesktop(["snapshot", ...scope, "-i", "--compact", ...(rootRef ? ["--root", rootRef] : [])]);
@@ -1379,7 +1373,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
   }
   async function uiFind(args) {
     const target = await uiApp(String(args.app || ""));
-    permit(target, "read", current);
+    await permit(target, "read", current);
     const scope = ["--app", target.raw];
     const cmd = ["find", ...scope, ...(args.query ? ["--text", String(args.query)] : []), ...(args.role ? ["--role", String(args.role)] : [])];
     const data = await agentDesktop(cmd);
@@ -1410,7 +1404,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     };
     if (!commands[action]) throw new Error(`action must be one of: ${Object.keys(commands).join(", ")}`);
     if (action === "select" && !text) throw new Error("select needs text: the option to choose");
-    permit(last.app, ["set_value", "type", "clear", "right_click"].includes(action) ? "full" : "click", current);
+    await permit(last.app, ["set_value", "type", "clear", "right_click"].includes(action) ? "full" : "click", current);
     const node = last.nodes?.get(raw.split(":").pop());
     if (["set_value", "type"].includes(action) && node && /password|protected|secure/i.test([node.role, node.role_description, node.subrole, ...(node.states || [])].join(" ")))
       throw new Error("That is a password field. The AI does not type passwords: ask the user to type it themselves.");
@@ -1443,7 +1437,7 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
     }
     if (tool === "computer_move") { const [sx, sy] = toScreen(args.x, args.y); await pointAt(sx, sy); return { text: "The AI cursor points there now (the user's mouse did not move)." }; }
     if (tool === "computer_drag") { await drag(args); await pause(); return screenshot(); }
-    if (tool === "computer_type" || tool === "computer_key") permit(await frontApp(), "full", current);
+    if (tool === "computer_type" || tool === "computer_key") await permit(await frontApp(), "full", current);
     if (tool === "computer_type" && process.platform === "win32" && (await send("secret").catch(() => "0")) === "1")
       throw new Error("The keyboard focus is in a password field. The AI does not type passwords: ask the user to type it themselves.");
     if (tool === "computer_type") { await typeText(String(args.text ?? "")); await pause(); return screenshot(); }
@@ -1460,7 +1454,6 @@ export function createComputerControl({ settingsFile, onStop, onChange }) {
       const given = args && typeof args === "object" ? args : {};
       current = caller;
       if (tool === "computer_request_access") return requestAccess(caller, given);
-      authorize(caller);
       if (tool === "computer_screenshot") choose(given);
       showBar(tool, caller);
       cursorSay(toolLabel(tool));

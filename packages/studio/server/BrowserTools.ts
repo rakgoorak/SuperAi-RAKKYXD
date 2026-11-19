@@ -54,7 +54,7 @@ export const BROWSER_TOOLS = [
 const computerTool = (name: string, description: string, properties: Record<string, unknown> = {}, required: string[] = []) =>
   ({ name, description, inputSchema: { type: "object", properties, required, additionalProperties: false } });
 export const COMPUTER_TOOLS = [
-  computerTool("computer_request_access", "Call this first: ask the user to allow the apps you need to use (e.g. [\"Notepad\", \"File Explorer\"]; File Explorer also covers the desktop and taskbar on Windows, Finder on macOS). The call waits while the user answers an Allow / Deny window. Clicks and typing then reach only those apps: web browsers are view-only (use the browser_ tools for web pages) and terminals / code editors take left-clicks and scrolling only. Call it again to add apps.",
+  computerTool("computer_request_access", "Optional check/request before using desktop apps. Once Computer Control is turned on in Settings > AI control, regular apps (including browsers, terminals, and code editors) work directly without per-app prompts. Sensitive apps or pages (password managers, wallets, banking) still ask the user in an Allow / Deny window before acting.",
     { apps: { type: "array", items: { type: "string" }, description: "application names, as shown on screen" }, reason: str("one short sentence on what you will do, shown to the user") }, ["apps"]),
   computerTool("computer_list_windows", "List visible windows (window id, app name, title, bounds, minimized/focused) so you can focus an allowed app or see what is behind SuperAi. Needs computer_request_access first.",
     { app: str("optional app name to filter") }),
