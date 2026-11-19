@@ -32,7 +32,7 @@ export function permissionChoices(agent: string): { value: ChatPermission; label
   return [
     { value: 'read', label: tr("อ่านอย่างเดียว"), hint: tr("อ่านและวางแผนได้ ไม่แก้ไฟล์และไม่รันคำสั่ง") },
     ...(asks ? [{ value: 'ask' as const, label: tr("ถามก่อนทำ"), hint: tr("ขออนุญาตในแชตก่อนแก้ไฟล์หรือรันคำสั่งทุกครั้ง") }] : []),
-    { value: 'auto', label: tr("ทำเองอัตโนมัติ"), hint: tr("แก้ไฟล์และรันคำสั่งในโฟลเดอร์โปรเจกต์ได้เอง (แนะนำ)") },
+    { value: 'auto', label: tr("ทำเองอัตโนมัติ"), hint: tr("แก้ไฟล์ รัน Git และใช้เครื่องมือเบราว์เซอร์ได้ตามสิทธิ์ของผู้ให้บริการ ส่วน Computer Use ขออนุญาตรายแอป") },
     ...(full ? [{ value: full, label: tr("เต็มสิทธิ์"), hint: tr("ไม่ถามและไม่จำกัดเฉพาะโฟลเดอร์โปรเจกต์ ใช้เมื่อไว้ใจงานนี้เท่านั้น") }] : []),
   ];
 }

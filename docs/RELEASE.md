@@ -1,3 +1,23 @@
+# SuperAi & RAKKYXD v1.2.7
+
+- **Browser Use:** Chrome and Edge launched by SuperAi run in the background by default. You can show the window for sign-in or opt into a local DevTools connection and select an existing tab.
+- **File attachments:** Browser Use can discover hidden file inputs and attach local files directly without opening the system file picker.
+- **Chat responsiveness:** Skill lookup and pre-turn Git checkpoints use asynchronous paths. The chat can record the message before the checkpoint finishes and start the CLI after the checkpoint is ready.
+- **Chat queue:** Removing a queued message restores its text to the composer for editing and preserves any draft already there.
+- **Automatic permissions:** Codex Auto uses native automatic review within the workspace sandbox. Computer Use retains per-app consent.
+- **Antigravity:** Chat sessions can use SuperAi's Browser and Computer Use tools via MCP and show clearer tool names in the conversation.
+
+## ภาษาไทย
+
+- **Browser Use:** Chrome และ Edge ที่ SuperAi เปิดทำงานเบื้องหลังเป็นค่าเริ่มต้น เปิดหน้าต่างเพื่อล็อกอินได้ หรือเลือกแท็บเดิมผ่านการเชื่อมต่อ DevTools ในเครื่องที่ผู้ใช้เปิดไว้
+- **แนบไฟล์:** Browser Use ค้นหาช่องอัปโหลดที่เว็บซ่อนไว้และแนบไฟล์จากเครื่องได้โดยตรง โดยไม่ต้องเปิดหน้าต่างเลือกไฟล์ของระบบ
+- **การตอบสนองของแชท:** ค้นหาสกิลและสร้าง Git checkpoint แบบอะซิงโครนัส แชทบันทึกข้อความได้ระหว่างรอ checkpoint และเริ่ม CLI เมื่อ checkpoint พร้อม
+- **คิวแชท:** เอาข้อความออกจากคิวเพื่อดึงข้อความกลับมาแก้ในช่องพิมพ์ได้ พร้อมเก็บร่างเดิมที่พิมพ์ค้างไว้
+- **สิทธิ์อัตโนมัติ:** โหมด Auto ของ Codex ใช้ตัวตรวจคำขออัตโนมัติภายใน workspace sandbox ส่วน Computer Use ขออนุญาตแยกตามแอป
+- **Antigravity:** ใช้เครื่องมือ Browser Use และ Computer Use ของ SuperAi ผ่าน MCP และแสดงชื่อเครื่องมือในแชทชัดขึ้น
+
+---
+
 # SuperAi & RAKKYXD v1.2.6
 
 - **Dynamic Client Assets (OTA):** sync web UI bundles in the background without needing new desktop releases or restarting the application.

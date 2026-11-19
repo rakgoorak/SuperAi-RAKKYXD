@@ -22,7 +22,12 @@ const site = createServer((req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   if (req.url.startsWith('/extras')) return res.end(`<title>Extras</title><h1>Extras</h1><p id="out">nothing yet</p>
     <button onclick="document.getElementById('out').textContent = confirm('Delete everything?') ? 'deleted' : 'kept'">Delete all</button>
+    <button id="dbl-btn" ondblclick="document.getElementById('out').textContent='double clicked'">Dbl target</button>
+    <div id="coord-box" role="button" onclick="document.getElementById('out').textContent='coord clicked'" style="display:inline-block;padding:4px 8px;">Coord box</div>
+    <div id="hover-box" role="button" onmouseenter="document.getElementById('out').textContent='hovered'" onmouseover="document.getElementById('out').textContent='hovered'">Hover box</div>
     <iframe srcdoc="<button onclick=&quot;parent.document.getElementById('out').textContent='frame clicked'&quot;>Frame button</button><input placeholder='Frame field'>" style="width:300px;height:80px"></iframe>
+    <input type="file" name="Hidden attachment" style="display:none"
+      onchange="document.getElementById('out').textContent='Attached '+this.files[0].name">
     <shadow-box></shadow-box>
     <script>customElements.define('shadow-box', class extends HTMLElement { connectedCallback() { const root = this.attachShadow({ mode: 'open' });
       root.innerHTML = '<button>Shadow button</button>'; root.querySelector('button').onclick = () => { document.getElementById('out').textContent = 'shadow clicked'; }; } });</script>`);
@@ -79,6 +84,8 @@ try {
   assert.equal(init.result.serverInfo.name, 'superai-browser');
   const tools = (await rpc('tools/list', {})).result.tools.map((t) => t.name);
   assert.ok(tools.includes('browser_open') && tools.includes('browser_click') && tools.includes('browser_screenshot'));
+  assert.ok(tools.includes('browser_hover') && tools.includes('browser_console') && tools.includes('browser_eval') && tools.includes('browser_upload') && tools.includes('browser_close_tab'));
+  assert.ok(tools.includes('computer_list_windows') && tools.includes('computer_focus_window') && tools.includes('computer_ui_find'));
 
   steps.step('open a page; the side browser is shown');
   let snap = (await call('browser_open', { url: pageUrl })).content[0].text;
@@ -92,7 +99,7 @@ try {
   assert.ok(shown.some((v) => v.visible !== false && v.bounds.width > 100 && v.bounds.height > 100), 'the browser view is laid out in the panel');
 
   steps.step('type, select, click and land on the next page');
-  snap = (await call('browser_type', { ref: refOf(snap, 'Your name'), text: 'Somchai' })).content[0].text;
+  snap = (await call('browser_type', { label: 'Your name', text: 'Somchai' })).content[0].text;
   assert.match(snap, /value="Somchai"/);
   snap = (await call('browser_select', { ref: refOf(snap, 'Size'), value: 'Large' })).content[0].text;
   snap = (await call('browser_click', { ref: refOf(snap, 'Send order') })).content[0].text;
@@ -115,11 +122,15 @@ try {
   await page.screenshot({ path: path.join(output, 'app.png') });
 
   steps.step('iframe, shadow DOM and confirm() in the panel');
+  const attachment = path.join(data, 'attachment.txt');
+  await fs.writeFile(attachment, 'browser upload smoke test');
   const extras = async (browser) => {
     const on = browser ? { browser } : {};
     let s = (await call('browser_open', { url: pageUrl + 'extras', ...on })).content[0].text;
     assert.match(s, /Frame button[^\n]*\(in frame\)/, 'elements inside a same-origin iframe get refs');
     assert.match(s, /Shadow button/, 'elements inside shadow DOM get refs');
+    s = (await call('browser_upload', { ref: refOf(s, 'Hidden attachment'), files: [attachment], ...on })).content[0].text;
+    assert.match(s, /Attached attachment\.txt/, 'hidden inputs accept files without a native dialog');
     s = (await call('browser_click', { ref: refOf(s, 'Frame button') })).content[0].text;
     assert.match(s, /frame clicked/);
     s = (await call('browser_type', { ref: refOf(s, 'Frame field'), text: 'in a frame' })).content[0].text;
@@ -129,12 +140,26 @@ try {
     s = (await call('browser_click', { ref: refOf(s, 'Delete all') })).content[0].text;
     assert.match(s, /kept/, 'confirm() is cancelled by default instead of freezing the page');
     assert.match(s, /confirm "Delete everything\?" -> Cancel/, 'the snapshot reports the dialog');
+    s = (await call('browser_hover', { ref: refOf(s, 'Hover box'), ...on })).content[0].text;
+    assert.match(s, /hovered/, 'browser_hover triggers mouseover/mouseenter');
+    s = (await call('browser_click', { ref: refOf(s, 'Dbl target'), double: true, ...on })).content[0].text;
+    assert.match(s, /double clicked/, 'browser_click with double:true double-clicks');
+    const pt = JSON.parse((await call('browser_eval', { expression: '(() => { const r = document.getElementById("coord-box").getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()', ...on })).content[0].text);
+    s = (await call('browser_click', { x: pt.x, y: pt.y, ...on })).content[0].text;
+    assert.match(s, /coord clicked/, 'browser_click with x,y coordinates clicks visual coordinates');
+    const evalRes = (await call('browser_eval', { expression: '1 + 2', ...on })).content[0].text;
+    assert.equal(evalRes.trim(), '3', 'browser_eval executes and returns result');
+    const consoleRes = (await call('browser_console', { ...on })).content[0].text;
+    assert.ok(consoleRes.length > 0, 'browser_console returns status');
     await call('browser_dialog', { accept: true, ...on });
     s = (await call('browser_click', { ref: refOf(s, 'Delete all') })).content[0].text;
     assert.match(s, /deleted/, 'browser_dialog answers the next confirm()');
     const tabs = (await call('browser_tabs', on)).content[0].text;
     assert.match(tabs, /^\* 0 /m, 'tabs are listed with their number');
     assert.match((await call('browser_tabs', { select: '0', ...on })).content[0].text, /^\* 0 /m, 'a tab can be chosen by number');
+    await call('browser_open', { url: pageUrl, newTab: true, ...on });
+    const afterClose = (await call('browser_close_tab', on)).content[0].text;
+    assert.match(afterClose, /Extras/, 'browser_close_tab closes the extra tab cleanly');
   };
   await extras();
   steps.step('the user gets real dialogs again after the AI is done');

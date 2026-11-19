@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { chatParser, chatArguments, shellCommand, CliChatManager, type ChatMessage } from '../server/CliChat.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { chatParser, chatArguments, claudeLiveArguments, shellCommand, toolKind, toolTitle, CliChatManager, type ChatMessage } from '../server/CliChat.js';
+import { BROWSER_MCP, antigravityBrowserArgs, cleanupAntigravityBrowserConfig, setBrowserBase, withOpenCodeBrowser } from '../server/BrowserTools.js';
 
 const lines = (agent: string, events: unknown[]) => {
   const parse = chatParser(agent, 't1');
@@ -113,11 +116,11 @@ test('Antigravity text deltas join into one message; tools show their main param
 
 test('turn arguments resume the conversation and keep edits in the project', () => {
   const first = chatArguments('codex', { prompt: 'x', model: 'gpt-6-luna', effort: 'low', files: ['C:/a.png'] });
-  assert.deepEqual(first.slice(0, 2), ['exec', '--json']);
+  assert.deepEqual(first.slice(0, 3), ['exec', '--approve-for-me', '--json']);
   assert.ok(first.includes('sandbox_mode="workspace-write"'));
   assert.ok(first.includes('--image=C:/a.png'));
   assert.equal(first.at(-1), '-', 'Codex reads the prompt from stdin');
-  assert.deepEqual(chatArguments('codex', { prompt: 'x', conversationId: 'abc' }).slice(0, 3), ['exec', 'resume', 'abc']);
+  assert.deepEqual(chatArguments('codex', { prompt: 'x', conversationId: 'abc' }).slice(0, 4), ['exec', '--approve-for-me', 'resume', 'abc']);
   const agy = chatArguments('antigravity', { prompt: 'คำถาม "quoted"', conversationId: 'conv-1' });
   assert.equal(agy[agy.indexOf('--conversation') + 1], 'conv-1');
   assert.equal(agy[agy.indexOf('--output-format') + 1], 'stream-json');
@@ -403,6 +406,10 @@ test('permission modes map to each CLI\'s own read-only / edit / auto switches',
     assert.deepEqual(allowed(mode).filter((tool) => tool.startsWith('Web')), ['WebSearch', 'WebFetch'], `${mode}: -p cannot ask, so web search/fetch are allowed up front`);
   assert.ok(arg('codex', 'read').includes('sandbox_mode="read-only"'));
   assert.ok(arg('codex', 'auto').includes('sandbox_mode="workspace-write"'));
+  assert.ok(arg('codex', 'auto').includes('--approve-for-me'));
+  assert.ok(arg('codex').includes('--approve-for-me'), 'the default mode uses native automatic review');
+  assert.ok(!arg('codex', 'auto').includes('--dangerously-bypass-approvals-and-sandbox'));
+  for (const mode of ['read', 'edit', 'full']) assert.ok(!arg('codex', mode).includes('--approve-for-me'));
   assert.ok(arg('codex', 'review').includes('--approve-for-me'));
   assert.ok(arg('codex', 'review').includes('sandbox_mode="workspace-write"'));
   assert.ok(!arg('codex', 'review').includes('--dangerously-bypass-approvals-and-sandbox'));
@@ -433,9 +440,10 @@ test('Ctrl+Enter queues behind a running turn; the queue sends in order, can be 
   assert.ok(chats.snapshot('q').activity, 'a running turn reports when it started');
   assert.throws(() => chats.send('q', { agent: 'codex', cwd: process.cwd(), text: 'แทรก' }), /Ctrl\+Enter/);
   assert.equal(chats.send('q', { agent: 'codex', cwd: process.cwd(), text: 'งานสอง' }, { queue: true }), 'queued');
-  assert.equal(chats.send('q', { agent: 'codex', cwd: process.cwd(), text: 'งานสาม' }, { queue: true }), 'queued');
+  assert.equal(chats.send('q', { agent: 'codex', cwd: process.cwd(), text: 'context\nงานสาม', draftText: '  งานสาม\n' }, { queue: true }), 'queued');
   const third = chats.snapshot('q').queued[1].id;
-  assert.equal(chats.unqueue('q', third), true);
+  assert.deepEqual(chats.unqueue('q', third), { text: '  งานสาม\n' });
+  assert.equal(chats.unqueue('q', third), undefined);
   assert.deepEqual(chats.snapshot('q').queued.map((q) => q.text), ['งานสอง']);
   fake.finish(fake.calls[0].proc, [{ type: 'turn.completed', usage: { output_tokens: 9 } }]);
   for (let i = 0; i < 100 && fake.calls.length < 2; i++) await settle();
@@ -482,4 +490,48 @@ test('a stop pressed while an interrupt waits keeps the queue paused', async () 
   await settle();
   assert.equal(fake.calls.length, 1);
   assert.deepEqual(chats.snapshot('j').queued.map((q) => q.text), ['เปลี่ยนแผน']);
+});
+
+test('Antigravity and Claude ask mode wire browser/computer MCP tools and classify tool kinds accurately', (t) => {
+  setBrowserBase('http://127.0.0.1:3999');
+  t.after(() => { cleanupAntigravityBrowserConfig('agy-chat-test'); setBrowserBase(''); });
+
+  const agyArgs = chatArguments('antigravity', { prompt: 'open page', chatId: 'agy-chat-test' });
+  const addDirIdx = agyArgs.indexOf('--add-dir');
+  assert.ok(addDirIdx >= 0, 'antigravity receives --add-dir plugin mount');
+  assert.equal(agyArgs.at(-1), '--print=open page', '--print remains the final argument');
+  const pluginDir = path.join(agyArgs[addDirIdx + 1], '.agents', 'plugins', BROWSER_MCP);
+  assert.ok(fs.existsSync(path.join(pluginDir, 'plugin.json')));
+  const mcpJson = JSON.parse(fs.readFileSync(path.join(pluginDir, 'mcp_config.json'), 'utf8'));
+  assert.ok(mcpJson.mcpServers[BROWSER_MCP], 'mcp_config.json registers superai-browser');
+  const rulesText = fs.readFileSync(path.join(pluginDir, 'rules', 'AGENTS.md'), 'utf8');
+  assert.match(rulesText, /browser_open/);
+  assert.match(rulesText, /computer_request_access/);
+
+  const claudeAsk = claudeLiveArguments({ permission: 'ask', chatId: 'claude-ask-test' });
+  assert.equal(claudeAsk[claudeAsk.indexOf('--permission-mode') + 1], 'default');
+  assert.equal(claudeAsk[claudeAsk.indexOf('--allowedTools') + 1], `mcp__${BROWSER_MCP}`);
+  assert.ok(claudeAsk.includes('--mcp-config'));
+
+  const claudeAuto = claudeLiveArguments({ permission: 'auto', chatId: 'claude-auto-test' });
+  const claudeAutoTools = claudeAuto[claudeAuto.indexOf('--allowedTools') + 1].split(',');
+  assert.ok(claudeAutoTools.includes('Bash'));
+  assert.ok(claudeAutoTools.includes(`mcp__${BROWSER_MCP}`));
+  assert.ok(!claudeAuto.includes('bypassPermissions'));
+
+  const opencode = JSON.parse(withOpenCodeBrowser('{"permission":{"bash":"ask"}}', 'opencode-auto-test')!);
+  assert.equal(opencode.mcp[BROWSER_MCP].enabled, true);
+  assert.equal(opencode.permission.bash, 'ask', 'MCP registration preserves user shell rules');
+
+  assert.equal(toolKind('browser_open'), 'web');
+  assert.equal(toolKind('browser_click'), 'web');
+  assert.equal(toolKind('computer_move'), 'other');
+  assert.equal(toolKind('computer_ui_find'), 'other');
+  assert.equal(toolTitle('call_mcp_tool', { ToolName: 'browser_open', Arguments: { url: 'https://example.com' } }), 'browser_open · https://example.com');
+  assert.equal(toolTitle('mcp__superai-browser__computer_focus_window', { app: 'Notepad' }), 'computer_focus_window · Notepad');
+
+  const antigravityMcpStep = lines('antigravity', [
+    { event: 'step_update', step_update: { step_index: 1, state: 'ACTIVE', step_type: 'tool', tool_name: 'call_mcp_tool', tool_info: { parameters: { ServerName: BROWSER_MCP, ToolName: 'browser_open', Arguments: { url: 'https://example.com' } } } } },
+  ]);
+  assert.deepEqual(antigravityMcpStep[0].items, [{ id: 't1-s1', kind: 'tool', tool: 'web', title: 'browser_open · https://example.com', output: undefined, status: 'running' }]);
 });

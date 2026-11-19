@@ -230,7 +230,15 @@ export function App() {
   const [runs, setRuns] = useState<Run[]>([]);
   // Agent team / multi-AI: Enter while a run is working queues the message (with its uploaded files)
   // and it goes out by itself once that run ends, like a CLI chat's queue.
-  const [queuedRun, setQueuedRun] = useState<{ wsId: string; mode: string; prompt: string; body: Record<string, unknown> } | null>(null);
+  const [queuedRun, setQueuedRun] = useState<{ wsId: string; mode: "agent" | "chat"; prompt: string; draftText: string; body: Record<string, unknown> } | null>(null);
+  const restoreQueuedRun = () => {
+    if (!queuedRun) return;
+    setDraftFor(composerDraftKey(queuedRun.wsId, queuedRun.mode, "", "active"),
+      current => [current, queuedRun.draftText].filter(Boolean).join("\n\n"));
+    setQueuedRun(null);
+    setMode(queuedRun.mode);
+    requestAnimationFrame(() => composer.current?.focus());
+  };
   const [menu, setMenu] = useState("");
   const composer = useRef<HTMLTextAreaElement>(null);
   const update = useUpdateState();
@@ -739,13 +747,10 @@ export function App() {
         setNotice(tr`เริ่มคุยกับ ${providerIdentity(quickProvider).label} แล้ว`);
         return;
       }
-      let queuedCount = 0, interruptedCount = 0;
+      let queuedCount = 0, interruptedCount = 0, optimisticCleared = false;
       if (!workspace) throw new Error(tr("กรุณาสร้างโปรเจกต์ก่อน"));
       // Save attached images/PDFs into <project>/.superai/attachments first.
       if (mode === "chat" && /^\/skills?\s*$/.test(draft.trim())) { setNotice(tr("เลือก skill จากรายการเหนือช่องพิมพ์ แล้วระบุงานที่ต้องการ")); return; }
-      const saved: SavedAttachment[] = [];
-      for (const item of attachments.items)
-        saved.push(await uploadAttachment(`/api/workspaces/${workspace.id}/attachments`, item.file));
       if (mode === "code") {
         const recipients =
           target === "all"
@@ -757,51 +762,79 @@ export function App() {
           throw new Error(
             tr("ไม่มี terminal ที่กำลังทำงาน กรุณาเปิด session ก่อน"),
           );
-        for (const recipient of recipients) {
-          // A pane in chat view takes the message as a chat turn; files go along as paths.
-          if (paneView(recipient) === "chat") {
-            const text = draft.trim() || tr("ดูไฟล์แนบนี้");
-            const prefs = chatPrefs(recipient.id);
-            // Composer commands for one chat: handled by its controls, not sent to the AI.
-            if (recipients.length === 1 && /^\/(skills?|login)\s*$/.test(text)) {
-              sendChatCommand(recipient.id, text.startsWith("/login") ? "login" : "skills");
-              if (text.startsWith("/login")) setDraft("");
-              return;
-            }
-            if (recipients.length === 1 && text === "/model") throw new Error(tr("เลือก Model จากช่องคำสั่งด้านล่าง ใช้กับข้อความถัดไป"));
-            if (prefs.blocked) throw new Error(`${recipient.name}: ${prefs.note || tr("กรุณาเข้าสู่ระบบก่อนส่งข้อความ")}`);
-            if (recipients.length === 1 && /^\/skills?\s*$/.test(text)) { setDialog("skills"); setDraft(""); return; }
-            const hasSkill = /(?:^|\s)\/(?:skill\s+)?([\w.:-]+)/.test(text);
-            const skillId = prefs.skillId && hasSkill ? prefs.skillId : "";
-            // Enter while the chat is answering waits for it; Ctrl+Enter stops that answer and sends this one.
-            const result = await post<{ queued?: boolean; interrupted?: boolean }>(`/api/terminals/${recipient.id}/chat`, {
-              text: contextPrompt(recipient.id, text),
-              model: prefs.model,
-              effort: prefs.effort,
-              permission: prefs.permission,
-              responseStyle: styleToSend(prefs.responseStyle),
-              includeProjectContext: prefs.includeProjectContext,
-              ...(skillId ? { skillId } : {}),
-              attachments: saved.map((file) => file.path),
-              ...(interruptNow ? { interrupt: true } : {}),
-            });
-            if (result.queued) queuedCount++;
-            if (result.interrupted) interruptedCount++;
-            try { saveMessageContexts(recipient.id, []); }
-            catch { setNotice(tr("ส่งข้อความแล้ว แต่ล้างบริบทที่บันทึกไว้ไม่ได้ กรุณาเอาบริบทออกก่อนส่งครั้งถัดไป")); }
-            if (prefs.skillId) setChatPrefs(recipient.id, { skillId: "" });
-            continue;
+        const allChat = recipients.every((recipient) => paneView(recipient) === "chat");
+        if (allChat) {
+          const text = draft.trim() || tr("ดูไฟล์แนบนี้");
+          if (recipients.length === 1 && /^\/(skills?|login)\s*$/.test(text)) {
+            sendChatCommand(recipients[0].id, text.startsWith("/login") ? "login" : "skills");
+            if (text.startsWith("/login")) setDraft("");
+            return;
           }
-          // Codex gets project-relative paths: typed ":" and "\" can be lost through ConPTY.
-          const relative = attachMode(recipient.agentType) === "clipboard" && recipient.cwd === workspace.rootPath;
-          const paths = saved.map((file) => formatPath(relative ? file.relativePath : file.path)).join("").trim();
-          const result = await post(`/api/terminals/${recipient.id}/input`, {
-            input: [draft.trim() || (paths ? tr("ดูไฟล์แนบนี้") : ""), paths].filter(Boolean).join(" ") + "\r",
-          });
-          if (!result.success)
-            throw new Error(
-              tr`ส่งไป ${recipient.name} ไม่สำเร็จ กรุณาตรวจ session`,
-            );
+          if (recipients.length === 1 && text === "/model") throw new Error(tr("เลือก Model จากช่องคำสั่งด้านล่าง ใช้กับข้อความถัดไป"));
+          for (const recipient of recipients) {
+            const prefs = chatPrefs(recipient.id);
+            if (prefs.blocked) throw new Error(`${recipient.name}: ${prefs.note || tr("กรุณาเข้าสู่ระบบก่อนส่งข้อความ")}`);
+          }
+        }
+        const saved: SavedAttachment[] = [];
+        for (const item of attachments.items)
+          saved.push(await uploadAttachment(`/api/workspaces/${workspace.id}/attachments`, item.file));
+        const submittedText = draft;
+        const submittedScope = draftScope;
+        if (allChat) {
+          setDraftFor(submittedScope, "");
+          optimisticCleared = true;
+        }
+        try {
+          for (const recipient of recipients) {
+            // A pane in chat view takes the message as a chat turn; files go along as paths.
+            if (paneView(recipient) === "chat") {
+              const text = submittedText.trim() || tr("ดูไฟล์แนบนี้");
+              const prefs = chatPrefs(recipient.id);
+              // Composer commands for one chat: handled by its controls, not sent to the AI.
+              if (recipients.length === 1 && /^\/(skills?|login)\s*$/.test(text)) {
+                sendChatCommand(recipient.id, text.startsWith("/login") ? "login" : "skills");
+                if (text.startsWith("/login")) setDraftFor(submittedScope, "");
+                return;
+              }
+              if (recipients.length === 1 && text === "/model") throw new Error(tr("เลือก Model จากช่องคำสั่งด้านล่าง ใช้กับข้อความถัดไป"));
+              if (prefs.blocked) throw new Error(`${recipient.name}: ${prefs.note || tr("กรุณาเข้าสู่ระบบก่อนส่งข้อความ")}`);
+              const hasSkill = /(?:^|\s)\/(?:skill\s+)?([\w.:-]+)/.test(text);
+              const skillId = prefs.skillId && hasSkill ? prefs.skillId : "";
+              // Enter while the chat is answering waits for it; Ctrl+Enter stops that answer and sends this one.
+              const result = await post<{ queued?: boolean; interrupted?: boolean }>(`/api/terminals/${recipient.id}/chat`, {
+                text: contextPrompt(recipient.id, text),
+                draftText: submittedText,
+                model: prefs.model,
+                effort: prefs.effort,
+                permission: prefs.permission,
+                responseStyle: styleToSend(prefs.responseStyle),
+                includeProjectContext: prefs.includeProjectContext,
+                ...(skillId ? { skillId } : {}),
+                attachments: saved.map((file) => file.path),
+                ...(interruptNow ? { interrupt: true } : {}),
+              });
+              if (result.queued) queuedCount++;
+              if (result.interrupted) interruptedCount++;
+              try { saveMessageContexts(recipient.id, []); }
+              catch { setNotice(tr("ส่งข้อความแล้ว แต่ล้างบริบทที่บันทึกไว้ไม่ได้ กรุณาเอาบริบทออกก่อนส่งครั้งถัดไป")); }
+              if (prefs.skillId) setChatPrefs(recipient.id, { skillId: "" });
+              continue;
+            }
+            // Codex gets project-relative paths: typed ":" and "\" can be lost through ConPTY.
+            const relative = attachMode(recipient.agentType) === "clipboard" && recipient.cwd === workspace.rootPath;
+            const paths = saved.map((file) => formatPath(relative ? file.relativePath : file.path)).join("").trim();
+            const result = await post(`/api/terminals/${recipient.id}/input`, {
+              input: [submittedText.trim() || (paths ? tr("ดูไฟล์แนบนี้") : ""), paths].filter(Boolean).join(" ") + "\r",
+            });
+            if (!result.success)
+              throw new Error(
+                tr`ส่งไป ${recipient.name} ไม่สำเร็จ กรุณาตรวจ session`,
+              );
+          }
+        } catch (err) {
+          if (optimisticCleared) setDraftFor(submittedScope, (cur) => cur || submittedText);
+          throw err;
         }
         // A chat shows its own message at once; only say something when the send did more than that.
         const sentNotice = queuedCount
@@ -813,6 +846,9 @@ export function App() {
               : recipients.every(r => paneView(r) === "chat") ? "" : tr("ส่งคำสั่งแล้ว");
         if (sentNotice) setNotice(sentNotice);
       } else {
+        const saved: SavedAttachment[] = [];
+        for (const item of attachments.items)
+          saved.push(await uploadAttachment(`/api/workspaces/${workspace.id}/attachments`, item.file));
         const prompt = draft.trim() || tr("ช่วยดูไฟล์แนบนี้");
         const files = saved.map((file) => file.path);
         let body: Record<string, unknown>;
@@ -825,14 +861,14 @@ export function App() {
         }
         if (activeRun && activeRun.wsId === workspace.id) {
           if (queuedRun) throw new Error(tr("มีข้อความรอคิวอยู่แล้ว ยกเลิกข้อความนั้นก่อน หรือรอให้ส่งไป"));
-          setQueuedRun({ wsId: workspace.id, mode, prompt, body });
+          setQueuedRun({ wsId: workspace.id, mode, prompt, draftText: draft, body });
           setNotice(tr("ต่อคิวแล้ว · ส่งเองเมื่องานก่อนหน้าเสร็จ"));
         } else {
           await post(`/api/conversations/${workspace.id}`, body);
           setRuns(await api<Run[]>(`/api/conversations/${workspace.id}`));
         }
       }
-      setDraft("");
+      if (!optimisticCleared) setDraft("");
       attachments.clear();
     }); } finally { sending.current = false; }
   };
@@ -1971,8 +2007,8 @@ export function App() {
                 {queuedRun && queuedRun.wsId === activeWs && (
                   <div className="queued-run" role="status">
                     <span>{tr("รอคิว:")} {queuedRun.prompt.split("\n")[0].slice(0, 120)}</span>
-                    <button type="button" className="text-button" onClick={() => { setDraft(queuedRun.prompt); setQueuedRun(null); }}>{tr("แก้ไข")}</button>
-                    <button type="button" className="text-button" onClick={() => setQueuedRun(null)}>{tr("ยกเลิก")}</button>
+                    <button type="button" className="text-button" onClick={restoreQueuedRun}>{tr("แก้ไข")}</button>
+                    <button type="button" className="text-button" onClick={restoreQueuedRun}>{tr("ยกเลิก")}</button>
                   </div>
                 )}
                 <div className="composer-hint">

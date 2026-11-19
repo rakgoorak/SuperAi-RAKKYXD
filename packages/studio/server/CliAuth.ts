@@ -51,7 +51,8 @@ export class CliAuthManager {
     const key = `${id}:${accountId}`;
     if (!(id in LOGIN_ARGS) && !(id in CLOUD_BYOK_KEYS)) throw new Error(tr("ไม่รู้จักผู้ให้บริการนี้"));
     const cached = this.cache.get(key);
-    if (!refresh && cached && Date.now() - cached.checkedAt < 15000) return cached;
+    const ttl = cached?.status === "authenticated" ? 5 * 60_000 : 15000;
+    if (!refresh && cached && Date.now() - cached.checkedAt < ttl) return cached;
     const pending = this.pending.get(key);
     if (pending) return pending;
     const request = this.probe(id, accountId).then((status) => { this.cache.set(key, status); return status; }).finally(() => this.pending.delete(key));

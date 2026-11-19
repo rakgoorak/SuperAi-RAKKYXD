@@ -58,6 +58,12 @@ It supports Claude Code, Codex, Antigravity (<code>agy</code>), OpenCode, Freebu
 - Review AI file changes section by section (keep or undo each hunk) and create **Git worktrees** for parallel branches.
 - Render full Markdown, math (**KaTeX**), **Mermaid** diagrams, inline videos and clickable file paths in chat, or preview HTML, SVG, Tailwind CSS and React artifacts beside your work.
 - Let the AI use the built-in browser panel, Google Chrome / Microsoft Edge, or opt-in **Computer use** (screen view, clicks and typing with per-app permissions and a live Stop bar).
+
+Chrome and Edge launched by Browser Use run in the background without opening a window by default. To sign in interactively or watch those browsers, start SuperAi with `SUPERAI_BROWSER_SHOW_WINDOW=1`. Both modes use the same SuperAi profiles. Use the built-in browser panel when you want to see the page inside SuperAi.
+
+To use a browser window you already manage, start SuperAi with `SUPERAI_EDGE_CDP_PORT` or `SUPERAI_CHROME_CDP_PORT` set to the loopback DevTools port you explicitly enabled for that browser. This requires a running browser profile that permits DevTools connections. SuperAi does not turn on debugging or import logins. A normal window without an enabled port cannot be connected this way. Only enable the port for a profile you intend to share with automation.
+
+Ask the agent to list tabs with `browser_tabs`, select the intended tab, and specify `browser: "edge"` or `browser: "chrome"` on subsequent calls. For attachments, use a file input ref from `browser_snapshot` with `browser_upload`. This also works with hidden file inputs that are already present in the page.
 - Cut token consumption with the one-click **Save tokens** switch, queue your next message while the AI works, or open **Quick Ask** from anywhere with a global shortcut.
 - Dictate with local Whisper and review the transcript before sending.
 - Check provider usage and quota information, use multiple accounts, and connect optional API providers (OpenRouter, DeepSeek, Groq or custom OpenAI-compatible endpoints).
