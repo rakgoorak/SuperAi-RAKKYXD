@@ -16,6 +16,7 @@ function wait(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
 /** Runs a page script, but never waits forever: a page that is frozen (or shows its own dialog) gets an error instead. */
 function js(wc, code, limit = 15000) {
+  if (wc.isDestroyed()) return Promise.reject(new Error("This browser tab has closed."));
   let timer;
   return Promise.race([
     wc.executeJavaScript(code, true).finally(() => clearTimeout(timer)),
@@ -27,17 +28,24 @@ function js(wc, code, limit = 15000) {
 async function settled(wc, limit = 20000) {
   const started = Date.now();
   await wait(150);
-  while (wc.isLoading() && Date.now() - started < limit) await wait(150);
+  while (!wc.isDestroyed() && wc.isLoading() && Date.now() - started < limit) await wait(150);
   await wait(250);
 }
 
 export function createBrowserAutomation(controller, { reveal } = {}) {
   const active = async () => {
-    const tab = controller.tabs.get(controller.activeId);
-    if (!tab) throw new Error("No browser tab is open. Use browser_open first.");
-    return tab.view.webContents;
+    const wc = controller.tabs.get(controller.activeId)?.view.webContents;
+    if (!wc || wc.isDestroyed()) throw new Error("No browser tab is open. Use browser_open first.");
+    return wc;
   };
   const snapshot = async (wc) => describe(await js(wc, SNAPSHOT));
+  const snapAfter = async (wc) => {
+    const current = controller.tabs.get(controller.activeId)?.view?.webContents;
+    const target = current && !current.isDestroyed() ? current : (!wc.isDestroyed() ? wc : null);
+    if (!target) return "(tab closed; no open tabs)";
+    if (target !== wc) await settled(target, 8000);
+    return snapshot(target);
+  };
   // The answer browser_dialog set for the page's next confirm / prompt.
   let dialogAnswer;
   const guard = async (wc) => { await js(wc, dialogGuardScript(dialogAnswer), 5000).catch(() => {}); dialogAnswer = undefined; };
@@ -97,9 +105,11 @@ export function createBrowserAutomation(controller, { reveal } = {}) {
     const acting = ["browser_click", "browser_hover", "browser_type", "browser_press", "browser_select", "browser_upload"].includes(tool);
     if (acting) await guard(wc);
     try { return await act(wc, tool, args); } finally {
-      if (acting) await release(wc);
-      // Between actions the AI cursor says the AI is thinking about its next step.
-      if (acting) await js(wc, aiThinkingScript(tr("กำลังคิด…")), 2000).catch(() => {});
+      if (acting && !wc.isDestroyed()) {
+        await release(wc);
+        // Between actions the AI cursor says the AI is thinking about its next step.
+        await js(wc, aiThinkingScript(tr("กำลังคิด…")), 2000).catch(() => {});
+      }
     }
   };
 
@@ -132,7 +142,7 @@ export function createBrowserAutomation(controller, { reveal } = {}) {
     if (tool === "browser_hover") {
       const target = await point(wc, args.ref, args.text);
       if (await js(wc, aiCursorScript(target.x, target.y, tr("ชี้"))).catch(() => false)) await wait(220);
-      if (await shown()) wc.sendInputEvent({ type: "mouseMove", x: target.x, y: target.y });
+      if ((await shown()) && !wc.isDestroyed()) wc.sendInputEvent({ type: "mouseMove", x: target.x, y: target.y });
       await js(wc, hoverScript(args.ref, args.text));
       await wait(200);
       return { text: await snapshot(wc) };
@@ -146,32 +156,34 @@ export function createBrowserAutomation(controller, { reveal } = {}) {
       const clickCount = args.double ? 2 : 1;
       // The AI's own cursor glides there first, so the user sees where it clicks (their mouse is untouched).
       if (await js(wc, aiCursorScript(target.x, target.y, tr("คลิก"))).catch(() => false)) await wait(240);
-      if (await shown()) {
+      if ((await shown()) && !wc.isDestroyed()) {
         wc.sendInputEvent({ type: "mouseMove", x: target.x, y: target.y });
         for (let c = 1; c <= clickCount; c++) {
           wc.sendInputEvent({ type: "mouseDown", x: target.x, y: target.y, button, clickCount: c });
           wc.sendInputEvent({ type: "mouseUp", x: target.x, y: target.y, button, clickCount: c });
         }
-      } else if (!hasCoords) {
+      } else if (!hasCoords && !wc.isDestroyed()) {
         await js(wc, clickScript(args.ref, args.text));
       }
       await settled(wc, 8000);
-      return { text: await snapshot(wc) };
+      return { text: await snapAfter(wc) };
     }
     if (tool === "browser_type") {
       const field = await point(wc, args.ref, undefined, args.label);
       const ref = args.ref || field.ref;
       if (field && await js(wc, aiCursorScript(field.x, field.y, tr("พิมพ์ข้อความ"))).catch(() => false)) await wait(220);
       if (!(await js(wc, focusScript(ref, args.label)))) throw new Error(`Element ${ref || args.label} cannot take text. Take a new browser_snapshot and pick an input.`);
+      if (wc.isDestroyed()) throw new Error("This browser tab has closed.");
       wc.focus();
       await wait(50);
       const text = String(args.text ?? "");
       // Typed text replaces the selected old value. (A Backspace input event could land after the
       // inserted text and eat its last letter.) Nothing to type: delete the selection instead.
       if (!args.append) await js(wc, SELECT_ALL);
+      if (wc.isDestroyed()) throw new Error("This browser tab has closed.");
       if (text) await wc.insertText(text); else if (!args.append) wc.delete();
-      if (args.submit) { await wait(60); key(wc, "Enter"); await settled(wc, 8000); }
-      return { text: await snapshot(wc) };
+      if (args.submit) { await wait(60); if (!wc.isDestroyed()) key(wc, "Enter"); await settled(wc, 8000); }
+      return { text: await snapAfter(wc) };
     }
     if (tool === "browser_upload") {
       const files = (Array.isArray(args.files) ? args.files : []).map((f) => String(f)).filter(Boolean);
@@ -198,9 +210,9 @@ export function createBrowserAutomation(controller, { reveal } = {}) {
       const parts = String(args.key || "").split("+");
       const last = parts.pop();
       const mods = parts.map((m) => { const low = m.trim().toLowerCase(); return low === "ctrl" ? "control" : low === "cmd" ? "meta" : low; });
-      key(wc, last, mods);
+      if (!wc.isDestroyed()) key(wc, last, mods);
       await settled(wc, 5000);
-      return { text: await snapshot(wc) };
+      return { text: await snapAfter(wc) };
     }
     if (tool === "browser_select") {
       if (!(await js(wc, selectScript(args.ref, args.value)))) throw new Error("Select element or option not found. Take a new browser_snapshot.");

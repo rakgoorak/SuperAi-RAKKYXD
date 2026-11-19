@@ -20,6 +20,12 @@ const data = await fs.mkdtemp(path.join(output, 'profile-'));
 
 const site = createServer((req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  if (req.url === '/auth-parent') return res.end(`<title>Auth opener</title><p id="result">Waiting</p>
+    <button onclick="const popup = window.open('about:blank'); if (popup) popup.location.href = '/auth-callback';">Sign in</button>
+    <script>addEventListener('message', event => {
+      if (event.origin === location.origin && event.data === 'auth-complete') document.getElementById('result').textContent = 'Signed in';
+    });</script>`);
+  if (req.url === '/auth-callback') return res.end(`<title>Auth callback</title><button onclick="window.opener.postMessage('auth-complete', location.origin); window.close();">Complete sign-in</button>`);
   if (req.url.startsWith('/extras')) return res.end(`<title>Extras</title><h1>Extras</h1><p id="out">nothing yet</p>
     <button onclick="document.getElementById('out').textContent = confirm('Delete everything?') ? 'deleted' : 'kept'">Delete all</button>
     <button id="dbl-btn" ondblclick="document.getElementById('out').textContent='double clicked'">Dbl target</button>
@@ -174,6 +180,16 @@ try {
   assert.match(bad.content[0].text, /snapshot/);
   const refused = await fetch(launch.env.SUPERAI_BROWSER_URL + '/api/browser-tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"tool":"browser_snapshot"}' });
   assert.equal(refused.status, 403, 'calls without the token are refused');
+
+  steps.step('auth popup keeps its opener and can close itself');
+  snap = (await call('browser_open', { url: pageUrl + 'auth-parent', newTab: true })).content[0].text;
+  await call('browser_click', { ref: refOf(snap, 'Sign in') });
+  snap = (await call('browser_wait', { text: 'Complete sign-in', seconds: 5 })).content[0].text;
+  await call('browser_click', { ref: refOf(snap, 'Complete sign-in') });
+  assert.doesNotMatch((await call('browser_tabs')).content[0].text, /Auth callback/);
+  snap = (await call('browser_wait', { text: 'Signed in', seconds: 5 })).content[0].text;
+  assert.match(snap, /Title: Auth opener/);
+  await call('browser_close_tab');
 
   steps.step('Chrome or Edge on the computer, in its own window');
   // Whichever is installed (Edge on Windows; on macOS Chrome, else Edge). SUPERAI_TEST_BROWSER picks one.
