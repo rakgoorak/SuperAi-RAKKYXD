@@ -1,3 +1,15 @@
+# SuperAi & RAKKYXD v1.2.9
+
+- **Antigravity chat stability:** Filtered out stale trajectory errors (such as previously recovered `stream idle timeout (10m0s)` retries) that Antigravity CLI (`agy`) re-emits at the end of resumed turns and `/compact` runs, while preserving all genuine failures.
+- **Clearer timeout guidance:** Added actionable localized messages (Thai, English, Japanese, Chinese) when a real server stream timeout occurs.
+
+## ภาษาไทย
+
+- **ความเสถียรของแชต Antigravity:** กรอง error เก่าที่ Antigravity CLI (`agy`) ส่งซ้ำท้ายรอบจากประวัติเดิม (เช่น `stream idle timeout (10m0s)` ที่เคย retry สำเร็จไปแล้ว รวมถึงรอบ `/compact`) โดยยังคงแสดง error จริงตามปกติทั้งหมด
+- **ข้อความแจ้งเตือนเมื่อ timeout จริง:** เพิ่มคำอธิบายภาษาไทย (และอังกฤษ/ญี่ปุ่น/จีน) พร้อมคำแนะนำให้ลองส่งใหม่ ใช้ `/compact` หรือเปิดห้องใหม่เมื่อเกิดการหมดเวลารอจากเซิร์ฟเวอร์จริง
+
+---
+
 # SuperAi & RAKKYXD v1.2.8
 
 - **Side browser stability:** Fixed an Electron main-process crash (`Cannot read properties of undefined (reading 'getURL')`) when OAuth or sign-in popups (such as Google Sign-In) close themselves inside the built-in browser panel.

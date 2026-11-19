@@ -6,6 +6,12 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.2.9] - 2026-11-19
+
+### Fixed
+- Filtered stale trajectory `ERROR_MESSAGE` errors (such as recovered `API error (attempt 1): request failed: stream idle timeout (10m0s): context deadline exceeded`) that Antigravity CLI (`agy`) re-emits on subsequent resumed turns and `/compact` runs (`packages/studio/server/CliChat.ts`).
+- Added clear localized guidance (`th`, `en`, `ja`, `zh`) when a genuine `stream idle timeout` / `context deadline exceeded` failure occurs (`packages/studio/server/CliProvider.ts`).
+
 ## [1.2.8] - 2026-11-19
 
 ### Fixed
