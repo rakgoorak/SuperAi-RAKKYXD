@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import fs from 'node:fs';
 import path from 'node:path';
-import { chatParser, chatArguments, claudeLiveArguments, shellCommand, toolKind, toolTitle, CliChatManager, type ChatMessage } from '../server/CliChat.js';
+import { chatParser, chatArguments, claudeLiveArguments, shellCommand, toolKind, toolTitle, parseGoDurationMs, CliChatManager, type ChatMessage } from '../server/CliChat.js';
 import { BROWSER_MCP, antigravityBrowserArgs, cleanupAntigravityBrowserConfig, setBrowserBase, withOpenCodeBrowser } from '../server/BrowserTools.js';
 
 const lines = (agent: string, events: unknown[]) => {
@@ -534,4 +534,155 @@ test('Antigravity and Claude ask mode wire browser/computer MCP tools and classi
     { event: 'step_update', step_update: { step_index: 1, state: 'ACTIVE', step_type: 'tool', tool_name: 'call_mcp_tool', tool_info: { parameters: { ServerName: BROWSER_MCP, ToolName: 'browser_open', Arguments: { url: 'https://example.com' } } } } },
   ]);
   assert.deepEqual(antigravityMcpStep[0].items, [{ id: 't1-s1', kind: 'tool', tool: 'web', title: 'browser_open · https://example.com', output: undefined, status: 'running' }]);
+});
+
+test('parseGoDurationMs parses Go duration strings and rejects malformed values', () => {
+  assert.equal(parseGoDurationMs('10m0s'), 600_000);
+  assert.equal(parseGoDurationMs('1h5m30s'), 3_930_000);
+  assert.equal(parseGoDurationMs('90s'), 90_000);
+  assert.equal(parseGoDurationMs('500ms'), 500);
+  assert.equal(parseGoDurationMs('1m30.5s'), 90_500);
+  assert.equal(parseGoDurationMs(''), undefined);
+  assert.equal(parseGoDurationMs('10minutes'), undefined);
+  assert.equal(parseGoDurationMs('0s'), undefined);
+});
+
+test('Antigravity stale replayed trajectory errors are suppressed without hiding real failures', () => {
+  const stale = 'API error (attempt 1): request failed: stream idle timeout (10m0s): context deadline exceeded';
+
+  // 1a. Completed turn with inline text_delta on DONE agent_response
+  {
+    let t = 1_000;
+    const parse = chatParser('antigravity', 't1', { now: () => t });
+    parse(JSON.stringify({ event: 'init', conversation_id: 'conv-1' }));
+    t += 5_000;
+    parse(JSON.stringify({ event: 'step_update', step_update: { step_index: 1, state: 'DONE', step_type: 'agent_response', text_delta: 'เสร็จแล้วครับ' } }));
+    const res = parse(JSON.stringify({ event: 'result', result: { status: 'ERROR', error: { message: stale }, response: 'เสร็จแล้วครับ' } }));
+    assert.equal(res.done, true);
+    assert.equal(res.error, undefined);
+    assert.equal(res.ignoredError, stale);
+  }
+
+  // 1b. Completed turn with ACTIVE text_delta followed by DONE usage-only update (plus empty thinking block)
+  {
+    let t = 1_000;
+    const parse = chatParser('antigravity', 't2', { now: () => t });
+    parse(JSON.stringify({ event: 'init', conversation_id: 'conv-1' }));
+    t += 2_000;
+    parse(JSON.stringify({ event: 'step_update', step_update: { step_index: 1, state: 'DONE', step_type: 'agent_response' } }));
+    t += 3_000;
+    parse(JSON.stringify({ event: 'step_update', step_update: { step_index: 2, state: 'ACTIVE', step_type: 'agent_response', text_delta: 'คำตอบจริง' } }));
+    parse(JSON.stringify({ event: 'step_update', step_update: { step_index: 2, state: 'DONE', step_type: 'agent_response', usage: { output_tokens: 12 } } }));
+    const res = parse(JSON.stringify({ event: 'result', result: { status: 'ERROR', error: { message: stale } } }));
+    assert.equal(res.done, true);
+    assert.equal(res.error, undefined);
+    assert.equal(res.ignoredError, stale);
+  }
+
+  // 2. Resumed /compact turn completing in 28s with no agent_response
+  {
+    let t = 10_000;
+    const parse = chatParser('antigravity', 't3', { now: () => t, resumed: true, command: true, previousStaleError: stale });
+    parse(JSON.stringify({ event: 'init', conversation_id: 'conv-1' }));
+    t += 28_000;
+    const res = parse(JSON.stringify({ event: 'result', result: { status: 'ERROR', error: { message: stale } } }));
+    assert.equal(res.done, true);
+    assert.equal(res.error, undefined);
+    assert.equal(res.ignoredError, stale);
+  }
+
+  // 3a. Genuine stream idle timeout after 10m is NEVER suppressed (even on resumed chat with matching previousStaleError)
+  {
+    let t = 10_000;
+    const parse = chatParser('antigravity', 't4', { now: () => t, resumed: true, previousStaleError: stale });
+    parse(JSON.stringify({ event: 'init', conversation_id: 'conv-1' }));
+    t += 600_000;
+    const res = parse(JSON.stringify({ event: 'result', result: { status: 'ERROR', error: { message: stale } } }));
+    assert.equal(res.error, stale);
+    assert.equal(res.done, undefined);
+    assert.equal(res.ignoredError, undefined);
+  }
+
+  // 3b. Mid-turn error after a tool step is NEVER suppressed
+  {
+    let t = 1_000;
+    const parse = chatParser('antigravity', 't5', { now: () => t });
+    parse(JSON.stringify({ event: 'init', conversation_id: 'conv-1' }));
+    parse(JSON.stringify({ event: 'step_update', step_update: { step_index: 1, state: 'DONE', step_type: 'tool', tool_name: 'read_file', tool_info: { parameters: { Path: 'a.ts' }, output: 'ok' } } }));
+    const res = parse(JSON.stringify({ event: 'result', result: { status: 'ERROR', error: { message: stale } } }));
+    assert.equal(res.error, stale);
+    assert.equal(res.ignoredError, undefined);
+  }
+
+  // 3c. Incomplete ACTIVE agent_response is NEVER suppressed
+  {
+    let t = 1_000;
+    const parse = chatParser('antigravity', 't6', { now: () => t });
+    parse(JSON.stringify({ event: 'init', conversation_id: 'conv-1' }));
+    parse(JSON.stringify({ event: 'step_update', step_update: { step_index: 1, state: 'ACTIVE', step_type: 'agent_response', text_delta: 'ยังพิมพ์ไม่จบ...' } }));
+    const res = parse(JSON.stringify({ event: 'result', result: { status: 'ERROR', error: { message: stale } } }));
+    assert.equal(res.error, stale);
+    assert.equal(res.ignoredError, undefined);
+  }
+
+  // 3d. Explicit step_type: error_message emitted in the current turn is NEVER suppressed
+  {
+    let t = 1_000;
+    const parse = chatParser('antigravity', 't7', { now: () => t, resumed: true, previousStaleError: stale });
+    parse(JSON.stringify({ event: 'init', conversation_id: 'conv-1' }));
+    parse(JSON.stringify({ event: 'step_update', step_update: { step_index: 1, state: 'DONE', step_type: 'error_message' } }));
+    const res = parse(JSON.stringify({ event: 'result', result: { status: 'ERROR', error: { message: stale } } }));
+    assert.equal(res.error, stale);
+    assert.equal(res.ignoredError, undefined);
+  }
+
+  // 3e. Non-attempt error (e.g. quota exceeded) is NEVER suppressed even after DONE agent_response
+  {
+    let t = 1_000;
+    const parse = chatParser('antigravity', 't8', { now: () => t });
+    parse(JSON.stringify({ event: 'init', conversation_id: 'conv-1' }));
+    parse(JSON.stringify({ event: 'step_update', step_update: { step_index: 1, state: 'DONE', step_type: 'agent_response', text_delta: 'ข้อความ' } }));
+    const res = parse(JSON.stringify({ event: 'result', result: { status: 'ERROR', error: { message: 'quota exceeded' } } }));
+    assert.equal(res.error, 'quota exceeded');
+    assert.equal(res.ignoredError, undefined);
+  }
+});
+
+test('CliChatManager suppresses Antigravity stale trajectory replay across resumed turns even on non-zero exit', async () => {
+  const stale = 'API error (attempt 1): request failed: stream idle timeout (10m0s): context deadline exceeded';
+  const fake = fakeSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch);
+
+  // Turn 1: completed assistant response + stale result error + exit code 1 with stale stderr
+  chats.send('agy-stale', { agent: 'antigravity', cwd: process.cwd(), text: 'สวัสดี' });
+  fake.finish(fake.calls[0].proc, [
+    { event: 'init', conversation_id: 'conv-stale' },
+    { event: 'step_update', step_update: { step_index: 1, state: 'DONE', step_type: 'agent_response', text_delta: 'ตอบสำเร็จครับ' } },
+    { event: 'result', result: { status: 'ERROR', error: { message: stale } } },
+  ], 1, stale);
+  await settle(chats, 'agy-stale');
+  let items = chats.snapshot('agy-stale').items;
+  assert.ok(items.some((i) => i.kind === 'assistant' && i.text === 'ตอบสำเร็จครับ'));
+  assert.equal(items.filter((i) => i.kind === 'error').length, 0, 'Turn 1 should suppress stale replay and exit 1');
+
+  // Turn 2: resumed /compact with stale result error + exit code 1
+  chats.send('agy-stale', { agent: 'antigravity', cwd: process.cwd(), text: '/compact' });
+  fake.finish(fake.calls[1].proc, [
+    { event: 'init', conversation_id: 'conv-stale' },
+    { event: 'result', result: { status: 'ERROR', error: { message: stale } } },
+  ], 1, stale);
+  await settle(chats, 'agy-stale');
+  items = chats.snapshot('agy-stale').items;
+  assert.equal(items.filter((i) => i.kind === 'error').length, 0, 'Turn 2 (/compact) should suppress replayed stale error');
+
+  // Turn 3: real non-stale error produces an error item
+  chats.send('agy-stale', { agent: 'antigravity', cwd: process.cwd(), text: 'ถามต่อ' });
+  fake.finish(fake.calls[2].proc, [
+    { event: 'init', conversation_id: 'conv-stale' },
+    { event: 'result', result: { status: 'ERROR', error: { message: 'quota exceeded' } } },
+  ], 1, 'quota exceeded');
+  await settle(chats, 'agy-stale');
+  items = chats.snapshot('agy-stale').items;
+  assert.equal(items.filter((i) => i.kind === 'error').length, 1, 'Turn 3 real failure must surface as error');
+  assert.match((items.find((i) => i.kind === 'error') as any).text, /quota exceeded/);
 });

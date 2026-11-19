@@ -66,7 +66,7 @@ export type PermissionDecision = "allow" | "always" | "deny";
 export type NewItem = ChatItem extends infer T ? (T extends ChatItem ? Omit<T, "at"> : never) : never;
 
 /** What one line of a CLI's JSON stream changes. `outputTokens` is added to the turn's count. */
-export interface ChatUpdate { items?: NewItem[]; conversationId?: string; error?: string; done?: boolean; outputTokens?: number }
+export interface ChatUpdate { items?: NewItem[]; conversationId?: string; error?: string; done?: boolean; outputTokens?: number; ignoredError?: string }
 /** The turn in progress: when it started and how many tokens the CLI has written so far. */
 export interface ChatActivity { startedAt: number; outputTokens: number; quiet?: { since: number; timeoutMs: number } }
 export interface QueuedChat { id: string; text: string; attachments?: string[] }
@@ -199,13 +199,43 @@ function codexItem(item: any, prefix: string): NewItem | null {
   }
 }
 
+export interface ChatParserOptions {
+  now?: () => number;
+  turnStartedAt?: number;
+  resumed?: boolean;
+  command?: boolean;
+  previousStaleError?: string;
+}
+
+/** Parse a Go `time.Duration.String()` value (e.g. `10m0s`, `1h5m30s`, `45s`, `500ms`) into milliseconds. */
+export function parseGoDurationMs(raw: string): number | undefined {
+  const s = raw.trim();
+  if (!s) return undefined;
+  const part = /(\d+(?:\.\d+)?)(ms|h|m|s)/g;
+  let total = 0, matched = 0, m: RegExpExecArray | null;
+  while ((m = part.exec(s)) !== null) {
+    if (m.index !== matched) return undefined;
+    matched = part.lastIndex;
+    const n = Number(m[1]);
+    if (!Number.isFinite(n)) return undefined;
+    total += m[2] === "h" ? n * 3_600_000 : m[2] === "m" ? n * 60_000 : m[2] === "s" ? n * 1_000 : n;
+  }
+  return matched === s.length && total > 0 ? total : undefined;
+}
+
 /** Reads one CLI's JSON lines for one turn. `prefix` keeps item ids unique across turns. */
-export function chatParser(agent: string, prefix: string): (line: string) => ChatUpdate {
+export function chatParser(agent: string, prefix: string, options: ChatParserOptions = {}): (line: string) => ChatUpdate {
   const texts = new Map<string, string>();
   const tools = new Map<string, NewItem>();
   // Claude Code repeats a message's usage on each of its content blocks: count each message once.
   const written = new Map<string, number>();
   let answered = false;
+  const clock = options.now ?? Date.now;
+  let lastProgressAt = options.turnStartedAt ?? clock();
+  let lastStepType = "";
+  let lastStepDone = false;
+  let lastStepHasText = false;
+  let sawErrorStep = false;
   return (line: string) => {
     let event: any;
     try { event = JSON.parse(line); } catch { return {}; }
@@ -313,36 +343,90 @@ export function chatParser(agent: string, prefix: string): (line: string) => Cha
       }
     }
     switch (event?.event) {
-      case "init": return { conversationId: String(event.conversation_id || "") || undefined };
+      case "init":
+        lastProgressAt = clock();
+        return { conversationId: String(event.conversation_id || "") || undefined };
       case "step_update": {
         const step = event.step_update || {};
         const id = `${prefix}-s${step.step_index}`;
+        const stepType = String(step.step_type || "");
+        if (/^error/i.test(stepType)) {
+          sawErrorStep = true;
+          return {};
+        }
         // A finished response step reports what it wrote (thinking included).
         const tokens = step.state === "DONE" && step.usage ? Number(step.usage.output_tokens || 0) + Number(step.usage.thinking_tokens || 0) : 0;
-        if (step.step_type === "agent_response" && typeof step.text_delta === "string") {
+        if (stepType === "agent_response" && typeof step.text_delta === "string") {
           const text = (texts.get(id) || "") + step.text_delta;
           texts.set(id, text);
           if (!text.trim()) return tokensWritten(tokens);
           answered = true;
+          lastProgressAt = clock();
+          lastStepType = "agent_response";
+          lastStepHasText = true;
+          lastStepDone = step.state === "DONE";
+          if (lastStepDone) sawErrorStep = false;
           return { items: [{ id, kind: "assistant", text }], ...tokensWritten(tokens) };
         }
-        if (step.step_type === "agent_response") return tokensWritten(tokens);
-        if (step.step_type === "tool") {
+        if (stepType === "agent_response") {
+          if (texts.get(id)?.trim()) {
+            lastProgressAt = clock();
+            lastStepType = "agent_response";
+            lastStepHasText = true;
+            lastStepDone = step.state === "DONE";
+            if (lastStepDone) sawErrorStep = false;
+          }
+          return tokensWritten(tokens);
+        }
+        if (stepType === "tool") {
           const rawName = String(step.tool_name || step.tool_info?.name || "tool");
           const params = step.tool_info?.parameters;
           const innerName = rawName === "call_mcp_tool" && typeof params?.ToolName === "string" ? params.ToolName : rawName;
           const output = step.tool_info?.output;
+          lastProgressAt = clock();
+          lastStepType = "tool";
+          lastStepHasText = false;
+          lastStepDone = step.state !== "ACTIVE";
           return { items: [{ id, kind: "tool", tool: toolKind(innerName), title: toolTitle(rawName, params),
             output: typeof output === "string" && output ? output : undefined,
             status: step.state === "ACTIVE" ? "running" : /ERROR|FAIL|CANCEL/i.test(String(step.state)) ? "failed" : "done" }] };
+        }
+        if (stepType === "user_input") {
+          lastProgressAt = clock();
+          lastStepType = "user_input";
+          lastStepHasText = false;
+          lastStepDone = step.state === "DONE";
         }
         return {};
       }
       case "result": {
         const result = event.result || {};
-        if (result.status !== "SUCCESS")
-          return { error: String(result.error?.message || result.error || tr`Antigravity หยุดทำงาน (${result.status || tr("ไม่ทราบสาเหตุ")})`) };
         const response = typeof result.response === "string" ? result.response.trim() : "";
+        if (result.status !== "SUCCESS") {
+          const rawError = String(result.error?.message || result.error || tr`Antigravity หยุดทำงาน (${result.status || tr("ไม่ทราบสาเหตุ")})`);
+          const finishedAnswer = lastStepType === "agent_response" && lastStepHasText && lastStepDone && !sawErrorStep;
+          const idleMatch = rawError.match(/stream idle timeout \(([^)]+)\)/i);
+          const idleTimeoutMs = idleMatch ? parseGoDurationMs(idleMatch[1]) : undefined;
+          const elapsedSinceProgress = Math.max(0, clock() - lastProgressAt);
+          const plausibleIdleTimeout = idleTimeoutMs !== undefined && elapsedSinceProgress >= idleTimeoutMs * 0.8;
+          const impossibleIdleTimeout = idleTimeoutMs !== undefined
+            && (finishedAnswer || !!options.resumed || !!options.command)
+            && !plausibleIdleTimeout
+            && !sawErrorStep;
+          const isAttemptError = /^API error \(attempt \d+\):/i.test(rawError);
+          const replayedAttemptError = isAttemptError && !sawErrorStep && !plausibleIdleTimeout && (
+            finishedAnswer
+            || (!!options.resumed && !!options.previousStaleError && rawError === options.previousStaleError)
+          );
+          if (impossibleIdleTimeout || replayedAttemptError) {
+            return {
+              done: true,
+              ignoredError: rawError,
+              items: !answered && response ? [{ id: `${prefix}-result`, kind: "assistant", text: response }] : undefined,
+            };
+          }
+          return { error: rawError };
+        }
         // agy reports success with no answer when a tool it needed was refused in this mode.
         const denied = Array.isArray(result.denied_actions) ? result.denied_actions.map((d: any) => String(d?.display_name || d?.action || "")).filter(Boolean) : [];
         if (!answered && !response && denied.length)
@@ -485,6 +569,7 @@ interface Chat extends Omit<ChatSnapshot, "queued"> {
   /** Claude's AskUserQuestion calls waiting for the user's choices. */ asks: Map<string, { live: LiveClaude; itemId: string }>;
   /** Project context already in this conversation (CLIs other than the live Claude get it once). */ contextKey?: string;
   /** Which version of the question rules this conversation already has, sent once like the context. */ rulesKey?: string;
+  /** Stale trajectory error known to be replayed by Antigravity CLI across resumed turns. */ staleError?: string;
 }
 export interface ChatFork { items: ChatItem[]; turns: number; seed: string; }
 export interface ChatRequest { accountId?: string; agent: string; cwd: string; text: string; draftText?: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle; /** Internal: pre-resolved by sendAsync so Electron's main thread never blocks. */ resolvedText?: string; /** Internal: pre-created asynchronously by sendAsync (`null` = skipped). */ checkpoint?: Checkpoint | null; }
@@ -520,6 +605,7 @@ export class CliChatManager {
         if (typeof saved.seed === 'string') chat.seed = saved.seed;
         if (typeof saved.contextKey === 'string') chat.contextKey = saved.contextKey;
         if (typeof saved.rulesKey === 'string') chat.rulesKey = saved.rulesKey;
+        if (typeof saved.staleError === 'string') chat.staleError = saved.staleError;
       }
     } catch {
       // an unreadable file starts an empty chat
@@ -534,7 +620,7 @@ export class CliChatManager {
     const write = () => {
       try {
         // Crash-safe: a power cut leaves the previous version, never a half-written file.
-        writeFileSafely(file, JSON.stringify({ conversationId: chat.conversationId, turns: chat.turns, items: chat.items, seed: chat.seed, contextKey: chat.contextKey, rulesKey: chat.rulesKey }));
+        writeFileSafely(file, JSON.stringify({ conversationId: chat.conversationId, turns: chat.turns, items: chat.items, seed: chat.seed, contextKey: chat.contextKey, rulesKey: chat.rulesKey, staleError: chat.staleError }));
       } catch {
         // a full disk must not break the chat on screen
       }
@@ -657,6 +743,7 @@ export class CliChatManager {
     chat.conversationId = conversationId;
     chat.contextKey = undefined;
     chat.rulesKey = undefined;
+    chat.staleError = undefined;
     this.save(id, chat, true);
   }
 
@@ -795,9 +882,9 @@ export class CliChatManager {
     this.emit(chat, { type: "state", running: true });
     this.onChange?.(id);
 
-    const parse = chatParser(agent, prefix);
+    const parse = chatParser(agent, prefix, { resumed: !!chat.conversationId, command, previousStaleError: chat.staleError });
     let proc!: ChildProcess;
-    let pending = "", errors = "", rejections = "", failed = false, finished = false;
+    let pending = "", errors = "", rejections = "", failed = false, finished = false, ignoredStaleError = false;
     let startupTimer: NodeJS.Timeout | undefined, idleTimer: NodeJS.Timeout | undefined;
     let timeoutReason: 'startup' | undefined;
     const finish = (problem?: string) => {
@@ -847,7 +934,12 @@ export class CliChatManager {
       const update = parse(line);
       if (update.conversationId && update.conversationId !== chat.conversationId) {
         chat.conversationId = update.conversationId;
+        chat.staleError = undefined;
         this.onChange?.(id);
+      }
+      if (update.ignoredError) {
+        ignoredStaleError = true;
+        chat.staleError = update.ignoredError;
       }
       for (const item of update.items || []) this.put(id, chat, item);
       if (update.outputTokens && chat.activity) {
@@ -897,7 +989,8 @@ export class CliChatManager {
       const silent = agent === 'opencode' && !openCodeAsk && code === 0 && !chat.cancelled && !failed && !timeoutProblem
         && !chat.items.some((i) => i.kind === 'assistant' && i.id.startsWith(`${prefix}-`) && i.text.trim());
       const toolRejected = chat.items.some((i) => i.kind === 'tool' && i.id.startsWith(`${prefix}-`) && !!i.output?.startsWith('OpenCode ปฏิเสธคำขอสิทธิ์'));
-      finish(timeoutProblem || (silent ? openCodeNoAnswer(rejections, toolRejected) : code === 0 || chat.cancelled ? undefined : cliFailure(agent, request.model || "", errors, "", code, accountId)));
+      const ignoreExit = ignoredStaleError && agent === "antigravity" && !timeoutProblem;
+      finish(timeoutProblem || (silent ? openCodeNoAnswer(rejections, toolRejected) : code === 0 || chat.cancelled || ignoreExit ? undefined : cliFailure(agent, request.model || "", errors, "", code, accountId)));
     };
     const activity = () => {
       if (finished || timeoutReason || chat.cancelled) return;

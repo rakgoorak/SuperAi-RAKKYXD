@@ -93,6 +93,9 @@ export function cliFailure(provider: string, model: string, errors: string, outp
   if (/Unexpected server error/i.test(raw)) {
     return tr`${provider}: เซิร์ฟเวอร์ของผู้ให้บริการมีปัญหาชั่วคราว (Unexpected server error) กรุณาลองใหม่อีกครั้งหรือสลับโมเดล`;
   }
+  if (/stream idle timeout|context deadline exceeded/i.test(raw)) {
+    return tr`${provider}: การเชื่อมต่อกับเซิร์ฟเวอร์ขาดช่วงหรือหมดเวลารอ (stream idle timeout) กรุณาลองส่งใหม่อีกครั้ง หากบทสนทนายาวมากแนะนำให้ใช้ /compact หรือเปิดห้องใหม่`;
+  }
 
   const message = [...raw.matchAll(/"message"\s*:\s*"([^"]{3,400})"/g)].at(-1)?.[1];
   const modelProblem = /model.*(not supported|not found|does not exist|unknown)|Model not found/i.test(message || raw);

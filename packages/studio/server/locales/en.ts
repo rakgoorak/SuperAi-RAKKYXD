@@ -215,6 +215,7 @@ const text: Record<string, string> = {
   " (รีเซ็ตใน {0})": " (resets in {0})",
   "{0}: โควตาการใช้งานเต็มแล้ว{1} กรุณารอหรือสลับไปใช้โมเดลอื่น": "{0}: the usage quota is used up{1}. Please wait or switch to another model",
   "{0}: เซิร์ฟเวอร์ของผู้ให้บริการมีปัญหาชั่วคราว (Unexpected server error) กรุณาลองใหม่อีกครั้งหรือสลับโมเดล": "{0}: the provider's server has a temporary problem (Unexpected server error). Please try again or switch model",
+  "{0}: การเชื่อมต่อกับเซิร์ฟเวอร์ขาดช่วงหรือหมดเวลารอ (stream idle timeout) กรุณาลองส่งใหม่อีกครั้ง หากบทสนทนายาวมากแนะนำให้ใช้ /compact หรือเปิดห้องใหม่": "{0}: the server stream timed out while waiting for a response (stream idle timeout). Please try again; if this chat is very long, run /compact or start a new chat",
   " — รุ่น {0} ใช้กับบัญชีนี้ไม่ได้ ลองเลือก model อื่นในช่อง Model": " — the model {0} cannot be used with this account. Try another model in the Model box",
   "ค่าเริ่มต้นของ CLI": "CLI default",
   "รุ่น Ollama บนเครื่องและ API นอกอ่านรูปหรือ PDF ที่แนบไม่ได้ กรุณาเลือก Claude Code, Codex หรือ OpenCode ในการตั้งค่า หรือส่งไฟล์ในโหมดโค้ด": "Ollama models on this computer and external APIs cannot read attached images or PDFs. Please choose Claude Code, Codex or OpenCode in the settings, or send the file in Code mode",

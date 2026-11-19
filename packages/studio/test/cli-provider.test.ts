@@ -73,6 +73,9 @@ test('CLI failures surface the provider message and a model hint instead of raw 
  assert.match(text, /ลองเลือก model อื่น/);
  assert.ok(!text.includes('WARN noise'));
  assert.equal(cliFailure('cli:claude-code', '', '', '', 2), 'cli:claude-code: exit 2');
+ const timeoutText = cliFailure('antigravity', '', 'API error (attempt 1): request failed: stream idle timeout (10m0s): context deadline exceeded', '', 1);
+ assert.match(timeoutText, /stream idle timeout/);
+ assert.match(timeoutText, /\/compact/);
 });
 
 test('team CLI parses split JSON events and reports provider usage without leaking event JSON into output', async t => {
