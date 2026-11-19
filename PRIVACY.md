@@ -27,7 +27,7 @@ you allow it. On first launch the app asks; until you answer "Allow", nothing is
 | Sent | Example |
 | :--- | :--- |
 | A random ID, created when you allow the count | `0b1e…` (not linked to you, your account or your computer's name) |
-| App version | `1.2.6` |
+| App version | `1.2.8` |
 | Operating system | `win32`, `darwin` |
 
 It is sent every 10 minutes while the app is open, to a Cloudflare Worker

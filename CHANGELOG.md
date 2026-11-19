@@ -6,6 +6,23 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.2.8] - 2026-11-19
+
+### Fixed
+- Fixed an Electron main-process crash (`TypeError: Cannot read properties of undefined (reading 'getURL')`) in `BrowserController.state()` when OAuth or sign-in popups close themselves inside the built-in browser panel (`packages/desktop/browser.mjs`).
+- Adopted popup windows cleanly without passing `webContents: undefined` to `new WebContentsView(...)`, preserving `window.opener`, `persist:superai-preview` session cookies, and `about:blank` redirects.
+- Hardened `browser_click`, `browser_type`, and `browser_press` against mid-action popup switches or self-closing tabs (`packages/desktop/browser-automation.mjs`).
+
+## [1.2.7] - 2026-11-19
+
+### Added
+- Antigravity CLI MCP integration for all SuperAi Browser Use and Computer Use tools, plus clearer tool labeling in chat.
+- Hidden file input discovery & direct upload in Browser Use (`browser_upload`) and Chrome/Edge DevTools tab attachment.
+- Non-blocking asynchronous skill discovery and pre-turn Git checkpoints (`deferCheckpoint` + `AbortSignal`), plus optimistic composer clearing and queue-edit restoration.
+
+### Changed
+- Chrome and Edge launched by SuperAi start in the background unless revealed for sign-in; Codex Auto uses native workspace-sandbox review.
+
 ## [1.2.6] - 2026-11-18
 
 ### Added

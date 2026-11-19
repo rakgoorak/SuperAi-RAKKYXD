@@ -1,3 +1,17 @@
+# SuperAi & RAKKYXD v1.2.8
+
+- **Side browser stability:** Fixed an Electron main-process crash (`Cannot read properties of undefined (reading 'getURL')`) when OAuth or sign-in popups (such as Google Sign-In) close themselves inside the built-in browser panel.
+- **OAuth popups:** Popups opened from the side browser panel now preserve `window.opener`, session cookies (`persist:superai-preview`), and `about:blank` redirects, and automatically return focus to the opener tab when closed.
+- **Browser automation resilience:** `browser_click`, `browser_type`, and `browser_press` safely switch to the active tab if an action opens a popup or closes the current tab.
+
+## ภาษาไทย
+
+- **ความเสถียรของเบราว์เซอร์ในแอป:** แก้ไขปัญหาโปรแกรมหลักแครช (`Cannot read properties of undefined (reading 'getURL')`) เมื่อหน้าต่าง popup สำหรับล็อกอิน (เช่น Google Sign-In) ปิดตัวเองในแผงเบราว์เซอร์ด้านข้าง
+- **Popup ล็อกอิน (OAuth):** หน้าต่าง popup ที่เปิดจากเบราว์เซอร์ในแอปยังคงรักษา `window.opener`, คุกกี้เซสชัน (`persist:superai-preview`) และการเปลี่ยนเส้นทางผ่าน `about:blank` พร้อมสลับกลับแท็บต้นทางอัตโนมัติเมื่อปิด
+- **ความทนทานของ Browser Automation:** คำสั่ง `browser_click`, `browser_type` และ `browser_press` สลับไปจับภาพ/อ่านแท็บที่ใช้งานอยู่ต่อได้อย่างปลอดภัยเมื่อเกิดการเปิดหรือปิด popup ระหว่างทำงาน
+
+---
+
 # SuperAi & RAKKYXD v1.2.7
 
 - **Browser Use:** Chrome and Edge launched by SuperAi run in the background by default. You can show the window for sign-in or opt into a local DevTools connection and select an existing tab.
