@@ -6,6 +6,11 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.3.2] - 2026-11-23
+
+### Added
+- `@room` handoff: the composer's `@` menu lists other chat rooms above project files; picking one sends the receiving AI a bounded summary of that room (requests, final answers, edited files, task list, folder) so work can continue across providers (`packages/studio/server/Handoff.ts`, `packages/studio/client/src/components/MentionMenu.tsx`, `packages/studio/client/src/handoffUtils.ts`).
+
 ## [1.3.1] - 2026-11-23
 
 ### Fixed

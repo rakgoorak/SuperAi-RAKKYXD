@@ -1,3 +1,13 @@
+# SuperAi & RAKKYXD v1.3.2
+
+- **Continue another room's work with @:** Type `@` in the composer and pick another chat room (for example "continue from @Codex · gpt-6.2"). The AI receiving the message gets a summary of that room: what was asked, the final answer of each turn, the files edited, its task list and its folder, so it can pick the work up across providers. The summary goes only to the AI; the chat shows what you typed. Up to 3 rooms per message.
+
+## ภาษาไทย
+
+- **ส่งต่องานข้ามค่ายด้วย @:** พิมพ์ `@` ในช่องพิมพ์แล้วเลือกห้องแชตอื่น (เช่น "ทำงานต่อจาก @Codex · gpt-6.2") AI ที่รับข้อความจะได้สรุปของห้องนั้น ทั้งสิ่งที่สั่งไว้ คำตอบสุดท้ายของแต่ละรอบ ไฟล์ที่แก้ รายการงานที่ค้าง และโฟลเดอร์ของห้อง จึงทำงานต่อจากค่ายอื่นได้ทันที สรุปจะส่งให้ AI อย่างเดียว หน้าแชตแสดงเฉพาะข้อความที่พิมพ์ อ้างอิงได้สูงสุด 3 ห้องต่อข้อความ
+
+---
+
 # SuperAi & RAKKYXD v1.3.1
 
 - **One-click sessions across folders:** Clicking a session listed under another folder in the sidebar (or in the command palette) now opens it directly, switching to that folder instead of snapping back to the current folder's first session.
