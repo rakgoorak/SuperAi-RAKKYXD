@@ -6,6 +6,15 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.3.1] - 2026-11-23
+
+### Fixed
+- Clicking a session under another folder in the sidebar or command palette now switches to that folder and opens the session in one click (`packages/studio/client/src/App.tsx`).
+- The Claude model list no longer repeats each model as both an alias and a full ID, replaces the outdated `claude-fable-5-1` with `claude-fable-5-2`, and shows Claude Desktop-style names (`packages/studio/server/Providers.ts`, `packages/studio/client/src/components/ModelCombo.tsx`).
+
+### Changed
+- Conversations started by typing a first message now default to the "Auto" permission instead of "Read only" (`packages/studio/client/src/App.tsx`).
+
 ## [1.3.0] - 2026-11-19
 
 ### Changed

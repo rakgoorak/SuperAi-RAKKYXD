@@ -1,3 +1,17 @@
+# SuperAi & RAKKYXD v1.3.1
+
+- **One-click sessions across folders:** Clicking a session listed under another folder in the sidebar (or in the command palette) now opens it directly, switching to that folder instead of snapping back to the current folder's first session.
+- **Cleaner Claude model list:** The Claude model menu now lists each model once with the names Claude Desktop uses (Opus 5.5, Sonnet 5.5, Haiku 5.5, Fable 5.2) and shows the full model ID underneath. The CLI still receives the full ID.
+- **New chats start in Auto:** Conversations started by typing a first message now use the "Auto" permission instead of "Read only". You can still change it in the composer at any time.
+
+## ภาษาไทย
+
+- **กด session ในโฟลเดอร์อื่นได้ทันที:** กด session ที่อยู่ในโฟลเดอร์อื่นจากแถบซ้าย (หรือจาก command palette) แล้วเปิดได้เลย ระบบสลับไปโฟลเดอร์นั้นให้เอง ไม่ต้องกดโฟลเดอร์ก่อนอีกแล้ว
+- **รายชื่อโมเดล Claude อ่านง่ายขึ้น:** เมนูโมเดล Claude แสดงแต่ละรุ่นครั้งเดียว ใช้ชื่อแบบ Claude Desktop (Opus 5.5, Sonnet 5.5, Haiku 5.5, Fable 5.2) พร้อม ID จริงตัวเล็กด้านล่าง และยังส่ง ID จริงให้ CLI เหมือนเดิม
+- **แชตใหม่เริ่มที่ "ทำเองอัตโนมัติ":** บทสนทนาที่เริ่มจากการพิมพ์ข้อความแรกจะใช้สิทธิ์ "ทำเองอัตโนมัติ" แทน "อ่านอย่างเดียว" และยังเปลี่ยนสิทธิ์เองได้ที่ช่องพิมพ์ทุกเมื่อ
+
+---
+
 # SuperAi & RAKKYXD v1.3.0
 
 - **Single-switch Computer Use:** Turning on Computer Control in Settings now lets AI assistants click, type, edit, and work directly across regular desktop apps—including Microsoft Edge, Chrome, terminals, and code editors—without repetitive per-app popups.
