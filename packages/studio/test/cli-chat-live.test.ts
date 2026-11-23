@@ -307,3 +307,114 @@ test('live arguments and permission card text', () => {
   assert.deepEqual(permissionSummary('Write', { file_path: 'C:/a.txt', content: 'x' }), { title: 'เขียนไฟล์', detail: 'C:/a.txt' });
   assert.equal(permissionSummary('mcp__x__y', { a: 1 }, 'Do Y').title, 'ใช้เครื่องมือ mcp__x__y · Do Y');
 });
+
+test('a background task ending after the turn: Claude\'s own turn is shown, and the process stays while tasks run', async () => {
+  const fake = liveSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch, { startup: 90000, turn: 600000 }, { idle: 40 });
+  const seen: any[] = [];
+  chats.subscribe('bg', (m) => seen.push(m));
+  chats.send('bg', claude('run the build in the background'));
+  const cli = fake.calls[0];
+  cli.say({ type: 'system', subtype: 'init', session_id: 'sess-bg' });
+  cli.say({ type: 'system', subtype: 'background_tasks_changed', tasks: [{ task_id: 'b1', description: 'npm run build', task_type: 'local_bash' }] });
+  cli.say({ type: 'assistant', message: { id: 'm1', content: [{ type: 'text', text: 'started' }] } });
+  cli.say(result);
+  await until(() => !chats.isRunning('bg'));
+  assert.deepEqual(chats.snapshot('bg').background, [{ id: 'b1', description: 'npm run build' }]);
+  assert.ok(seen.some((m) => m.type === 'background' && m.background.length === 1));
+
+  // Longer than the idle limit: a task is still running, so the process must stay.
+  await new Promise((r) => setTimeout(r, 120));
+  assert.equal(cli.proc.stdin.writableEnded, false, 'not closed while a background task runs');
+
+  // The task ends: Claude reports it and starts a turn by itself.
+  cli.say({ type: 'system', subtype: 'task_notification', task_id: 'b1', status: 'completed' });
+  cli.say({ type: 'system', subtype: 'background_tasks_changed', tasks: [] });
+  cli.say({ type: 'system', subtype: 'init', session_id: 'sess-bg' });
+  await until(() => chats.isRunning('bg'));
+  cli.say({ type: 'assistant', message: { id: 'm2', content: [{ type: 'text', text: 'build finished: ok' }] } });
+  cli.say(result);
+  await until(() => !chats.isRunning('bg'));
+  const items = chats.snapshot('bg').items;
+  assert.ok(items.some((i) => i.kind === 'notice' && /งานเบื้องหลัง/.test(i.text)), 'a notice marks the turn Claude started');
+  assert.ok(items.some((i) => i.kind === 'assistant' && i.text === 'build finished: ok'), 'its answer is kept');
+  assert.equal(items.filter((i) => i.kind === 'user').length, 1, 'no user message is invented');
+  assert.equal(cli.lines().length, 1, 'nothing is written to Claude for its own turn');
+  assert.equal(chats.snapshot('bg').background, undefined);
+
+  // With no task left, the idle limit closes it as before.
+  await until(() => cli.proc.stdin.writableEnded);
+  chats.stopAll();
+});
+
+test('a message sent during Claude\'s own turn waits for it', async () => {
+  const fake = liveSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch);
+  chats.send('bq', claude('start'));
+  const cli = fake.calls[0];
+  cli.say(result);
+  await until(() => !chats.isRunning('bq'));
+  cli.say({ type: 'system', subtype: 'task_notification', task_id: 'b1', status: 'completed' });
+  cli.say({ type: 'system', subtype: 'init', session_id: 'sess-bq' });
+  await until(() => chats.isRunning('bq'));
+  assert.equal(chats.send('bq', claude('next'), { queue: true }), 'queued');
+  cli.say(result);
+  await until(() => cli.lines().length === 2);
+  assert.equal(cli.lines()[1].message.content.includes('next'), true);
+  cli.say(result);
+  await until(() => !chats.isRunning('bq'));
+  chats.stopAll();
+});
+
+// Claude finished one turn and a background task of it is about to end.
+async function afterFirstTurn(id: string, request: object = {}) {
+  const fake = liveSpawner();
+  const chats = new CliChatManager(fake.spawner as any, undefined, launch);
+  chats.send(id, claude('start', request));
+  const cli = fake.calls[0];
+  cli.say(result);
+  await until(() => !chats.isRunning(id));
+  return { chats, cli };
+}
+
+test('a task notification with no turn after it leaves the chat idle', async () => {
+  const { chats, cli } = await afterFirstTurn('bn');
+  cli.say({ type: 'system', subtype: 'task_notification', task_id: 'b1', status: 'completed' });
+  cli.say({ type: 'system', subtype: 'background_tasks_changed', tasks: [] });
+  await tick(); await tick();
+  assert.equal(chats.isRunning('bn'), false, 'not stuck as busy');
+  assert.ok(!chats.snapshot('bn').items.some((i) => i.kind === 'notice' && /งานเบื้องหลัง/.test(i.text)));
+  chats.stopAll();
+});
+
+test('stop works on a turn Claude started itself, and keeps Claude for the next message', async () => {
+  const { chats, cli } = await afterFirstTurn('bs');
+  cli.say({ type: 'system', subtype: 'init', session_id: 'sess-bs' });
+  await until(() => chats.isRunning('bs'));
+  assert.equal(chats.cancel('bs'), true);
+  const interrupt = cli.lines().find((m) => m.type === 'control_request');
+  assert.equal(interrupt?.request.subtype, 'interrupt');
+  cli.say({ type: 'result', subtype: 'error_during_execution', is_error: true, result: '' });
+  await until(() => !chats.isRunning('bs'));
+  assert.ok(chats.snapshot('bs').items.some((i) => i.kind === 'notice' && i.text === 'หยุดแล้ว'));
+  assert.equal(cli.proc.killed, false);
+  chats.send('bs', claude('again'));
+  assert.equal(cli.lines().filter((m) => m.type === 'user').length, 2, 'the same Claude takes the next message');
+  cli.say(result);
+  await until(() => !chats.isRunning('bs'));
+  chats.stopAll();
+});
+
+test('Claude asking permission during its own turn gets a card that answers it', async () => {
+  const { chats, cli } = await afterFirstTurn('bp', { permission: 'ask' });
+  cli.say({ type: 'system', subtype: 'init', session_id: 'sess-bp' });
+  await until(() => chats.isRunning('bp'));
+  cli.say({ type: 'control_request', request_id: 'r1', request: { subtype: 'can_use_tool', tool_name: 'Bash', input: { command: 'npm test' } } });
+  await until(() => chats.snapshot('bp').items.some((i) => i.kind === 'permission'));
+  assert.equal(chats.answerPermission('bp', 'r1', 'allow'), true);
+  const allowed = cli.lines().find((m) => m.type === 'control_response');
+  assert.equal(allowed?.response.response.behavior, 'allow');
+  cli.say(result);
+  await until(() => !chats.isRunning('bp'));
+  chats.stopAll();
+});

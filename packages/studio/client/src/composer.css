@@ -205,6 +205,10 @@
 #root .chat-user:hover .chat-time, #root .chat-user:focus-within .chat-time { opacity: 1; }
 #root .response-time { margin-left: 6px; font-size: 12px; color: var(--dim); }
 #root .chat-queue { display: grid; gap: 6px; }
+#root .chat-background { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--control-border); border-radius: 12px; color: var(--text-secondary); font-size: 13px; }
+#root .chat-background > span:nth-child(2) { display: grid; flex: 1; min-width: 0; }
+#root .chat-background small { color: var(--dim); font-size: 11px; overflow-wrap: anywhere; }
+#root .chat-background > small { flex-shrink: 0; max-width: 40%; text-align: right; }
 #root .chat-queued { display: flex; align-items: center; gap: 8px; margin-left: auto; max-width: 82%; padding: 8px 10px 8px 12px; border: 1px dashed var(--control-border); border-radius: 14px; color: var(--text-secondary); font-size: 14px; }
 #root .chat-queued > span { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 #root .chat-queued > small { color: var(--dim); font-size: 11px; flex-shrink: 0; }

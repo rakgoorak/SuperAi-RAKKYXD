@@ -1595,6 +1595,9 @@ const text: Record<string, string> = {
   "ปิดโหมดเสียงแล้ว": "Voice mode turned off",
   "อ้างอิงห้องแชตหรือไฟล์": "Reference a chat room or file",
   "ทำงานต่อจาก {0}: แนบสรุปงานของห้องนั้นไปกับข้อความนี้": "Continue from {0}: attaches a summary of that room's work to this message",
-  "ห้องแชต · {0} · แนบสรุปงานให้ AI": "Chat room · {0} · sends the AI a summary of its work"
+  "ห้องแชต · {0} · แนบสรุปงานให้ AI": "Chat room · {0} · sends the AI a summary of its work",
+  "งานที่ทำอยู่เบื้องหลัง": "Tasks running in the background",
+  "งานเบื้องหลัง {0} งาน": "{0} background task(s)",
+  "เสร็จแล้ว AI จะทำต่อเองและแจ้งเตือน ไม่ต้องรอหน้าจอนี้": "When they finish, the AI continues on its own and notifies you; no need to wait here"
 };
 export default text;

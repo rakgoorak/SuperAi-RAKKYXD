@@ -46,11 +46,12 @@ type ChatItem =
   | QuestionItem;
 type PermissionItem = { id: string; kind: 'permission'; requestId: string; tool: string; title: string; detail?: string; canAlways?: boolean; status: 'pending' | 'allowed' | 'always' | 'denied' | 'expired'; at: number };
 type Message =
-  | { type: 'snapshot'; chat: { items: ChatItem[]; running: boolean; activity?: Activity; queued?: Queued[] } }
+  | { type: 'snapshot'; chat: { items: ChatItem[]; running: boolean; activity?: Activity; queued?: Queued[]; background?: { id: string; description: string }[] } }
   | { type: 'item'; item: ChatItem }
   | { type: 'state'; running: boolean }
   | { type: 'activity'; activity?: Activity }
-  | { type: 'queue'; queued: Queued[] };
+  | { type: 'queue'; queued: Queued[] }
+  | { type: 'background'; background: { id: string; description: string }[] };
 type Block = Exclude<ChatItem, ToolItem> | { id: string; kind: 'tools'; tools: ToolItem[] };
 
 const ICONS = { command: TerminalIcon, read: FileText, edit: FilePen, search: Search, web: Globe, plan: ListChecks, other: Wrench };
@@ -348,6 +349,8 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
   const [running, setRunning] = useState(false);
   const [activity, setActivity] = useState<Activity | undefined>();
   const [queued, setQueued] = useState<Queued[]>([]);
+  /** Tasks Claude left running after its turn; it picks the work up by itself when each ends. */
+  const [background, setBackground] = useState<{ id: string; description: string }[]>([]);
   const [offline, setOffline] = useState(false);
   const [now, setNow] = useState(Date.now());
   const scroller = useRef<HTMLDivElement>(null);
@@ -454,7 +457,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
         if (disposed) return;
         let message: Message;
         try { message = JSON.parse(event.data); } catch { return; }
-        if (message.type === 'snapshot') { itemBatch.reset(); setItems(message.chat.items); setRunning(message.chat.running); wasRunning.current = message.chat.running; publishChatRunning(sessionId, message.chat.running); setActivity(message.chat.activity); setQueued(message.chat.queued || []); }
+        if (message.type === 'snapshot') { itemBatch.reset(); setItems(message.chat.items); setRunning(message.chat.running); wasRunning.current = message.chat.running; publishChatRunning(sessionId, message.chat.running); setActivity(message.chat.activity); setQueued(message.chat.queued || []); setBackground(message.chat.background || []); }
         else if (message.type === 'state') {
           itemBatch.flush();
           if (wasRunning.current && !message.running) { notifyDone(sessionNotice(sessionId, nameRef.current)); setTurnsDone(n => n + 1); }
@@ -465,6 +468,7 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
         }
         else if (message.type === 'activity') setActivity(message.activity);
         else if (message.type === 'queue') setQueued(message.queued);
+        else if (message.type === 'background') setBackground(message.background);
         else if (message.type === 'item') {
           const item = message.item;
           // A question waits for the user: tell them even when the app is in the background.
@@ -686,6 +690,16 @@ export function ChatView({ sessionId, name, active = true }: { sessionId: string
               {activity?.quiet ? <Clock3 size={14} aria-hidden="true" /> : <span className="chat-pulse" aria-hidden="true"><i /><i /><i /></span>}
               {/* Activity describes observed state; token counts appear only when supplied. */}
               <span>{workingLabel} · {activity?.outputTokens ? `${tokenLabel(activity.outputTokens)} tokens · ` : ''}{seconds >= 60 ? tr`${Math.floor(seconds / 60)} นาที ${seconds % 60} วิ` : tr`${seconds} วิ`}</span>
+            </div>
+          )}
+          {background.length > 0 && (
+            <div className="chat-background" role="status" aria-label={tr("งานที่ทำอยู่เบื้องหลัง")}>
+              <span className="chat-pulse" aria-hidden="true"><i /><i /><i /></span>
+              <span>
+                <strong>{tr`งานเบื้องหลัง ${background.length} งาน`}</strong>
+                <small>{background.map(task => task.description).filter(Boolean).join(' · ')}</small>
+              </span>
+              <small>{tr("เสร็จแล้ว AI จะทำต่อเองและแจ้งเตือน ไม่ต้องรอหน้าจอนี้")}</small>
             </div>
           )}
           {queued.length > 0 && (

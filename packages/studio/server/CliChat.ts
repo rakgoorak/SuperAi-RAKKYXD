@@ -70,13 +70,16 @@ export interface ChatUpdate { items?: NewItem[]; conversationId?: string; error?
 /** The turn in progress: when it started and how many tokens the CLI has written so far. */
 export interface ChatActivity { startedAt: number; outputTokens: number; quiet?: { since: number; timeoutMs: number } }
 export interface QueuedChat { id: string; text: string; attachments?: string[] }
-export interface ChatSnapshot { items: ChatItem[]; running: boolean; conversationId?: string; activity?: ChatActivity; queued: QueuedChat[] }
+/** A task Claude left running after its turn (a background command or agent). */
+export interface BackgroundTask { id: string; description: string }
+export interface ChatSnapshot { items: ChatItem[]; running: boolean; conversationId?: string; activity?: ChatActivity; queued: QueuedChat[]; /** Tasks still running after the turn; Claude picks the work up when each ends. */ background?: BackgroundTask[] }
 export type ChatMessage =
   | { type: "snapshot"; chat: ChatSnapshot }
   | { type: "item"; item: ChatItem }
   | { type: "state"; running: boolean }
   | { type: "activity"; activity?: ChatActivity }
-  | { type: "queue"; queued: QueuedChat[] };
+  | { type: "queue"; queued: QueuedChat[] }
+  | { type: "background"; background: BackgroundTask[] };
 
 // Screenshots a tool returns (Claude Code): shown as thumbnails, kept small enough for the chat file.
 const MAX_IMAGE_CHARS = 2_000_000;
@@ -557,7 +560,7 @@ export function permissionSummary(tool: string, input: any, description?: string
 type Spawner = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
 interface QueuedRequest extends QueuedChat { request: ChatRequest }
 /** A Claude Code process that outlives a turn; `onLine`/`onClose` belong to the turn in progress. */
-interface LiveClaude { proc: ChildProcess; key: string; closed: boolean; errors: string; writeProblem?: string; onWriteFailure?: (message: string) => void; onLine?: (line: string) => void; onClose?: (code: number | null) => void; idle?: NodeJS.Timeout; stopTimer?: NodeJS.Timeout }
+interface LiveClaude { proc: ChildProcess; key: string; closed: boolean; errors: string; /** The last message's settings, reused when Claude starts a turn on its own. */ request?: ChatRequest; writeProblem?: string; onWriteFailure?: (message: string) => void; onLine?: (line: string) => void; onClose?: (code: number | null) => void; idle?: NodeJS.Timeout; stopTimer?: NodeJS.Timeout }
 interface PendingPermission { live: LiveClaude; input: unknown; itemId: string; tool: string; protocol?: 'codex' | 'opencode'; rpcId?: string | number; reply?: (decision: PermissionDecision) => Promise<void>; answering?: boolean }
 interface Chat extends Omit<ChatSnapshot, "queued"> {
   apiAbort?: AbortController;
@@ -690,8 +693,8 @@ export class CliChatManager {
     return item.checkpoint;
   }
   snapshot(id: string): ChatSnapshot {
-    const { items, running, conversationId, activity, queue } = this.chat(id);
-    return { items, running, conversationId, activity, queued: queue.map(({ id, text, attachments }) => ({ id, text, attachments })) };
+    const { items, running, conversationId, activity, queue, background } = this.chat(id);
+    return { items, running, conversationId, activity, queued: queue.map(({ id, text, attachments }) => ({ id, text, attachments })), ...(background?.length ? { background } : {}) };
   }
   /** Read-only view of a room for a handoff summary. */
   handoffItems(id: string): { items: ChatItem[]; running: boolean } {
@@ -787,7 +790,7 @@ export class CliChatManager {
    * Start a turn. While one is running: `queue` holds the message until the turn ends (Ctrl+Enter);
    * `interrupt` stops the turn and sends the message right after it, in the same conversation (Enter).
    */
-  send(id: string, request: ChatRequest, options: { queue?: boolean; interrupt?: boolean; deferCheckpoint?: boolean } = {}): "sent" | "queued" | "interrupted" {
+  send(id: string, request: ChatRequest, options: { queue?: boolean; interrupt?: boolean; deferCheckpoint?: boolean; /** Claude started this turn itself (a background task ended): nothing is written to it. */ selfStarted?: boolean } = {}): "sent" | "queued" | "interrupted" {
     if (isCloud(request.agent)) return this.sendApi(id, request, options);
     const { agent } = request;
     const accountId = accounts.resolve(agent, request.accountId || undefined);
@@ -851,7 +854,8 @@ export class CliChatManager {
     const prompt = command ? text : live ? questionPrompt : `${questionPrompt}\n\n${TASK_PROGRESS}`;
     if (prompt.length > MAX_PROMPT) throw new Error(tr("ข้อความยาวเกินไป กรุณาแบ่งส่งหรือใส่ไว้ในไฟล์แล้วแนบแทน"));
     const liveKey = JSON.stringify([accountId, request.cwd, request.model || "", request.effort || "", request.permission || "auto", systemPrompt || ""]);
-    if (live && chat.live && (chat.live.closed || chat.live.key !== liveKey)) this.closeLive(chat);
+    // A turn Claude started itself runs in the process it is already in, whatever the settings say now.
+    if (live && chat.live && !options.selfStarted && (chat.live.closed || chat.live.key !== liveKey)) this.closeLive(chat);
     const reuse = live && chat.live && !chat.live.closed ? chat.live : undefined;
     const codexAsk = agent === 'codex' && request.permission === 'ask';
     const openCodeAsk = agent === 'opencode' && request.permission === 'ask';
@@ -879,7 +883,7 @@ export class CliChatManager {
     const checkpoint = request.checkpoint !== undefined ? (request.checkpoint || undefined) : (!deferCp && needsCheckpoint ? createCheckpoint(request.cwd) : undefined);
     const prefix = `t${++chat.turns}`;
     const userItem: NewItem = { id: `${prefix}-user`, kind: "user", ...(checkpoint ? { checkpoint } : {}), text, request: { text, model: request.model, effort: request.effort, skillId: request.skillId, attachments: files, permission: request.permission, projectContext: request.projectContext, responseStyle: request.responseStyle }, ...(files.length ? { attachments: files.map((f) => path.basename(f)) } : {}) };
-    this.put(id, chat, userItem);
+    this.put(id, chat, options.selfStarted ? { id: `${prefix}-background`, kind: "notice", text: tr("งานเบื้องหลังเสร็จแล้ว · Claude ทำงานต่อเอง") } : userItem);
     chat.running = true;
     chat.preparing = deferCp;
     chat.activity = { startedAt: Date.now(), outputTokens: 0 };
@@ -906,7 +910,7 @@ export class CliChatManager {
         const current = chat.live;
         current.onLine = undefined; current.onClose = undefined; current.onWriteFailure = undefined;
         clearTimeout(current.stopTimer);
-        if (!current.closed) { current.idle = setTimeout(() => { if (chat.live === current && !chat.running) this.closeLive(chat); }, this.options.idle ?? 15 * 60_000); current.idle.unref?.(); }
+        if (!current.closed) this.scheduleIdle(chat, current);
       }
       for (const [requestId, pending] of chat.permissions) {
         const item = chat.items.find((i) => i.id === pending.itemId);
@@ -975,7 +979,7 @@ export class CliChatManager {
         finish(tr`เปิด ${NAMES[agent]} ไม่สำเร็จ: ${error.message}`);
         return;
       }
-      if (live) current = this.startLive(chat, proc, liveKey);
+      if (live) current = this.startLive(id, chat, proc, liveKey);
     }
     if (current) { clearTimeout(current.idle); proc = current.proc; }
     chat.proc = proc!;
@@ -1202,6 +1206,9 @@ export class CliChatManager {
         lv.writeProblem = message;
         this.kill(lv.proc);
       };
+      if (options.selfStarted) return;
+      const { resolvedText: _rt, checkpoint: _cp, handoff: _h, attachments: _a, ...settings } = request;
+      lv.request = settings;
       const failTurn = lv.onWriteFailure;
       const sendFailed = () => failTurn(tr("ส่งข้อความไปยัง Claude ไม่สำเร็จ โปรดลองส่งอีกครั้ง"));
       if (!this.writeLive(lv, { type: "user", message: { role: "user", content: prompt } }, sendFailed)) sendFailed();
@@ -1261,7 +1268,7 @@ export class CliChatManager {
   }
 
   /** Wire a freshly spawned Claude Code that will serve this chat's turns until closed. */
-  private startLive(chat: Chat, proc: ChildProcess, key: string): LiveClaude {
+  private startLive(id: string, chat: Chat, proc: ChildProcess, key: string): LiveClaude {
     const lv: LiveClaude = { proc, key, closed: false, errors: "" };
     chat.live = lv;
     let pending = "";
@@ -1270,7 +1277,7 @@ export class CliChatManager {
     proc.stdout?.on("data", (chunk: string) => {
       const lines = (pending + chunk).split(/\r?\n/);
       pending = lines.pop() || "";
-      for (const line of lines) if (line.trim()) lv.onLine?.(line);
+      for (const line of lines) if (line.trim()) this.liveLine(id, chat, lv, line);
     });
     proc.stderr?.setEncoding("utf8");
     proc.stderr?.on("data", (chunk: string) => { lv.errors = (lv.errors + chunk).slice(-4000); });
@@ -1278,6 +1285,7 @@ export class CliChatManager {
       if (lv.closed) return;
       if (pending.trim()) lv.onLine?.(pending);
       lv.closed = true;
+      this.setBackground(chat, []);
       clearTimeout(lv.idle); clearTimeout(lv.stopTimer);
       if (chat.live === lv) chat.live = undefined;
       lv.onClose?.(code);
@@ -1439,6 +1447,42 @@ ${reply}` } } });
   }
 
   /** Let a live Claude finish on its own: close its input, then make sure it is gone. */
+  /**
+   * Every line from a live Claude. Between turns Claude still talks: when a background task it
+   * started ends, it reports `task_notification` and then begins a turn of its own (`init`). That turn is shown
+   * like any other (without a user message) instead of being dropped.
+   */
+  private liveLine(id: string, chat: Chat, lv: LiveClaude, line: string) {
+    if (line.includes('"background_tasks_changed"')) {
+      try {
+        const event = JSON.parse(line);
+        if (event?.type === "system" && event.subtype === "background_tasks_changed" && Array.isArray(event.tasks))
+          this.setBackground(chat, event.tasks.map((task: any) => ({ id: String(task?.task_id || ""), description: String(task?.description || task?.task_type || "") })).filter((task: BackgroundTask) => task.id));
+      } catch {}
+    }
+    // Only `init` opens the turn: it comes when Claude really starts one. A task notification alone
+    // may not be followed by a turn, and would leave the chat looking busy until stopped.
+    if (!lv.onLine && !lv.closed && chat.live === lv && !chat.running && lv.request && /"type":"system","subtype":"init"/.test(line)) {
+      clearTimeout(lv.idle);
+      try { this.send(id, { ...lv.request, checkpoint: null }, { selfStarted: true }); } catch {}
+    }
+    lv.onLine?.(line);
+  }
+  private setBackground(chat: Chat, tasks: BackgroundTask[]) {
+    if (JSON.stringify(chat.background || []) === JSON.stringify(tasks)) return;
+    chat.background = tasks.length ? tasks : undefined;
+    this.emit(chat, { type: "background", background: tasks });
+  }
+  /** An unused live Claude closes after a while, but never while a task it started is still running. */
+  private scheduleIdle(chat: Chat, lv: LiveClaude) {
+    clearTimeout(lv.idle);
+    lv.idle = setTimeout(() => {
+      if (chat.live !== lv || chat.running) return;
+      if (chat.background?.length) this.scheduleIdle(chat, lv);
+      else this.closeLive(chat);
+    }, this.options.idle ?? 15 * 60_000);
+    lv.idle.unref?.();
+  }
   private closeLive(chat: Chat) {
     const lv = chat.live;
     if (!lv) return;
