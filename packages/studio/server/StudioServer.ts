@@ -38,6 +38,7 @@ import { CliChatManager, CHAT_CLIS, CHAT_PERMISSIONS, supportsChatPermission } f
 import { getProjectRules, nativeRuleFiles } from "./ProjectRules.js";
 import { buildProjectContext, readProjectText } from './ProjectContext.js';
 import { responseStyle } from './ResponseStyle.js';
+import { handoffBlock } from './Handoff.js';
 import { cleanPrediction, nextPromptRequest, predictionSeat } from './NextPrompt.js';
 import { CliProvider } from './CliProvider.js';
 import { listMcpServers, saveMcpServer, removeMcpServer, toggleMcpServer } from './McpManager.js';
@@ -1249,6 +1250,13 @@ export class StudioServer {
         if (req.body.permission !== undefined && !supportsChatPermission(agent, req.body.permission)) throw new Error(tr("สิทธิ์นี้ไม่รองรับสำหรับ provider นี้"));
         if (req.body.includeProjectContext !== undefined && typeof req.body.includeProjectContext !== 'boolean') throw new Error(tr("การตั้งค่าบริบทโปรเจกต์ไม่ถูกต้อง"));
         const style = responseStyle(req.body.responseStyle);
+        // "@room" in the composer: hand this AI a summary of what that room did.
+        const from: unknown[] = Array.isArray(req.body.handoffFrom) ? req.body.handoffFrom : [];
+        if (from.length > 3 || from.some(item => typeof item !== "string")) throw new Error(tr("อ้างอิงห้องอื่นได้ไม่เกิน 3 ห้องต่อข้อความ"));
+        const handoff = handoffBlock([...new Set(from as string[])].filter(sourceId => sourceId !== id).flatMap(sourceId => {
+          const source = this.terminalManager.getSession(sourceId);
+          return source ? [{ name: source.name, agent: source.agentType || "", cwd: source.cwd, ...this.chats.handoffItems(sourceId) }] : [];
+        }));
         if (!isCloud(agent)) await cliAuth.requireReady(agent, session.accountId || "system");
         if (this.terminalManager.getSession(id) !== session || this.viewOf(id) !== "chat") return res.status(409).json({ error: tr("session เปลี่ยนไปแล้ว กรุณาลองใหม่") });
         if (session.sleeping || ["running", "stopping"].includes(session.status)) return res.status(409).json({ error: tr("Terminal ยังปิดไม่เสร็จ กรุณารอก่อนส่งข้อความ") });
@@ -1266,6 +1274,7 @@ export class StudioServer {
           attachments,
           projectContext: req.body.includeProjectContext === false ? { text: '', instructions: false, files: [], preparedAt: Date.now(), chunks: [] } : buildProjectContext(session.wsId ? this.workspaceRegistry.getWorkspace(session.wsId) : undefined, session.cwd, { native: nativeRuleFiles(agent) }),
           responseStyle: style,
+          ...(handoff ? { handoff } : {}),
         // Enter while the chat is answering waits for the current turn (like Codex and Claude Code);
         // Ctrl+Enter (`interrupt: true`) stops that turn and sends at once.
         }, { queue: req.body.interrupt !== true, interrupt: req.body.interrupt === true, deferCheckpoint: true });

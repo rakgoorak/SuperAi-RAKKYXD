@@ -565,6 +565,7 @@ const text: Record<string, string> = {
   "ไม่พบตำแหน่งที่ติดตั้งโปรแกรม": "The app's install location was not found",
   "ไม่มีสิทธิ์เขียนโฟลเดอร์ {0} ย้ายโปรแกรมไปไว้ในโฟลเดอร์ของคุณ (เช่น Documents) แล้วลองใหม่": "No permission to write the folder {0}. Move the app into one of your own folders (e.g. Documents) and try again",
   "เริ่มตัวติดตั้งไม่สำเร็จ (หมดเวลา) กรุณาลองใหม่": "Could not start the installer (timed out). Please try again",
-  "เริ่มตัวติดตั้งไม่สำเร็จ (รหัส {0})": "Could not start the installer (code {0})"
+  "เริ่มตัวติดตั้งไม่สำเร็จ (รหัส {0})": "Could not start the installer (code {0})",
+  "อ้างอิงห้องอื่นได้ไม่เกิน 3 ห้องต่อข้อความ": "A message can reference at most 3 other rooms"
 };
 export default text;

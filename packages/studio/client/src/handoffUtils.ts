@@ -193,3 +193,29 @@ export function getQuickAgentTargets(
     };
   });
 }
+
+/**
+ * Rooms a message continues from: every `@<room name>` in the text. A name picked from the
+ * @ menu maps to that exact room; a typed or restored name prefers the room in the same folder.
+ * The room receiving the message is never its own source, and at most three rooms are sent.
+ */
+export function findHandoffSources(
+  text: string,
+  sessions: Array<{ id: string; name: string; wsId?: string }>,
+  options: { targetId?: string; workspaceId?: string; picked?: ReadonlyMap<string, string> } = {}
+): string[] {
+  const found: string[] = [];
+  // Longest names first, so "@Codex · gpt-6.2" isn't also counted as a room called "Codex".
+  const names = [...new Set(sessions.map((s) => s.name).filter(Boolean))].sort((a, b) => b.length - a.length);
+  let rest = text;
+  for (const name of names) {
+    const token = `@${name}`;
+    if (!rest.includes(token)) continue;
+    rest = rest.split(token).join(' ');
+    const pickedId = options.picked?.get(name);
+    const candidates = sessions.filter((s) => s.name === name && s.id !== options.targetId);
+    const chosen = candidates.find((s) => s.id === pickedId) || candidates.find((s) => s.wsId === options.workspaceId) || candidates[0];
+    if (chosen && !found.includes(chosen.id)) found.push(chosen.id);
+  }
+  return found.slice(0, 3);
+}

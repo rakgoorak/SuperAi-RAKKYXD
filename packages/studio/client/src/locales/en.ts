@@ -1592,6 +1592,9 @@ const text: Record<string, string> = {
   "เปิดไมโครโฟนไม่ได้: {0}": "Cannot open the microphone: {0}",
   "ยังไม่ได้เปิดไมโครโฟน": "The microphone is not on yet",
   "ระบบแปลงเสียงหยุดทำงาน": "The speech system stopped working",
-  "ปิดโหมดเสียงแล้ว": "Voice mode turned off"
+  "ปิดโหมดเสียงแล้ว": "Voice mode turned off",
+  "อ้างอิงห้องแชตหรือไฟล์": "Reference a chat room or file",
+  "ทำงานต่อจาก {0}: แนบสรุปงานของห้องนั้นไปกับข้อความนี้": "Continue from {0}: attaches a summary of that room's work to this message",
+  "ห้องแชต · {0} · แนบสรุปงานให้ AI": "Chat room · {0} · sends the AI a summary of its work"
 };
 export default text;

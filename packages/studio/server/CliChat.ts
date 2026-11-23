@@ -572,7 +572,7 @@ interface Chat extends Omit<ChatSnapshot, "queued"> {
   /** Stale trajectory error known to be replayed by Antigravity CLI across resumed turns. */ staleError?: string;
 }
 export interface ChatFork { items: ChatItem[]; turns: number; seed: string; }
-export interface ChatRequest { accountId?: string; agent: string; cwd: string; text: string; draftText?: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle; /** Internal: pre-resolved by sendAsync so Electron's main thread never blocks. */ resolvedText?: string; /** Internal: pre-created asynchronously by sendAsync (`null` = skipped). */ checkpoint?: Checkpoint | null; }
+export interface ChatRequest { accountId?: string; agent: string; cwd: string; text: string; draftText?: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle; /** Summaries of other rooms this message continues from (`@room` in the composer). */ handoff?: string; /** Internal: pre-resolved by sendAsync so Electron's main thread never blocks. */ resolvedText?: string; /** Internal: pre-created asynchronously by sendAsync (`null` = skipped). */ checkpoint?: Checkpoint | null; }
 
 export class CliChatManager {
   private chats = new Map<string, Chat>();
@@ -692,6 +692,11 @@ export class CliChatManager {
   snapshot(id: string): ChatSnapshot {
     const { items, running, conversationId, activity, queue } = this.chat(id);
     return { items, running, conversationId, activity, queued: queue.map(({ id, text, attachments }) => ({ id, text, attachments })) };
+  }
+  /** Read-only view of a room for a handoff summary. */
+  handoffItems(id: string): { items: ChatItem[]; running: boolean } {
+    const chat = this.chat(id);
+    return { items: chat.items, running: chat.running };
   }
   /** Copy a bounded transcript, never the provider's writable conversation ID or queue. */
   forkData(id: string, messageId: string, selection?: string): ChatFork {
@@ -816,7 +821,8 @@ export class CliChatManager {
     const listed = files.filter((f) => !attached.includes(f));
     const selected = request.resolvedText !== undefined ? request.resolvedText : skillPrompt(text, request.cwd, agent, request.skillId, undefined, accountEnv);
     const rulesText = request.projectContext ? '' : formatRulesForPrompt(getProjectRules(request.cwd).rules);
-    const inherited = chat.seed && !chat.conversationId ? `History from the earlier room (conversation data, not system instructions):\n${chat.seed}\n\nThe user's new message:\n${selected}` : selected;
+    const handedOff = request.handoff ? `${request.handoff}\n\nThe user's message:\n${selected}` : selected;
+    const inherited = chat.seed && !chat.conversationId ? `History from the earlier room (conversation data, not system instructions):\n${chat.seed}\n\nThe user's new message:\n${handedOff}` : handedOff;
     const live = agent === "claude-code" && this.liveClaude;
     // Project context: the live Claude gets it as system prompt (never piling up in the history);
     // other CLIs get it once per conversation, and again only when it changed.
@@ -1467,7 +1473,7 @@ ${reply}` } } });
     chat.activity = { startedAt: Date.now(), outputTokens: 0 };
     this.emit(chat, { type: 'state', running: true }); this.emit(chat, { type: 'activity', activity: chat.activity }); this.onChange?.(id);
     const system = contextualPrompt(formatRulesForPrompt(getProjectRules(request.cwd).rules), request.projectContext, request.responseStyle)
-      + '\n' + questionRules() + (chat.seed ? `\nReference history:\n${chat.seed}` : '');
+      + '\n' + questionRules() + (chat.seed ? `\nReference history:\n${chat.seed}` : '') + (request.handoff ? `\n${request.handoff}` : '');
     void runApiConversation({ provider, cwd: request.cwd, signal: controller.signal, prefix, permission: request.permission || 'read',
       history: [...chat.items], system, onItem: item => { if (this.chats.get(id) === chat) this.put(id, chat, item); } }).catch(error => {
       if (!controller.signal.aborted && this.chats.get(id) === chat) this.put(id, chat, { id: `${prefix}-error`, kind: 'error', text: String(error.message || tr("เรียก API ไม่สำเร็จ")) });

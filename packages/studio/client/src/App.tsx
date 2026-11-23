@@ -4,7 +4,8 @@ import { InteractiveTour } from "./components/InteractiveTour";
 import { HistoryPanel, type HistoryEntry } from "./components/HistoryPanel";
 import { RunActions } from "./components/RunActions";
 import { SlashMenu, type SlashMenuHandle } from "./components/SlashMenu";
-import { MentionMenu, type MentionMenuHandle } from "./components/MentionMenu";
+import { MentionMenu, type MentionMenuHandle, type MentionSession } from "./components/MentionMenu";
+import { findHandoffSources } from "./handoffUtils";
 import { CommandPalette } from "./components/CommandPalette";
 import { useTranslation, dateLocale } from "./i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -140,6 +141,8 @@ export function App() {
   };
   const slashMenu = useRef<SlashMenuHandle>(null);
   const mentionMenu = useRef<MentionMenuHandle>(null);
+  /** Room names picked from the @ menu → the exact room, for "continue from @room". */
+  const handoffPicks = useRef(new Map<string, string>());
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWs, setActiveWs] = useState(initial("superai-workspace", ""));
   const [openProjectIds, setOpenProjectIds] = useState<string[]>(() => activeWs ? [activeWs] : []);
@@ -357,6 +360,11 @@ export function App() {
   // The one chat session the composer sends to gets its Model/Effort/skills/account controls there.
   const composerTarget = target === "all" ? undefined : selectedSession;
   const chatTarget = mode === "code" && composerTarget && paneView(composerTarget) === "chat" ? composerTarget : undefined;
+  // Rooms the composer can continue from with "@": every other room, this folder's first.
+  const mentionSessions: MentionSession[] = sessions
+    .filter(s => s.id !== composerTarget?.id)
+    .sort((a, b) => Number(b.wsId === activeWs) - Number(a.wsId === activeWs))
+    .map(s => ({ id: s.id, name: s.name, agentType: s.agentType, detail: `${providerIdentity(s.agentType).label} · ${workspaces.find(w => w.id === s.wsId)?.name || ""}` }));
   const [nextPrompts, setNextPrompts] = useState<Record<string, string>>({});
   useEffect(() => onNextPrompt((sessionId, text) => setNextPrompts(current => ({ ...current, [sessionId]: text }))), []);
   const nextPrompt = chatTarget && !draft ? nextPrompts[chatTarget.id] || "" : "";
@@ -742,7 +750,8 @@ export function App() {
         const files: SavedAttachment[] = [];
         for (const item of attachments.items) files.push(await uploadAttachment(`/api/workspaces/${ws.id}/attachments`, item.file));
         await post(`/api/terminals/${session.id}/chat`, { text: draft.trim() || tr("ดูไฟล์แนบนี้"),
-          model: chosen.model, effort: chosen.effort, permission: "auto", responseStyle: styleToSend(answerStyle), attachments: files.map(file => file.path) });
+          model: chosen.model, effort: chosen.effort, permission: "auto", responseStyle: styleToSend(answerStyle), attachments: files.map(file => file.path),
+          handoffFrom: findHandoffSources(draft, sessions, { targetId: session.id, workspaceId: ws.id, picked: handoffPicks.current }) });
         setChatPrefs(session.id, { responseStyle: answerStyle });
         const created = namedSessions([session])[0];
         refreshSeq.current++;
@@ -821,6 +830,7 @@ export function App() {
                 includeProjectContext: prefs.includeProjectContext,
                 ...(skillId ? { skillId } : {}),
                 attachments: saved.map((file) => file.path),
+                handoffFrom: findHandoffSources(submittedText, sessions, { targetId: recipient.id, workspaceId: workspace.id, picked: handoffPicks.current }),
                 ...(interruptNow ? { interrupt: true } : {}),
               });
               if (result.queued) queuedCount++;
@@ -1875,7 +1885,8 @@ export function App() {
                   </div>
                   <div className="composer-input-container" data-tour="composer">
                     <SlashMenu ref={slashMenu} draft={draft} sessionId={chatTarget?.id} workspaceId={mode === "chat" ? workspace?.id : undefined} providers={mode === "chat" ? [...new Set((chatConfig?.panel || []).filter(seat => seat.provider.startsWith("cli:")).map(seat => `${seat.provider.slice(4)}:${seat.accountId || ""}`))] : []} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
-                    <MentionMenu ref={mentionMenu} draft={draft} workspaceId={workspace?.id} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }} />
+                    <MentionMenu ref={mentionMenu} draft={draft} workspaceId={workspace?.id} onDraft={text => { setDraft(text); requestAnimationFrame(() => composer.current?.focus()); }}
+                      sessions={mentionSessions} onSessionPick={room => handoffPicks.current.set(room.name, room.id)} />
                     <textarea
                       ref={composer}
                       rows={mode === "code" ? 1 : 3}

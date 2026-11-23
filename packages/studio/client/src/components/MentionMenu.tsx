@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { AtSign, FileCode, FileText, FileImage, File, X } from 'lucide-react';
+import { ProviderBadge } from './ProviderBadge';
 import { api } from '../api';
 import { tr } from '../i18n';
 
@@ -18,11 +19,24 @@ export interface MentionMenuHandle {
   keyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
 }
 
+/** Another chat room the message can continue from ("@Codex · gpt-6.2"). */
+export interface MentionSession {
+  id: string;
+  name: string;
+  agentType: string;
+  /** Provider and folder, shown under the name. */
+  detail: string;
+}
+
 interface Props {
   draft: string;
   workspaceId?: string;
   onDraft: (text: string) => void;
+  sessions?: MentionSession[];
+  onSessionPick?: (session: MentionSession) => void;
 }
+
+type Choice = { kind: 'session'; session: MentionSession } | { kind: 'file'; file: string };
 
 export function extractMentionQuery(text: string): { query: string; mentionIndex: number } | null {
   const match = /(?:^|\s)@([^\s]*)$/.exec(text);
@@ -65,7 +79,7 @@ function getFileIcon(filename: string) {
 }
 
 export const MentionMenu = forwardRef<MentionMenuHandle, Props>(function MentionMenu(
-  { draft, workspaceId, onDraft },
+  { draft, workspaceId, onDraft, sessions = [], onSessionPick },
   ref
 ) {
   const id = useId();
@@ -79,7 +93,7 @@ export const MentionMenu = forwardRef<MentionMenuHandle, Props>(function Mention
   const [active, setActive] = useState(0);
 
   const mentionInfo = extractMentionQuery(draft);
-  const searching = !!workspaceId && mentionInfo !== null;
+  const searching = (!!workspaceId || sessions.length > 0) && mentionInfo !== null;
   const open = searching && dismissed !== draft;
 
   useLayoutEffect(() => {
@@ -123,9 +137,12 @@ export const MentionMenu = forwardRef<MentionMenuHandle, Props>(function Mention
   }, [draft, workspaceId]);
 
   const query = mentionInfo?.query || '';
+  // Rooms first: "@codex" should find the Codex room before files that mention codex.
+  const roomMatches = sessions.filter(session => !query || `${session.name} ${session.detail}`.toLowerCase().replace(/\s+/g, '').includes(query)).slice(0, 6);
+  const choices: Choice[] = [...roomMatches.map(session => ({ kind: 'session' as const, session })), ...files.map(file => ({ kind: 'file' as const, file }))];
 
   useEffect(() => {
-    if (!searching || !workspaceId) return;
+    if (!searching || !workspaceId) { setFiles([]); return; }
     let disposed = false;
     setLoading(true);
     setError('');
@@ -149,17 +166,16 @@ export const MentionMenu = forwardRef<MentionMenuHandle, Props>(function Mention
     };
   }, [searching, workspaceId, query]);
 
-  const pick = (filePath: string) => {
+  const insert = (token: string) => {
     const current = extractMentionQuery(draft);
-    if (current) {
-      const prefix = draft.slice(0, current.mentionIndex);
-      const next = `${prefix}@${filePath} `;
-      onDraft(next);
-      setDismissed(next);
-    } else {
-      onDraft(`@${filePath} `);
-      setDismissed(`@${filePath} `);
-    }
+    const next = `${current ? draft.slice(0, current.mentionIndex) : ''}@${token} `;
+    onDraft(next);
+    setDismissed(next);
+  };
+  const pick = (choice: Choice) => {
+    if (choice.kind === 'file') return insert(choice.file);
+    onSessionPick?.(choice.session);
+    insert(choice.session.name);
   };
 
   useImperativeHandle(ref, () => ({
@@ -173,22 +189,22 @@ export const MentionMenu = forwardRef<MentionMenuHandle, Props>(function Mention
       if (['ArrowDown', 'ArrowUp'].includes(event.key)) {
         event.preventDefault();
         setActive((index) =>
-          files.length ? (index + (event.key === 'ArrowDown' ? 1 : -1) + files.length) % files.length : 0
+          choices.length ? (index + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length : 0
         );
         return true;
       }
       if (event.key === 'Tab') {
-        if (files[active]) {
+        if (choices[active]) {
           event.preventDefault();
-          pick(files[active]);
+          pick(choices[active]);
           return true;
         }
         setDismissed(draft);
         return false;
       }
-      if (event.key === 'Enter' && !event.shiftKey && files[active]) {
+      if (event.key === 'Enter' && !event.shiftKey && choices[active]) {
         event.preventDefault();
-        pick(files[active]);
+        pick(choices[active]);
         return true;
       }
       return false;
@@ -207,14 +223,35 @@ export const MentionMenu = forwardRef<MentionMenuHandle, Props>(function Mention
           <div ref={popup} className="slash-menu mention-menu" aria-label={tr("อ้างอิงไฟล์")} style={position}>
             <header>
               <strong>
-                <AtSign size={14} /> {tr("อ้างอิงไฟล์ในโปรเจกต์")} <small>{files.length}</small>
+                <AtSign size={14} /> {roomMatches.length ? tr("อ้างอิงห้องแชตหรือไฟล์") : tr("อ้างอิงไฟล์ในโปรเจกต์")} <small>{choices.length}</small>
               </strong>
               <button type="button" aria-label={tr("ปิดรายการไฟล์")} onClick={() => setDismissed(draft)}>
                 <X size={15} />
               </button>
             </header>
             <div role="listbox" id={`${id}-list`} aria-label={tr("เลือกไฟล์")}>
-              {files.map((file, index) => {
+              {roomMatches.map((session, index) => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={active === index}
+                  id={`${id}-${index}`}
+                  key={`session-${session.id}`}
+                  className={active === index ? 'active' : ''}
+                  title={tr`ทำงานต่อจาก ${session.name}: แนบสรุปงานของห้องนั้นไปกับข้อความนี้`}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setActive(index)}
+                  onClick={() => pick({ kind: 'session', session })}
+                >
+                  <span className="slash-symbol"><ProviderBadge provider={session.agentType} compact /></span>
+                  <span className="slash-choice">
+                    <strong>{session.name}</strong>
+                    <small>{tr`ห้องแชต · ${session.detail} · แนบสรุปงานให้ AI`}</small>
+                  </span>
+                </button>
+              ))}
+              {files.map((file, fileIndex) => {
+                const index = roomMatches.length + fileIndex;
                 const parts = file.split('/');
                 const fileName = parts.pop() || file;
                 const dirPath = parts.join('/');
@@ -229,7 +266,7 @@ export const MentionMenu = forwardRef<MentionMenuHandle, Props>(function Mention
                     title={file}
                     onMouseDown={(event) => event.preventDefault()}
                     onMouseEnter={() => setActive(index)}
-                    onClick={() => pick(file)}
+                    onClick={() => pick({ kind: 'file', file })}
                   >
                     <span className="slash-symbol" style={{ color: 'var(--accent)' }}>
                       {getFileIcon(fileName)}
@@ -244,7 +281,7 @@ export const MentionMenu = forwardRef<MentionMenuHandle, Props>(function Mention
             </div>
             {loading && <p role="status">{tr("กำลังค้นหาไฟล์…")}</p>}
             {error && <p role="alert">{error}</p>}
-            {!loading && !error && !files.length && <p>{tr("ไม่พบไฟล์ที่ตรงกับคำค้นหา")}</p>}
+            {!loading && !error && !choices.length && <p>{tr("ไม่พบไฟล์ที่ตรงกับคำค้นหา")}</p>}
             <footer>
               <span>{tr("↑ ↓ หรือ Tab เลือก · Enter เติม · Esc ปิด")}</span>
               <span>{tr("อ้างอิงบริบทเข้าพร้อมคำสั่ง")}</span>
