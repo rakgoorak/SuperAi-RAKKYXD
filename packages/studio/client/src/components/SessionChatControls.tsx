@@ -98,7 +98,7 @@ export function SessionChatControls({ sessionId, name, disabled }: { sessionId: 
       {agent && <ProviderBadge provider={agent} />}
       {ready && profiles > 1 && <span className="session-account-name" title={tr("บัญชีที่ห้องนี้ใช้")}>{profileName}</span>}
       <div className="chat-model-controls">
-        <label>Model<ModelCombo label={tr`Model ในแชท ${name}`} value={model} options={list?.models || []} onOpen={refreshModels} placeholder={tr("ค่าเริ่มต้นของ CLI")} disabled={disabled || !ready}
+        <label>Model<ModelCombo label={tr`Model ในแชท ${name}`} value={model} options={list?.models || []} labels={list?.modelLabels} onOpen={refreshModels} placeholder={tr("ค่าเริ่มต้นของ CLI")} disabled={disabled || !ready}
           onChange={(value) => { setModel(value); setEffort(''); }} /></label>
         {efforts.length > 0 && <select className="chat-effort-select" aria-label={tr`Effort ในแชท ${name}`} title={tr("ระดับการคิด")} value={effort} disabled={disabled} onChange={(e) => setEffort(e.target.value)}>
           <option value="">{tr("Effort เริ่มต้น")}</option>{efforts.map((e) => <option key={e} value={e}>{effortLabel(e)}</option>)}

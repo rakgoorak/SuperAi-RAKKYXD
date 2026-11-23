@@ -67,7 +67,7 @@ export function SeatPicker({ seat, onChange, clis, ollamaModels, label, named = 
       <label>
         {tr("รุ่น AI (Model)")}
         {cli || cloud ? (
-          <ModelCombo label={tr`model ของ${label}`} value={seat.model} options={list?.models || []} onOpen={refreshModels} placeholder={tr("ใช้รุ่นเริ่มต้นได้")} disabled={disabled}
+          <ModelCombo label={tr`model ของ${label}`} value={seat.model} options={list?.models || []} labels={list?.modelLabels} onOpen={refreshModels} placeholder={tr("ใช้รุ่นเริ่มต้นได้")} disabled={disabled}
             onChange={(model) => onChange({ ...seat, model: model.trim(), effort: efforts.includes(seat.effort) || !seat.effort ? seat.effort : "" })} />
         ) : (
           <ModelCombo label={tr`model ของ${label}`} value={seat.provider} options={ollamaModels} maxLength={150} placeholder={tr("ชื่อรุ่น Ollama")} disabled={disabled}

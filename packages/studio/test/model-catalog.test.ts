@@ -31,3 +31,11 @@ test('Codex catalog reads new provider models and their efforts without restarti
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+test('Claude models are listed once each, with the names Claude Desktop uses', async () => {
+  const list = await listModels('claude-code');
+  assert.deepEqual(list.models, ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-fable-5-2']);
+  assert.deepEqual(list.models.map((m) => list.modelLabels?.[m]), ['Opus 5.5', 'Sonnet 5.5', 'Haiku 5.5', 'Fable 5.2']);
+  // Values saved by older versions still get a readable name.
+  assert.equal(list.modelLabels?.opus, 'Opus (latest)');
+});

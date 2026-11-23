@@ -336,8 +336,14 @@ export function App() {
     }
     setNotice(tr("ซ่อน session พับเก็บไว้แล้ว · คลิกชื่อในแถบซ้ายหรือแถบด้านบนเพื่อเปิดกลับมาได้ตลอดเวลา"));
   }, [selected, workspaceSessions, hiddenSessions]);
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
   const unhideSession = useCallback((id: string) => {
     setHiddenSessions((prev) => prev.filter((item) => item !== id));
+    // A session in another folder opens in one click: switch to its folder first,
+    // otherwise the selection is dropped because it isn't in the active folder's list.
+    const wsId = sessionsRef.current.find((s) => s.id === id)?.wsId;
+    if (wsId && wsId !== activeWsRef.current) setActiveWs(wsId);
     setSelected(id);
     setMode("code");
   }, []);
@@ -493,8 +499,6 @@ export function App() {
     for (const run of finishedRuns(runStatuses.current, runs))
       notifyDone(runNotice(run, workspaces.find(w => w.id === run.wsId)?.name));
   }, [runs]);
-  const sessionsRef = useRef(sessions);
-  sessionsRef.current = sessions;
   useEffect(() => onNoticeOpen(target => {
     if (target.kind === "run") { setActiveWs(target.wsId); setMode(target.mode); return; }
     const session = sessionsRef.current.find(s => s.id === target.id);
@@ -732,12 +736,13 @@ export function App() {
           if (session.status === "error") throw new Error(tr`เปิด ${providerIdentity(quickProvider).label} ไม่สำเร็จ ตรวจการติดตั้งแล้วลองอีกครั้ง`);
           pendingQuick.current = { session, wsId: ws.id, accountSelection: quickAccount || "" };
           saveQuickConversationState(starterDraftScopes.current, pendingQuick.current);
-          setChatPrefs(session.id, { model: chosen.model, effort: chosen.effort, permission: "read", responseStyle: answerStyle });
+          // New conversations start in "auto" like every other chat; the user can change it in the composer.
+          setChatPrefs(session.id, { model: chosen.model, effort: chosen.effort, permission: "auto", responseStyle: answerStyle });
         }
         const files: SavedAttachment[] = [];
         for (const item of attachments.items) files.push(await uploadAttachment(`/api/workspaces/${ws.id}/attachments`, item.file));
         await post(`/api/terminals/${session.id}/chat`, { text: draft.trim() || tr("ดูไฟล์แนบนี้"),
-          model: chosen.model, effort: chosen.effort, permission: "read", responseStyle: styleToSend(answerStyle), attachments: files.map(file => file.path) });
+          model: chosen.model, effort: chosen.effort, permission: "auto", responseStyle: styleToSend(answerStyle), attachments: files.map(file => file.path) });
         setChatPrefs(session.id, { responseStyle: answerStyle });
         const created = namedSessions([session])[0];
         refreshSeq.current++;

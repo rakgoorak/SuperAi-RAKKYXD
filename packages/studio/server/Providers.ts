@@ -25,6 +25,8 @@ export interface ProviderProfile {
   efforts: string[];
   /** Models we can offer before asking the CLI; users may type any other name. */
   suggestedModels: string[];
+  /** Friendly names shown in place of model IDs (the ID is still what the CLI receives). */
+  modelLabels?: Record<string, string>;
   effortNote?: string;
 }
 
@@ -32,7 +34,19 @@ export const PROVIDER_PROFILES: Record<string, ProviderProfile> = {
   "claude-code": {
     id: "claude-code",
     efforts: ["low", "medium", "high", "xhigh", "max"],
-    suggestedModels: ["opus", "sonnet", "haiku", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1"],
+    // Full IDs only: the bare aliases (opus/sonnet/haiku) point at the same models and showed each one twice.
+    suggestedModels: ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-2"],
+    modelLabels: {
+      "claude-opus-5-5": "Opus 5.5",
+      "claude-sonnet-5-5": "Sonnet 5.5",
+      "claude-haiku-5-5": "Haiku 5.5",
+      "claude-fable-5-2": "Fable 5.2",
+      // Values saved by older versions still read well.
+      "claude-fable-5-1": "Fable 5.1",
+      opus: "Opus (latest)",
+      sonnet: "Sonnet (latest)",
+      haiku: "Haiku (latest)",
+    },
   },
   codex: {
     id: "codex",
@@ -138,7 +152,7 @@ async function antigravityModels(): Promise<string[]> {
   return stdout.split(/\r?\n/).map((line) => line.split("\t")[0].trim()).filter((m) => /^[\w.-]+$/.test(m) && m.includes("-"));
 }
 
-export interface ModelList { models: string[]; efforts: string[]; modelEfforts?: Record<string, string[]>; note?: string }
+export interface ModelList { models: string[]; efforts: string[]; modelEfforts?: Record<string, string[]>; modelLabels?: Record<string, string>; note?: string }
 
 /** Models a provider offers right now. Failures fall back to suggestions plus free typing. */
 export async function listModels(id: string, accountId = "system"): Promise<ModelList> {
@@ -146,7 +160,7 @@ export async function listModels(id: string, accountId = "system"): Promise<Mode
   const env = accounts.environment(id, accountId);
   const profile = PROVIDER_PROFILES[id];
   if (!profile) throw new Error(tr("ไม่รู้จักผู้ให้บริการนี้"));
-  const base = { efforts: profile.efforts, note: profile.effortNote };
+  const base = { efforts: profile.efforts, note: profile.effortNote, ...(profile.modelLabels ? { modelLabels: profile.modelLabels } : {}) };
   try {
     if (id === "codex") {
       const cached = codexCachedModels(env);

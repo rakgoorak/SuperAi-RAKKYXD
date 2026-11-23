@@ -127,7 +127,7 @@ export interface Cli {
 }
 /** One AI seat: tool ("cli:<id>" or an Ollama model), model and effort ("" = CLI default). */
 export interface Seat { accountId?: string; name: string; provider: string; model: string; effort: string; }
-export interface ModelList { models: string[]; efforts: string[]; modelEfforts?: Record<string, string[]>; note?: string; }
+export interface ModelList { models: string[]; efforts: string[]; modelEfforts?: Record<string, string[]>; modelLabels?: Record<string, string>; note?: string; }
 export interface CliAuthStatus { id: string; status: "authenticated" | "login-required" | "unknown" | "not-installed"; note: string; checkedAt: number; loginCommand: string }
 export interface ChatSkill { id: string; name: string; description: string; source: string; path: string }
 export async function loginProvider(id: string, context: { sessionId?: string; wsId?: string; accountId?: string }) {

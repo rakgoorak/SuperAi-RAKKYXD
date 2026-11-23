@@ -11,6 +11,8 @@ interface Props {
   maxLength?: number;
   disabled?: boolean;
   onOpen?: () => void;
+  /** Friendly names by model ID; the ID is still what onChange receives. */
+  labels?: Record<string, string>;
 }
 
 /**
@@ -18,14 +20,15 @@ interface Props {
  * shows names that match what is already typed, so a filled-in field looked like it offered a
  * single model. Here the arrow (or an untouched field) shows every model; typing narrows it.
  */
-export function ModelCombo({ value, options, onChange, label, placeholder, maxLength = 200, disabled, onOpen }: Props) {
+export function ModelCombo({ value, options, onChange, label, placeholder, maxLength = 200, disabled, onOpen, labels }: Props) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState(false);
   const [active, setActive] = useState(-1);
+  const nameOf = (model: string) => labels?.[model] || model;
   const query = value.trim().toLowerCase();
-  const shown = typed && query ? options.filter((m) => m.toLowerCase().includes(query)) : options;
+  const shown = typed && query ? options.filter((m) => m.toLowerCase().includes(query) || nameOf(m).toLowerCase().includes(query)) : options;
 
   useEffect(() => {
     if (!open) return;
@@ -42,7 +45,15 @@ export function ModelCombo({ value, options, onChange, label, placeholder, maxLe
   };
   const pick = (model: string) => {
     onChange(model);
+    setTyped(false);
     setOpen(false);
+  };
+  // Typing a friendly name ("opus 5.5") still sends the real ID to the CLI.
+  const settle = () => {
+    if (!typed) return;
+    const match = labels && Object.keys(labels).find((m) => labels[m].toLowerCase() === query);
+    if (match) onChange(match);
+    setTyped(false);
   };
 
   return (
@@ -54,7 +65,8 @@ export function ModelCombo({ value, options, onChange, label, placeholder, maxLe
         aria-controls={`${id}-list`}
         aria-autocomplete="list"
         aria-activedescendant={open && active >= 0 && shown[active] ? `${id}-${active}` : undefined}
-        value={value}
+        value={typed ? value : nameOf(value)}
+        title={labels?.[value] ? value : undefined}
         maxLength={maxLength}
         placeholder={placeholder}
         disabled={disabled}
@@ -77,7 +89,9 @@ export function ModelCombo({ value, options, onChange, label, placeholder, maxLe
             setOpen(false);
           }
         }}
-        onBlur={(e) => !root.current?.contains(e.relatedTarget as Node) && setOpen(false)}
+        // A friendly name is selected on focus so typing replaces it instead of appending to it.
+        onFocus={(e) => { if (labels?.[value]) e.target.select(); }}
+        onBlur={(e) => { if (!root.current?.contains(e.relatedTarget as Node)) { setOpen(false); settle(); } }}
       />
       <button type="button" className="model-combo-toggle" tabIndex={-1} aria-label={tr`ดูรายชื่อ ${label} ทั้งหมด`} disabled={disabled || (!options.length && !onOpen)}
         onMouseDown={(e) => e.preventDefault()}
@@ -96,7 +110,7 @@ export function ModelCombo({ value, options, onChange, label, placeholder, maxLe
               onMouseDown={(e) => e.preventDefault()}
               onMouseEnter={() => setActive(i)}
               onClick={() => pick(model)}>
-              <span>{model}</span>
+              <span>{nameOf(model)}{labels?.[model] && <small className="model-combo-id">{model}</small>}</span>
               {model === value && <Check size={13} />}
             </li>
           ))}
