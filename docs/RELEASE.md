@@ -1,3 +1,13 @@
+# SuperAi & RAKKYXD v1.3.3
+
+- **Long tasks in the background (Claude):** When Claude starts a long command or agent in the background and ends its turn, the chat shows a "background tasks" strip with what is still running. When a task finishes, Claude continues on its own: its new answer appears in the chat (marked "Background task finished · Claude is continuing on its own") and you get a notification, so you no longer need to keep the screen open or ask again. Claude is no longer closed after 15 idle minutes while a task is still running. Messages you send during that turn wait for it, and Stop works as usual.
+
+## ภาษาไทย
+
+- **งานยาวเบื้องหลัง (Claude):** เมื่อ Claude สั่งงานยาวแบบเบื้องหลังแล้วจบรอบ แชตจะแสดงแถบ "งานเบื้องหลัง" ว่ามีอะไรรันอยู่ พองานเสร็จ Claude จะทำต่อเองทันที คำตอบใหม่ขึ้นในแชต (มีป้าย "งานเบื้องหลังเสร็จแล้ว · Claude ทำงานต่อเอง") พร้อมแจ้งเตือน ไม่ต้องเปิดหน้าจอรอหรือสั่งซ้ำ และแอปจะไม่ปิด Claude หลังว่าง 15 นาทีขณะที่ยังมีงานรันอยู่ ข้อความที่พิมพ์ระหว่างนั้นจะต่อคิว และปุ่มหยุดใช้ได้ตามปกติ
+
+---
+
 # SuperAi & RAKKYXD v1.3.2
 
 - **Continue another room's work with @:** Type `@` in the composer and pick another chat room (for example "continue from @Codex · gpt-6.2"). The AI receiving the message gets a summary of that room: what was asked, the final answer of each turn, the files edited, its task list and its folder, so it can pick the work up across providers. The summary goes only to the AI; the chat shows what you typed. Up to 3 rooms per message.

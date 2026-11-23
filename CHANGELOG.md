@@ -6,6 +6,14 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.3.3] - 2026-11-23
+
+### Added
+- Background tasks for Claude chats: the turn Claude Code starts by itself when a background task ends (stream-json `init` between turns) is now shown instead of dropped, with a notice, notification, stop, permission cards and queueing; running tasks from `background_tasks_changed` appear as a strip in the chat (`packages/studio/server/CliChat.ts`, `packages/studio/client/src/components/ChatView.tsx`).
+
+### Fixed
+- The idle close of a live Claude no longer kills background tasks that are still running (`packages/studio/server/CliChat.ts`).
+
 ## [1.3.2] - 2026-11-23
 
 ### Added
