@@ -9,9 +9,10 @@ export interface LanguageOption {
   flag: string;
 }
 
+// English is the app's first language, Thai the second.
 export const SUPPORTED_LANGUAGES: LanguageOption[] = [
-  { code: 'th', label: 'Thai', nativeName: 'ภาษาไทย', flag: '🇹🇭' },
   { code: 'en', label: 'English', nativeName: 'English', flag: '🇬🇧' },
+  { code: 'th', label: 'Thai', nativeName: 'ภาษาไทย', flag: '🇹🇭' },
   { code: 'ja', label: 'Japanese', nativeName: '日本語', flag: '🇯🇵' },
   { code: 'zh', label: 'Chinese', nativeName: '简体中文', flag: '🇨🇳' },
 ];
@@ -571,8 +572,8 @@ export const translations: Record<Locale, Record<string, string>> = {
 };
 
 /**
- * Detect the initial language from localStorage or navigator.
- * Thai OS -> 'th', Japanese OS -> 'ja', Chinese OS -> 'zh', all other global OS -> 'en'.
+ * The window's first language: the one saved in this window, else (in the desktop app) the one the
+ * app starts with, which is the installer's choice or English. A plain browser starts in English.
  */
 export function getInitialLocale(): Locale {
   // Outside a browser (tests and scripts) the text stays as written, in Thai.
@@ -582,9 +583,10 @@ export function getInitialLocale(): Locale {
     if (saved && (saved === 'th' || saved === 'en' || saved === 'ja' || saved === 'zh')) {
       return saved;
     }
-    // First run: the computer's language when the app has it, otherwise English for everyone else.
-    for (const language of navigator.languages?.length ? navigator.languages : [navigator.language]) {
-      const code = String(language || '').toLowerCase().slice(0, 2);
+    // The desktop app starts Chromium in the chosen language (packages/desktop/app.mjs), so there
+    // navigator.language is that choice, never just the computer's language.
+    if (window.superai?.isDesktop) {
+      const code = String(navigator.language || '').toLowerCase().slice(0, 2);
       if (code === 'th' || code === 'en' || code === 'ja' || code === 'zh') return code;
     }
   } catch {}
@@ -627,7 +629,7 @@ export function dateLocale(): string {
  * Cycle to the next supported language (convenient for 1-click header switcher)
  */
 export function cycleLocale(): Locale {
-  const order: Locale[] = ['th', 'en', 'ja', 'zh'];
+  const order: Locale[] = ['en', 'th', 'ja', 'zh'];
   const idx = order.indexOf(currentLocale);
   const next = order[(idx + 1) % order.length];
   setLocale(next);

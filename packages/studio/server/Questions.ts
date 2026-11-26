@@ -32,7 +32,7 @@ export function extractJson(raw: string): any {
         return JSON.parse(text.slice(start, end + 1));
       } catch {}
   }
-  throw new Error("ไม่พบ JSON");
+  throw new Error("No JSON found");
 }
 
 export const MAX_QUESTIONS = 4;

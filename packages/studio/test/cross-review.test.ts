@@ -56,7 +56,7 @@ Here is my review:
 
   // 2. formatApplyPrompt formats issues clearly for author agent
   const applyPrompt = manager.formatApplyPrompt(review);
-  assert.match(applyPrompt, /AI Cross-Review จาก Codex Reviewer/);
+  assert.match(applyPrompt, /AI Cross-Review by Codex Reviewer/);
   assert.match(applyPrompt, /CRITICAL/);
   assert.match(applyPrompt, /Missing null check/);
   assert.match(applyPrompt, /const token = req\.headers\.authorization/);

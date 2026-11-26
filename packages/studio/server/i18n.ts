@@ -16,10 +16,11 @@ const TEXT: Record<Locale, Record<string, string> | null> = { th: null, en, ja, 
 const isLocale = (value: unknown): value is Locale => typeof value === "string" && Object.prototype.hasOwnProperty.call(TEXT, value);
 const file = () => path.join(process.env.SUPERAI_DATA_DIR || path.join(os.homedir(), ".opencode-multi"), "locale.txt");
 
-// Until the window reports its choice: the computer's language when supported, otherwise English.
-// SUPERAI_LANG (the same switch the desktop app takes) wins, e.g. for tests that check the Thai text.
-const system = String(process.env.SUPERAI_LANG || Intl.DateTimeFormat().resolvedOptions().locale || "").toLowerCase().slice(0, 2);
-let locale: Locale = system === "th" || system === "ja" || system === "zh" ? system : "en";
+// Until the window reports its choice: English, the app's first language (the computer's language
+// is not used). A language saved earlier wins; SUPERAI_LANG (the same switch the desktop app takes)
+// sets it for a run, e.g. for tests that check the Thai text.
+const requested = String(process.env.SUPERAI_LANG || "").toLowerCase().slice(0, 2);
+let locale: Locale = requested === "th" || requested === "ja" || requested === "zh" ? requested : "en";
 try {
   const saved = fs.readFileSync(file(), "utf8").trim();
   if (isLocale(saved)) locale = saved;

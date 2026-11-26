@@ -35,12 +35,10 @@ VIAddVersionKey /LANG=0 "ProductVersion" "${VERSION}"
 VIAddVersionKey /LANG=0 "CompanyName" "RAKKYXD"
 VIAddVersionKey /LANG=0 "LegalCopyright" "RAKKYXD"
 
-; Setup and the uninstaller speak the computer's language when it is one of these; English
-; (loaded first) is the fallback.
+; Setup and the uninstaller speak English, the app's first language. Thai is the second: it is
+; used only when the person already chose Thai (in the installer or the app; see PickLanguage).
 LoadLanguageFile "${NSISDIR}\Contrib\Language files\English.nlf"
 LoadLanguageFile "${NSISDIR}\Contrib\Language files\Thai.nlf"
-LoadLanguageFile "${NSISDIR}\Contrib\Language files\Japanese.nlf"
-LoadLanguageFile "${NSISDIR}\Contrib\Language files\SimpChinese.nlf"
 LangString Preparing ${LANG_ENGLISH} "Preparing the ${APPNAME} installer..."
 LangString Removing ${LANG_ENGLISH} "Uninstalling ${APPNAME}..."
 LangString ConfirmRemove ${LANG_ENGLISH} "Remove ${APPNAME} from this computer?$\r$\n$\r$\nYour projects, history and settings are kept."
@@ -53,18 +51,25 @@ LangString ConfirmRemove ${LANG_THAI} "ถอนการติดตั้ง $
 LangString AppRunning ${LANG_THAI} "${APPNAME} กำลังเปิดอยู่ กรุณาปิดโปรแกรมก่อน แล้วกด Retry"
 LangString NotOurFolder ${LANG_THAI} "โฟลเดอร์นี้ไม่ได้ติดตั้งด้วยตัวติดตั้งของ ${APPNAME} จึงไม่ลบไฟล์ในโฟลเดอร์ ลบทางลัดและรายการโปรแกรมเท่านั้น"
 LangString LaunchFailed ${LANG_THAI} "เปิดตัวติดตั้งไม่สำเร็จ กรุณาดาวน์โหลด Setup ใหม่อีกครั้ง"
-LangString Preparing ${LANG_JAPANESE} "${APPNAME} のインストーラーを準備しています..."
-LangString Removing ${LANG_JAPANESE} "${APPNAME} をアンインストールしています..."
-LangString ConfirmRemove ${LANG_JAPANESE} "${APPNAME} をこのコンピューターから削除しますか？$\r$\n$\r$\nプロジェクト、履歴、設定は残ります。"
-LangString AppRunning ${LANG_JAPANESE} "${APPNAME} が起動しています。終了してから「再試行」を押してください。"
-LangString NotOurFolder ${LANG_JAPANESE} "このフォルダーは ${APPNAME} のインストーラーでインストールされていないため、ファイルは削除しません。ショートカットとプログラムの登録のみ削除します。"
-LangString LaunchFailed ${LANG_JAPANESE} "インストーラーを起動できませんでした。Setup をもう一度ダウンロードしてください。"
-LangString Preparing ${LANG_SIMPCHINESE} "正在准备 ${APPNAME} 安装程序..."
-LangString Removing ${LANG_SIMPCHINESE} "正在卸载 ${APPNAME}..."
-LangString ConfirmRemove ${LANG_SIMPCHINESE} "要从本机卸载 ${APPNAME} 吗？$\r$\n$\r$\n你的项目、历史和设置会保留。"
-LangString AppRunning ${LANG_SIMPCHINESE} "${APPNAME} 正在运行，请先关闭程序，再点击“重试”。"
-LangString NotOurFolder ${LANG_SIMPCHINESE} "此文件夹并非由 ${APPNAME} 安装程序安装，因此不会删除其中的文件，只删除快捷方式和程序条目。"
-LangString LaunchFailed ${LANG_SIMPCHINESE} "无法启动安装程序，请重新下载 Setup。"
+
+; English unless the language saved by the installer or the app (%USERPROFILE%\.opencode-multi\locale.txt)
+; is Thai. Without this, NSIS would follow the computer's language.
+!macro PickLanguage ID
+  StrCpy $LANGUAGE ${LANG_ENGLISH}
+  ClearErrors
+  FileOpen $0 "$PROFILE\.opencode-multi\locale.txt" r
+  IfErrors picked_${ID}
+  FileRead $0 $1
+  FileClose $0
+  StrCpy $1 $1 2
+  StrCmp $1 "th" 0 picked_${ID}
+  StrCpy $LANGUAGE ${LANG_THAI}
+  picked_${ID}:
+!macroend
+
+Function .onInit
+  !insertmacro PickLanguage setup
+FunctionEnd
 
 Page instfiles
 UninstPage instfiles
@@ -97,6 +102,7 @@ Section "Unpack"
 SectionEnd
 
 Function un.onInit
+  !insertmacro PickLanguage uninstall
   MessageBox MB_YESNO|MB_ICONQUESTION "$(ConfirmRemove)" /SD IDYES IDYES +2
   Abort
 FunctionEnd

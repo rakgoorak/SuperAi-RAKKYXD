@@ -25,13 +25,15 @@ const USAGE_FILE = process.env.SUPERAI_INSTALL_USAGE_FILE || path.join(app.getPa
 const PRIVACY_URL = "https://github.com/rakgoorak/SuperAi-RAKKYXD/blob/main/PRIVACY.md";
 const readUsage = () => { try { return JSON.parse(fs.readFileSync(USAGE_FILE, "utf8")); } catch { return {}; } };
 // The language chosen here is the app's first language (the app reads the same file; see
-// packages/studio/server/i18n.ts). An earlier choice made in the app is shown first.
+// packages/studio/server/i18n.ts). The installer speaks English (the default) or Thai; an earlier
+// Thai choice made in the app is shown first. Japanese or Chinese chosen in the app is kept as it is.
 const LOCALE_FILE = process.env.SUPERAI_INSTALL_LOCALE_FILE || path.join(os.homedir(), ".opencode-multi", "locale.txt");
-const LOCALES = ["th", "en", "ja", "zh"];
-const readLocale = () => { try { const v = fs.readFileSync(LOCALE_FILE, "utf8").trim(); return LOCALES.includes(v) ? v : ""; } catch { return ""; } };
-// Empty until chosen: messages then follow the computer's language (known once the app is ready).
-let locale = readLocale();
-const current = () => locale || (LOCALES.includes(app.getLocale().slice(0, 2)) ? app.getLocale().slice(0, 2) : "en");
+const APP_LOCALES = ["en", "th", "ja", "zh"];
+const LOCALES = ["en", "th"];
+const readLocale = () => { try { const v = fs.readFileSync(LOCALE_FILE, "utf8").trim(); return APP_LOCALES.includes(v) ? v : ""; } catch { return ""; } };
+const savedLocale = readLocale();
+let locale = LOCALES.includes(savedLocale) ? savedLocale : "en";
+const current = () => locale;
 const MESSAGES = {
   en: { denied: "Not allowed", pick: "Choose where to install", shortcut: "Could not create the shortcut: {0}", busy: "Already installing",
     noDir: "Please choose an install folder", otherDir: "Choose another folder", running: "{0} is open. Please close it, then press install again",
@@ -41,14 +43,6 @@ const MESSAGES = {
     noDir: "กรุณาเลือกโฟลเดอร์ติดตั้ง", otherDir: "เลือกโฟลเดอร์อื่น", running: "{0} กำลังเปิดอยู่ กรุณาปิดโปรแกรมก่อน แล้วกดติดตั้งอีกครั้ง",
     noWrite: "ไม่มีสิทธิ์เขียนโฟลเดอร์นี้ กรุณาเลือกโฟลเดอร์อื่น เช่นในโฟลเดอร์ผู้ใช้ของคุณ", noUninstaller: "ไม่พบตัวถอนการติดตั้งในไฟล์ติดตั้ง",
     noApp: "ไม่พบโปรแกรม", title: "ติดตั้ง {0}" },
-  ja: { denied: "許可されていません", pick: "インストール先を選択", shortcut: "ショートカットを作成できませんでした: {0}", busy: "インストール中です",
-    noDir: "インストール先のフォルダーを選択してください", otherDir: "別のフォルダーを選択してください", running: "{0} が起動しています。終了してからもう一度インストールを押してください",
-    noWrite: "このフォルダーへの書き込み権限がありません。ユーザーフォルダー内など、別のフォルダーを選択してください", noUninstaller: "セットアップファイルにアンインストーラーがありません",
-    noApp: "アプリが見つかりません", title: "{0} のインストール" },
-  zh: { denied: "不允许", pick: "选择安装位置", shortcut: "无法创建快捷方式: {0}", busy: "正在安装",
-    noDir: "请选择安装文件夹", otherDir: "请选择其他文件夹", running: "{0} 正在运行，请先关闭程序再点击安装",
-    noWrite: "没有写入此文件夹的权限，请选择其他文件夹，例如你的用户文件夹中", noUninstaller: "安装文件中缺少卸载程序",
-    noApp: "未找到程序", title: "安装 {0}" },
 };
 const M = (key, value = "") => (MESSAGES[current()] || MESSAGES.en)[key].replace("{0}", value);
 
@@ -125,7 +119,7 @@ ipcMain.handle("installer:info", async (e) => {
     const s = await fsp.statfs(path.parse(dir).root);
     free = s.bavail * s.bsize;
   } catch {}
-  return { version, dir, existing: !!existing, required: manifest.bytes, free, usage: readUsage().enabled !== false, locale };
+  return { version, dir, existing: !!existing, required: manifest.bytes, free, usage: readUsage().enabled !== false, locale: savedLocale };
 });
 
 ipcMain.handle("installer:pick", async (e, current) => {

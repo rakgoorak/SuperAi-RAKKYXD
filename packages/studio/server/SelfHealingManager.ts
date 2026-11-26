@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
 import { cliEnv, findExecutable } from './CliCatalog.js';
-import { tr } from './i18n.js';
+import { replyLanguageRule, tr } from './i18n.js';
 
 const execAsync = promisify(execFile);
 
@@ -176,10 +176,10 @@ export class SelfHealingManager {
       }
 
       // Verification failed
-      const fixPrompt = `[Self-Healing Loop: ครั้งที่ ${attempt}/${maxAttempts}]\n` +
-        `คำสั่งตรวจสอบ (${command}) ไม่ผ่าน (Exit Code ${verification.exitCode})\n` +
-        `สรุปข้อผิดพลาดที่พบ:\n\`\`\`\n${verification.failureSummary}\n\`\`\`\n\n` +
-        `กรุณาตรวจสอบสาเหตุของข้อผิดพลาดข้างต้น แก้ไขไฟล์โค้ดที่เกี่ยวข้อง และตรวจสอบให้แน่ใจว่าการทดสอบจะสามารถรันผ่านได้`;
+      const fixPrompt = `[Self-Healing Loop: attempt ${attempt}/${maxAttempts}]\n` +
+        `The check command (${command}) failed (exit code ${verification.exitCode})\n` +
+        `Failure summary:\n\`\`\`\n${verification.failureSummary}\n\`\`\`\n\n` +
+        `Find the root cause of the error above, fix the related code files, and make sure the tests will pass. Do not delete or weaken tests to make them pass. ${replyLanguageRule()}`;
 
       attempts.push({
         attempt,

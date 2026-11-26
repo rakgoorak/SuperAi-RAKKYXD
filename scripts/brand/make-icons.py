@@ -154,10 +154,12 @@ def dmg_background(scale: int) -> Image.Image:
     wm = word.copy()
     wm.thumbnail((190 * scale, 60 * scale), Image.LANCZOS)
     bg.alpha_composite(wm, ((w - wm.width) // 2, 30 * scale))
-    font = ImageFont.truetype("C:/Windows/Fonts/LeelawUI.ttf", 15 * scale)
-    text = "ลากไปที่ Applications เพื่อติดตั้ง"
-    tw = d.textlength(text, font=font)
-    d.text(((w - tw) / 2, 318 * scale), text, font=font, fill=(200, 214, 226, 255))
+    # English first (the app's first language), Thai second.
+    for text, size, top, fill in (("Drag to Applications to install", 15, 310, (200, 214, 226, 255)),
+                                  ("ลากไปที่ Applications เพื่อติดตั้ง", 12, 334, (138, 154, 168, 255))):
+        font = ImageFont.truetype("C:/Windows/Fonts/LeelawUI.ttf", size * scale)
+        tw = d.textlength(text, font=font)
+        d.text(((w - tw) / 2, top * scale), text, font=font, fill=fill)
     return bg.convert("RGB")
 
 

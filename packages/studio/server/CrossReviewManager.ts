@@ -6,7 +6,7 @@ import { Seat, validateSeat } from './Providers.js';
 import { CliProvider } from './CliProvider.js';
 import { LocalProvider } from './AgentRunManager.js';
 import { createProvider, LLMMessage } from '@superai-rakkyxd/core';
-import { tr } from './i18n.js';
+import { replyLanguageRule, tr } from './i18n.js';
 
 const execAsync = promisify(execFile);
 
@@ -275,22 +275,22 @@ export class CrossReviewManager {
     const warnings = review.issues.filter(i => i.severity === 'warning');
     const suggestions = review.issues.filter(i => i.severity === 'suggestion');
 
-    let prompt = `[AI Cross-Review จาก ${review.reviewer.name}]\n` +
-      `ผลการตรวจทานโค้ด (คะแนนความปลอดภัย: ${review.score}/100, สถานะ: ${review.verdict})\n` +
-      `สรุป: ${review.summary}\n\n` +
-      `กรุณาแก้ไขปัญหาตามผลการตรวจทานดังนี้:\n`;
+    let prompt = `[AI Cross-Review by ${review.reviewer.name}]\n` +
+      `Code review result (safety score: ${review.score}/100, verdict: ${review.verdict})\n` +
+      `Summary: ${review.summary}\n\n` +
+      `Please fix the problems this review found:\n`;
 
     const allIssues = [...criticals, ...warnings, ...suggestions];
     allIssues.forEach((issue, idx) => {
       prompt += `\n${idx + 1}. [${issue.severity.toUpperCase()}] ${issue.title}`;
-      if (issue.file) prompt += ` (ไฟล์: ${issue.file}${issue.line ? `:${issue.line}` : ''})`;
-      prompt += `\n   รายละเอียด: ${issue.description}`;
+      if (issue.file) prompt += ` (file: ${issue.file}${issue.line ? `:${issue.line}` : ''})`;
+      prompt += `\n   Details: ${issue.description}`;
       if (issue.suggestedFix) {
-        prompt += `\n   แนวทางแก้ไขที่แนะนำ:\n\`\`\`\n${issue.suggestedFix}\n\`\`\``;
+        prompt += `\n   Suggested fix:\n\`\`\`\n${issue.suggestedFix}\n\`\`\``;
       }
     });
 
-    prompt += `\n\nโปรดแก้ไขไฟล์โค้ดตามคำแนะนำข้างต้นให้เรียบร้อยและรันการทดสอบเพื่อให้แน่ใจว่าไม่มีข้อผิดพลาด`;
+    prompt += `\n\nFirst check that each finding is real by reading the code. Fix the real ones, say briefly why you skip any that are not, then run the tests to make sure nothing is broken. ${replyLanguageRule()}`;
     return prompt;
   }
 }

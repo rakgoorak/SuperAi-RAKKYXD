@@ -318,7 +318,7 @@ export function chatParser(agent: string, prefix: string, options: ChatParserOpt
           // `opencode run` rejects an interactive permission request itself; its error text
           // says "the user rejected" even though no approval prompt reached our chat UI.
           const shownOutput = state.status === 'error' && output && /the user rejected permission to use this specific tool call/i.test(output)
-            ? tr("OpenCode ปฏิเสธคำขอสิทธิ์ในโหมดแชตโดยไม่มีปุ่มให้ตอบในโปรแกรม ตรวจการตั้งค่าสิทธิ์ของ OpenCode หรือใช้ Terminal เพื่อตอบคำขอ") : output;
+            ? openCodeRefusal() : output;
           return { ...conversation, items: [{ id: `${prefix}-${part.id || part.callID}`, kind: "tool", tool: toolKind(name),
             title: typeof state.title === "string" && state.title ? state.title : toolTitle(name, state.input), output: shownOutput,
             status: state.status === "error" ? "failed" : state.status === "completed" ? "done" : "running" }] };
@@ -576,6 +576,9 @@ interface Chat extends Omit<ChatSnapshot, "queued"> {
 }
 export interface ChatFork { items: ChatItem[]; turns: number; seed: string; }
 export interface ChatRequest { accountId?: string; agent: string; cwd: string; text: string; draftText?: string; model?: string; effort?: string; attachments?: string[]; skillId?: string; permission?: ChatPermission; projectContext?: ProjectContext; responseStyle?: ResponseStyle; /** Summaries of other rooms this message continues from (`@room` in the composer). */ handoff?: string; /** Internal: pre-resolved by sendAsync so Electron's main thread never blocks. */ resolvedText?: string; /** Internal: pre-created asynchronously by sendAsync (`null` = skipped). */ checkpoint?: Checkpoint | null; }
+
+/** Shown in place of `opencode run`'s own refusal text; also how a refused tool call is recognised later. */
+const openCodeRefusal = () => tr("OpenCode ปฏิเสธคำขอสิทธิ์ในโหมดแชตโดยไม่มีปุ่มให้ตอบในโปรแกรม ตรวจการตั้งค่าสิทธิ์ของ OpenCode หรือใช้ Terminal เพื่อตอบคำขอ");
 
 export class CliChatManager {
   private chats = new Map<string, Chat>();
@@ -998,7 +1001,7 @@ export class CliChatManager {
       // `opencode run` refuses permission requests itself and then exits 0 without an answer: say why.
       const silent = agent === 'opencode' && !openCodeAsk && code === 0 && !chat.cancelled && !failed && !timeoutProblem
         && !chat.items.some((i) => i.kind === 'assistant' && i.id.startsWith(`${prefix}-`) && i.text.trim());
-      const toolRejected = chat.items.some((i) => i.kind === 'tool' && i.id.startsWith(`${prefix}-`) && !!i.output?.startsWith('OpenCode ปฏิเสธคำขอสิทธิ์'));
+      const toolRejected = chat.items.some((i) => i.kind === 'tool' && i.id.startsWith(`${prefix}-`) && i.output === openCodeRefusal());
       const ignoreExit = ignoredStaleError && agent === "antigravity" && !timeoutProblem;
       finish(timeoutProblem || (silent ? openCodeNoAnswer(rejections, toolRejected) : code === 0 || chat.cancelled || ignoreExit ? undefined : cliFailure(agent, request.model || "", errors, "", code, accountId)));
     };

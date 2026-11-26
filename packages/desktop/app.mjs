@@ -32,12 +32,13 @@ if (process.env.SUPERAI_TEST_MODE === "1" || process.argv.includes("--disable-gp
   app.commandLine.appendSwitch("disable-software-rasterizer");
 }
 app.commandLine.appendSwitch("disable-gpu-process-crash-limit");
-// Start in a given interface language (tests, or anyone who wants it); otherwise the computer's.
-// The language picked in the installer (or later in the app) is the window's starting language.
+// Start in a given interface language (tests, or anyone who wants it). Otherwise the language picked
+// in the installer (or later in the app), and English, the app's first language, when none was picked:
+// the computer's own language is not used.
 const chosenLanguage = (() => {
   try { return readFileSync(path.join(process.env.SUPERAI_DATA_DIR || path.join(os.homedir(), ".opencode-multi"), "locale.txt"), "utf8").trim(); } catch { return ""; }
 })();
-const startLanguage = process.env.SUPERAI_LANG || chosenLanguage;
+const startLanguage = process.env.SUPERAI_LANG || chosenLanguage || "en";
 if (/^[a-z]{2}(-[A-Za-z]{2})?$/.test(startLanguage)) app.commandLine.appendSwitch("lang", startLanguage);
 // Microsoft Store install: Electron sets process.windowsStore; scripts/package-msix.mjs also marks the
 // staged package.json, so the Store build is recognised even where that flag is missing.

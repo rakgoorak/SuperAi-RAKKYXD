@@ -9,12 +9,12 @@ let info = null;
 let target = "";
 let installedExe = "";
 
-// The installer's own language: the one chosen earlier in the app, else the computer's, else English.
+// The installer's own language: English first; Thai when it was chosen earlier (here or in the app).
+// The computer's language is not used, so English stays the default everywhere.
 const TEXT = window.INSTALLER_TEXT;
-let lang = (() => {
-  for (const code of navigator.languages || [navigator.language]) { const short = String(code || "").slice(0, 2).toLowerCase(); if (TEXT[short]) return short; }
-  return "en";
-})();
+let lang = "en";
+// A Japanese or Chinese choice made in the app is kept unless the person picks a language here.
+let picked = false;
 const T = (key, values = {}) => (TEXT[lang][key] ?? TEXT.en[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => values[name] ?? "");
 function applyLanguage() {
   document.documentElement.lang = lang;
@@ -110,7 +110,7 @@ $("install").addEventListener("click", async () => {
   $("percent").textContent = "0";
   setState("installing");
   try {
-    const result = await api.install({ dir: target, desktop: $("desktop").checked, usage: $("usage").checked, locale: lang });
+    const result = await api.install({ dir: target, desktop: $("desktop").checked, usage: $("usage").checked, locale: picked || !info?.locale || TEXT[info.locale] ? lang : undefined });
     installedExe = result.exe;
     $("done-lead").textContent = T("doneLead", { version: info ? `v${info.version}` : "" });
     $("done-desktop").hidden = !$("desktop").checked;
@@ -132,7 +132,7 @@ document.querySelectorAll("[data-window]").forEach((button) =>
   button.addEventListener("click", () => void api.window(button.dataset.window)),
 );
 
-$("language").addEventListener("change", (event) => { lang = event.target.value; applyLanguage(); });
+$("language").addEventListener("change", (event) => { lang = event.target.value; picked = true; applyLanguage(); });
 applyLanguage();
 setOrbit(0);
 void load();
