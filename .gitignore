@@ -50,3 +50,7 @@ docs/*.md
 /DESIGN.md
 /PRODUCT.md
 .freebuff/
+
+# Local marketplace submissions and social auto-post tooling, not part of the app.
+/agensi-skills/
+/scripts/x-autopost/
