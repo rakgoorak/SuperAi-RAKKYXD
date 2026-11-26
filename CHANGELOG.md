@@ -6,6 +6,15 @@ All notable changes to SuperAi & RAKKYXD are documented here. The format follows
 
 Full release notes, including Thai descriptions, live in [docs/RELEASE.md](docs/RELEASE.md).
 
+## [1.3.4] - 2026-11-26
+
+### Changed
+- English is now the app's first language on new installs and first launch; Thai is second. The Windows and macOS installers no longer follow the computer's language and offer English and Thai only, preserving a Japanese or Chinese choice already made in the app (`packages/desktop/app.mjs`, `packages/desktop/installer/*`, `installer/windows/installer.nsi`, `packages/studio/client/src/i18n.ts`, `packages/studio/server/i18n.ts`).
+- Cross-review and self-healing prompts sent to AI agents are written in English and ask the agent to reply in the language the user wrote in, and to check that each review finding is real before changing code (`packages/studio/server/CrossReviewManager.ts`, `packages/studio/server/SelfHealingManager.ts`).
+
+### Fixed
+- OpenCode permission refusals are matched by the exact refusal message instead of a Thai prefix (`packages/studio/server/CliChat.ts`).
+
 ## [1.3.3] - 2026-11-23
 
 ### Added

@@ -1,3 +1,13 @@
+# SuperAi & RAKKYXD v1.3.4
+
+- **English first, Thai second:** New installs and the first launch now start in English. The installer no longer follows the computer's language: it offers English and Thai, and keeps a Japanese or Chinese language you already chose inside the app.
+
+## ภาษาไทย
+
+- **ภาษาอังกฤษมาก่อน ภาษาไทยรอง:** การติดตั้งใหม่และการเปิดแอปครั้งแรกจะเริ่มเป็นภาษาอังกฤษ ตัวติดตั้งไม่ตามภาษาของเครื่องอีกต่อไป แต่มีอังกฤษและไทยให้เลือก และยังคงภาษาญี่ปุ่นหรือจีนที่เคยเลือกไว้ในแอป
+
+---
+
 # SuperAi & RAKKYXD v1.3.3
 
 - **Long tasks in the background (Claude):** When Claude starts a long command or agent in the background and ends its turn, the chat shows a "background tasks" strip with what is still running. When a task finishes, Claude continues on its own: its new answer appears in the chat (marked "Background task finished · Claude is continuing on its own") and you get a notification, so you no longer need to keep the screen open or ask again. Claude is no longer closed after 15 idle minutes while a task is still running. Messages you send during that turn wait for it, and Stop works as usual.
